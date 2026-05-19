@@ -35,12 +35,17 @@
                         <td><span class="crm-badge crm-badge-blue">{{ $source->name }}</span></td>
                         <td>{{ $source->created_at->format('d M Y') }}</td>
                         <td class="text-right">
+                            <details class="crm-table-dropdown">
+                                <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                <div class="crm-table-dropdown-menu">
                             <button class="crm-icon-btn" onclick="openEdit({{ $source->id }}, '{{ addslashes($source->name) }}')">✏️</button>
                             <form action="{{ route('settings.lead-sources.destroy', $source) }}" method="POST" style="display:inline"
                                   onsubmit="return confirm('Delete this source?')">
                                 @csrf @method('DELETE')
                                 <button class="crm-icon-btn danger">🗑️</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 @empty

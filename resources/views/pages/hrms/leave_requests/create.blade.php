@@ -15,6 +15,29 @@
     </style>
 @endpush
 
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.querySelector('form[action="{{ route('leave-requests.store') }}"]');
+
+            if (! form) {
+                return;
+            }
+
+            form.addEventListener('submit', function () {
+                const submitButton = form.querySelector('button[type="submit"]');
+
+                if (! submitButton || submitButton.disabled) {
+                    return;
+                }
+
+                submitButton.disabled = true;
+                submitButton.textContent = 'Submitting...';
+            });
+        });
+    </script>
+@endpush
+
 @section('content')
 <div class="eob-page">
     <div class="eob-topbar">

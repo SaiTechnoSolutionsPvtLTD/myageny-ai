@@ -42,12 +42,17 @@
                         <td><span class="crm-badge">{{ $status->name }}</span></td>
                         <td>{{ $status->created_at->format('d M Y') }}</td>
                         <td class="text-right">
+                            <details class="crm-table-dropdown">
+                                <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                <div class="crm-table-dropdown-menu">
                             <button class="crm-icon-btn" onclick="openEdit({{ $status->id }}, '{{ addslashes($status->name) }}')">✏️</button>
                             <form action="{{ route('settings.lead-statuses.destroy', $status) }}" method="POST" style="display:inline"
                                   onsubmit="return confirm('Delete this status?')">
                                 @csrf @method('DELETE')
                                 <button class="crm-icon-btn danger">🗑️</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 @empty

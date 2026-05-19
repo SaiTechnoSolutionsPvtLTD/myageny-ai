@@ -279,6 +279,7 @@ class PermissionRequestController extends Controller
     private function resolveEmployee(User $user): ?EmployeeOnboarding
     {
         return EmployeeOnboarding::query()
+            ->active()
             ->where(function ($query) use ($user) {
                 $query->where('portal_user_id', $user->id)
                     ->orWhere('email', $user->email);

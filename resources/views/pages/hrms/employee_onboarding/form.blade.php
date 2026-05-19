@@ -8,7 +8,7 @@
     $portalAccountRequired = $portalPasswordRequired || (bool) $portalUser;
 
     $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    $statusOptions = ['pending' => 'Pending', 'verified' => 'Verified', 'rejected' => 'Rejected'];
+    $statusOptions = ['active' => 'Active', 'resigned' => 'Resigned'];
 
     $defaultEducations = [
         ['qualification' => 'PG', 'institution_name' => '', 'year_of_passing' => '', 'percentage' => '', 'specialization' => ''],
@@ -84,7 +84,6 @@
         ['key' => 'salary', 'number' => '08', 'title' => 'Employee Salaries', 'sub' => 'Salary, statutory deductions, and payroll setup.'],
         ['key' => 'bank', 'number' => '09', 'title' => 'Bank Account Details', 'sub' => 'Payroll and bank information.'],
         ['key' => 'documents', 'number' => '10', 'title' => 'Document Uploads', 'sub' => 'Certificates and identity proofs.'],
-        ['key' => 'declaration', 'number' => '11', 'title' => 'Declaration', 'sub' => 'Final declaration and signature.'],
     ];
 
     $errorStepMap = [
@@ -144,9 +143,6 @@
         'bank_account_no' => 'bank',
         'bank_ifsc_code' => 'bank',
         'bank_branch' => 'bank',
-        'declaration_date' => 'declaration',
-        'declaration_place' => 'declaration',
-        'signature' => 'declaration',
     ];
 
     foreach (array_keys($errors->toArray()) as $errorKey) {
@@ -198,6 +194,7 @@
         </aside>
 
         <div class="eob-wizard-main">
+            <div class="eob-wizard-validation-summary" id="employeeWizardValidationSummary" role="alert" aria-live="polite"></div>
             <div class="eob-wizard-progress-card">
                 <div>
                     <div class="eob-card-title" id="wizardActiveTitle">Personal Details</div>
@@ -238,7 +235,12 @@
                                 @error('father_name')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group full">
-                                <label class="eob-label">Correspondence Address</label>
+                                <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                    <label class="eob-label mb-0">Correspondence Address</label>
+                                    <button type="button" class="eob-btn eob-btn-ghost eob-btn-sm" data-copy-address data-copy-source="correspondence_address" data-copy-target="permanent_address">
+                                        Copy to Permanent
+                                    </button>
+                                </div>
                                 <textarea name="correspondence_address" class="eob-textarea">{{ old('correspondence_address', $employee?->correspondence_address) }}</textarea>
                                 @error('correspondence_address')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
@@ -315,7 +317,7 @@
                                 <label class="eob-label">Status <span class="eob-label-required">*</span></label>
                                 <select name="status" class="eob-select" required>
                                     @foreach($statusOptions as $value => $label)
-                                        <option value="{{ $value }}" @selected(old('status', $employee?->status ?? 'pending') === $value)>{{ $label }}</option>
+                                        <option value="{{ $value }}" @selected(old('status', $employee?->status ?? 'active') === $value)>{{ $label }}</option>
                                     @endforeach
                                 </select>
                                 @error('status')<div class="eob-error">{{ $message }}</div>@enderror
@@ -639,23 +641,24 @@
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Basic Salary</label>
-                                <input type="number" step="0.01" min="0" name="basic_salary" class="eob-input" data-salary-input="basic_salary" value="{{ old('basic_salary', $employee?->basic_salary) }}">
-                                <div class="eob-help">PF is auto-estimated as 12% of basic salary when enabled.</div>
+                                <input type="number" step="0.01" min="0" name="basic_salary" class="eob-input" data-salary-input="basic_salary" value="{{ old('basic_salary', $employee?->basic_salary) }}" readonly>
+                                <div class="eob-help">Auto-calculated as 50% of gross salary. PF is estimated from this when enabled.</div>
                                 @error('basic_salary')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">HRA</label>
-                                <input type="number" step="0.01" min="0" name="hra" class="eob-input" value="{{ old('hra', $employee?->hra) }}">
+                                <input type="number" step="0.01" min="0" name="hra" class="eob-input" data-salary-input="hra" value="{{ old('hra', $employee?->hra) }}" readonly>
                                 @error('hra')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">Special Allowance</label>
-                                <input type="number" step="0.01" min="0" name="special_allowance" class="eob-input" value="{{ old('special_allowance', $employee?->special_allowance) }}">
+                                <label class="eob-label">Travel Allowance</label>
+                                <input type="number" step="0.01" min="0" name="special_allowance" class="eob-input" data-salary-input="special_allowance" value="{{ old('special_allowance', $employee?->special_allowance) }}" readonly>
                                 @error('special_allowance')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Other Allowance</label>
-                                <input type="number" step="0.01" min="0" name="other_allowance" class="eob-input" value="{{ old('other_allowance', $employee?->other_allowance) }}">
+                                <input type="number" step="0.01" min="0" name="other_allowance" class="eob-input" data-salary-input="other_allowance" value="{{ old('other_allowance', $employee?->other_allowance) }}" readonly>
+                                <div class="eob-help">Balance amount after basic, HRA, and special allowance split.</div>
                                 @error('other_allowance')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
@@ -718,7 +721,7 @@
                             <div class="eob-group">
                                 <label class="eob-label">ESI No</label>
                                 <input type="text" name="esi_no" class="eob-input" value="{{ old('esi_no', $employee?->esi_no) }}">
-                                <div class="eob-help">ESI is estimated only when gross salary is at or below 21,000.</div>
+                                <div class="eob-help" id="esiEligibilityHelp">ESI amount is calculated as 4% of gross salary whenever ESI is enabled.</div>
                                 @error('esi_no')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
@@ -816,37 +819,6 @@
                     </div>
                 </section>
 
-                <section class="eob-card eob-wizard-panel" data-step="declaration" data-step-title="Declaration" data-step-sub="Final declaration and signature.">
-                    <div class="eob-card-head">
-                        <div>
-                            <div class="eob-card-title">Declaration</div>
-                            <div class="eob-card-sub">Capture declaration date, place, and signed proof.</div>
-                        </div>
-                    </div>
-                    <div class="eob-card-body">
-                        <div class="eob-form-grid">
-                            <div class="eob-group">
-                                <label class="eob-label">Date</label>
-                                <input type="date" name="declaration_date" class="eob-input" value="{{ old('declaration_date', optional($employee?->declaration_date)->format('Y-m-d')) }}">
-                            </div>
-                            <div class="eob-group">
-                                <label class="eob-label">Place</label>
-                                <input type="text" name="declaration_place" class="eob-input" value="{{ old('declaration_place', $employee?->declaration_place) }}">
-                            </div>
-                            <div class="eob-group full">
-                                <label class="eob-label">Signature</label>
-                                <input type="file" name="signature" class="eob-input" accept=".pdf,.jpg,.jpeg,.png">
-                                @if($employee?->signature)
-                                    <div class="eob-file-links">
-                                        <a href="{{ asset('storage/' . $employee->signature) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View Existing</a>
-                                        <a href="{{ asset('storage/' . $employee->signature) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download Existing</a>
-                                    </div>
-                                @endif
-                                @error('signature')<div class="eob-error">{{ $message }}</div>@enderror
-                            </div>
-                        </div>
-                    </div>
-                </section>
             </div>
 
             <div class="eob-foot eob-wizard-footer">
@@ -898,6 +870,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('employeeWizardForm');
+    const addressCopyButtons = Array.from(document.querySelectorAll('[data-copy-address]'));
     const maritalInputs = document.querySelectorAll('input[name="marital_status"]');
     const marriageDateGroup = document.getElementById('marriageDateGroup');
     const roleSelect = document.getElementById('employeeRoleSelect');
@@ -916,7 +889,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const progressBar = document.getElementById('wizardProgressBar');
     const activeTitle = document.getElementById('wizardActiveTitle');
     const activeSub = document.getElementById('wizardActiveSub');
+    const validationSummary = document.getElementById('employeeWizardValidationSummary');
     const tlUsers = @json($tlUsers);
+    const serverErrors = @json($errors->toArray());
     const currentPortalUserId = '{{ $portalUser?->id }}';
     const portalSummary = document.getElementById('employeePortalMappingSummary');
 
@@ -1236,6 +1211,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const salaryInputs = {
         grossSalary: form.querySelector('[data-salary-input="gross_salary"]'),
         basicSalary: form.querySelector('[data-salary-input="basic_salary"]'),
+        hra: form.querySelector('[data-salary-input="hra"]'),
+        specialAllowance: form.querySelector('[data-salary-input="special_allowance"]'),
+        otherAllowance: form.querySelector('[data-salary-input="other_allowance"]'),
         professionalTax: form.querySelector('[data-salary-input="professional_tax"]'),
         tdsAmount: form.querySelector('[data-salary-input="tds_amount"]'),
         loanDeduction: form.querySelector('[data-salary-input="loan_deduction"]'),
@@ -1259,13 +1237,56 @@ document.addEventListener('DOMContentLoaded', function () {
         return (Math.round(value * 100) / 100).toFixed(2);
     }
 
+    function setSalaryFieldValue(input, value) {
+        if (input) {
+            input.value = formatAmount(value);
+        }
+    }
+
+    function syncSalaryBreakdownFromGross() {
+        const grossSalary = parseAmount(salaryInputs.grossSalary);
+
+        if (grossSalary <= 0) {
+            setSalaryFieldValue(salaryInputs.basicSalary, 0);
+            setSalaryFieldValue(salaryInputs.hra, 0);
+            setSalaryFieldValue(salaryInputs.specialAllowance, 0);
+            setSalaryFieldValue(salaryInputs.otherAllowance, 0);
+            return {
+                grossSalary: 0,
+                basicSalary: 0,
+                hra: 0,
+                specialAllowance: 0,
+                otherAllowance: 0,
+            };
+        }
+
+        const basicSalary = grossSalary * 0.50;
+        const hra = grossSalary * 0.30;
+        const specialAllowance = grossSalary * 0.10;
+        const otherAllowance = Math.max(grossSalary - basicSalary - hra - specialAllowance, 0);
+
+        setSalaryFieldValue(salaryInputs.basicSalary, basicSalary);
+        setSalaryFieldValue(salaryInputs.hra, hra);
+        setSalaryFieldValue(salaryInputs.specialAllowance, specialAllowance);
+        setSalaryFieldValue(salaryInputs.otherAllowance, otherAllowance);
+
+        return {
+            grossSalary: grossSalary,
+            basicSalary: basicSalary,
+            hra: hra,
+            specialAllowance: specialAllowance,
+            otherAllowance: otherAllowance,
+        };
+    }
+
     function updateSalaryCalculations() {
         if (!salaryInputs.grossSalary || !salaryInputs.netSalary) {
             return;
         }
 
-        const grossSalary = parseAmount(salaryInputs.grossSalary);
-        const basicSalary = parseAmount(salaryInputs.basicSalary);
+        const breakdown = syncSalaryBreakdownFromGross();
+        const grossSalary = breakdown.grossSalary;
+        const basicSalary = breakdown.basicSalary;
         const professionalTax = parseAmount(salaryInputs.professionalTax);
         const tdsAmount = parseAmount(salaryInputs.tdsAmount);
         const loanDeduction = parseAmount(salaryInputs.loanDeduction);
@@ -1273,11 +1294,13 @@ document.addEventListener('DOMContentLoaded', function () {
         const pfEnabled = salaryInputs.pfToggle ? salaryInputs.pfToggle.checked : false;
         const esiEnabled = salaryInputs.esiToggle ? salaryInputs.esiToggle.checked : false;
 
-        const pfEmployee = pfEnabled ? basicSalary * 0.12 : 0;
-        const pfEmployer = pfEnabled ? basicSalary * 0.12 : 0;
-        const esiApplicableGross = grossSalary <= 21000 ? grossSalary : 0;
-        const esiEmployee = esiEnabled ? esiApplicableGross * 0.0075 : 0;
-        const esiEmployer = esiEnabled ? esiApplicableGross * 0.0325 : 0;
+        const pfBaseAmount = breakdown.basicSalary >= 15000
+            ? 15000
+            : (breakdown.basicSalary + breakdown.specialAllowance + breakdown.otherAllowance);
+        const pfEmployee = pfEnabled ? Math.round(pfBaseAmount * 0.25) : 0;
+        const pfEmployer = pfEnabled ? Math.round(pfBaseAmount * 0.25) : 0;
+        const esiEmployee = esiEnabled ? Math.round(grossSalary * 0.04) : 0;
+        const esiEmployer = esiEnabled ? Math.round(grossSalary * 0.04) : 0;
         const totalDeduction = pfEmployee + esiEmployee + professionalTax + tdsAmount + loanDeduction + otherDeduction;
         const netSalary = Math.max(grossSalary - totalDeduction, 0);
 
@@ -1299,11 +1322,28 @@ document.addEventListener('DOMContentLoaded', function () {
         if (salaryInputs.netSalary) {
             salaryInputs.netSalary.value = formatAmount(netSalary);
         }
+
+        updateEsiEligibilityHelp(esiEnabled);
+    }
+
+    function updateEsiEligibilityHelp(esiEnabled) {
+        const esiHelp = document.getElementById('esiEligibilityHelp');
+        if (!esiHelp) {
+            return;
+        }
+
+        if (!esiEnabled) {
+            esiHelp.textContent = 'ESI amount is calculated as 4% of gross salary whenever ESI is enabled.';
+            esiHelp.style.color = '';
+            return;
+        }
+
+        esiHelp.textContent = 'ESI calculation is active at 4% of gross salary.';
+        esiHelp.style.color = '#166534';
     }
 
     [
         salaryInputs.grossSalary,
-        salaryInputs.basicSalary,
         salaryInputs.professionalTax,
         salaryInputs.tdsAmount,
         salaryInputs.loanDeduction,
@@ -1360,14 +1400,141 @@ document.addEventListener('DOMContentLoaded', function () {
         return panel.getAttribute('data-step') === form.getAttribute('data-initial-step');
     }));
 
+    function humanizeFieldName(name) {
+        return (name || 'This field')
+            .replace(/\.\d+\./g, ' ')
+            .replace(/\./g, ' ')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
+    }
+
+    function resolveFieldLabel(input) {
+        const directLabel = input.closest('.eob-group, td')?.querySelector('.eob-label');
+        if (directLabel) {
+            return directLabel.textContent.replace('*', '').trim();
+        }
+
+        const td = input.closest('td');
+        const row = input.closest('tr');
+        const table = input.closest('table');
+        if (td && row && table) {
+            const cellIndex = Array.from(row.children).indexOf(td);
+            const header = table.querySelectorAll('thead th')[cellIndex];
+            if (header) {
+                return header.textContent.trim();
+            }
+        }
+
+        return humanizeFieldName(input.name);
+    }
+
+    function clearValidationSummary() {
+        if (!validationSummary) {
+            return;
+        }
+
+        validationSummary.classList.remove('is-visible');
+        validationSummary.innerHTML = '';
+    }
+
+    function showValidationSummary(invalidFields) {
+        if (!validationSummary || !invalidFields.length) {
+            return;
+        }
+
+        const items = invalidFields.map(function (field) {
+            return '<li>' + field + '</li>';
+        }).join('');
+
+        validationSummary.innerHTML = '<strong>Please review the highlighted fields before continuing.</strong><ul>' + items + '</ul>';
+        validationSummary.classList.add('is-visible');
+    }
+
+    function clearStepValidationState() {
+        if (!panels[activeIndex]) {
+            return;
+        }
+
+        panels[activeIndex].querySelectorAll('.is-invalid').forEach(function (node) {
+            node.classList.remove('is-invalid');
+        });
+
+        clearValidationSummary();
+    }
+
+    function fieldNamesForErrorKey(errorKey) {
+        const bracketName = errorKey.replace(/\.(\d+)\./g, '[$1][').replace(/\.(\w+)$/g, '[$1]');
+
+        if (bracketName.includes('[')) {
+            return [bracketName];
+        }
+
+        return [errorKey];
+    }
+
+    function stepIndexForFieldName(fieldName) {
+        const directInput = form.querySelector('[name="' + fieldName + '"]');
+        if (!directInput) {
+            return -1;
+        }
+
+        const panel = directInput.closest('.eob-wizard-panel');
+        return panel ? panels.indexOf(panel) : -1;
+    }
+
+    function serverErrorStepIndices() {
+        return Array.from(new Set(Object.keys(serverErrors).map(function (errorKey) {
+            const candidateNames = fieldNamesForErrorKey(errorKey);
+            for (const fieldName of candidateNames) {
+                const index = stepIndexForFieldName(fieldName);
+                if (index !== -1) {
+                    return index;
+                }
+            }
+
+            return -1;
+        }).filter(function (index) {
+            return index !== -1;
+        })));
+    }
+
+    function applyServerErrorHighlights() {
+        const highlightedLabels = [];
+
+        Object.keys(serverErrors).forEach(function (errorKey) {
+            fieldNamesForErrorKey(errorKey).forEach(function (fieldName) {
+                const input = form.querySelector('[name="' + fieldName + '"]');
+                if (!input) {
+                    return;
+                }
+
+                input.classList.add('is-invalid');
+
+                const panel = input.closest('.eob-wizard-panel');
+                if (panel && panels.indexOf(panel) === activeIndex) {
+                    highlightedLabels.push(resolveFieldLabel(input));
+                }
+            });
+        });
+
+        const uniqueLabels = Array.from(new Set(highlightedLabels));
+        showValidationSummary(uniqueLabels);
+    }
+
     function updateWizard() {
+        clearValidationSummary();
+
         panels.forEach(function (panel, index) {
             panel.classList.toggle('is-active', index === activeIndex);
         });
 
+        const errorSteps = serverErrorStepIndices();
         stepButtons.forEach(function (button, index) {
             button.classList.toggle('is-active', index === activeIndex);
             button.classList.toggle('is-complete', index < activeIndex);
+            button.classList.toggle('has-errors', errorSteps.includes(index));
         });
 
         const activePanel = panels[activeIndex];
@@ -1381,18 +1548,53 @@ document.addEventListener('DOMContentLoaded', function () {
         prevButton.style.display = activeIndex === 0 ? 'none' : 'inline-flex';
         nextButton.style.display = activeIndex === panels.length - 1 ? 'none' : 'inline-flex';
         submitButton.style.display = activeIndex === panels.length - 1 ? 'inline-flex' : 'none';
+
+        if (Object.keys(serverErrors).length) {
+            applyServerErrorHighlights();
+        }
     }
 
     function validateCurrentStep() {
-        const inputs = panels[activeIndex].querySelectorAll('input, select, textarea');
+        clearStepValidationState();
+
+        const inputs = Array.from(panels[activeIndex].querySelectorAll('input, select, textarea')).filter(function (input) {
+            return !input.disabled && typeof input.checkValidity === 'function';
+        });
+        const invalidInputs = [];
+        const invalidLabels = [];
+
         for (const input of inputs) {
-            if (typeof input.reportValidity === 'function' && !input.reportValidity()) {
-                input.focus();
-                return false;
+            if (!input.checkValidity()) {
+                invalidInputs.push(input);
+                invalidLabels.push(resolveFieldLabel(input));
+                input.classList.add('is-invalid');
             }
         }
-        return true;
+
+        if (!invalidInputs.length) {
+            return true;
+        }
+
+        showValidationSummary(Array.from(new Set(invalidLabels)));
+        invalidInputs[0].focus();
+        invalidInputs[0].reportValidity();
+        return false;
     }
+
+    addressCopyButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            const source = form.querySelector('[name="' + button.getAttribute('data-copy-source') + '"]');
+            const target = form.querySelector('[name="' + button.getAttribute('data-copy-target') + '"]');
+
+            if (!source || !target) {
+                return;
+            }
+
+            target.value = source.value;
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
 
     stepButtons.forEach(function (button, index) {
         button.addEventListener('click', function () {
@@ -1421,6 +1623,16 @@ document.addEventListener('DOMContentLoaded', function () {
             activeIndex += 1;
             updateWizard();
         }
+    });
+
+    form.querySelectorAll('input, select, textarea').forEach(function (input) {
+        input.addEventListener('input', function () {
+            input.classList.remove('is-invalid');
+        });
+
+        input.addEventListener('change', function () {
+            input.classList.remove('is-invalid');
+        });
     });
 
     updateWizard();

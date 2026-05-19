@@ -1,16 +1,25 @@
 {{-- Sidebar - matches exact design from static HTML --}}
 @php
     $isHrmsModule = request()->routeIs('hrms.dashboard')
+        || request()->routeIs('hrms.masters.*')
         || request()->routeIs('employee-onboarding.*')
         || request()->routeIs('recruitment.*')
         || request()->routeIs('assets.*')
         || request()->routeIs('interns.*')
         || request()->routeIs('attendance.*')
+        || request()->routeIs('payroll.*')
         || request()->routeIs('leave-requests.*')
         || request()->routeIs('permission-requests.*')
         || request()->routeIs('visitor-management.*')
+        || request()->routeIs('dynamic-forms.*')
         || request()->routeIs('facility-management.*')
+        || request()->routeIs('settings.departments.*')
+        || request()->routeIs('settings.leave-types.*')
+        || request()->routeIs('settings.asset-categories.*')
+        || request()->routeIs('settings.payroll.*')
+        || request()->routeIs('settings.facility-titles.*')
         || request()->routeIs('settings.holiday-calendars.*');
+    $hrmsSelfService = auth()->user()?->isHrmsAttendanceOnlyUser();
 @endphp
 
 <aside class="sidebar">
@@ -47,8 +56,9 @@
                     </div>
                 </a>
 
-                 <a href="{{ url('/masters') }}" class="nav-item {{ request()->is('masters') || request()->is('masters/*') ? 'active' : '' }}">
-                    @if(request()->is('masters') || request()->is('masters/*'))
+                @if(! $hrmsSelfService)
+                 <a href="{{ route('hrms.masters.index') }}" class="nav-item {{ request()->routeIs('hrms.masters.*') || request()->routeIs('settings.departments.*') || request()->routeIs('settings.leave-types.*') || request()->routeIs('settings.asset-categories.*') || request()->routeIs('settings.payroll.*') || request()->routeIs('settings.facility-titles.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.masters.*') || request()->routeIs('settings.departments.*') || request()->routeIs('settings.leave-types.*') || request()->routeIs('settings.asset-categories.*') || request()->routeIs('settings.payroll.*') || request()->routeIs('settings.facility-titles.*'))
                         <div class="active-indicator"></div>
                     @endif
                     <div class="nav-content">
@@ -61,7 +71,9 @@
                         <span>Masters</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('employee-onboarding.index') }}" class="nav-item {{ request()->routeIs('employee-onboarding.*') ? 'active' : '' }}">
                     @if(request()->routeIs('employee-onboarding.*'))
                         <div class="active-indicator"></div>
@@ -76,7 +88,9 @@
                         <span>Employees</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('recruitment.index') }}" class="nav-item {{ request()->routeIs('recruitment.*') ? 'active' : '' }}">
                     @if(request()->routeIs('recruitment.*'))
                         <div class="active-indicator"></div>
@@ -92,7 +106,9 @@
                         <span>Recruitment</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('interns.index') }}" class="nav-item {{ request()->routeIs('interns.*') ? 'active' : '' }}">
                     @if(request()->routeIs('interns.*'))
                         <div class="active-indicator"></div>
@@ -105,6 +121,7 @@
                         <span>Interns</span>
                     </div>
                 </a>
+                @endif
 
                 <a href="{{ route('attendance.index') }}" class="nav-item {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
                     @if(request()->routeIs('attendance.*'))
@@ -126,6 +143,23 @@
                     </div>
                 </a>
 
+                @if(! $hrmsSelfService)
+                <a href="{{ route('payroll.index') }}" class="nav-item {{ request()->routeIs('payroll.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('payroll.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="6" width="18" height="12" rx="2"></rect>
+                            <path d="M7 10h10"></path>
+                            <path d="M7 14h6"></path>
+                        </svg>
+                        <span>Payroll</span>
+                    </div>
+                </a>
+                @endif
+
+                @if(! $hrmsSelfService)
                 <a href="{{ route('leave-requests.index') }}" class="nav-item {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('leave-requests.*'))
                         <div class="active-indicator"></div>
@@ -141,7 +175,9 @@
                         <span>Leave Requests</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('permission-requests.index') }}" class="nav-item {{ request()->routeIs('permission-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('permission-requests.*'))
                         <div class="active-indicator"></div>
@@ -154,7 +190,9 @@
                         <span>Permission Requests</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('visitor-management.index') }}" class="nav-item {{ request()->routeIs('visitor-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('visitor-management.*'))
                         <div class="active-indicator"></div>
@@ -169,6 +207,28 @@
                         <span>Visitor Management</span>
                     </div>
                 </a>
+                @endif
+
+                @if(! $hrmsSelfService)
+                <a href="{{ route('dynamic-forms.index') }}" class="nav-item {{ request()->routeIs('dynamic-forms.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('dynamic-forms.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 6h13"></path>
+                            <path d="M8 12h13"></path>
+                            <path d="M8 18h13"></path>
+                            <path d="M3 6h.01"></path>
+                            <path d="M3 12h.01"></path>
+                            <path d="M3 18h.01"></path>
+                        </svg>
+                        <span>Form Builder</span>
+                    </div>
+                </a>
+                @endif
+
+                @if(! $hrmsSelfService)
                 <a href="{{ route('facility-management.index') }}" class="nav-item {{ request()->routeIs('facility-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('facility-management.*'))
                         <div class="active-indicator"></div>
@@ -183,7 +243,9 @@
                         <span>Facility Management</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('assets.index') }}" class="nav-item {{ request()->routeIs('assets.*') ? 'active' : '' }}">
                     @if(request()->routeIs('assets.*'))
                         <div class="active-indicator"></div>
@@ -197,7 +259,9 @@
                         <span>Assets</span>
                     </div>
                 </a>
+                @endif
 
+                @if(! $hrmsSelfService)
                 <a href="{{ route('settings.holiday-calendars.index') }}" class="nav-item {{ request()->routeIs('settings.holiday-calendars.*') ? 'active' : '' }}">
                     @if(request()->routeIs('settings.holiday-calendars.*'))
                         <div class="active-indicator"></div>
@@ -212,6 +276,7 @@
                         <span>Holiday Calendar</span>
                     </div>
                 </a>
+                @endif
 
             </div>
         </div>
@@ -235,7 +300,24 @@
                     </div>
                 </a>
 
-                 <a href="{{ url('/masters') }}" class="nav-item {{ request()->is('masters') || request()->is('masters/*') ? 'active' : '' }}">
+                @if($hrmsSelfService)
+                <a href="{{ route('attendance.index') }}" class="nav-item {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('attendance.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="8" height="8" rx="2"></rect>
+                            <rect x="13" y="3" width="8" height="5" rx="2"></rect>
+                            <rect x="13" y="10" width="8" height="11" rx="2"></rect>
+                            <rect x="3" y="13" width="8" height="8" rx="2"></rect>
+                        </svg>
+                        <span>Attendance</span>
+                    </div>
+                </a>
+                @endif
+
+                 <a href="{{ route('masters.index') }}" class="nav-item {{ request()->is('masters') || request()->is('masters/*') ? 'active' : '' }}">
                     @if(request()->is('masters') || request()->is('masters/*'))
                         <div class="active-indicator"></div>
                     @endif

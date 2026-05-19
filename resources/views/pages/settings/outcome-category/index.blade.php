@@ -36,12 +36,17 @@
                         <td><span class="crm-count-badge">{{ $cat->sub_categories_count }}</span></td>
                         <td>{{ $cat->created_at->format('d M Y') }}</td>
                         <td class="text-right">
+                            <details class="crm-table-dropdown">
+                                <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                <div class="crm-table-dropdown-menu">
                             <button class="crm-icon-btn" onclick="openEdit({{ $cat->id }}, '{{ addslashes($cat->name) }}')">✏️</button>
                             <form action="{{ route('settings.outcome-categories.destroy', $cat) }}" method="POST" style="display:inline"
                                   onsubmit="return confirm('Delete this category and all its sub-categories?')">
                                 @csrf @method('DELETE')
                                 <button class="crm-icon-btn danger">🗑️</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 @empty

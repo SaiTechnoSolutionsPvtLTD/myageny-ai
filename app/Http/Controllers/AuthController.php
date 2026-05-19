@@ -93,7 +93,9 @@ class AuthController extends Controller
             'last_login_ip' => $request->ip(),
         ]);
 
-        return redirect()->intended(route('dashboard'))
+        $defaultRoute = $user->dashboardRoute();
+
+        return redirect()->intended(route($defaultRoute))
             ->with('success', 'Welcome back, ' . $user->name . '!');
     }
 

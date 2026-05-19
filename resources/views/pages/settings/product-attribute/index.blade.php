@@ -36,6 +36,9 @@
                         <td><span class="crm-badge crm-badge-purple">{{ $sub->category->name ?? '—' }}</span></td>
                         <td>{{ $sub->created_at->format('d M Y') }}</td>
                         <td class="text-right">
+                            <details class="crm-table-dropdown">
+                                <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                <div class="crm-table-dropdown-menu">
                             <button class="crm-icon-btn"
                                 onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->product_category_id }}, {{ $sub->id }})">✏️</button>
                             <form action="{{ route('settings.product-attribute.destroy', $sub) }}" method="POST" style="display:inline"
@@ -44,6 +47,8 @@
                                 <input type="hidden" name="id" value="{{ $sub->id }}">
                                 <button class="crm-icon-btn danger">🗑️</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 @empty

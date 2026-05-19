@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\EmployeeOnboarding;
 use App\Models\Role;
 use App\Models\RoleHierarchyMapping;
 use App\Models\User;
@@ -124,7 +125,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'document_salary_slips' => $fileRules,
             'document_bank_passbook' => $fileRules,
 
-            'status' => ['required', Rule::in(['pending', 'verified', 'rejected'])],
+            'status' => ['required', Rule::in([EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED])],
         ];
     }
 

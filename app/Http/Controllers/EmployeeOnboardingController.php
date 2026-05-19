@@ -25,6 +25,12 @@ class EmployeeOnboardingController extends Controller
     private const FILE_DIRECTORY = 'employee_onboarding';
     private const EMPLOYEE_ID_PREFIX = 'STS';
     private const TEAM_LEAD_ROLE_KEYS = ['tl', 'team_lead', 'team_leader', 'teamlead', 'manager'];
+    private const BASIC_SALARY_RATIO = 0.50;
+    private const HRA_RATIO = 0.30;
+    private const SPECIAL_ALLOWANCE_RATIO = 0.10;
+    private const PF_CONTRIBUTION_RATE = 0.25;
+    private const PF_BASIC_SALARY_CAP = 15000.00;
+    private const ESI_CONTRIBUTION_RATE = 0.04;
 
     private const DOCUMENT_LABELS = [
         'photograph' => 'Photograph',
@@ -47,8 +53,10 @@ class EmployeeOnboardingController extends Controller
 
     public function index(Request $request): View
     {
+        $this->authorizeEmployeeDataAccess();
+
         $employees = EmployeeOnboarding::query()
-            ->with(['role', 'department'])
+            ->with(['role', 'department', 'sourceIntern'])
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -70,6 +78,8 @@ class EmployeeOnboardingController extends Controller
 
     public function create(): View
     {
+        $this->authorizeEmployeeDataAccess();
+
         return view('pages.hrms.employee_onboarding.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
             'generatedEmployeeId' => $this->generateNextEmployeeId(),
@@ -82,6 +92,8 @@ class EmployeeOnboardingController extends Controller
 
     public function store(StoreEmployeeOnboardingRequest $request): RedirectResponse
     {
+        $this->authorizeEmployeeDataAccess();
+
         $validated = $request->validated();
 
         $employee = DB::transaction(function () use ($request, $validated) {
@@ -109,12 +121,15 @@ class EmployeeOnboardingController extends Controller
 
     public function show(EmployeeOnboarding $employee_onboarding): View
     {
+        $this->authorizeEmployeeDataAccess();
+
         $employee_onboarding->load([
             'educations',
             'employments',
             'familyDetails',
             'creator',
             'updater',
+            'sourceIntern',
             'role.department',
             'department',
             'portalUser.branch',
@@ -130,10 +145,13 @@ class EmployeeOnboardingController extends Controller
 
     public function edit(EmployeeOnboarding $employee_onboarding): View
     {
+        $this->authorizeEmployeeDataAccess();
+
         $employee_onboarding->load([
             'educations',
             'employments',
             'familyDetails',
+            'sourceIntern',
             'role.department',
             'department',
             'portalUser.branch',
@@ -154,6 +172,8 @@ class EmployeeOnboardingController extends Controller
 
     public function update(UpdateEmployeeOnboardingRequest $request, EmployeeOnboarding $employee_onboarding): RedirectResponse
     {
+        $this->authorizeEmployeeDataAccess();
+
         $validated = $request->validated();
 
         DB::transaction(function () use ($request, $validated, $employee_onboarding) {
@@ -180,6 +200,8 @@ class EmployeeOnboardingController extends Controller
 
     public function destroy(EmployeeOnboarding $employee_onboarding): RedirectResponse
     {
+        $this->authorizeEmployeeDataAccess();
+
         $employeeName = $employee_onboarding->name;
 
         DB::transaction(function () use ($employee_onboarding) {
@@ -214,6 +236,73 @@ class EmployeeOnboardingController extends Controller
         if (($attributes['marital_status'] ?? null) !== 'married') {
             $attributes['date_of_marriage'] = null;
         }
+
+        return $this->normalizeSalaryAttributes($attributes);
+    }
+
+    private function authorizeEmployeeDataAccess(): void
+    {
+        abort_if(auth()->user()?->isHrmsAttendanceOnlyUser(), 403);
+    }
+
+    private function normalizeSalaryAttributes(array $attributes): array
+    {
+        $grossSalary = round((float) ($attributes['gross_salary'] ?? 0), 2);
+
+        if ($grossSalary <= 0) {
+            foreach ([
+                'basic_salary',
+                'hra',
+                'special_allowance',
+                'other_allowance',
+                'pf_employee_contribution',
+                'pf_employer_contribution',
+                'esi_employee_contribution',
+                'esi_employer_contribution',
+                'total_deduction',
+                'net_salary',
+            ] as $field) {
+                if (array_key_exists($field, $attributes)) {
+                    $attributes[$field] = 0;
+                }
+            }
+
+            return $attributes;
+        }
+
+        $basicSalary = round($grossSalary * self::BASIC_SALARY_RATIO, 2);
+        $hra = round($grossSalary * self::HRA_RATIO, 2);
+        $specialAllowance = round($grossSalary * self::SPECIAL_ALLOWANCE_RATIO, 2);
+        $otherAllowance = round(max($grossSalary - $basicSalary - $hra - $specialAllowance, 0), 2);
+
+        $pfEnabled = (bool) ($attributes['pf_enabled'] ?? false);
+        $esiEnabled = (bool) ($attributes['esi_enabled'] ?? false);
+
+        $pfBaseAmount = $basicSalary >= self::PF_BASIC_SALARY_CAP
+            ? self::PF_BASIC_SALARY_CAP
+            : ($basicSalary + $specialAllowance + $otherAllowance);
+        $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * self::PF_CONTRIBUTION_RATE, 0) : 0;
+        $pfEmployerContribution = $pfEnabled ? round($pfBaseAmount * self::PF_CONTRIBUTION_RATE, 0) : 0;
+        $esiEmployeeContribution = $esiEnabled ? round($grossSalary * self::ESI_CONTRIBUTION_RATE, 0) : 0;
+        $esiEmployerContribution = $esiEnabled ? round($grossSalary * self::ESI_CONTRIBUTION_RATE, 0) : 0;
+
+        $professionalTax = round((float) ($attributes['professional_tax'] ?? 0), 2);
+        $tdsAmount = round((float) ($attributes['tds_amount'] ?? 0), 2);
+        $loanDeduction = round((float) ($attributes['loan_deduction'] ?? 0), 2);
+        $otherDeduction = round((float) ($attributes['other_deduction'] ?? 0), 2);
+        $totalDeduction = round($pfEmployeeContribution + $esiEmployeeContribution + $professionalTax + $tdsAmount + $loanDeduction + $otherDeduction, 2);
+        $netSalary = round(max($grossSalary - $totalDeduction, 0), 2);
+
+        $attributes['basic_salary'] = $basicSalary;
+        $attributes['hra'] = $hra;
+        $attributes['special_allowance'] = $specialAllowance;
+        $attributes['other_allowance'] = $otherAllowance;
+        $attributes['pf_employee_contribution'] = $pfEmployeeContribution;
+        $attributes['pf_employer_contribution'] = $pfEmployerContribution;
+        $attributes['esi_employee_contribution'] = $esiEmployeeContribution;
+        $attributes['esi_employer_contribution'] = $esiEmployerContribution;
+        $attributes['total_deduction'] = $totalDeduction;
+        $attributes['net_salary'] = $netSalary;
 
         return $attributes;
     }

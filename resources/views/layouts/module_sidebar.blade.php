@@ -17,7 +17,7 @@
     ];
 @endphp
 
-@can('module_menu.view')
+@can('modules_menu.view')
 <button
     type="button"
     class="module-fab"

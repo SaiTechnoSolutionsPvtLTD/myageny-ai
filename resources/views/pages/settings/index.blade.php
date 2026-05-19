@@ -117,6 +117,7 @@
 .settings-card.facebook::after { background: #2563eb; }
 .settings-card.department::after { background: #059669; }
 .settings-card.holiday::after { background: #ef4444; }
+.settings-card.payroll::after { background: #16a34a; }
 .settings-card-icon {
     width: 54px;
     height: 54px;
@@ -175,6 +176,10 @@
 .settings-card-icon.holiday {
     background: linear-gradient(135deg, #fff1f2, #ffe4e6);
     color: #be123c;
+}
+.settings-card-icon.payroll {
+    background: linear-gradient(135deg, #ecfdf5, #dcfce7);
+    color: #15803d;
 }
 .settings-card-title {
     margin: 0 0 8px;
@@ -306,6 +311,27 @@
             <p class="settings-card-text">Connect campaign flows and manage mapped lead intake from Facebook forms inside your CRM.</p>
             <span class="settings-card-link">
                 Open Facebook Integration
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.payroll.index') }}" class="settings-card payroll">
+            <div class="settings-card-icon payroll">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="6" width="18" height="12" rx="2"/>
+                    <path d="M7 10h10"/>
+                    <path d="M7 14h6"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Payroll Settings</h4>
+            <p class="settings-card-text">Set default PF and ESI percentages, salary limit rules, and monthly payroll calculation defaults.</p>
+            <span class="settings-card-link">
+                Open Payroll Settings
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

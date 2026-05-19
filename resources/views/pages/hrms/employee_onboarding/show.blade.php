@@ -41,11 +41,18 @@
                         <div style="margin-top:14px;">
                             <span class="eob-chip eob-chip-{{ $employee->status }}">{{ ucfirst($employee->status) }}</span>
                         </div>
+                        @if($employee->sourceIntern)
+                            <div style="margin-top:10px;">
+                                <span class="eob-chip eob-chip-pending">Converted from Intern</span>
+                            </div>
+                        @endif
 
                         <div class="eob-empid-card">
                             <div class="eob-empid-label">Employee ID</div>
                             <div class="eob-empid-value">{{ $employee->employee_id }}</div>
-                            <div class="eob-empid-sub">Quick identity card for profile reference while scrolling.</div>
+                            <div class="eob-empid-sub">
+                                {{ $employee->sourceIntern ? 'Created from intern ' . ($employee->sourceIntern->intern_id ?: $employee->sourceIntern->name) : 'Quick identity card for profile reference while scrolling.' }}
+                            </div>
                         </div>
 
                         <div class="eob-side-list">
@@ -89,6 +96,7 @@
                     <div class="eob-card-body">
                         <div class="eob-show-grid">
                             <div class="eob-show-item"><div class="eob-show-label">Employee ID</div><div class="eob-show-value">{{ $employee->employee_id }}</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Source</div><div class="eob-show-value">@if($employee->sourceIntern)<a href="{{ route('interns.show', $employee->sourceIntern) }}">Intern {{ $employee->sourceIntern->intern_id ?: $employee->sourceIntern->name }}</a>@else Direct Employee Onboarding @endif</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Father's Name</div><div class="eob-show-value">{{ $employee->father_name ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Blood Group</div><div class="eob-show-value">{{ $employee->blood_group ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Marital Status</div><div class="eob-show-value">{{ ucfirst($employee->marital_status) }}</div></div>
@@ -310,28 +318,6 @@
                     </div>
                 </div>
 
-                <div class="eob-show-card">
-                    <div class="eob-card-head"><div><div class="eob-card-title">Declaration</div></div></div>
-                    <div class="eob-card-body">
-                        <div class="eob-show-grid">
-                            <div class="eob-show-item"><div class="eob-show-label">Date</div><div class="eob-show-value">{{ optional($employee->declaration_date)->format('d M Y') ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Place</div><div class="eob-show-value">{{ $employee->declaration_place ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item">
-                                <div class="eob-show-label">Signature File</div>
-                                <div class="eob-show-value">
-                                    @if($employee->signature)
-                                        <div class="eob-doc-actions">
-                                            <a href="{{ asset('storage/' . $employee->signature) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View</a>
-                                            <a href="{{ asset('storage/' . $employee->signature) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download</a>
-                                        </div>
-                                    @else
-                                        N/A
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

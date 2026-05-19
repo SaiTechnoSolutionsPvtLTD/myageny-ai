@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreAssetEntryRequest;
 use App\Http\Requests\UpdateAssetEntryRequest;
+use App\Models\AssetCategory;
 use App\Models\AssetEntry;
 use App\Models\EmployeeOnboarding;
 use Illuminate\Http\RedirectResponse;
@@ -38,8 +39,8 @@ class AssetEntryController extends Controller
 
         return view('pages.hrms.assets.index', [
             'assets' => $assets,
-            'categories' => AssetEntry::query()->whereNotNull('asset_category')->distinct()->orderBy('asset_category')->pluck('asset_category'),
-            'employees' => EmployeeOnboarding::query()->orderBy('name')->get(['id', 'employee_id', 'name']),
+            'categories' => AssetCategory::query()->orderBy('name')->pluck('name'),
+            'employees' => EmployeeOnboarding::query()->active()->orderBy('name')->get(['id', 'employee_id', 'name']),
             'stats' => [
                 'total' => AssetEntry::count(),
                 'assigned' => AssetEntry::where('asset_status', 'assigned')->count(),
@@ -54,7 +55,8 @@ class AssetEntryController extends Controller
         return view('pages.hrms.assets.create', [
             'asset' => null,
             'generatedAssetCode' => $this->generateNextAssetCode(),
-            'employees' => EmployeeOnboarding::query()->orderBy('name')->get(['id', 'employee_id', 'name']),
+            'assetCategories' => AssetCategory::query()->orderBy('name')->get(['name', 'description']),
+            'employees' => EmployeeOnboarding::query()->active()->orderBy('name')->get(['id', 'employee_id', 'name']),
             'statusOptions' => $this->statusOptions(),
         ]);
     }
@@ -85,7 +87,8 @@ class AssetEntryController extends Controller
         return view('pages.hrms.assets.edit', [
             'asset' => $asset,
             'generatedAssetCode' => $asset->asset_code,
-            'employees' => EmployeeOnboarding::query()->orderBy('name')->get(['id', 'employee_id', 'name']),
+            'assetCategories' => AssetCategory::query()->orderBy('name')->get(['name', 'description']),
+            'employees' => EmployeeOnboarding::query()->active()->orderBy('name')->get(['id', 'employee_id', 'name']),
             'statusOptions' => $this->statusOptions(),
         ]);
     }

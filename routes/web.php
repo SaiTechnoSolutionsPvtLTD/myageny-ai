@@ -3,11 +3,14 @@
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\AccessMappingController;
 use App\Http\Controllers\AssetEntryController;
+use App\Http\Controllers\AssetCategoryController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\DynamicFormController;
 use App\Http\Controllers\EmployeeOnboardingController;
+use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\HolidayCalendarController;
@@ -24,6 +27,8 @@ use App\Http\Controllers\MastersController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\OutcomeSubCategoryController;
 use App\Http\Controllers\PermissionRequestController;
+use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\PayrollSettingController;
 use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -35,6 +40,7 @@ use App\Http\Controllers\SuperAdminDashboardController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VisitorManagementController;
 use App\Http\Controllers\FacilityManagementController;
+use App\Http\Controllers\FacilityTitleController;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use Illuminate\Support\Facades\Auth;
@@ -79,7 +85,6 @@ Route::middleware(['auth'])->group(function () {
 
      // Super Admin Dashboard (API-integrated blade)
     Route::get('/dashboard/admin', [DashboardController::class, 'index'])
-        ->middleware('can:dashboard.view')
         ->name('dashboard.admin');
 
     Route::get('/product-dashboard/admin', [SuperAdminDashboardController::class, 'adminProductindex'])
@@ -87,17 +92,20 @@ Route::middleware(['auth'])->group(function () {
 
     // Default redirect by role
     Route::get('/dashboard', function () {
-    return redirect()->route('dashboard.admin');
-        // if (auth()->user()->hasAnyRole(['Super Admin', 'admin', 'super_admin'])) {
-        //     return redirect()->route('dashboard.admin');
-        // }
-        // return redirect()->route('leads.index');
+        $user = auth()->user()?->loadMissing('roles.department');
+
+        abort_unless($user, 403);
+
+        return redirect()->route($user->dashboardRoute());
     })->name('dashboard');
 
     // Masters
     Route::get('/masters', [MastersController::class, 'index'])
         ->middleware('can:masters.view')
         ->name('masters.index');
+    Route::get('/hrms/masters', [MastersController::class, 'hrmsIndex'])
+        ->middleware('can:masters.view')
+        ->name('hrms.masters.index');
 
     Route::get('/authentications', [UserController::class, 'authIndex'])
         ->middleware('can:authentication.menuview')
@@ -156,6 +164,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/create', [AttendanceController::class, 'create'])->name('attendance.create');
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
+    Route::get('/attendance/checkout', [AttendanceController::class, 'createCheckout'])->name('attendance.checkout.create');
+    Route::post('/attendance/checkout', [AttendanceController::class, 'storeCheckout'])->name('attendance.checkout.store');
+    Route::get('/attendance/lookup', [AttendanceController::class, 'lookupAttendance'])->name('attendance.lookup');
     Route::get('/attendance/export', [AttendanceController::class, 'export'])->name('attendance.export');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
@@ -176,6 +187,22 @@ Route::middleware(['auth'])->group(function () {
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
+    Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
+    Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
+    Route::patch('/employee-exit-requests/{employeeExitRequest}/approve', [EmployeeExitController::class, 'approveExit'])->name('employee-exit-requests.approve');
+    Route::patch('/employee-exit-requests/{employeeExitRequest}/reject', [EmployeeExitController::class, 'rejectExit'])->name('employee-exit-requests.reject');
+    Route::patch('/employee-exit-requests/{employeeExitRequest}/approve-revoke', [EmployeeExitController::class, 'approveRevoke'])->name('employee-exit-requests.approve-revoke');
+    Route::patch('/employee-exit-requests/{employeeExitRequest}/reject-revoke', [EmployeeExitController::class, 'rejectRevoke'])->name('employee-exit-requests.reject-revoke');
+    Route::get('/dynamic-forms/{dynamicForm}/responses', [DynamicFormController::class, 'responses'])->name('dynamic-forms.responses');
+    Route::get('/dynamic-forms/{dynamicForm}/export', [DynamicFormController::class, 'export'])->name('dynamic-forms.export');
+    Route::resource('dynamic-forms', DynamicFormController::class);
+    Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
+    Route::get('/payroll/create', [PayrollController::class, 'create'])->name('payroll.create');
+    Route::post('/payroll', [PayrollController::class, 'store'])->name('payroll.store');
+    Route::get('/payroll/{payroll}', [PayrollController::class, 'show'])->name('payroll.show');
+    Route::get('/payroll/{payroll}/payslip/{item}', [PayrollController::class, 'payslip'])->name('payroll.payslip');
+    Route::get('/interns/{intern}/convert-to-employee', [InternJoiningFormController::class, 'showConvertToEmployeeForm'])->name('interns.convert-to-employee');
+    Route::post('/interns/{intern}/convert-to-employee', [InternJoiningFormController::class, 'convertToEmployee'])->name('interns.convert-to-employee.store');
     Route::resource('interns', InternJoiningFormController::class);
     Route::get('/visitor-management/qr-code', [VisitorManagementController::class, 'qrCode'])->name('visitor-management.qr-code');
     Route::get('/visitor-management', [VisitorManagementController::class, 'index'])->name('visitor-management.index');
@@ -268,6 +295,9 @@ Route::middleware(['auth'])->group(function () {
 
 });
 
+Route::get('/forms/{token}', [DynamicFormController::class, 'publicShow'])->name('dynamic-forms.public.show');
+Route::post('/forms/{token}', [DynamicFormController::class, 'publicSubmit'])->name('dynamic-forms.public.submit');
+
 Route::resource('facility-management', FacilityManagementController::class)
          ->except(['show']);
 
@@ -292,6 +322,14 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
 
 
     Route::resource('leave-types', LeaveTypeController::class)
+         ->middleware('can:settings.manage')
+         ->except(['show']);
+
+    Route::resource('asset-categories', AssetCategoryController::class)
+         ->middleware('can:settings.manage')
+         ->except(['show']);
+
+    Route::resource('facility-titles', FacilityTitleController::class)
          ->middleware('can:settings.manage')
          ->except(['show']);
 
@@ -346,6 +384,8 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
 
 
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->name('quotation');
+    Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:settings.manage')->name('payroll.index');
+    Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:settings.manage')->name('payroll.update');
 
     Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:settings.manage')->name('quotation.update');
     Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:settings.manage')->name('quotation.file.delete');

@@ -22,7 +22,14 @@
         </div>
         <div class="intern-body">
             @if($errors->any())
-                <div class="intern-alert intern-alert-danger">Please review the highlighted fields before continuing.</div>
+                <div class="intern-alert intern-alert-danger">
+                    <div class="fw-bold">Please review the highlighted fields before continuing.</div>
+                    <ul class="mb-0 mt-2 ps-3">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
             @endif
 
             @include('pages.hrms.Interns.intern_joining_forms.form', [

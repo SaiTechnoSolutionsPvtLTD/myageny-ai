@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Add Attendance')
+@section('title', 'Check In Attendance')
 
 @push('styles')
 <style>
@@ -23,6 +23,8 @@
 .att-textarea{min-height:110px;resize:vertical}
 .att-input:focus,.att-select:focus,.att-textarea:focus{border-color:#fe5f04;box-shadow:0 0 0 3px rgba(254,95,4,.1)}
 .att-error{font-size:12px;color:#dc2626}
+.att-help{font-size:12px;color:#8a8a97}
+.att-help.is-warning{color:#c2410c}
 .att-foot{padding:18px 22px;border-top:1px solid #f0eef2;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .att-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:10px;border:1px solid transparent;background:#fff;color:#121212;text-decoration:none;font-size:13px;font-weight:700;cursor:pointer}
 .att-btn-primary{background:linear-gradient(135deg,#fe5f04,#ff7c30);border-color:#fe5f04;color:#fff}
@@ -41,8 +43,8 @@
 <div class="att-page">
     <div class="att-topbar">
         <div>
-            <div class="att-title">Add Attendance</div>
-            <div class="att-breadcrumb">HRMS > Attendance > Add Entry</div>
+            <div class="att-title">Check In Attendance</div>
+            <div class="att-breadcrumb">HRMS > Attendance > Check In</div>
         </div>
         <div>
             <a href="{{ route('attendance.index') }}" class="att-btn att-btn-ghost">Back</a>
@@ -57,27 +59,27 @@
         <form method="POST" action="{{ route('attendance.store') }}" class="att-card">
             @csrf
             <div class="att-card-head">
-                <div class="att-card-title">Manual HR Attendance Entry</div>
-                <div class="att-card-sub">Select employee, date, in-time and out-time. Out-time is optional and can be entered later through another update flow.</div>
+                <div class="att-card-title">Manual HR Check-In Entry</div>
+                <div class="att-card-sub">Select employee or intern, choose date, and enter only the check-in time. Checkout can be added separately.</div>
             </div>
             <div class="att-card-body">
                 <div class="att-grid">
                     <div class="att-field full">
-                        <label class="att-label">Employee <span class="att-req">*</span></label>
-                        <select name="employee_id" class="att-select" required>
-                            <option value="">Select employee</option>
-                            @foreach($employees as $employee)
-                                <option value="{{ $employee->id }}" @selected(old('employee_id') == $employee->id)>
-                                    {{ $employee->name }}{{ $employee->employee_id ? ' - ' . $employee->employee_id : '' }}
+                        <label class="att-label">Employee / Intern <span class="att-req">*</span></label>
+                        <select name="attendee_key" class="att-select" id="attendee_key" required>
+                            <option value="">Select attendee</option>
+                            @foreach($attendees as $attendee)
+                                <option value="{{ $attendee['select_key'] }}" @selected(old('attendee_key') == $attendee['select_key'])>
+                                    {{ strtoupper($attendee['attendee_type']) }} - {{ $attendee['name'] }}{{ $attendee['display_id'] ? ' - ' . $attendee['display_id'] : '' }}
                                 </option>
                             @endforeach
                         </select>
-                        @error('employee_id')<div class="att-error">{{ $message }}</div>@enderror
+                        @error('attendee_key')<div class="att-error">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="att-field">
                         <label class="att-label">Date <span class="att-req">*</span></label>
-                        <input type="date" name="attendance_date" class="att-input" value="{{ old('attendance_date', now()->toDateString()) }}" required>
+                        <input type="date" name="attendance_date" id="attendance_date" class="att-input" value="{{ old('attendance_date', now()->toDateString()) }}" required>
                         @error('attendance_date')<div class="att-error">{{ $message }}</div>@enderror
                     </div>
 
@@ -92,14 +94,9 @@
 
                     <div class="att-field">
                         <label class="att-label">In Time <span class="att-req">*</span></label>
-                        <input type="time" name="login_time" class="att-input" value="{{ old('login_time', now()->format('H:i')) }}" required>
+                        <input type="time" name="login_time" id="login_time" class="att-input" value="{{ old('login_time') }}" required>
                         @error('login_time')<div class="att-error">{{ $message }}</div>@enderror
-                    </div>
-
-                    <div class="att-field">
-                        <label class="att-label">Out Time</label>
-                        <input type="time" name="logout_time" class="att-input" value="{{ old('logout_time') }}">
-                        @error('logout_time')<div class="att-error">{{ $message }}</div>@enderror
+                        <div class="att-help" id="login_time_help">If a check-in already exists for the selected date, that time will appear here. Otherwise this stays blank.</div>
                     </div>
 
                     <div class="att-field full">
@@ -111,9 +108,84 @@
             </div>
             <div class="att-foot">
                 <a href="{{ route('attendance.index') }}" class="att-btn att-btn-ghost">Cancel</a>
-                <button type="submit" class="att-btn att-btn-primary">Save Attendance</button>
+                <button type="submit" class="att-btn att-btn-primary">Save Check-In</button>
             </div>
         </form>
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const attendeeField = document.getElementById('attendee_key');
+    const dateField = document.getElementById('attendance_date');
+    const loginField = document.getElementById('login_time');
+    const helpField = document.getElementById('login_time_help');
+    let activeLookup = 0;
+
+    const resetLoginState = function (message, warning) {
+        loginField.value = '';
+        helpField.textContent = message;
+        helpField.classList.toggle('is-warning', Boolean(warning));
+    };
+
+    const lookupAttendance = function () {
+        const attendeeKey = attendeeField.value;
+        const attendanceDate = dateField.value;
+
+        if (!attendeeKey || !attendanceDate) {
+            resetLoginState('Choose attendee and date to load any existing check-in time.', false);
+            return;
+        }
+
+        const lookupId = ++activeLookup;
+        const url = new URL(@json(route('attendance.lookup')));
+        url.searchParams.set('attendee_key', attendeeKey);
+        url.searchParams.set('attendance_date', attendanceDate);
+
+        fetch(url.toString(), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('Lookup failed');
+                }
+
+                return response.json();
+            })
+            .then(function (data) {
+                if (lookupId !== activeLookup) {
+                    return;
+                }
+
+                if (data.found && data.login_time) {
+                    loginField.value = data.login_time;
+                    helpField.textContent = 'Existing check-in time loaded for this attendee and date.';
+                    helpField.classList.remove('is-warning');
+                    return;
+                }
+
+                resetLoginState('No existing check-in time found for this attendee and date.', false);
+            })
+            .catch(function () {
+                if (lookupId !== activeLookup) {
+                    return;
+                }
+
+                resetLoginState('Unable to load existing check-in time right now.', true);
+            });
+    };
+
+    attendeeField.addEventListener('change', lookupAttendance);
+    dateField.addEventListener('change', lookupAttendance);
+
+    if (attendeeField.value && dateField.value) {
+        lookupAttendance();
+    }
+});
+</script>
+@endpush

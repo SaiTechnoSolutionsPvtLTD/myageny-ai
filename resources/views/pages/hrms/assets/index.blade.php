@@ -127,18 +127,20 @@
                                     </td>
                                     <td>{{ $asset->location ?: 'N/A' }}</td>
                                     <td>
-                                        <div class="eob-inline-actions">
-                                            <a href="{{ route('assets.show', $asset) }}" class="eob-icon-btn" title="View">V</a>
-                                            <a href="{{ route('assets.edit', $asset) }}" class="eob-icon-btn" title="Edit">E</a>
-                                            <button
-                                                type="button"
-                                                class="eob-icon-btn danger"
-                                                title="Delete"
-                                                data-delete-trigger
-                                                data-name="{{ $asset->asset_name }}"
-                                                data-action="{{ route('assets.destroy', $asset) }}"
-                                            >D</button>
-                                        </div>
+                                        <details class="eob-table-dropdown">
+                                            <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                            <div class="eob-table-dropdown-menu">
+                                                <a href="{{ route('assets.show', $asset) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                                <a href="{{ route('assets.edit', $asset) }}" class="eob-table-dropdown-item"><i class="bi bi-pencil"></i> Edit</a>
+                                                <button
+                                                    type="button"
+                                                    class="eob-table-dropdown-item danger"
+                                                    data-delete-trigger
+                                                    data-name="{{ $asset->asset_name }}"
+                                                    data-action="{{ route('assets.destroy', $asset) }}"
+                                                ><i class="bi bi-trash"></i> Delete</button>
+                                            </div>
+                                        </details>
                                     </td>
                                 </tr>
                             @endforeach

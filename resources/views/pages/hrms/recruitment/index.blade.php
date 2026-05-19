@@ -120,9 +120,12 @@
                                     <td><span class="rec-chip rec-chip-{{ $candidate->status }}">{{ $candidate->status_label }}</span></td>
                                     <td>{{ $candidate->created_at->format('d M Y') }}</td>
                                     <td>
-                                        <div class="eob-inline-actions">
-                                            <a href="{{ route('recruitment.show', $candidate) }}" class="eob-icon-btn" title="View">V</a>
-                                        </div>
+                                        <details class="eob-table-dropdown">
+                                            <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                            <div class="eob-table-dropdown-menu">
+                                                <a href="{{ route('recruitment.show', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                            </div>
+                                        </details>
                                     </td>
                                 </tr>
                             @endforeach
