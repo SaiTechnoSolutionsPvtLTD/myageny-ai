@@ -24,6 +24,9 @@
             @if(session('success'))
                 <div class="intern-alert intern-alert-success">{!! session('success') !!}</div>
             @endif
+            @if(session('error'))
+                <div class="intern-alert" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;">{{ session('error') }}</div>
+            @endif
 
 
 
@@ -31,16 +34,16 @@
                 <div class="intern-card-head">
                     <div>
                         <div class="intern-card-title">Intern Records</div>
-                        <div class="intern-card-subtitle">Review submitted intern details, contact information, and declaration dates in one place.</div>
+                        <div class="intern-card-subtitle">Review submitted intern details, internship duration, and current status in one place.</div>
                     </div>
                     <div class="intern-results-chip">{{ $forms->total() }} total</div>
                 </div>
 
-                <div class="intern-filter-wrap">
+                        <div class="intern-filter-wrap">
                     <form method="GET" action="{{ route('interns.index') }}" class="intern-filter-form">
                         <div class="intern-filter-field">
                             <label class="intern-filter-label">Search Intern</label>
-                            <input type="text" name="search" class="intern-input" value="{{ request('search') }}" placeholder="Search by name, email, mobile, aadhaar">
+                            <input type="text" name="search" class="intern-input" value="{{ request('search') }}" placeholder="Search by intern ID, name, email, mobile, aadhaar">
                         </div>
                         <div class="intern-filter-actions">
                             <button type="submit" class="btn btn-primary">Search</button>
@@ -58,8 +61,8 @@
                                 <th>#</th>
                                 <th>Intern</th>
                                 <th>Contact</th>
-                                <th>Date of Birth</th>
-                                <th>Declaration Date</th>
+                                <th>Internship Timeline</th>
+                                <th>Status</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
@@ -74,7 +77,12 @@
                                         <div class="intern-person-avatar">{{ strtoupper(substr($item->name, 0, 1)) }}</div>
                                         <div>
                                             <div class="intern-person-name">{{ $item->name }}</div>
-                                            <div class="intern-person-sub">{{ $item->father_name ?: 'Father name not added' }}</div>
+                                            <div class="intern-person-sub">
+                                                {{ $item->intern_id ?: 'Intern ID pending' }}
+                                                @if($item->convertedEmployee)
+                                                    • Converted to {{ $item->convertedEmployee->employee_id }}
+                                                @endif
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
@@ -83,23 +91,31 @@
                                     <div class="intern-contact-sub">{{ $item->email ?: 'Email not added' }}</div>
                                 </td>
                                 <td>
-                                    <div class="intern-date-main">{{ optional($item->date_of_birth)->format('d M Y') ?: 'N/A' }}</div>
-                                    <div class="intern-date-sub">{{ optional($item->date_of_birth)->age ? optional($item->date_of_birth)->age . ' yrs' : 'Age unavailable' }}</div>
+                                    <div class="intern-date-main">{{ optional($item->internship_start_date)->format('d M Y') ?: 'N/A' }} to {{ optional($item->internship_end_date)->format('d M Y') ?: 'N/A' }}</div>
+                                    <div class="intern-date-sub">{{ $item->internship_duration_months ? $item->internship_duration_months . ' month(s)' : 'Duration not set' }}</div>
                                 </td>
                                 <td>
-                                    <div class="intern-date-main">{{ optional($item->declaration_date)->format('d M Y') ?: 'N/A' }}</div>
-                                    <div class="intern-date-sub">{{ $item->declaration_place ?: 'Place not added' }}</div>
+                                    <div class="intern-date-main">{{ ucfirst($item->internship_status ?: 'active') }}</div>
+                                    <div class="intern-date-sub">{{ optional($item->date_of_birth)->age ? optional($item->date_of_birth)->age . ' yrs' : 'Age unavailable' }}</div>
                                 </td>
                                 <td class="text-end">
-                                    <div class="intern-action-group">
-                                        <a href="{{ route('interns.show', $item) }}" class="btn btn-sm btn-outline-primary">View</a>
-                                        <a href="{{ route('interns.edit', $item) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                                        <form method="POST" action="{{ route('interns.destroy', $item) }}" onsubmit="return confirm('Delete this intern form?')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                                        </form>
-                                    </div>
+                                    <details class="eob-table-dropdown">
+                                        <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                        <div class="eob-table-dropdown-menu">
+                                            <a href="{{ route('interns.show', $item) }}" class="eob-table-dropdown-item">View</a>
+                                            @if($item->convertedEmployee)
+                                                <a href="{{ route('employee-onboarding.show', $item->convertedEmployee) }}" class="eob-table-dropdown-item">Employee</a>
+                                            @else
+                                                <a href="{{ route('interns.convert-to-employee', $item) }}" class="eob-table-dropdown-item">Convert</a>
+                                            @endif
+                                            <a href="{{ route('interns.edit', $item) }}" class="eob-table-dropdown-item">Edit</a>
+                                            <form method="POST" action="{{ route('interns.destroy', $item) }}" onsubmit="return confirm('Delete this intern form?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="eob-table-dropdown-item danger">Delete</button>
+                                            </form>
+                                        </div>
+                                    </details>
                                 </td>
                             </tr>
                         @empty

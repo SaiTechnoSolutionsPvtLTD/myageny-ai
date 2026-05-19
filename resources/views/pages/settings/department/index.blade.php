@@ -14,7 +14,7 @@
                 <p class="crm-subtitle">Create and manage employee departments with soft delete support.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.index') }}" class="crm-btn crm-btn-ghost">Back</a>
                 <a href="{{ route('settings.departments.create') }}" class="crm-btn crm-btn-primary">+ Add Department</a>
             </div>
         </div>
@@ -50,6 +50,9 @@
                         <td>{{ \Illuminate\Support\Str::limit($department->description ?: 'No description added.', 70) }}</td>
                         <td>{{ $department->created_at->format('d M Y') }}</td>
                         <td class="text-right">
+                            <details class="crm-table-dropdown">
+                                <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                <div class="crm-table-dropdown-menu">
                             <a href="{{ route('settings.departments.edit', $department) }}" class="crm-icon-btn" title="Edit">✏️</a>
                             <form action="{{ route('settings.departments.destroy', $department) }}" method="POST" style="display:inline"
                                   onsubmit="return confirm('Delete this department? It will be soft deleted.')">
@@ -57,6 +60,8 @@
                                 @method('DELETE')
                                 <button class="crm-icon-btn danger" title="Delete">🗑️</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 @empty

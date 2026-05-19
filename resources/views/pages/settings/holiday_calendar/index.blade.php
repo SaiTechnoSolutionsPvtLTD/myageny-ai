@@ -140,14 +140,19 @@
                                     </td>
                                     <td>{{ $holiday->reason }}</td>
                                     <td class="text-right">
-                                        <div class="holiday-actions">
-                                            <a href="{{ route('settings.holiday-calendars.edit', $holiday) }}" class="crm-icon-btn" title="Edit">E</a>
+                                        <details class="crm-table-dropdown">
+                                            <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                            <div class="crm-table-dropdown-menu">
+                                                <div class="holiday-actions">
+                                            <a href="{{ route('settings.holiday-calendars.edit', $holiday) }}" class="crm-icon-btn" title="Edit"><i class="bi bi-pencil"></i></a>
                                             <form action="{{ route('settings.holiday-calendars.destroy', $holiday) }}" method="POST" onsubmit="return confirm('Delete this holiday?')">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button class="crm-icon-btn danger" title="Delete">D</button>
+                                                <button class="crm-icon-btn danger" title="Delete"><i class="bi bi-trash"></i></button>
                                             </form>
-                                        </div>
+                                                </div>
+                                            </div>
+                                        </details>
                                     </td>
                                 </tr>
                             @empty

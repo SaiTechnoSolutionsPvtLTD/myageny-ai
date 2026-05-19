@@ -92,7 +92,7 @@ class LeaveRequestController extends Controller
                 'submitted_at' => now(),
             ]);
 
-            $leaveRequest->approvals()->createMany($this->approvalRowsFor($user));
+            $this->syncApprovalRows($leaveRequest, $user);
 
             return $leaveRequest;
         });
@@ -218,6 +218,16 @@ class LeaveRequestController extends Controller
             ->all();
     }
 
+    private function syncApprovalRows(LeaveRequest $leaveRequest, User $requester): void
+    {
+        foreach ($this->approvalRowsFor($requester) as $attributes) {
+            $leaveRequest->approvals()->updateOrCreate(
+                ['step_key' => $attributes['step_key']],
+                $attributes
+            );
+        }
+    }
+
     private function pendingApprovalsFor(User $user): Collection
     {
         return LeaveApproval::with(['leaveRequest.user.roles', 'leaveRequest.employee', 'leaveRequest.leaveType', 'approver', 'actionedBy'])
@@ -276,6 +286,7 @@ class LeaveRequestController extends Controller
     private function resolveEmployee(User $user): ?EmployeeOnboarding
     {
         return EmployeeOnboarding::query()
+            ->active()
             ->where(function ($query) use ($user) {
                 $query->where('portal_user_id', $user->id)
                     ->orWhere('email', $user->email);

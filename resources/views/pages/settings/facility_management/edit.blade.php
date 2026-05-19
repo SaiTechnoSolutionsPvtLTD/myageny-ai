@@ -8,27 +8,40 @@
 .crm-form-head { padding:20px 24px; border-bottom:1px solid #f1f1f1; }
 .crm-form-body { padding:24px; display:flex; flex-direction:column; gap:18px; }
 .crm-form-foot { padding:20px 24px; border-top:1px solid #f1f1f1; display:flex; justify-content:flex-end; gap:10px; }
-.crm-textarea { width:100%; min-height:120px; padding:10px 14px; border:1px solid #e1dee3; border-radius:10px; font-size:14px; outline:none; font-family:inherit; resize:vertical; }
-.crm-textarea:focus { border-color:#fe5f04; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
+.crm-auto-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; }
+.crm-readonly { background:#f8f8f8; color:#555; }
 </style>
 @endpush
 
 @section('content')
+@php
+    $entryDate = $facilityEntry->entry_date
+        ?? $facilityEntry->office_mopping_date
+        ?? $facilityEntry->office_cleaning_date
+        ?? $facilityEntry->toilet_cleaning_date
+        ?? $facilityEntry->created_at;
+    $entryTime = $facilityEntry->entry_time
+        ? \Carbon\Carbon::parse($facilityEntry->entry_time)->format('h:i A')
+        : optional($facilityEntry->created_at)->format('h:i A');
+@endphp
 <main class="main-content">
     <div class="crm-page-body">
         <div class="crm-page-header">
             <div>
                 <h2 class="crm-title">Edit Facility Entry</h2>
-                <p class="crm-subtitle">Update the cleaning schedule or notes for facility management.</p>
+                <p class="crm-subtitle">Update the selected facility title for this entry.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.facility-management.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                @can('settings.manage')
+                    <a href="{{ route('settings.facility-titles.create') }}" class="crm-btn crm-btn-ghost">+ Add Title Master</a>
+                @endcan
+                <a href="{{ route('facility-management.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.facility-management.update', $facilityEntry) }}">
+        <form method="POST" action="{{ route('facility-management.update', $facilityEntry) }}">
             @csrf
             @method('PUT')
             <div class="crm-form-wrap">
@@ -38,32 +51,30 @@
                 <div class="crm-form-body">
                     <div>
                         <label class="crm-label">Title <span class="req">*</span></label>
-                        <input type="text" name="title" class="crm-input" value="{{ old('title', $facilityEntry->title) }}" required>
+                        <select name="facility_title_id" class="crm-input" required @disabled($facilityTitles->isEmpty())>
+                            <option value="">Select title</option>
+                            @foreach($facilityTitles as $facilityTitle)
+                                <option value="{{ $facilityTitle->id }}" @selected((string) old('facility_title_id', $facilityEntry->facility_title_id) === (string) $facilityTitle->id)>
+                                    {{ $facilityTitle->name }}
+                                </option>
+                            @endforeach
+                        </select>
                     </div>
 
-                    <div>
-                        <label class="crm-label">Office Mopping Date</label>
-                        <input type="date" name="office_mopping_date" class="crm-input" value="{{ old('office_mopping_date', optional($facilityEntry->office_mopping_date)->format('Y-m-d')) }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Office Cleaning Date</label>
-                        <input type="date" name="office_cleaning_date" class="crm-input" value="{{ old('office_cleaning_date', optional($facilityEntry->office_cleaning_date)->format('Y-m-d')) }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Toilet Cleaning Date</label>
-                        <input type="date" name="toilet_cleaning_date" class="crm-input" value="{{ old('toilet_cleaning_date', optional($facilityEntry->toilet_cleaning_date)->format('Y-m-d')) }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Remarks</label>
-                        <textarea name="remarks" class="crm-textarea" placeholder="Optional notes or cleaning instructions">{{ old('remarks', $facilityEntry->remarks) }}</textarea>
+                    <div class="crm-auto-grid">
+                        <div>
+                            <label class="crm-label">Date</label>
+                            <input type="text" class="crm-input crm-readonly" value="{{ $entryDate?->format('d M Y') ?? 'N/A' }}" readonly>
+                        </div>
+                        <div>
+                            <label class="crm-label">Time</label>
+                            <input type="text" class="crm-input crm-readonly" value="{{ $entryTime ?? 'N/A' }}" readonly>
+                        </div>
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.facility-management.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
-                    <button type="submit" class="crm-btn crm-btn-primary">Update Entry</button>
+                    <a href="{{ route('facility-management.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <button type="submit" class="crm-btn crm-btn-primary" @disabled($facilityTitles->isEmpty())>Update Entry</button>
                 </div>
             </div>
         </form>

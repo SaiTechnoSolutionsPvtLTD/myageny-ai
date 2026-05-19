@@ -6,10 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Builder;
 
 class EmployeeOnboarding extends Model
 {
     use HasFactory;
+
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_RESIGNED = 'resigned';
 
     public const DOCUMENT_FIELDS = [
         'photograph',
@@ -32,6 +36,7 @@ class EmployeeOnboarding extends Model
 
     protected $fillable = [
         'employee_id',
+        'source_intern_joining_form_id',
         'role_id',
         'department_id',
         'portal_user_id',
@@ -171,5 +176,15 @@ class EmployeeOnboarding extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function sourceIntern(): BelongsTo
+    {
+        return $this->belongsTo(InternJoiningForm::class, 'source_intern_joining_form_id');
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
     }
 }

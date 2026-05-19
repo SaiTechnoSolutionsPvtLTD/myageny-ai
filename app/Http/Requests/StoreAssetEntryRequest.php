@@ -16,7 +16,12 @@ class StoreAssetEntryRequest extends FormRequest
     {
         return [
             'asset_name' => ['required', 'string', 'max:150'],
-            'asset_category' => ['nullable', 'string', 'max:100'],
+            'asset_category' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::exists('asset_categories', 'name')->whereNull('deleted_at'),
+            ],
             'brand' => ['nullable', 'string', 'max:100'],
             'model_name' => ['nullable', 'string', 'max:100'],
             'serial_number' => ['nullable', 'string', 'max:100'],

@@ -26,6 +26,7 @@
         @include('pages.hrms.assets.form', [
             'asset' => null,
             'generatedAssetCode' => $generatedAssetCode,
+            'assetCategories' => $assetCategories,
             'employees' => $employees,
             'statusOptions' => $statusOptions,
             'action' => route('assets.store'),

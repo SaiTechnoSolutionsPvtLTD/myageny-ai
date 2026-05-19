@@ -37,9 +37,8 @@
                     <label class="eob-label">Status</label>
                     <select name="status" class="eob-select">
                         <option value="">All Status</option>
-                        <option value="pending" @selected(request('status') === 'pending')>Pending</option>
-                        <option value="verified" @selected(request('status') === 'verified')>Verified</option>
-                        <option value="rejected" @selected(request('status') === 'rejected')>Rejected</option>
+                        <option value="active" @selected(request('status') === 'active')>Active</option>
+                        <option value="resigned" @selected(request('status') === 'resigned')>Resigned</option>
                     </select>
                 </div>
                 <div class="eob-actions">
@@ -85,7 +84,9 @@
                                     </td>
                                     <td>
                                         <div class="eob-cell-title">{{ $employee->name }}</div>
-                                        <div class="eob-cell-sub">{{ $employee->father_name ?: 'Father name not added' }}</div>
+                                        <div class="eob-cell-sub">
+                                            {{ $employee->sourceIntern ? 'Converted from intern ' . ($employee->sourceIntern->intern_id ?: $employee->sourceIntern->name) : ($employee->father_name ?: 'Father name not added') }}
+                                        </div>
                                     </td>
                                     <td>
                                         <div class="eob-cell-title">{{ $employee->role?->display_name ?: ($employee->role?->name ?: 'No role') }}</div>
@@ -101,18 +102,20 @@
                                     </td>
                                     <td>{{ $employee->created_at->format('d M Y') }}</td>
                                     <td>
-                                        <div class="eob-inline-actions">
-                                            <a href="{{ route('employee-onboarding.show', $employee) }}" class="eob-icon-btn" title="View">V</a>
-                                            <a href="{{ route('employee-onboarding.edit', $employee) }}" class="eob-icon-btn" title="Edit">E</a>
-                                            <button
-                                                type="button"
-                                                class="eob-icon-btn danger"
-                                                title="Delete"
-                                                data-delete-trigger
-                                                data-name="{{ $employee->name }}"
-                                                data-action="{{ route('employee-onboarding.destroy', $employee) }}"
-                                            >D</button>
-                                        </div>
+                                        <details class="eob-table-dropdown">
+                                            <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                            <div class="eob-table-dropdown-menu">
+                                                <a href="{{ route('employee-onboarding.show', $employee) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                                <a href="{{ route('employee-onboarding.edit', $employee) }}" class="eob-table-dropdown-item"><i class="bi bi-pencil"></i> Edit</a>
+                                                <button
+                                                    type="button"
+                                                    class="eob-table-dropdown-item danger"
+                                                    data-delete-trigger
+                                                    data-name="{{ $employee->name }}"
+                                                    data-action="{{ route('employee-onboarding.destroy', $employee) }}"
+                                                ><i class="bi bi-trash"></i> Delete</button>
+                                            </div>
+                                        </details>
                                     </td>
                                 </tr>
                             @endforeach

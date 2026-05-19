@@ -54,9 +54,12 @@
 .att-chip-late{background:#fff7ed;color:#c2410c}
 .att-chip-on-time{background:#f4f4f5;color:#52525b}
 .att-chip-leave{background:#f5eeff;color:#6b21a8}
+.att-chip-employee{background:#eff6ff;color:#1d4ed8}
+.att-chip-intern{background:#fff7ed;color:#c2410c}
 .att-table{width:100%;border-collapse:collapse;min-width:1000px}
 .att-table th,.att-table td{padding:14px 16px;border-bottom:1px solid #f0eef2;text-align:left;vertical-align:top}
 .att-table th{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#9e9e9e;background:#fafafa}
+.att-row-intern td{background:#fffaf5}
 .att-cell-title{font-weight:700;color:#121212;font-size:13px}
 .att-cell-sub{margin-top:2px;color:#9e9e9e;font-size:11px}
 .att-empty{padding:42px 20px;text-align:center;color:#7a7f8c}
@@ -82,14 +85,18 @@
 
 @section('content')
 <div class="att-page">
+    @php($selfServiceMode = auth()->user()?->isHrmsAttendanceOnlyUser())
     <div class="att-topbar">
         <div>
-            <div class="att-title">Attendance</div>
+            <div class="att-title">{{ $selfServiceMode ? 'My Attendance' : 'Attendance' }}</div>
             <div class="att-breadcrumb">HRMS > Attendance</div>
 
         </div>
         <div class="att-actions">
-            <a href="{{ route('attendance.create') }}" class="att-btn att-btn-primary">Add Attendance</a>
+            @unless($selfServiceMode)
+                <a href="{{ route('attendance.create') }}" class="att-btn att-btn-primary">Check In</a>
+                <a href="{{ route('attendance.checkout.create') }}" class="att-btn att-btn-ghost">Checkout</a>
+            @endunless
             <a href="{{ route('hrms.dashboard') }}" class="att-btn att-btn-ghost">Back</a>
         </div>
     </div>
@@ -103,7 +110,7 @@
     <div class="att-stats">
         <div class="att-stat-card employees">
             <div class="att-stat-head">
-                <div class="att-stat-label">Employees</div>
+                <div class="att-stat-label">People</div>
                 <div class="att-stat-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -115,8 +122,8 @@
             </div>
             <div class="att-stat-value">{{ $stats['total_employees'] }}</div>
             <div class="att-stat-foot">
-                <span class="att-stat-pill">Workforce</span>
-                <span class="att-stat-trend">Base count</span>
+                <span class="att-stat-pill">{{ $stats['employee_count'] }} Emp / {{ $stats['intern_count'] }} Int</span>
+                <span class="att-stat-trend">Workforce</span>
             </div>
         </div>
         <div class="att-stat-card present">
@@ -170,9 +177,10 @@
 
     <div class="att-filter-wrap att-card">
         <div class="att-card-title">Filter Attendance</div>
-        <div class="att-card-sub">Filter by employee, employee ID, date, status, or login timing.</div>
+        <div class="att-card-sub">{{ $selfServiceMode ? 'Review your attendance by date, status, or login timing.' : 'Filter by employee, employee ID, date, status, or login timing.' }}</div>
 
         <form method="GET" action="{{ route('attendance.index') }}" class="att-filter-form" style="margin-top:16px;">
+            @unless($selfServiceMode)
             <div class="att-field">
                 <label class="att-label">Employee</label>
                 <input type="text" name="employee_name" class="att-input" value="{{ request('employee_name') }}" placeholder="Search employee name">
@@ -181,6 +189,7 @@
                 <label class="att-label">Employee ID</label>
                 <input type="text" name="employee_id" class="att-input" value="{{ request('employee_id') }}" placeholder="Search employee ID">
             </div>
+            @endunless
             <div class="att-field">
                 <label class="att-label">Date</label>
                 <input type="date" name="attendance_date" class="att-input" value="{{ request('attendance_date', $selectedDate->format('Y-m-d')) }}">
@@ -202,10 +211,20 @@
                     <option value="early" @selected(request('login_timing') === 'early')>Early Login</option>
                 </select>
             </div>
+            <div class="att-field">
+                <label class="att-label">Attendee Type</label>
+                <select name="attendee_type" class="att-select">
+                    <option value="">All Types</option>
+                    <option value="employee" @selected(request('attendee_type') === 'employee')>Employees</option>
+                    <option value="intern" @selected(request('attendee_type') === 'intern')>Interns</option>
+                </select>
+            </div>
             <div class="att-actions">
                 <button type="submit" class="att-btn att-btn-primary">Apply Filter</button>
-                <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
-                @if(request()->hasAny(['employee_name', 'employee_id', 'attendance_date', 'status', 'login_timing']))
+                @unless($selfServiceMode)
+                    <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
+                @endunless
+                @if(request()->hasAny(['employee_name', 'employee_id', 'attendance_date', 'status', 'login_timing', 'attendee_type']))
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
             </div>
@@ -215,10 +234,10 @@
     <div class="att-table-wrap att-card">
         <div class="att-meta-row">
             <div>
-                <div class="att-card-title">Attendance Details</div>
+                <div class="att-card-title">{{ $selfServiceMode ? 'Your Attendance Details' : 'Attendance Details' }}</div>
                 <div class="att-card-sub">{{ $attendances->total() }} record(s) matched your filters.</div>
             </div>
-            <div class="att-note">Default view shows the current day's attendance.</div>
+            <div class="att-note">{{ $selfServiceMode ? 'Default view shows your attendance for the current day.' : 'Default view shows the current day\'s attendance.' }}</div>
         </div>
 
         @if($attendances->isEmpty())
@@ -240,7 +259,7 @@
                     </thead>
                     <tbody>
                         @foreach($attendances as $attendance)
-                            <tr>
+                            <tr class="{{ $attendance['attendee_type'] === 'intern' ? 'att-row-intern' : '' }}">
                                 <td>
                                     <div class="att-thumb-row">
                                         @if($attendance['attendance_photo_url'])
@@ -248,7 +267,10 @@
                                         @endif
                                         <div>
                                             <div class="att-cell-title">{{ $attendance['employee_name'] }}</div>
-                                            <div class="att-cell-sub">ID: {{ $attendance['employee_id'] ?: 'N/A' }}</div>
+                                            <div class="att-cell-sub">
+                                                ID: {{ $attendance['employee_id'] ?: 'N/A' }}
+                                                <span class="att-chip att-chip-{{ $attendance['attendee_type'] }}">{{ ucfirst($attendance['attendee_type']) }}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </td>

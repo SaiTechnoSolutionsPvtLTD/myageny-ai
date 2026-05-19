@@ -1,5 +1,12 @@
 @php
     $form = $form ?? null;
+    $portalUser = $form?->portalUser;
+    $selectedTlUserId = old('tl_user_id', $portalUser?->managerMappings?->first()?->manager_id);
+    $portalBranchId = old('branch_id', $portalUser?->branch_id ?? auth()->user()?->branch_id);
+    $portalDepartmentId = old('department_id', $form?->department_id);
+    $portalRoleId = old('role_id', $form?->role_id);
+    $portalEmail = old('portal_email', $portalUser?->email ?? $form?->email ?? '');
+    $portalAccountEnabled = old('create_portal_account', $portalUser ? '1' : '0') === '1';
 
     $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
     $educationDefaults = [
@@ -65,11 +72,11 @@
 
     $steps = [
         ['key' => 'personal', 'label' => 'Personal Details'],
+        ['key' => 'portal', 'label' => 'Intern Portal Account'],
         ['key' => 'education', 'label' => 'Educational Details'],
         ['key' => 'employment', 'label' => 'Employment Details'],
         ['key' => 'family', 'label' => 'Family Details'],
         ['key' => 'documents', 'label' => 'Document Uploads'],
-        ['key' => 'declaration', 'label' => 'Declaration'],
         ['key' => 'review', 'label' => 'Review & Submit'],
     ];
 @endphp
@@ -101,6 +108,7 @@
         </aside>
 
         <div class="wizard-main">
+            <div class="wizard-validation-summary" id="wizardValidationSummary" role="alert" aria-live="polite"></div>
             <div class="wizard-header-card">
                 <div>
                     <div class="small text-uppercase text-secondary fw-bold">Progress</div>
@@ -149,7 +157,12 @@
                         @error('mobile')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                     </div>
                     <div class="grid-half">
-                        <label class="intern-label">Correspondence Address <span class="intern-label-required">*</span></label>
+                        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                            <label class="intern-label mb-0">Correspondence Address <span class="intern-label-required">*</span></label>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-copy-address data-copy-source="correspondence_address" data-copy-target="permanent_address">
+                                Copy to Permanent
+                            </button>
+                        </div>
                         <textarea name="correspondence_address" class="intern-input intern-textarea" rows="3" required>{{ old('correspondence_address', $form?->correspondence_address) }}</textarea>
                         @error('correspondence_address')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                     </div>
@@ -168,6 +181,30 @@
                         <label class="intern-label">Date of Birth <span class="intern-label-required">*</span></label>
                         <input type="date" name="date_of_birth" class="intern-input" value="{{ old('date_of_birth', optional($form?->date_of_birth)->format('Y-m-d')) }}" required>
                         @error('date_of_birth')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="grid-half">
+                        <label class="intern-label">Internship Start Date <span class="intern-label-required">*</span></label>
+                        <input type="date" name="internship_start_date" id="internshipStartDate" class="intern-input" value="{{ old('internship_start_date', optional($form?->internship_start_date)->format('Y-m-d')) }}" required>
+                        @error('internship_start_date')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="grid-half">
+                        <label class="intern-label">Duration in Months <span class="intern-label-required">*</span></label>
+                        <input type="number" name="internship_duration_months" id="internshipDurationMonths" class="intern-input" min="1" max="60" value="{{ old('internship_duration_months', $form?->internship_duration_months) }}" required>
+                        <div class="text-secondary small mt-1">End date will be calculated automatically.</div>
+                        @error('internship_duration_months')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="grid-half">
+                        <label class="intern-label">Internship End Date</label>
+                        <input type="date" name="internship_end_date" id="internshipEndDate" class="intern-input" value="{{ old('internship_end_date', optional($form?->internship_end_date)->format('Y-m-d')) }}" readonly>
+                        @error('internship_end_date')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="grid-half">
+                        <label class="intern-label">Internship Status <span class="intern-label-required">*</span></label>
+                        <select name="internship_status" class="intern-select" required>
+                            <option value="active" @selected(old('internship_status', $form?->internship_status ?? 'active') === 'active')>Active</option>
+                            <option value="resigned" @selected(old('internship_status', $form?->internship_status) === 'resigned')>Resigned</option>
+                        </select>
+                        @error('internship_status')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                     </div>
                     <div class="grid-half">
                         <label class="intern-label">Blood Group</label>
@@ -223,10 +260,116 @@
                 </div>
             </section>
 
-            <section class="wizard-panel intern-card p-4" data-step-panel="education">
+            <section class="wizard-panel intern-card p-4" data-step-panel="portal">
                 <div class="panel-intro">
                     <div>
                         <div class="panel-eyebrow">Step 2</div>
+                        <h3 class="panel-title">Intern Portal Account</h3>
+                        <p class="panel-subtitle">Create login access for interns who need to use the portal.</p>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="grid-full">
+                        <div class="intern-check-card border rounded-4 p-3 bg-light">
+                            <input
+                                class="intern-choice-input mt-1"
+                                type="checkbox"
+                                value="1"
+                                name="create_portal_account"
+                                id="createPortalAccount"
+                                @checked($portalAccountEnabled)
+                            >
+                            <label class="intern-choice-label fw-semibold" for="createPortalAccount">
+                                Create intern portal login account
+                            </label>
+                        </div>
+                        <div class="text-secondary small mt-2">
+                            Enable this only if the intern needs portal access. Existing linked accounts will stay connected unless you update them here.
+                        </div>
+                    </div>
+
+                    <div class="grid-full" id="internPortalFields">
+                        <div class="border rounded-4 p-3 bg-white">
+                            <div class="form-grid">
+                                <div class="grid-half">
+                                    <label class="intern-label">Portal Email <span class="intern-label-required">*</span></label>
+                                    <input type="email" name="portal_email" id="portalEmailInput" class="intern-input" value="{{ $portalEmail }}" data-portal-field>
+                                    <div class="text-secondary small mt-1">Defaulted from personal email. You can change it if needed.</div>
+                                    @error('portal_email')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-half">
+                                    <label class="intern-label">Portal Password {{ $portalUser ? '' : '*' }}</label>
+                                    <input type="password" name="portal_password" id="portalPasswordInput" class="intern-input" data-portal-field>
+                                    <div class="text-secondary small mt-1">{{ $portalUser ? 'Leave blank to keep current password.' : 'Minimum 8 characters.' }}</div>
+                                    @error('portal_password')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-half">
+                                    <label class="intern-label">Branch <span class="intern-label-required">*</span></label>
+                                    <select name="branch_id" id="portalBranchSelect" class="intern-select" data-portal-field>
+                                        <option value="">Select branch</option>
+                                        @foreach($branches as $branch)
+                                            <option value="{{ $branch->id }}" @selected((string) $portalBranchId === (string) $branch->id)>{{ $branch->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('branch_id')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-half">
+                                    <label class="intern-label">Department <span class="intern-label-required">*</span></label>
+                                    <select name="department_id" id="portalDepartmentSelect" class="intern-select" data-portal-field>
+                                        <option value="">Select department</option>
+                                        @foreach($departments as $department)
+                                            <option value="{{ $department->id }}" @selected((string) $portalDepartmentId === (string) $department->id)>{{ $department->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('department_id')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-half">
+                                    <label class="intern-label">Role <span class="intern-label-required">*</span></label>
+                                    <select name="role_id" id="portalRoleSelect" class="intern-select" data-portal-field>
+                                        <option value="">Select role</option>
+                                        @foreach($roles as $role)
+                                            <option
+                                                value="{{ $role->id }}"
+                                                data-department-id="{{ $role->department_id }}"
+                                                data-parent-role-id="{{ $role->roleParentMapping?->parent_role_id ?? '' }}"
+                                                data-parent-role-name="{{ $role->roleParentMapping?->parentRole?->display_name ?: $role->roleParentMapping?->parentRole?->name ?? '' }}"
+                                                @selected((string) $portalRoleId === (string) $role->id)
+                                            >
+                                                {{ $role->display_name ?: $role->name }}{{ $role->department ? ' - ' . $role->department->name : '' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('role_id')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-half">
+                                    <label class="intern-label">Team Lead <span class="intern-label-required">*</span></label>
+                                    <select
+                                        name="tl_user_id"
+                                        id="portalTlUserSelect"
+                                        class="intern-select"
+                                        data-portal-field
+                                        data-selected-tl="{{ $selectedTlUserId }}"
+                                    >
+                                        <option value="">Select TL</option>
+                                    </select>
+                                    <div class="text-secondary small mt-1" id="portalTlHelp">TL options will update based on branch, department, and role.</div>
+                                    @error('tl_user_id')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="grid-full">
+                                    <div class="border rounded-4 p-3 bg-light text-secondary small" id="portalSummary">
+                                        Choose branch, department, and role to review the login mapping summary.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="wizard-panel intern-card p-4" data-step-panel="education">
+                <div class="panel-intro">
+                    <div>
+                        <div class="panel-eyebrow">Step 3</div>
                         <h3 class="panel-title">Educational Details</h3>
                         <p class="panel-subtitle">Capture academic history in a simple, scan-friendly format.</p>
                     </div>
@@ -245,10 +388,10 @@
                         <tbody>
                             @foreach($educationRows as $index => $row)
                                 <tr>
-                                    <td><input type="text" name="educational_details[{{ $index }}][qualification]" class="intern-input" value="{{ $row['qualification'] ?? '' }}" required readonly></td>
-                                    <td><input type="text" name="educational_details[{{ $index }}][institution_name]" class="intern-input" value="{{ $row['institution_name'] ?? '' }}" required></td>
-                                    <td><input type="text" name="educational_details[{{ $index }}][year_of_passing]" class="intern-input" value="{{ $row['year_of_passing'] ?? '' }}" required></td>
-                                    <td><input type="text" name="educational_details[{{ $index }}][percentage]" class="intern-input" value="{{ $row['percentage'] ?? '' }}" required></td>
+                                    <td><input type="text" name="educational_details[{{ $index }}][qualification]" class="intern-input" value="{{ $row['qualification'] ?? '' }}" readonly></td>
+                                    <td><input type="text" name="educational_details[{{ $index }}][institution_name]" class="intern-input" value="{{ $row['institution_name'] ?? '' }}"></td>
+                                    <td><input type="text" name="educational_details[{{ $index }}][year_of_passing]" class="intern-input" value="{{ $row['year_of_passing'] ?? '' }}"></td>
+                                    <td><input type="text" name="educational_details[{{ $index }}][percentage]" class="intern-input" value="{{ $row['percentage'] ?? '' }}"></td>
                                     <td><input type="text" name="educational_details[{{ $index }}][specialization]" class="intern-input" value="{{ $row['specialization'] ?? '' }}"></td>
                                 </tr>
                             @endforeach
@@ -260,7 +403,7 @@
             <section class="wizard-panel intern-card p-4" data-step-panel="employment">
                 <div class="panel-intro">
                     <div>
-                        <div class="panel-eyebrow">Step 3</div>
+                        <div class="panel-eyebrow">Step 4</div>
                         <h3 class="panel-title">Employment Details</h3>
                         <p class="panel-subtitle">Add previous experience only where applicable.</p>
                     </div>
@@ -300,7 +443,7 @@
             <section class="wizard-panel intern-card p-4" data-step-panel="family">
                 <div class="panel-intro">
                     <div>
-                        <div class="panel-eyebrow">Step 4</div>
+                        <div class="panel-eyebrow">Step 5</div>
                         <h3 class="panel-title">Family Details</h3>
                         <p class="panel-subtitle">List immediate family contacts that may be useful for records.</p>
                     </div>
@@ -340,7 +483,7 @@
             <section class="wizard-panel intern-card p-4" data-step-panel="documents">
                 <div class="panel-intro">
                     <div>
-                        <div class="panel-eyebrow">Step 5</div>
+                        <div class="panel-eyebrow">Step 6</div>
                         <h3 class="panel-title">Document Uploads</h3>
                         <p class="panel-subtitle">Upload the required proofs and certificates for onboarding.</p>
                     </div>
@@ -359,52 +502,6 @@
                 </div>
             </section>
 
-            <section class="wizard-panel intern-card p-4" data-step-panel="declaration">
-                <div class="panel-intro">
-                    <div>
-                        <div class="panel-eyebrow">Step 6</div>
-                        <h3 class="panel-title">Declaration</h3>
-                        <p class="panel-subtitle">Confirm the information and add a signature for approval.</p>
-                    </div>
-                </div>
-                <div class="form-grid">
-                    <div class="grid-full">
-                        <div class="intern-check-card border rounded-4 p-3 bg-light">
-                            <input class="intern-choice-input mt-1" type="checkbox" value="1" name="declaration_accepted" id="declarationAccepted" @checked(old('declaration_accepted', $form?->declaration_accepted)) required>
-                            <label class="intern-choice-label fw-semibold" for="declarationAccepted">
-                                I hereby declare that the above statements are true, complete and correct to the best of my knowledge and belief.
-                            </label>
-                        </div>
-                        @error('declaration_accepted')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="grid-half">
-                        <label class="intern-label">Date <span class="intern-label-required">*</span></label>
-                        <input type="date" name="declaration_date" class="intern-input" value="{{ old('declaration_date', optional($form?->declaration_date)->format('Y-m-d')) }}" required>
-                    </div>
-                    <div class="grid-half">
-                        <label class="intern-label">Place <span class="intern-label-required">*</span></label>
-                        <input type="text" name="declaration_place" class="intern-input" value="{{ old('declaration_place', $form?->declaration_place) }}" required>
-                    </div>
-                    <div class="grid-half">
-                        <label class="intern-label">Signature Upload</label>
-                        <input type="file" name="signature_upload" class="intern-input intern-file-input" accept=".pdf,.jpg,.jpeg,.png">
-                        @if($form?->documents?->signature_path)
-                            <a href="{{ asset('storage/' . $form->documents->signature_path) }}" target="_blank" class="btn btn-link px-0 mt-2">View Existing Signature</a>
-                        @endif
-                    </div>
-                    <div class="grid-full">
-                        <label class="intern-label">Or Draw Signature</label>
-                        <div class="signature-pad-wrap">
-                            <canvas id="signaturePad" class="signature-pad"></canvas>
-                            <input type="hidden" name="signature_data" id="signatureData">
-                            <div class="mt-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="clearSignatureBtn">Clear Signature</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <section class="wizard-panel intern-card p-4" data-step-panel="review">
                 <div class="panel-intro">
                     <div>
@@ -420,10 +517,13 @@
                             <dl class="review-list mb-0">
                                 <dt>Name</dt><dd data-review="name">-</dd>
                                 <dt>Email</dt><dd data-review="email">-</dd>
+                                <dt>Portal Email</dt><dd data-review="portal_email">-</dd>
                                 <dt>Mobile</dt><dd data-review="mobile">-</dd>
+                                <dt>Internship Start</dt><dd data-review="internship_start_date">-</dd>
+                                <dt>Internship End</dt><dd data-review="internship_end_date">-</dd>
+                                <dt>Status</dt><dd data-review="internship_status">-</dd>
                                 <dt>Marital Status</dt><dd data-review="marital_status">-</dd>
                                 <dt>Emergency Contact</dt><dd data-review="emergency_contact_name">-</dd>
-                                <dt>Declaration Place</dt><dd data-review="declaration_place">-</dd>
                             </dl>
                         </div>
                     </div>
@@ -479,6 +579,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('internWizardForm');
+    const addressCopyButtons = Array.from(document.querySelectorAll('[data-copy-address]'));
     const panels = Array.from(document.querySelectorAll('[data-step-panel]'));
     const stepButtons = Array.from(document.querySelectorAll('[data-step-button]'));
     const prevButton = document.getElementById('wizardPrevBtn');
@@ -492,9 +593,23 @@ document.addEventListener('DOMContentLoaded', function () {
     const familyRows = document.getElementById('familyRows');
     const addEmploymentRow = document.getElementById('addEmploymentRow');
     const addFamilyRow = document.getElementById('addFamilyRow');
-    const signaturePad = document.getElementById('signaturePad');
-    const signatureData = document.getElementById('signatureData');
-    const clearSignatureBtn = document.getElementById('clearSignatureBtn');
+    const validationSummary = document.getElementById('wizardValidationSummary');
+    const internshipStartDate = document.getElementById('internshipStartDate');
+    const internshipDurationMonths = document.getElementById('internshipDurationMonths');
+    const internshipEndDate = document.getElementById('internshipEndDate');
+    const createPortalAccount = document.getElementById('createPortalAccount');
+    const portalFieldsWrap = document.getElementById('internPortalFields');
+    const portalFieldInputs = Array.from(document.querySelectorAll('[data-portal-field]'));
+    const personalEmailInput = form.querySelector('input[name="email"]');
+    const portalEmailInput = document.getElementById('portalEmailInput');
+    const portalPasswordInput = document.getElementById('portalPasswordInput');
+    const branchSelect = document.getElementById('portalBranchSelect');
+    const departmentSelect = document.getElementById('portalDepartmentSelect');
+    const roleSelect = document.getElementById('portalRoleSelect');
+    const tlSelect = document.getElementById('portalTlUserSelect');
+    const tlHelp = document.getElementById('portalTlHelp');
+    const portalSummary = document.getElementById('portalSummary');
+    const tlUsers = @json($tlUsers ?? []);
     let activeIndex = 0;
 
     function updateReview() {
@@ -517,23 +632,422 @@ document.addEventListener('DOMContentLoaded', function () {
         marriageDateField.style.display = selected && selected.value === 'married' ? '' : 'none';
     }
 
+    function calculateInternshipEndDate() {
+        if (!internshipStartDate || !internshipDurationMonths || !internshipEndDate) {
+            return;
+        }
+
+        const startValue = internshipStartDate.value;
+        const durationValue = parseInt(internshipDurationMonths.value || '', 10);
+
+        if (!startValue || !Number.isFinite(durationValue) || durationValue < 1) {
+            internshipEndDate.value = '';
+            return;
+        }
+
+        const calculatedDate = new Date(startValue + 'T00:00:00');
+        calculatedDate.setMonth(calculatedDate.getMonth() + durationValue);
+        calculatedDate.setDate(calculatedDate.getDate() - 1);
+
+        const year = calculatedDate.getFullYear();
+        const month = String(calculatedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(calculatedDate.getDate()).padStart(2, '0');
+
+        internshipEndDate.value = year + '-' + month + '-' + day;
+    }
+
     form.querySelectorAll('input[name="marital_status"]').forEach(function (input) {
         input.addEventListener('change', toggleMarriageDate);
     });
     toggleMarriageDate();
+    internshipStartDate?.addEventListener('change', calculateInternshipEndDate);
+    internshipDurationMonths?.addEventListener('input', calculateInternshipEndDate);
+    internshipDurationMonths?.addEventListener('change', calculateInternshipEndDate);
+    calculateInternshipEndDate();
 
-    function validateCurrentStep() {
-        const inputs = panels[activeIndex].querySelectorAll('input, select, textarea');
-        for (const input of inputs) {
-            if (typeof input.reportValidity === 'function' && !input.reportValidity()) {
-                input.focus();
-                return false;
+    const allRoleOptions = roleSelect ? Array.from(roleSelect.querySelectorAll('option')).map(function (option) {
+        return {
+            value: option.value,
+            label: option.textContent,
+            departmentId: option.getAttribute('data-department-id') || '',
+            parentRoleId: option.getAttribute('data-parent-role-id') || '',
+            parentRoleLabel: option.getAttribute('data-parent-role-name') || ''
+        };
+    }) : [];
+
+    function portalAccountEnabled() {
+        return !!createPortalAccount?.checked;
+    }
+
+    function togglePortalFields() {
+        const enabled = portalAccountEnabled();
+
+        if (portalFieldsWrap) {
+            portalFieldsWrap.style.display = enabled ? '' : 'none';
+        }
+
+        portalFieldInputs.forEach(function (input) {
+            input.disabled = !enabled;
+            input.required = false;
+        });
+
+        if (!enabled) {
+            return;
+        }
+
+        if (portalEmailInput) {
+            portalEmailInput.required = true;
+        }
+        if (branchSelect) {
+            branchSelect.required = true;
+        }
+        if (departmentSelect) {
+            departmentSelect.required = true;
+        }
+        if (roleSelect) {
+            roleSelect.required = true;
+        }
+        if (tlSelect) {
+            tlSelect.required = true;
+        }
+        if (portalPasswordInput && !@json((bool) $portalUser)) {
+            portalPasswordInput.required = true;
+        }
+    }
+
+    if (personalEmailInput && portalEmailInput) {
+        personalEmailInput.addEventListener('input', function () {
+            if (!portalEmailInput.dataset.touched && portalEmailInput.value.trim() === '') {
+                portalEmailInput.value = personalEmailInput.value.trim();
+            }
+        });
+
+        portalEmailInput.addEventListener('input', function () {
+            portalEmailInput.dataset.touched = '1';
+        });
+    }
+
+    function syncDepartmentFromRole(force) {
+        if (!roleSelect || !departmentSelect || !roleSelect.value) {
+            return;
+        }
+
+        const selectedOption = roleSelect.options[roleSelect.selectedIndex];
+        const departmentId = selectedOption ? selectedOption.getAttribute('data-department-id') : '';
+
+        if (!departmentId) {
+            return;
+        }
+
+        if (force || !departmentSelect.value) {
+            departmentSelect.value = departmentId;
+        }
+    }
+
+    function filterRolesByDepartment() {
+        if (!roleSelect || !departmentSelect) {
+            return;
+        }
+
+        const selectedDepartmentId = departmentSelect.value;
+        const selectedRoleId = roleSelect.value;
+        const filteredRoleOptions = allRoleOptions.filter(function (option) {
+            if (!option.value || !selectedDepartmentId) {
+                return true;
+            }
+
+            return option.departmentId === '' || option.departmentId === selectedDepartmentId;
+        });
+
+        roleSelect.innerHTML = '';
+
+        filteredRoleOptions.forEach(function (option) {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.value;
+            optionElement.textContent = option.label;
+
+            if (option.departmentId) {
+                optionElement.setAttribute('data-department-id', option.departmentId);
+            }
+            if (option.parentRoleId) {
+                optionElement.setAttribute('data-parent-role-id', option.parentRoleId);
+            }
+            if (option.parentRoleLabel) {
+                optionElement.setAttribute('data-parent-role-name', option.parentRoleLabel);
+            }
+            if (option.value === selectedRoleId) {
+                optionElement.selected = true;
+            }
+
+            roleSelect.appendChild(optionElement);
+        });
+
+        if (!filteredRoleOptions.some(function (option) { return option.value === selectedRoleId; })) {
+            roleSelect.value = '';
+        }
+    }
+
+    function selectedRoleMeta() {
+        if (!roleSelect || !roleSelect.value) {
+            return null;
+        }
+
+        const selectedOption = roleSelect.options[roleSelect.selectedIndex];
+
+        return {
+            parentRoleId: selectedOption?.getAttribute('data-parent-role-id') || '',
+            parentRoleLabel: selectedOption?.getAttribute('data-parent-role-name') || ''
+        };
+    }
+
+    function normalizedRoleLabel(label) {
+        return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    function tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel) {
+        const roleIds = Array.isArray(tlUser.role_ids) ? tlUser.role_ids.map(String) : [];
+
+        if (parentRoleId && roleIds.includes(String(parentRoleId))) {
+            return true;
+        }
+
+        const parentKey = normalizedRoleLabel(parentRoleLabel);
+
+        return Boolean(tlUser.is_super_admin && ['super_admin', 'admin'].includes(parentKey));
+    }
+
+    function filteredTlUsersForSelection() {
+        const selectedDepartmentId = departmentSelect ? departmentSelect.value : '';
+        const selectedBranchId = branchSelect ? branchSelect.value : '';
+        const selectedRole = selectedRoleMeta();
+        const parentRoleId = selectedRole?.parentRoleId || '';
+        const parentRoleLabel = selectedRole?.parentRoleLabel || '';
+
+        return tlUsers.filter(function (tlUser) {
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
+
+            if (parentRoleId) {
+                return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
+            }
+
+            const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
+            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
+
+            return matchesDepartment && matchesBranch;
+        });
+    }
+
+    function updatePortalMappingSummary() {
+        if (!portalSummary || !departmentSelect || !roleSelect || !tlSelect) {
+            return;
+        }
+
+        const departmentLabel = departmentSelect.options[departmentSelect.selectedIndex]?.textContent.trim() || 'No department selected';
+        const roleLabel = roleSelect.options[roleSelect.selectedIndex]?.textContent.trim() || 'No role selected';
+        const selectedTlOption = tlSelect.options[tlSelect.selectedIndex];
+        const selectedTlLabel = selectedTlOption && selectedTlOption.value ? selectedTlOption.textContent.trim() : null;
+        const filteredTlUsers = filteredTlUsersForSelection();
+
+        portalSummary.textContent = selectedTlLabel
+            ? 'Department: ' + departmentLabel + '. Role: ' + roleLabel + '. Selected TL: ' + selectedTlLabel + '.'
+            : 'Department: ' + departmentLabel + '. Role: ' + roleLabel + '. Available TL count: ' + filteredTlUsers.length + '.';
+    }
+
+    function updateTlOptions() {
+        if (!tlSelect) {
+            return;
+        }
+
+        const selectedDepartmentId = departmentSelect ? departmentSelect.value : '';
+        const selectedRoleId = roleSelect ? roleSelect.value : '';
+        const selectedRole = selectedRoleMeta();
+        const parentRoleId = selectedRole?.parentRoleId || '';
+        const parentRoleLabel = selectedRole?.parentRoleLabel || 'mapped parent role';
+        const previousValue = tlSelect.value || tlSelect.getAttribute('data-selected-tl') || '';
+
+        tlSelect.innerHTML = '';
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+
+        if (!selectedDepartmentId || !selectedRoleId) {
+            placeholder.textContent = 'Select department and role first';
+            tlSelect.appendChild(placeholder);
+            tlSelect.value = '';
+            if (tlHelp) {
+                tlHelp.textContent = 'TLs will appear after department and role selection.';
+            }
+            updatePortalMappingSummary();
+            return;
+        }
+
+        const filteredTlUsers = filteredTlUsersForSelection();
+
+        placeholder.textContent = filteredTlUsers.length
+            ? (parentRoleId ? 'Select ' + parentRoleLabel : 'Select TL')
+            : (parentRoleId ? 'No user found with ' + parentRoleLabel + ' role' : 'No TL found for this department');
+        tlSelect.appendChild(placeholder);
+
+        filteredTlUsers.forEach(function (tlUser) {
+            const option = document.createElement('option');
+            option.value = tlUser.id;
+            option.textContent = tlUser.name + ' - ' + (tlUser.role_label || 'Team Lead') + (tlUser.branch_name ? ' - ' + tlUser.branch_name : '');
+
+            if (String(tlUser.id) === String(previousValue)) {
+                option.selected = true;
+            }
+
+            tlSelect.appendChild(option);
+        });
+
+        if (!filteredTlUsers.some(function (tlUser) { return String(tlUser.id) === String(previousValue); })) {
+            tlSelect.value = '';
+        }
+
+        if (tlHelp) {
+            tlHelp.textContent = filteredTlUsers.length
+                ? filteredTlUsers.length + ' TL option' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the current selection.'
+                : 'No active TL users found for the current selection.';
+        }
+
+        updatePortalMappingSummary();
+    }
+
+    if (createPortalAccount) {
+        createPortalAccount.addEventListener('change', function () {
+            togglePortalFields();
+            updateTlOptions();
+        });
+    }
+
+    if (roleSelect) {
+        roleSelect.addEventListener('change', function () {
+            syncDepartmentFromRole(true);
+            filterRolesByDepartment();
+            updateTlOptions();
+        });
+    }
+
+    if (departmentSelect) {
+        departmentSelect.addEventListener('change', function () {
+            filterRolesByDepartment();
+            updateTlOptions();
+        });
+    }
+
+    if (branchSelect) {
+        branchSelect.addEventListener('change', updateTlOptions);
+    }
+
+    if (tlSelect) {
+        tlSelect.addEventListener('change', updatePortalMappingSummary);
+    }
+
+    if (departmentSelect && !departmentSelect.value && roleSelect && roleSelect.value) {
+        syncDepartmentFromRole(true);
+    }
+
+    filterRolesByDepartment();
+    togglePortalFields();
+    updateTlOptions();
+
+    function humanizeFieldName(name) {
+        return (name || 'This field')
+            .replace(/\[\d+\]/g, '')
+            .replace(/\[(\w+)\]/g, ' $1')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
+    }
+
+    function resolveFieldLabel(input) {
+        const explicitLabel = input.dataset.label;
+        if (explicitLabel) {
+            return explicitLabel;
+        }
+
+        const choiceLabel = input.closest('.intern-choice')?.querySelector('.intern-choice-label');
+        if (choiceLabel && input.type === 'radio') {
+            const groupLabel = input.closest('.grid-half, .grid-full')?.querySelector('.intern-label');
+            return groupLabel ? groupLabel.textContent.replace('*', '').trim() : choiceLabel.textContent.trim();
+        }
+
+        const directLabel = input.closest('.grid-half, .grid-full, .field-surface, .intern-doc-card, .intern-check-card, .signature-pad-wrap')?.querySelector('.intern-label');
+        if (directLabel) {
+            return directLabel.textContent.replace('*', '').trim();
+        }
+
+        const td = input.closest('td');
+        const row = input.closest('tr');
+        const table = input.closest('table');
+        if (td && row && table) {
+            const cellIndex = Array.from(row.children).indexOf(td);
+            const header = table.querySelectorAll('thead th')[cellIndex];
+            if (header) {
+                return header.textContent.trim();
             }
         }
-        return true;
+
+        return humanizeFieldName(input.name);
+    }
+
+    function clearStepValidationState() {
+        panels[activeIndex].querySelectorAll('.is-invalid').forEach(function (node) {
+            node.classList.remove('is-invalid');
+        });
+
+        if (validationSummary) {
+            validationSummary.classList.remove('is-visible');
+            validationSummary.innerHTML = '';
+        }
+    }
+
+    function showValidationSummary(invalidFields) {
+        if (!validationSummary || !invalidFields.length) {
+            return;
+        }
+
+        const items = invalidFields.map(function (field) {
+            return '<li>' + field + '</li>';
+        }).join('');
+
+        validationSummary.innerHTML = '<strong>Please review the highlighted fields before continuing.</strong><ul>' + items + '</ul>';
+        validationSummary.classList.add('is-visible');
+    }
+
+    function validateCurrentStep() {
+        clearStepValidationState();
+
+        const inputs = Array.from(panels[activeIndex].querySelectorAll('input, select, textarea')).filter(function (input) {
+            return !input.disabled && typeof input.checkValidity === 'function';
+        });
+
+        const invalidInputs = [];
+        const invalidLabels = [];
+
+        inputs.forEach(function (input) {
+            if (!input.checkValidity()) {
+                invalidInputs.push(input);
+                invalidLabels.push(resolveFieldLabel(input));
+                input.classList.add('is-invalid');
+            }
+        });
+
+        if (!invalidInputs.length) {
+            return true;
+        }
+
+        const uniqueLabels = Array.from(new Set(invalidLabels));
+        showValidationSummary(uniqueLabels);
+        invalidInputs[0].focus();
+        invalidInputs[0].reportValidity();
+        return false;
     }
 
     function updateWizard() {
+        clearStepValidationState();
+
         panels.forEach(function (panel, index) {
             panel.classList.toggle('is-active', index === activeIndex);
         });
@@ -555,6 +1069,21 @@ document.addEventListener('DOMContentLoaded', function () {
             updateReview();
         }
     }
+
+    addressCopyButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            const source = form.querySelector('[name="' + button.getAttribute('data-copy-source') + '"]');
+            const target = form.querySelector('[name="' + button.getAttribute('data-copy-target') + '"]');
+
+            if (!source || !target) {
+                return;
+            }
+
+            target.value = source.value;
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
 
     stepButtons.forEach(function (button, index) {
         button.addEventListener('click', function () {
@@ -608,63 +1137,15 @@ document.addEventListener('DOMContentLoaded', function () {
         row.remove();
     });
 
-    if (signaturePad) {
-        const ctx = signaturePad.getContext('2d');
-        let drawing = false;
-
-        function resizeCanvas() {
-            const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            const rect = signaturePad.getBoundingClientRect();
-            signaturePad.width = rect.width * ratio;
-            signaturePad.height = rect.height * ratio;
-            ctx.scale(ratio, ratio);
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#111827';
-        }
-
-        function position(event) {
-            const rect = signaturePad.getBoundingClientRect();
-            const point = event.touches ? event.touches[0] : event;
-            return { x: point.clientX - rect.left, y: point.clientY - rect.top };
-        }
-
-        function start(event) {
-            drawing = true;
-            const point = position(event);
-            ctx.beginPath();
-            ctx.moveTo(point.x, point.y);
-        }
-
-        function move(event) {
-            if (!drawing) {
-                return;
-            }
-            event.preventDefault();
-            const point = position(event);
-            ctx.lineTo(point.x, point.y);
-            ctx.stroke();
-            signatureData.value = signaturePad.toDataURL('image/png');
-        }
-
-        function stop() {
-            drawing = false;
-        }
-
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        signaturePad.addEventListener('mousedown', start);
-        signaturePad.addEventListener('mousemove', move);
-        signaturePad.addEventListener('mouseup', stop);
-        signaturePad.addEventListener('mouseleave', stop);
-        signaturePad.addEventListener('touchstart', start, { passive: false });
-        signaturePad.addEventListener('touchmove', move, { passive: false });
-        signaturePad.addEventListener('touchend', stop);
-        clearSignatureBtn.addEventListener('click', function () {
-            ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
-            signatureData.value = '';
+    form.querySelectorAll('input, select, textarea').forEach(function (input) {
+        input.addEventListener('input', function () {
+            input.classList.remove('is-invalid');
         });
-    }
+
+        input.addEventListener('change', function () {
+            input.classList.remove('is-invalid');
+        });
+    });
 
     updateWizard();
 });

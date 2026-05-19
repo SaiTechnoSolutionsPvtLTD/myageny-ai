@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DailyAttendance extends Model
 {
@@ -11,6 +12,8 @@ class DailyAttendance extends Model
 
     protected $fillable = [
         'employee_id',
+        'attendee_type',
+        'intern_joining_form_id',
         'employee_name',
         'attendance_photo',
         'login_location',
@@ -29,6 +32,7 @@ class DailyAttendance extends Model
 
     protected $casts = [
         'employee_id' => 'integer',
+        'intern_joining_form_id' => 'integer',
         'login_latitude' => 'float',
         'login_longitude' => 'float',
         'logout_latitude' => 'float',
@@ -36,8 +40,13 @@ class DailyAttendance extends Model
         'attendance_date' => 'date',
     ];
 
-    public function employee()
+    public function employee(): BelongsTo
     {
         return $this->belongsTo(EmployeeOnboarding::class, 'employee_id');
+    }
+
+    public function intern(): BelongsTo
+    {
+        return $this->belongsTo(InternJoiningForm::class, 'intern_joining_form_id');
     }
 }

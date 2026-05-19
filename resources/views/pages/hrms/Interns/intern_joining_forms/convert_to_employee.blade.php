@@ -1,0 +1,159 @@
+@extends('layouts.app')
+
+@section('title', 'Convert Intern To Employee')
+
+@push('styles')
+    @include('pages.hrms.employee_onboarding.styles')
+    @include('pages.hrms.Interns.intern_joining_forms.styles')
+@endpush
+
+@section('content')
+<div class="intern-page">
+    <div class="intern-shell">
+        <div class="eob-topbar">
+            <div>
+                <div class="eob-title">Convert Intern To Employee</div>
+                <div class="eob-breadcrumb">HRMS > Intern Joining Forms > Convert</div>
+            </div>
+            <div class="eob-actions">
+                <a href="{{ route('interns.show', $form) }}" class="eob-btn eob-btn-ghost">Back to Intern</a>
+            </div>
+        </div>
+
+        <div class="intern-body">
+            @if($errors->any())
+                <div class="eob-alert eob-alert-error">Please review the portal account details and try again.</div>
+            @endif
+            @if($form->convertedEmployee)
+                <div class="eob-alert eob-alert-success">
+                    This intern is already converted to employee <strong>{{ $form->convertedEmployee->employee_id }}</strong>.
+                    <a href="{{ route('employee-onboarding.show', $form->convertedEmployee) }}">Open employee profile</a>
+                </div>
+            @endif
+
+            <div class="eob-show-layout intern-show-layout">
+                <aside class="eob-profile eob-profile-sticky intern-show-sidebar">
+                    <div class="eob-profile-banner"></div>
+                    <div class="eob-profile-body">
+                        <div class="eob-avatar intern-show-avatar">
+                            @if($form->photograph)
+                                <img src="{{ asset('storage/' . $form->photograph) }}" alt="{{ $form->name }}">
+                            @else
+                                <span>{{ strtoupper(substr($form->name, 0, 1)) }}</span>
+                            @endif
+                        </div>
+                        <div class="eob-profile-name">{{ $form->name }}</div>
+                        <div class="eob-profile-mail">{{ $form->email }}</div>
+
+                        <div class="eob-empid-card">
+                            <div class="eob-empid-label">Ready To Convert</div>
+                            <div class="eob-empid-value">{{ $generatedEmployeeId }}</div>
+                            <div class="eob-empid-sub">This employee ID will be assigned after portal account creation.</div>
+                        </div>
+
+                        <div class="eob-side-list">
+                            <div class="eob-side-item">
+                                <div class="eob-side-label">Intern ID</div>
+                                <div class="eob-side-value">{{ $form->intern_id ?: 'N/A' }}</div>
+                            </div>
+                            <div class="eob-side-item">
+                                <div class="eob-side-label">Mobile</div>
+                                <div class="eob-side-value">{{ $form->mobile ?: 'N/A' }}</div>
+                            </div>
+                            <div class="eob-side-item">
+                                <div class="eob-side-label">Date of Birth</div>
+                                <div class="eob-side-value">{{ optional($form->date_of_birth)->format('d M Y') ?: 'N/A' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <div class="intern-show-main">
+                    <div class="eob-show-card">
+                        <div class="eob-card-head">
+                            <div>
+                                <div class="eob-card-title">Employee Portal Account</div>
+                                <div class="eob-card-sub">Create the login details and reporting setup before converting this intern.</div>
+                            </div>
+                        </div>
+                        <div class="eob-card-body">
+                            <form method="POST" action="{{ route('interns.convert-to-employee.store', $form) }}">
+                                @csrf
+                                <div class="eob-form-grid">
+                                    <div class="eob-group">
+                                        <label class="eob-label">Employee ID</label>
+                                        <input type="text" class="eob-input" value="{{ $generatedEmployeeId }}" readonly>
+                                        <div class="eob-help">Auto-generated during conversion.</div>
+                                    </div>
+                                    <div class="eob-group">
+                                        <label class="eob-label">Portal Email <span class="eob-label-required">*</span></label>
+                                        <input type="email" name="portal_email" class="eob-input" value="{{ old('portal_email', $form->email) }}" required>
+                                        @error('portal_email')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="eob-group">
+                                        <label class="eob-label">Portal Password <span class="eob-label-required">*</span></label>
+                                        <input type="password" name="portal_password" class="eob-input" required>
+                                        <div class="eob-help">Minimum 8 characters.</div>
+                                        @error('portal_password')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="eob-group">
+                                        <label class="eob-label">Branch <span class="eob-label-required">*</span></label>
+                                        <select name="branch_id" class="eob-select" required>
+                                            <option value="">Select Branch</option>
+                                            @foreach($branches as $branch)
+                                                <option value="{{ $branch->id }}" @selected((string) old('branch_id', auth()->user()?->branch_id) === (string) $branch->id)>{{ $branch->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('branch_id')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="eob-group">
+                                        <label class="eob-label">Department <span class="eob-label-required">*</span></label>
+                                        <select name="department_id" class="eob-select" required>
+                                            <option value="">Select Department</option>
+                                            @foreach($departments as $department)
+                                                <option value="{{ $department->id }}" @selected((string) old('department_id') === (string) $department->id)>{{ $department->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('department_id')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="eob-group">
+                                        <label class="eob-label">Role <span class="eob-label-required">*</span></label>
+                                        <select name="role_id" class="eob-select" required>
+                                            <option value="">Select Role</option>
+                                            @foreach($roles as $role)
+                                                <option value="{{ $role->id }}" @selected((string) old('role_id') === (string) $role->id)>
+                                                    {{ $role->display_name ?: $role->name }}{{ $role->department ? ' - ' . $role->department->name : '' }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('role_id')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="eob-group full">
+                                        <label class="eob-label">Team Lead <span class="eob-label-required">*</span></label>
+                                        <select name="tl_user_id" class="eob-select" required>
+                                            <option value="">Select Team Lead</option>
+                                            @foreach($tlUsers as $tlUser)
+                                                <option value="{{ $tlUser['id'] }}" @selected((string) old('tl_user_id') === (string) $tlUser['id'])>
+                                                    {{ $tlUser['name'] }} - {{ $tlUser['role_label'] }}{{ $tlUser['branch_name'] ? ' - ' . $tlUser['branch_name'] : '' }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('tl_user_id')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
+                                </div>
+
+                                <div class="eob-foot">
+                                    <a href="{{ route('interns.show', $form) }}" class="eob-btn eob-btn-ghost">Cancel</a>
+                                    @if(!$form->convertedEmployee)
+                                        <button type="submit" class="eob-btn eob-btn-primary">Create Login And Convert</button>
+                                    @endif
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection

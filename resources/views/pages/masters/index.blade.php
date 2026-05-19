@@ -116,6 +116,7 @@
 .masters-card.product::after { background: #10b981; }
 .masters-card.department::after { background: #059669; }
 .masters-card.leave-type::after { background: #0f766e; }
+.masters-card.facility-title::after { background: #f97316; }
 .masters-card-icon {
     width: 54px;
     height: 54px;
@@ -170,6 +171,10 @@
 .masters-card-icon.leave-type {
     background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
     color: #0f766e;
+}
+.masters-card-icon.facility-title {
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    color: #c2410c;
 }
 .masters-card-title {
     margin: 0 0 8px;
@@ -381,52 +386,6 @@
             <p class="masters-card-text">Define attribute sets and configurable product details your sales and quotation workflows depend on.</p>
             <span class="masters-card-link">
                 Manage Product Sub Categories
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                </svg>
-            </span>
-        </a>
-        @endcan
-
-        @can('departments.menuview')
-        <a href="{{ route('settings.departments.index') }}" class="masters-card department">
-            <div class="masters-card-icon department">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                    <circle cx="9" cy="7" r="3"/>
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-                    <path d="M16 4.13a3 3 0 0 1 0 5.74"/>
-                </svg>
-            </div>
-            <h4 class="masters-card-title">Departments</h4>
-            <p class="masters-card-text">Maintain department master data for HR structure, onboarding alignment, and employee organization.</p>
-            <span class="masters-card-link">
-                Manage Departments
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                </svg>
-            </span>
-        </a>
-        @endcan
-
-        @can('settings.manage')
-        <a href="{{ route('settings.leave-types.index') }}" class="masters-card leave-type">
-            <div class="masters-card-icon leave-type">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 2v4"/>
-                    <path d="M16 2v4"/>
-                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                    <path d="M3 10h18"/>
-                    <path d="M8 15h4"/>
-                    <path d="M8 18h8"/>
-                </svg>
-            </div>
-            <h4 class="masters-card-title">Leave Types</h4>
-            <p class="masters-card-text">Maintain leave categories such as casual, sick, earned, or unpaid leave for HR workflows.</p>
-            <span class="masters-card-link">
-                Manage Leave Types
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

@@ -8,8 +8,8 @@
 .crm-form-head { padding:20px 24px; border-bottom:1px solid #f1f1f1; }
 .crm-form-body { padding:24px; display:flex; flex-direction:column; gap:18px; }
 .crm-form-foot { padding:20px 24px; border-top:1px solid #f1f1f1; display:flex; justify-content:flex-end; gap:10px; }
-.crm-textarea { width:100%; min-height:120px; padding:10px 14px; border:1px solid #e1dee3; border-radius:10px; font-size:14px; outline:none; font-family:inherit; resize:vertical; }
-.crm-textarea:focus { border-color:#fe5f04; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
+.crm-auto-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; }
+.crm-readonly { background:#f8f8f8; color:#555; }
 </style>
 @endpush
 
@@ -19,9 +19,12 @@
         <div class="crm-page-header">
             <div>
                 <h2 class="crm-title">Create Facility Entry</h2>
-                <p class="crm-subtitle">Add a new office cleaning schedule for facility management.</p>
+                <p class="crm-subtitle">Select a facility title. Date and time will be stored automatically.</p>
             </div>
             <div class="crm-header-actions">
+                @can('settings.manage')
+                    <a href="{{ route('settings.facility-titles.create') }}" class="crm-btn crm-btn-ghost">+ Add Title Master</a>
+                @endcan
                 <a href="{{ route('facility-management.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
@@ -37,32 +40,30 @@
                 <div class="crm-form-body">
                     <div>
                         <label class="crm-label">Title <span class="req">*</span></label>
-                        <input type="text" name="title" class="crm-input" value="{{ old('title') }}" required>
+                        <select name="facility_title_id" class="crm-input" required @disabled($facilityTitles->isEmpty())>
+                            <option value="">Select title</option>
+                            @foreach($facilityTitles as $facilityTitle)
+                                <option value="{{ $facilityTitle->id }}" @selected((string) old('facility_title_id') === (string) $facilityTitle->id)>
+                                    {{ $facilityTitle->name }}
+                                </option>
+                            @endforeach
+                        </select>
                     </div>
 
-                    <div>
-                        <label class="crm-label">Office Mopping Date</label>
-                        <input type="date" name="office_mopping_date" class="crm-input" value="{{ old('office_mopping_date') }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Office Cleaning Date</label>
-                        <input type="date" name="office_cleaning_date" class="crm-input" value="{{ old('office_cleaning_date') }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Toilet Cleaning Date</label>
-                        <input type="date" name="toilet_cleaning_date" class="crm-input" value="{{ old('toilet_cleaning_date') }}">
-                    </div>
-
-                    <div>
-                        <label class="crm-label">Remarks</label>
-                        <textarea name="remarks" class="crm-textarea" placeholder="Optional notes or cleaning instructions">{{ old('remarks') }}</textarea>
+                    <div class="crm-auto-grid">
+                        <div>
+                            <label class="crm-label">Date</label>
+                            <input type="text" class="crm-input crm-readonly" value="{{ $currentDateTime->format('d M Y') }}" readonly>
+                        </div>
+                        <div>
+                            <label class="crm-label">Time</label>
+                            <input type="text" class="crm-input crm-readonly" value="{{ $currentDateTime->format('h:i A') }}" readonly>
+                        </div>
                     </div>
                 </div>
                 <div class="crm-form-foot">
                     <a href="{{ route('facility-management.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
-                    <button type="submit" class="crm-btn crm-btn-primary">Create Entry</button>
+                    <button type="submit" class="crm-btn crm-btn-primary" @disabled($facilityTitles->isEmpty())>Create Entry</button>
                 </div>
             </div>
         </form>

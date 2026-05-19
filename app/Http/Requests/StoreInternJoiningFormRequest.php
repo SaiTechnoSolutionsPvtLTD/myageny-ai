@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\InternJoiningForm;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,6 +22,8 @@ class StoreInternJoiningFormRequest extends FormRequest
     {
         $maxUploadKb = (int) config('interns.max_upload_kb', 2048);
         $fileRules = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:' . $maxUploadKb];
+        $intern = $this->route('intern');
+        $portalUserId = $intern?->portal_user_id;
 
         return [
             'photograph' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:' . $maxUploadKb],
@@ -31,6 +34,10 @@ class StoreInternJoiningFormRequest extends FormRequest
             'mobile' => ['required', 'regex:/^[0-9]{10}$/'],
             'email' => ['required', 'email', 'max:150'],
             'date_of_birth' => ['required', 'date'],
+            'internship_start_date' => ['required', 'date'],
+            'internship_duration_months' => ['required', 'integer', 'min:1', 'max:60'],
+            'internship_end_date' => ['nullable', 'date', 'after_or_equal:internship_start_date'],
+            'internship_status' => ['required', Rule::in([InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_RESIGNED])],
             'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
             'marital_status' => ['required', Rule::in(['single', 'married'])],
             'date_of_marriage' => ['nullable', 'date', 'required_if:marital_status,married'],
@@ -39,12 +46,50 @@ class StoreInternJoiningFormRequest extends FormRequest
             'emergency_contact_name' => ['required', 'string', 'max:150'],
             'emergency_contact_relation' => ['required', 'string', 'max:100'],
             'emergency_contact_no' => ['required', 'regex:/^[0-9]{10}$/'],
+            'create_portal_account' => ['nullable', 'boolean'],
+            'portal_email' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account')),
+                'nullable',
+                'email',
+                'max:150',
+                Rule::unique('users', 'email')->ignore($portalUserId),
+            ],
+            'portal_password' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account') && ! $portalUserId),
+                'nullable',
+                'string',
+                'min:8',
+            ],
+            'branch_id' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account')),
+                'nullable',
+                'integer',
+                'exists:branches,id',
+            ],
+            'department_id' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account')),
+                'nullable',
+                'integer',
+                'exists:departments,id',
+            ],
+            'role_id' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account')),
+                'nullable',
+                'integer',
+                'exists:roles,id',
+            ],
+            'tl_user_id' => [
+                Rule::requiredIf(fn () => $this->boolean('create_portal_account')),
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
 
-            'educational_details' => ['required', 'array', 'size:4'],
-            'educational_details.*.qualification' => ['required', 'string', 'max:100'],
-            'educational_details.*.institution_name' => ['required', 'string', 'max:255'],
-            'educational_details.*.year_of_passing' => ['required', 'string', 'max:20'],
-            'educational_details.*.percentage' => ['required', 'string', 'max:20'],
+            'educational_details' => ['nullable', 'array', 'max:4'],
+            'educational_details.*.qualification' => ['nullable', 'string', 'max:100'],
+            'educational_details.*.institution_name' => ['nullable', 'string', 'max:255'],
+            'educational_details.*.year_of_passing' => ['nullable', 'string', 'max:20'],
+            'educational_details.*.percentage' => ['nullable', 'string', 'max:20'],
             'educational_details.*.specialization' => ['nullable', 'string', 'max:255'],
 
             'employment_details' => ['nullable', 'array', 'max:3'],
@@ -76,11 +121,18 @@ class StoreInternJoiningFormRequest extends FormRequest
             'document_salary_slips' => $fileRules,
             'document_bank_passbook' => $fileRules,
 
-            'declaration_accepted' => ['accepted'],
-            'declaration_date' => ['required', 'date'],
-            'declaration_place' => ['required', 'string', 'max:150'],
+            'declaration_accepted' => ['nullable', 'boolean'],
+            'declaration_date' => ['nullable', 'date'],
+            'declaration_place' => ['nullable', 'string', 'max:150'],
             'signature_upload' => $fileRules,
             'signature_data' => ['nullable', 'string'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'create_portal_account' => $this->boolean('create_portal_account'),
+        ]);
     }
 }

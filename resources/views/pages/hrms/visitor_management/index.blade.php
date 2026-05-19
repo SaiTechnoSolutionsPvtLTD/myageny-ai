@@ -100,15 +100,18 @@
                                     <td>{{ $visitor->person_to_meet }}</td>
                                     <td><span class="vm-status vm-status-{{ $visitor->status }}">{{ str_replace('_', ' ', $visitor->status) }}</span></td>
                                     <td>
-                                        <div class="eob-inline-actions">
-                                            <a href="{{ route('visitor-management.show', $visitor) }}" class="eob-icon-btn" title="View">V</a>
-                                            <a href="{{ route('visitor-management.edit', $visitor) }}" class="eob-icon-btn" title="Edit">E</a>
-                                            <form method="POST" action="{{ route('visitor-management.destroy', $visitor) }}" onsubmit="return confirm('Delete this visitor entry?')">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="eob-icon-btn danger" title="Delete">D</button>
-                                            </form>
-                                        </div>
+                                        <details class="eob-table-dropdown">
+                                            <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                            <div class="eob-table-dropdown-menu">
+                                                <a href="{{ route('visitor-management.show', $visitor) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                                <a href="{{ route('visitor-management.edit', $visitor) }}" class="eob-table-dropdown-item"><i class="bi bi-pencil"></i> Edit</a>
+                                                <form method="POST" action="{{ route('visitor-management.destroy', $visitor) }}" onsubmit="return confirm('Delete this visitor entry?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="eob-table-dropdown-item danger"><i class="bi bi-trash"></i> Delete</button>
+                                                </form>
+                                            </div>
+                                        </details>
                                     </td>
                                 </tr>
                             @endforeach

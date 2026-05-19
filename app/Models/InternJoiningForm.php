@@ -4,12 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InternJoiningForm extends Model
 {
     use HasFactory;
+
+    public const INTERN_ID_PREFIX = 'STSINT';
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_RESIGNED = 'resigned';
 
     public const DOCUMENT_FIELDS = [
         'document_10th_marksheet',
@@ -30,6 +36,7 @@ class InternJoiningForm extends Model
     ];
 
     protected $fillable = [
+        'intern_id',
         'photograph',
         'name',
         'father_name',
@@ -46,6 +53,13 @@ class InternJoiningForm extends Model
         'emergency_contact_name',
         'emergency_contact_relation',
         'emergency_contact_no',
+        'internship_start_date',
+        'internship_duration_months',
+        'internship_end_date',
+        'internship_status',
+        'role_id',
+        'department_id',
+        'portal_user_id',
         'declaration_accepted',
         'declaration_date',
         'declaration_place',
@@ -56,6 +70,9 @@ class InternJoiningForm extends Model
         return [
             'date_of_birth' => 'date',
             'date_of_marriage' => 'date',
+            'internship_start_date' => 'date',
+            'internship_end_date' => 'date',
+            'internship_duration_months' => 'integer',
             'declaration_date' => 'date',
             'declaration_accepted' => 'boolean',
         ];
@@ -79,5 +96,30 @@ class InternJoiningForm extends Model
     public function documents(): HasOne
     {
         return $this->hasOne(InternDocument::class);
+    }
+
+    public function convertedEmployee(): HasOne
+    {
+        return $this->hasOne(EmployeeOnboarding::class, 'source_intern_joining_form_id');
+    }
+
+    public function portalUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'portal_user_id');
+    }
+
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('internship_status', self::STATUS_ACTIVE);
     }
 }

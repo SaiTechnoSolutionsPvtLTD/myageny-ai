@@ -164,12 +164,17 @@
                                 @endif
                             </td>
                             <td class="text-right">
+                                <details class="crm-table-dropdown">
+                                    <summary class="crm-table-dropdown-trigger">Actions</summary>
+                                    <div class="crm-table-dropdown-menu">
                                 <form action="{{ route('settings.facebook-integration.sync', $campaignMaster) }}" method="POST" style="display:inline">
                                     @csrf
                                     <button class="crm-icon-btn">Sync Now</button>
                                 </form>
                                 <button type="button" class="crm-icon-btn editintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Edit Mapping</button>
                                 <button type="button" class="crm-icon-btn danger deleteintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Delete</button>
+                                    </div>
+                                </details>
                             </td>
                         </tr>
                     @empty

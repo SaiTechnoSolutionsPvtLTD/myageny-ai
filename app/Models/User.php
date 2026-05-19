@@ -229,4 +229,133 @@ class User extends Authenticatable
     {
         return in_array(Str::of($roleName)->lower()->replace(' ', '_')->value(), ['super_admin', 'admin'], true);
     }
+
+    public function dashboardRoute(): string
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin() || $this->hasAdminLikeRole()) {
+            return 'dashboard.admin';
+        }
+
+        if ($this->isHrmsAttendanceOnlyUser()) {
+            return 'hrms.dashboard';
+        }
+
+        if ($this->belongsToHrDepartment()) {
+            return 'hrms.dashboard';
+        }
+
+        if ($this->belongsToSalesDepartment() || $this->hasExecutiveLikeRole()) {
+            return 'dashboard.admin';
+        }
+
+        return 'dashboard.admin';
+    }
+
+    public function belongsToHrDepartment(): bool
+    {
+        return $this->departmentKeys()->intersect([
+            'hr',
+            'human_resource',
+            'human_resources',
+            'hrms',
+            'people_operations',
+            'talent_acquisition',
+            'recruitment',
+        ])->isNotEmpty();
+    }
+
+    public function belongsToSalesDepartment(): bool
+    {
+        return $this->departmentKeys()->intersect([
+            'sales',
+            'crm',
+            'business_development',
+            'marketing',
+            'telecalling',
+        ])->isNotEmpty();
+    }
+
+    public function hasExecutiveLikeRole(): bool
+    {
+        return $this->roleKeys()->intersect([
+            'executive',
+            'sales_executive',
+            'hr_executive',
+            'bde',
+            'business_development_executive',
+            'telecaller',
+        ])->isNotEmpty();
+    }
+
+    public function hasAdminLikeRole(): bool
+    {
+        return $this->roleKeys()->intersect([
+            'super_admin',
+            'admin',
+            'company_admin',
+            'branch_admin',
+        ])->isNotEmpty();
+    }
+
+    public function isExecutiveHrmsUser(): bool
+    {
+        return $this->hasExecutiveLikeRole()
+            && ! $this->belongsToHrDepartment()
+            && ! $this->hasAdminLikeRole()
+            && ! $this->isCompanyAdmin()
+            && ! $this->isSuperAdmin();
+    }
+
+    public function isHrmsAttendanceOnlyUser(): bool
+    {
+        return $this->hasExecutiveLikeRole()
+            && ! $this->belongsToHrDepartment()
+            && ! $this->hasAdminLikeRole()
+            && ! $this->isCompanyAdmin()
+            && ! $this->isSuperAdmin();
+    }
+
+    private function roleKeys(): \Illuminate\Support\Collection
+    {
+        $roles = $this->relationLoaded('roles') ? $this->roles : $this->roles()->get();
+
+        return $roles
+            ->flatMap(function ($role) {
+                return array_filter([
+                    $this->normalizeDashboardKey((string) $role->name),
+                    $this->normalizeDashboardKey((string) ($role->display_name ?? '')),
+                ]);
+            })
+            ->unique()
+            ->values();
+    }
+
+    private function departmentKeys(): \Illuminate\Support\Collection
+    {
+        $roles = $this->relationLoaded('roles')
+            ? $this->roles->loadMissing('department')
+            : $this->roles()->with('department')->get();
+
+        return $roles
+            ->map(fn ($role) => $this->normalizeDashboardKey((string) ($role->department?->name ?? '')))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function normalizeDashboardKey(string $value): string
+    {
+        $value = Str::contains($value, '__')
+            ? Str::afterLast($value, '__')
+            : $value;
+
+        return Str::of($value)
+            ->lower()
+            ->replace('&', 'and')
+            ->replace(['-', ' '], '_')
+            ->replaceMatches('/[^a-z0-9_]+/', '')
+            ->replaceMatches('/_+/', '_')
+            ->trim('_')
+            ->value();
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class FacilityManagementRequest extends FormRequest
 {
@@ -14,11 +15,11 @@ class FacilityManagementRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title' => ['required', 'string', 'max:191'],
-            'office_mopping_date' => ['nullable', 'date'],
-            'office_cleaning_date' => ['nullable', 'date'],
-            'toilet_cleaning_date' => ['nullable', 'date'],
-            'remarks' => ['nullable', 'string'],
+            'facility_title_id' => [
+                'required',
+                'integer',
+                Rule::exists('facility_titles', 'id')->whereNull('deleted_at'),
+            ],
         ];
     }
 }

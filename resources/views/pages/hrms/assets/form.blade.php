@@ -24,9 +24,27 @@
                     <input type="text" name="asset_name" class="eob-input" value="{{ old('asset_name', $asset?->asset_name) }}" required>
                     @error('asset_name')<div class="eob-error">{{ $message }}</div>@enderror
                 </div>
+                @php
+                    $selectedAssetCategory = old('asset_category', $asset?->asset_category);
+                    $assetCategoryOptions = collect($assetCategories ?? []);
+                    if ($selectedAssetCategory && ! $assetCategoryOptions->contains(fn ($category) => $category->name === $selectedAssetCategory)) {
+                        $assetCategoryOptions = $assetCategoryOptions->prepend((object) [
+                            'name' => $selectedAssetCategory,
+                            'description' => 'Existing asset category',
+                        ]);
+                    }
+                @endphp
                 <div class="eob-group">
                     <label class="eob-label">Category</label>
-                    <input type="text" name="asset_category" class="eob-input" value="{{ old('asset_category', $asset?->asset_category) }}" placeholder="Laptop, Mobile, Monitor">
+                    <select name="asset_category" class="eob-select">
+                        <option value="">Select asset category</option>
+                        @foreach($assetCategoryOptions as $category)
+                            <option value="{{ $category->name }}" @selected((string) $selectedAssetCategory === (string) $category->name)>
+                                {{ $category->name }}{{ $category->description ? ' - ' . \Illuminate\Support\Str::limit($category->description, 40) : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="eob-help">Manage selectable categories from HRMS Masters > Asset Categories.</div>
                     @error('asset_category')<div class="eob-error">{{ $message }}</div>@enderror
                 </div>
                 <div class="eob-group">
