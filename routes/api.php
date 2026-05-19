@@ -19,8 +19,12 @@ use App\Http\Controllers\App\HRMS\DashboardApiController;
 use App\Http\Controllers\App\HRMS\EmployeeApiController;
 use App\Http\Controllers\App\HRMS\InternApiController;
 use App\Http\Controllers\App\HRMS\AttendanceApiController;
+use App\Http\Controllers\App\HRMS\AssetApiController;
+use App\Http\Controllers\App\HRMS\HolidayApiController;
+use App\Http\Controllers\App\HRMS\LeaveTypeApiController;
+use App\Http\Controllers\App\HRMS\LeaveRequestApiController;
+use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
 use Illuminate\Support\Facades\Route;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -122,6 +126,42 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
       Route::get('attendance',      [AttendanceApiController::class, 'index'])->name('attendance.index');
       Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');  
+
+      Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');
+      Route::get('assets',        [AssetApiController::class, 'index'])->name('assets.index');
+      Route::get('assets/{id}',   [AssetApiController::class, 'show'])->name('assets.show');
+
+      Route::get('holidays/meta', [HolidayApiController::class, 'meta'])->name('holidays.meta');
+      Route::get('holidays',      [HolidayApiController::class, 'index'])->name('holidays.index');
+
+      Route::get('leave-types',      [LeaveTypeApiController::class, 'index'])->name('leave-types.index');
+    Route::get('leave-types/{leaveType}', [LeaveTypeApiController::class, 'show'])->name('leave-types.show');
+
+    // Leave Requests — static routes BEFORE wildcard
+    Route::get('leave-requests/meta',               [LeaveRequestApiController::class, 'meta'])->name('leave-requests.meta');
+    Route::get('leave-requests/pending-approvals',  [LeaveRequestApiController::class, 'pendingApprovals'])->name('leave-requests.pending-approvals');
+    Route::get('leave-requests/handled-approvals',  [LeaveRequestApiController::class, 'handledApprovals'])->name('leave-requests.handled-approvals');
+
+    Route::get('leave-requests',                    [LeaveRequestApiController::class, 'index'])->name('leave-requests.index');
+    Route::post('leave-requests',                   [LeaveRequestApiController::class, 'store'])->name('leave-requests.store');
+    Route::get('leave-requests/{leaveRequest}',     [LeaveRequestApiController::class, 'show'])->name('leave-requests.show');
+
+    // Approve / Reject
+    Route::post('leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestApiController::class, 'approve'])->name('leave-requests.approve');
+    Route::post('leave-requests/{leaveRequest}/approvals/{approval}/reject',  [LeaveRequestApiController::class, 'reject'])->name('leave-requests.reject');
+
+    // Permission Requests — static routes BEFORE wildcard
+    Route::get('permission-requests/meta',              [PermissionRequestApiController::class, 'meta'])->name('permission-requests.meta');
+    Route::get('permission-requests/pending-approvals', [PermissionRequestApiController::class, 'pendingApprovals'])->name('permission-requests.pending-approvals');
+    Route::get('permission-requests/handled-approvals', [PermissionRequestApiController::class, 'handledApprovals'])->name('permission-requests.handled-approvals');
+
+    Route::get('permission-requests',                   [PermissionRequestApiController::class, 'index'])->name('permission-requests.index');
+    Route::post('permission-requests',                  [PermissionRequestApiController::class, 'store'])->name('permission-requests.store');
+    Route::get('permission-requests/{permissionRequest}', [PermissionRequestApiController::class, 'show'])->name('permission-requests.show');
+
+    // Approve / Reject
+    Route::post('permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestApiController::class, 'approve'])->name('permission-requests.approve');
+    Route::post('permission-requests/{permissionRequest}/approvals/{approval}/reject',  [PermissionRequestApiController::class, 'reject'])->name('permission-requests.reject');
 
   });
 
