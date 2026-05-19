@@ -53,31 +53,31 @@ class AuthController extends Controller
         ]
     )]
     public function register(Request $request): JsonResponse
-{
-    $request->validate([
-        'name'                  => ['required', 'string', 'max:255'],
-        'email'                 => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-        'password'              => ['required', 'string', 'min:8', 'confirmed'],
-        'password_confirmation' => ['required', 'string'],
-        'branch_id'             => ['nullable', 'integer', 'exists:branches,id'],
-    ]);
+    {
+        $request->validate([
+            'name'                  => ['required', 'string', 'max:255'],
+            'email'                 => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password'              => ['required', 'string', 'min:8', 'confirmed'],
+            'password_confirmation' => ['required', 'string'],
+            'branch_id'             => ['nullable', 'integer', 'exists:branches,id'],
+        ]);
 
-    $user = User::create([
-        'name'      => $request->name,
-        'email'     => $request->email,
-        'password'  => Hash::make($request->password),
-        'branch_id' => $request->branch_id,
-        'is_active' => true,
-    ]);
+        $user = User::create([
+            'name'      => $request->name,
+            'email'     => $request->email,
+            'password'  => Hash::make($request->password),
+            'branch_id' => $request->branch_id,
+            'is_active' => true,
+        ]);
 
-    // $user->assignRole('developer');
+        // $user->assignRole('developer');
 
-    return response()->json([
-        'status'  => true,
-        'message' => 'Developer account created successfully.',
-        'user'    => $this->formatUser($user),
-    ], 201);
-}
+        return response()->json([
+            'status'  => true,
+            'message' => 'Developer account created successfully.',
+            'user'    => $this->formatUser($user->load('employeeOnboarding')),
+        ], 201);
+    }
 
     // =========================================================================
     // LOGIN
@@ -121,7 +121,6 @@ class AuthController extends Controller
     )]
     public function login(Request $request): JsonResponse
     {
-       
         $request->validate([
             'email'       => ['required', 'string', 'email'],
             'password'    => ['required', 'string'],
@@ -164,7 +163,7 @@ class AuthController extends Controller
             'message'    => 'Login successful',
             'token'      => $token,
             'token_type' => 'Bearer',
-            'user'       => $this->formatUser($user),
+            'user'       => $this->formatUser($user->load('employeeOnboarding.department', 'employeeOnboarding.role')),
         ]);
     }
 
@@ -222,7 +221,7 @@ class AuthController extends Controller
     )]
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load('branch', 'roles');
+        $user = $request->user()->load('branch', 'roles', 'employeeOnboarding.department', 'employeeOnboarding.role');
 
         return response()->json([
             'status' => true,
@@ -256,21 +255,43 @@ class AuthController extends Controller
     }
 
     protected function formatUser(User $user, mixed $activeBranchId = null): array
-{
-    return [
-        'id'            => $user->id,
-        'name'          => $user->name,
-        'email'         => $user->email,
-        'role'          => $user->roles->first()?->name ?? null,
-        'role_display'  => $user->role_display_name,
-        'is_active'     => $user->is_active,
-        'branch_id'     => $activeBranchId ?? $user->branch_id,
-        'branch'        => $user->branch ? [
-            'id'   => $user->branch->id,
-            'name' => $user->branch->name,
-        ] : null,
-        'last_login_at' => $user->last_login_at?->toIso8601String(),
-        'profile_photo' => $user->avatar ?? null,
-    ];
-}
+    {
+        $emp = $user->employeeOnboarding;
+
+        return [
+            'id'            => $user->id,
+            'name'          => $user->name,
+            'email'         => $user->email,
+            'role'          => $user->roles->first()?->name ?? null,
+            'role_display'  => $user->role_display_name,
+            'is_active'     => $user->is_active,
+            'branch_id'     => $activeBranchId ?? $user->branch_id,
+            'branch'        => $user->branch ? [
+                'id'   => $user->branch->id,
+                'name' => $user->branch->name,
+            ] : null,
+            'last_login_at' => $user->last_login_at?->toIso8601String(),
+            'profile_photo' => $user->photo ?? null,
+
+            'employee' => $emp ? [
+                'employee_id'     => $emp->employee_id,
+                'mobile'          => $emp->mobile,
+                'date_of_birth'   => $emp->date_of_birth?->toDateString(),
+                'blood_group'     => $emp->blood_group,
+                'marital_status'  => $emp->marital_status,
+                'date_of_joining' => $emp->salary_effective_from?->toDateString(),
+                'gross_salary'    => $emp->gross_salary,
+                'net_salary'      => $emp->net_salary,
+                'status'          => $emp->status,
+                'department'      => $emp->department ? [
+                    'id'   => $emp->department->id,
+                    'name' => $emp->department->name,
+                ] : null,
+                'designation'     => $emp->role ? [
+                    'id'   => $emp->role->id,
+                    'name' => $emp->role->name,
+                ] : null,
+            ] : null,
+        ];
+    }
 }

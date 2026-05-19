@@ -358,4 +358,10 @@ class User extends Authenticatable
             ->trim('_')
             ->value();
     }
+
+    public function employeeOnboarding(): \Illuminate\Database\Eloquent\Relations\HasOne
+{
+    return $this->hasOne(\App\Models\EmployeeOnboarding::class, 'portal_user_id');
+}
+
 }

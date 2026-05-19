@@ -187,4 +187,5 @@ class EmployeeOnboarding extends Model
     {
         return $query->where('status', self::STATUS_ACTIVE);
     }
+    
 }
