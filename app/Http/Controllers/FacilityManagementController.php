@@ -43,14 +43,8 @@ class FacilityManagementController extends Controller
     public function store(FacilityManagementRequest $request): RedirectResponse
     {
         $facilityTitle = FacilityTitle::findOrFail($request->validated('facility_title_id'));
-        $now = now();
 
-        FacilityManagement::create([
-            'facility_title_id' => $facilityTitle->id,
-            'title' => $facilityTitle->name,
-            'entry_date' => $now->toDateString(),
-            'entry_time' => $now->format('H:i:s'),
-        ]);
+        FacilityManagement::create($this->payload($facilityTitle, $request->validated('remarks')));
 
         return redirect()
             ->route('facility-management.index')
@@ -75,11 +69,37 @@ class FacilityManagementController extends Controller
             'title' => $facilityTitle->name,
             'entry_date' => $facility_management->entry_date?->toDateString() ?? $now->toDateString(),
             'entry_time' => $facility_management->entry_time ?? $now->format('H:i:s'),
+            'remarks' => $request->validated('remarks'),
         ]);
 
         return redirect()
             ->route('facility-management.index')
             ->with('success', "Facility entry '{$facilityTitle->name}' updated successfully.");
+    }
+
+    public function qrCode(): View
+    {
+        $facilityFormUrl = route('facility-entry.create');
+        $qrCodeUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=' . urlencode($facilityFormUrl);
+
+        return view('pages.settings.facility_management.qr-code', compact('facilityFormUrl', 'qrCodeUrl'));
+    }
+
+    public function publicCreate(): View
+    {
+        return view('pages.public.facility-entry', [
+            'facilityTitles' => FacilityTitle::orderBy('name')->get(),
+            'currentDateTime' => now(),
+        ]);
+    }
+
+    public function publicStore(FacilityManagementRequest $request): View
+    {
+        $facilityTitle = FacilityTitle::findOrFail($request->validated('facility_title_id'));
+
+        $facilityEntry = FacilityManagement::create($this->payload($facilityTitle, $request->validated('remarks')));
+
+        return view('pages.public.facility-entry-success', compact('facilityEntry'));
     }
 
     public function destroy(FacilityManagement $facility_management): RedirectResponse
@@ -91,5 +111,18 @@ class FacilityManagementController extends Controller
         return redirect()
             ->route('facility-management.index')
             ->with('success', "Facility entry '{$title}' deleted successfully.");
+    }
+
+    private function payload(FacilityTitle $facilityTitle, ?string $remarks = null): array
+    {
+        $now = now();
+
+        return [
+            'facility_title_id' => $facilityTitle->id,
+            'title' => $facilityTitle->name,
+            'entry_date' => $now->toDateString(),
+            'entry_time' => $now->format('H:i:s'),
+            'remarks' => $remarks,
+        ];
     }
 }

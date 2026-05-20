@@ -356,6 +356,15 @@
 .hrms-birthday-role{font-size:12px;color:#7d7d7d;margin-top:2px}
 
 /* Holiday Cards */
+.hrms-filter-form{display:flex;flex-direction:column;gap:12px}
+.hrms-filter-bar{display:flex;gap:10px;flex-wrap:wrap}
+.hrms-filter-select,
+.hrms-filter-input{
+    min-height:42px;padding:10px 12px;border-radius:12px;border:1px solid #e6ddd6;background:#fff;color:#121212;
+    font-size:13px;font-family:inherit;
+}
+.hrms-filter-input{min-width:160px}
+.hrms-filter-actions{display:flex;gap:10px;flex-wrap:wrap}
 .hrms-holiday-list{display:flex;flex-direction:column;gap:10px}
 .hrms-holiday-item{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:#fff;border:1px solid #f0e9e3}
 .hrms-holiday-date{width:60px;height:60px;border-radius:12px;background:#fe5f04;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;text-align:center}
@@ -748,29 +757,27 @@
                 </div>
             </div>
 
-            <!-- Upcoming Holidays -->
-            <div class="hrms-card hrms-panel">
+            <!-- Announcements -->
+            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">📅 Upcoming Holidays</div>
-                        <div class="hrms-panel-sub">Next 7 days schedule</div>
+                        <div class="hrms-panel-title">📢 Announcements</div>
+                        <div class="hrms-panel-sub">Important updates and notices</div>
                     </div>
+                    @if($stats['can_manage_announcements'] ?? false)
+                    <a href="{{ route('hrms-announcements.index') }}" class="hrms-link">Create Announcement</a>
+                    @endif
                 </div>
-                <div class="hrms-holiday-list">
-                    @forelse($stats['upcoming_holidays'] as $holiday)
-                    <div class="hrms-holiday-item">
-                        <div class="hrms-holiday-date">
-                            <div>{{ $holiday->holiday_date->format('M') }}</div>
-                            <div>{{ $holiday->holiday_date->format('d') }}</div>
-                        </div>
-                        <div class="hrms-holiday-info">
-                            <div class="hrms-holiday-name">{{ $holiday->reason }}</div>
-                            <div class="hrms-holiday-desc">{{ $holiday->holiday_date->format('l, F j, Y') }}</div>
-                        </div>
+                <div class="hrms-announcement-list">
+                    @forelse($stats['announcements'] as $announcement)
+                    <div class="hrms-announcement-item hrms-announcement-priority-{{ $announcement['priority'] }}">
+                        <div class="hrms-announcement-title">{{ $announcement['title'] }}</div>
+                        <div class="hrms-announcement-message">{{ $announcement['message'] }}</div>
+                        <div class="hrms-announcement-date">{{ \Carbon\Carbon::parse($announcement['date'])->format('M j, Y') }}</div>
                     </div>
                     @empty
-                    <div style="text-align:center;padding:20px;color:#9ca3af;">
-                        No upcoming holidays
+                    <div class="hrms-announcement-item" style="background:#faf7f4;">
+                        <div class="hrms-announcement-message" style="margin-bottom:0;">No announcements available right now.</div>
                     </div>
                     @endforelse
                 </div>
@@ -987,27 +994,46 @@
             </div>
             @endif
 
-            <!-- Announcements -->
-            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
+            <!-- Upcoming Holidays -->
+            <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">📢 Announcements</div>
-                        <div class="hrms-panel-sub">Important updates and notices</div>
+                        <div class="hrms-panel-title">📅 Upcoming Holidays</div>
+                        <div class="hrms-panel-sub">{{ $stats['holiday_filter']['label'] ?? 'Next 7 days schedule' }}</div>
                     </div>
-                    @if($stats['can_manage_announcements'] ?? false)
-                    <a href="{{ route('hrms-announcements.index') }}" class="hrms-link">Create Announcement</a>
-                    @endif
                 </div>
-                <div class="hrms-announcement-list">
-                    @forelse($stats['announcements'] as $announcement)
-                    <div class="hrms-announcement-item hrms-announcement-priority-{{ $announcement['priority'] }}">
-                        <div class="hrms-announcement-title">{{ $announcement['title'] }}</div>
-                        <div class="hrms-announcement-message">{{ $announcement['message'] }}</div>
-                        <div class="hrms-announcement-date">{{ \Carbon\Carbon::parse($announcement['date'])->format('M j, Y') }}</div>
+                <form method="GET" action="{{ route('hrms.dashboard') }}" class="hrms-filter-form" style="margin-bottom:16px;">
+                    <div class="hrms-filter-bar">
+                        <select name="holiday_filter" class="hrms-filter-select" onchange="this.form.submit()">
+                            <option value="week" @selected(($stats['holiday_filter']['type'] ?? 'week') === 'week')>This Week</option>
+                            <option value="month" @selected(($stats['holiday_filter']['type'] ?? '') === 'month')>This Month</option>
+                            <option value="custom" @selected(($stats['holiday_filter']['type'] ?? '') === 'custom')>Custom Dates</option>
+                        </select>
+                        @if(($stats['holiday_filter']['type'] ?? 'week') === 'custom')
+                        <input type="date" name="holiday_start_date" class="hrms-filter-input" value="{{ $stats['holiday_filter']['start_input'] ?? '' }}">
+                        <input type="date" name="holiday_end_date" class="hrms-filter-input" value="{{ $stats['holiday_filter']['end_input'] ?? '' }}">
+                        <div class="hrms-filter-actions">
+                            <button type="submit" class="hrms-btn hrms-btn-primary">Apply</button>
+                            <a href="{{ route('hrms.dashboard', ['holiday_filter' => 'week']) }}" class="hrms-btn hrms-btn-ghost">Reset</a>
+                        </div>
+                        @endif
+                    </div>
+                </form>
+                <div class="hrms-holiday-list">
+                    @forelse($stats['upcoming_holidays'] as $holiday)
+                    <div class="hrms-holiday-item">
+                        <div class="hrms-holiday-date">
+                            <div>{{ $holiday->holiday_date->format('M') }}</div>
+                            <div>{{ $holiday->holiday_date->format('d') }}</div>
+                        </div>
+                        <div class="hrms-holiday-info">
+                            <div class="hrms-holiday-name">{{ $holiday->reason }}</div>
+                            <div class="hrms-holiday-desc">{{ $holiday->holiday_date->format('l, F j, Y') }}</div>
+                        </div>
                     </div>
                     @empty
-                    <div class="hrms-announcement-item" style="background:#faf7f4;">
-                        <div class="hrms-announcement-message" style="margin-bottom:0;">No announcements available right now.</div>
+                    <div style="text-align:center;padding:20px;color:#9ca3af;">
+                        No holidays found for the selected range
                     </div>
                     @endforelse
                 </div>

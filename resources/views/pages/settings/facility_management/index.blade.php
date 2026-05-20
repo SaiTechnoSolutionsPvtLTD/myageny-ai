@@ -18,7 +18,8 @@
                 @can('settings.manage')
                     <a href="{{ route('settings.facility-titles.index') }}" class="crm-btn crm-btn-ghost">Title Master</a>
                 @endcan
-                <a href="{{ route('facility-management.create') }}" class="crm-btn crm-btn-primary">+ Add Facility Entry</a>
+                <a href="{{ route('facility-management.qr-code') }}" class="crm-btn crm-btn-ghost">QR Code</a>
+                <a href="{{ route('facility-management.create') }}" class="crm-btn crm-btn-primary">+ Add Activity</a>
             </div>
         </div>
 

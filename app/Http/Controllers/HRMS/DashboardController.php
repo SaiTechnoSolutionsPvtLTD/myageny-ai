@@ -12,13 +12,14 @@ use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollItem;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         if (auth()->user()?->isHrmsAttendanceOnlyUser()) {
-            return $this->selfServiceDashboard();
+            return $this->selfServiceDashboard($request);
         }
 
         $today = Carbon::today();
@@ -91,11 +92,8 @@ class DashboardController extends Controller
             ->with('role')
             ->get();
 
-        // Upcoming holidays (next 7 days)
-        $upcoming_holidays = HolidayCalendar::where('holiday_date', '>=', $today)
-            ->where('holiday_date', '<=', $today->copy()->addDays(7))
-            ->orderBy('holiday_date')
-            ->get();
+        $holidayFilter = $this->resolveHolidayFilter($request, $today);
+        $upcoming_holidays = $this->upcomingHolidays($holidayFilter);
 
         // Payroll information
         $salary_day_1_employees = EmployeeOnboarding::active()
@@ -136,6 +134,7 @@ class DashboardController extends Controller
             'today_anniversaries' => $today_anniversaries,
             'today_work_anniversaries' => $today_work_anniversaries,
             'upcoming_holidays' => $upcoming_holidays,
+            'holiday_filter' => $holidayFilter,
             'salary_day_1_employees' => $salary_day_1_employees,
             'salary_day_10_employees' => $salary_day_10_employees,
             'monthly_leave_data' => $monthly_leave_data,
@@ -159,10 +158,11 @@ class DashboardController extends Controller
         return view('pages.hrms.dashboard.index', compact('stats'));
     }
 
-    private function selfServiceDashboard()
+    private function selfServiceDashboard(Request $request)
     {
         $today = Carbon::today();
         $employee = $this->currentEmployee()?->loadMissing('role');
+        $holidayFilter = $this->resolveHolidayFilter($request, $today);
         $exitRequest = $employee
             ? EmployeeExitRequest::query()
                 ->where('employee_onboarding_id', $employee->id)
@@ -237,10 +237,8 @@ class DashboardController extends Controller
                 && optional($employee->joining_date)?->day === $today->day
                 ? collect([$employee])
                 : collect(),
-            'upcoming_holidays' => HolidayCalendar::where('holiday_date', '>=', $today)
-                ->where('holiday_date', '<=', $today->copy()->addDays(7))
-                ->orderBy('holiday_date')
-                ->get(),
+            'upcoming_holidays' => $this->upcomingHolidays($holidayFilter),
+            'holiday_filter' => $holidayFilter,
             'salary_day_1_employees' => 0,
             'salary_day_10_employees' => 0,
             'monthly_leave_data' => $monthlyLeaveData,
@@ -262,6 +260,66 @@ class DashboardController extends Controller
         ];
 
         return view('pages.hrms.dashboard.index', compact('stats'));
+    }
+
+    private function resolveHolidayFilter(Request $request, Carbon $today): array
+    {
+        $type = $request->string('holiday_filter')->toString() ?: 'week';
+
+        if (! in_array($type, ['week', 'month', 'custom'], true)) {
+            $type = 'week';
+        }
+
+        $startDate = null;
+        $endDate = null;
+        $label = 'Next 7 days schedule';
+
+        if ($type === 'month') {
+            $startDate = $today->copy()->startOfMonth();
+            $endDate = $today->copy()->endOfMonth();
+            $label = 'Holidays in ' . $today->format('F Y');
+        } elseif ($type === 'custom') {
+            $startInput = $request->input('holiday_start_date');
+            $endInput = $request->input('holiday_end_date');
+
+            try {
+                $startDate = $startInput ? Carbon::parse($startInput)->startOfDay() : null;
+                $endDate = $endInput ? Carbon::parse($endInput)->endOfDay() : null;
+            } catch (\Throwable $e) {
+                $startDate = null;
+                $endDate = null;
+            }
+
+            if (! $startDate || ! $endDate || $startDate->gt($endDate)) {
+                $type = 'week';
+                $startDate = $today->copy();
+                $endDate = $today->copy()->addDays(7)->endOfDay();
+                $label = 'Next 7 days schedule';
+            } else {
+                $label = 'Holidays from ' . $startDate->format('d M Y') . ' to ' . $endDate->format('d M Y');
+            }
+        } else {
+            $startDate = $today->copy();
+            $endDate = $today->copy()->addDays(7)->endOfDay();
+        }
+
+        return [
+            'type' => $type,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'start_input' => $startDate?->format('Y-m-d'),
+            'end_input' => $endDate?->format('Y-m-d'),
+            'label' => $label,
+        ];
+    }
+
+    private function upcomingHolidays(array $holidayFilter)
+    {
+        return HolidayCalendar::query()
+            ->whereDate('holiday_date', '>=', $holidayFilter['start_date']->toDateString())
+            ->whereDate('holiday_date', '<=', $holidayFilter['end_date']->toDateString())
+            ->orderBy('holiday_date')
+            ->get();
     }
 
     private function currentEmployee(): ?EmployeeOnboarding

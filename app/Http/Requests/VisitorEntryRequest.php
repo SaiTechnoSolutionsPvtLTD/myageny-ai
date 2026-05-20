@@ -20,7 +20,7 @@ class VisitorEntryRequest extends FormRequest
             'in_time' => ['required', 'date_format:H:i'],
             'out_time' => ['nullable', 'date_format:H:i', 'after_or_equal:in_time'],
             'person_to_meet' => ['required', 'string', 'max:150'],
-            'remarks' => ['nullable', 'string', 'max:1000'],
+            'remarks' => ['required', 'string', 'max:1000'],
         ];
     }
 }

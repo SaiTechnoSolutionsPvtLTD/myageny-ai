@@ -42,6 +42,7 @@
         <div class="nav-section">
             <div class="nav-title">HRMS</div>
             <div class="nav-items">
+                @can('dashboard.menuview')
                 <a href="{{ route('hrms.dashboard') }}" class="nav-item {{ request()->routeIs('hrms.dashboard') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.dashboard'))
                         <div class="active-indicator"></div>
@@ -56,8 +57,10 @@
                         <span>Dashboard</span>
                     </div>
                 </a>
+                @endcan
 
                 @if(! $hrmsSelfService)
+                @can('masters.menuview')
                  <a href="{{ route('hrms.masters.index') }}" class="nav-item {{ request()->routeIs('hrms.masters.*') || request()->routeIs('settings.departments.*') || request()->routeIs('settings.leave-types.*') || request()->routeIs('settings.asset-categories.*') || request()->routeIs('settings.payroll.*') || request()->routeIs('settings.facility-titles.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.masters.*') || request()->routeIs('settings.departments.*') || request()->routeIs('settings.leave-types.*') || request()->routeIs('settings.asset-categories.*') || request()->routeIs('settings.payroll.*') || request()->routeIs('settings.facility-titles.*'))
                         <div class="active-indicator"></div>
@@ -72,9 +75,11 @@
                         <span>Masters</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('employees.menuview')
                 <a href="{{ route('employee-onboarding.index') }}" class="nav-item {{ request()->routeIs('employee-onboarding.*') ? 'active' : '' }}">
                     @if(request()->routeIs('employee-onboarding.*'))
                         <div class="active-indicator"></div>
@@ -89,9 +94,11 @@
                         <span>Employees</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('recruitment.menuview')
                 <a href="{{ route('recruitment.index') }}" class="nav-item {{ request()->routeIs('recruitment.*') ? 'active' : '' }}">
                     @if(request()->routeIs('recruitment.*'))
                         <div class="active-indicator"></div>
@@ -107,9 +114,11 @@
                         <span>Recruitment</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('interns.menuview')
                 <a href="{{ route('interns.index') }}" class="nav-item {{ request()->routeIs('interns.*') ? 'active' : '' }}">
                     @if(request()->routeIs('interns.*'))
                         <div class="active-indicator"></div>
@@ -122,8 +131,10 @@
                         <span>Interns</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
+                @can('attendance.menuview')
                 <a href="{{ route('attendance.index') }}" class="nav-item {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
                     @if(request()->routeIs('attendance.*'))
                         <div class="active-indicator"></div>
@@ -143,8 +154,10 @@
                         <span>Attendance</span>
                     </div>
                 </a>
+                @endcan
 
                 @if(! $hrmsSelfService)
+                @can('payroll.menuview')
                 <a href="{{ route('payroll.index') }}" class="nav-item {{ request()->routeIs('payroll.*') ? 'active' : '' }}">
                     @if(request()->routeIs('payroll.*'))
                         <div class="active-indicator"></div>
@@ -158,9 +171,11 @@
                         <span>Payroll</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService && (auth()->user()?->belongsToHrDepartment() || auth()->user()?->hasHrLikeRole()))
+                @can('announcements.menuview')
                 <a href="{{ route('hrms-announcements.index') }}" class="nav-item {{ request()->routeIs('hrms-announcements.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms-announcements.*'))
                         <div class="active-indicator"></div>
@@ -173,9 +188,11 @@
                         <span>Announcements</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('leaverequests.menuview')
                 <a href="{{ route('leave-requests.index') }}" class="nav-item {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('leave-requests.*'))
                         <div class="active-indicator"></div>
@@ -191,9 +208,11 @@
                         <span>Leave Requests</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('permissionrequest.menuview')
                 <a href="{{ route('permission-requests.index') }}" class="nav-item {{ request()->routeIs('permission-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('permission-requests.*'))
                         <div class="active-indicator"></div>
@@ -206,9 +225,11 @@
                         <span>Permission Requests</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('visitor_management.menuview')
                 <a href="{{ route('visitor-management.index') }}" class="nav-item {{ request()->routeIs('visitor-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('visitor-management.*'))
                         <div class="active-indicator"></div>
@@ -223,9 +244,11 @@
                         <span>Visitor Management</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('dynamic_forms.menuview')
                 <a href="{{ route('dynamic-forms.index') }}" class="nav-item {{ request()->routeIs('dynamic-forms.*') ? 'active' : '' }}">
                     @if(request()->routeIs('dynamic-forms.*'))
                         <div class="active-indicator"></div>
@@ -242,9 +265,11 @@
                         <span>Form Builder</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('facility_management.menuview')
                 <a href="{{ route('facility-management.index') }}" class="nav-item {{ request()->routeIs('facility-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('facility-management.*'))
                         <div class="active-indicator"></div>
@@ -259,9 +284,11 @@
                         <span>Facility Management</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('assets.menuview')
                 <a href="{{ route('assets.index') }}" class="nav-item {{ request()->routeIs('assets.*') ? 'active' : '' }}">
                     @if(request()->routeIs('assets.*'))
                         <div class="active-indicator"></div>
@@ -275,9 +302,11 @@
                         <span>Assets</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)
+                @can('holiday_calendar.menuview')
                 <a href="{{ route('settings.holiday-calendars.index') }}" class="nav-item {{ request()->routeIs('settings.holiday-calendars.*') ? 'active' : '' }}">
                     @if(request()->routeIs('settings.holiday-calendars.*'))
                         <div class="active-indicator"></div>
@@ -292,6 +321,7 @@
                         <span>Holiday Calendar</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
             </div>

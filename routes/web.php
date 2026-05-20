@@ -69,6 +69,8 @@ Route::post('/logout', [AuthController::class, 'logout'])
 
 Route::get('/visitor-entry', [VisitorManagementController::class, 'publicCreate'])->name('visitor-entry.create');
 Route::post('/visitor-entry', [VisitorManagementController::class, 'publicStore'])->name('visitor-entry.store');
+Route::get('/facility-entry', [FacilityManagementController::class, 'publicCreate'])->name('facility-entry.create');
+Route::post('/facility-entry', [FacilityManagementController::class, 'publicStore'])->name('facility-entry.store');
 
 // Forgot password placeholder
 Route::get('/forgot-password', function () {
@@ -216,6 +218,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/visitor-management/{visitorEntry}/edit', [VisitorManagementController::class, 'edit'])->name('visitor-management.edit');
     Route::put('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'update'])->name('visitor-management.update');
     Route::delete('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'destroy'])->name('visitor-management.destroy');
+    Route::get('/facility-management/qr-code', [FacilityManagementController::class, 'qrCode'])->name('facility-management.qr-code');
     Route::get('/lead-price-requests', [LeadProductPriceRequestController::class, 'index'])
         ->middleware('can:price_requests.view')
         ->name('lead-price-requests.index');
