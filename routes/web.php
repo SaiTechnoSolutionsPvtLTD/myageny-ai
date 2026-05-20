@@ -14,6 +14,7 @@ use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\HolidayCalendarController;
+use App\Http\Controllers\HrmsAnnouncementController;
 use App\Http\Controllers\InternJoiningFormController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadCallUpdateController;
@@ -161,6 +162,9 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+    Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
+    Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
+    Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/create', [AttendanceController::class, 'create'])->name('attendance.create');
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');

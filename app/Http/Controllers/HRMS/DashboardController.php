@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\EmployeeExitRequest;
 use App\Models\EmployeeOnboarding;
 use App\Models\HolidayCalendar;
+use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollItem;
 use Carbon\Carbon;
@@ -78,6 +79,18 @@ class DashboardController extends Controller
             ->with('role')
             ->get();
 
+        $today_anniversaries = EmployeeOnboarding::whereMonth('date_of_marriage', $today->month)
+            ->whereDay('date_of_marriage', $today->day)
+            ->active()
+            ->with('role')
+            ->get();
+
+        $today_work_anniversaries = EmployeeOnboarding::whereMonth('joining_date', $today->month)
+            ->whereDay('joining_date', $today->day)
+            ->active()
+            ->with('role')
+            ->get();
+
         // Upcoming holidays (next 7 days)
         $upcoming_holidays = HolidayCalendar::where('holiday_date', '>=', $today)
             ->where('holiday_date', '<=', $today->copy()->addDays(7))
@@ -108,21 +121,7 @@ class DashboardController extends Controller
             ];
         }
 
-        // Sample announcements
-        $announcements = [
-            [
-                'title' => 'New HR Policy Update',
-                'message' => 'Please review the updated leave policy effective from next month.',
-                'priority' => 'high',
-                'date' => $today->format('Y-m-d')
-            ],
-            [
-                'title' => 'Team Building Event',
-                'message' => 'Join us for the quarterly team building event on Friday.',
-                'priority' => 'medium',
-                'date' => $today->copy()->addDays(2)->format('Y-m-d')
-            ]
-        ];
+        $announcements = $this->announcementsForDashboard();
 
         $stats = [
             'employees_total' => $employees_total,
@@ -134,6 +133,8 @@ class DashboardController extends Controller
             'today_absent' => $today_absent,
             'department_stats' => $department_stats,
             'today_birthdays' => $today_birthdays,
+            'today_anniversaries' => $today_anniversaries,
+            'today_work_anniversaries' => $today_work_anniversaries,
             'upcoming_holidays' => $upcoming_holidays,
             'salary_day_1_employees' => $salary_day_1_employees,
             'salary_day_10_employees' => $salary_day_10_employees,
@@ -142,7 +143,14 @@ class DashboardController extends Controller
             'is_birthday_today' => $this->isBirthdayToday($currentEmployee, $today),
             'birthday_person_name' => $currentEmployee?->name ?: auth()->user()?->name,
             'birthday_greeting' => $this->birthdayGreeting($currentEmployee, $today),
+            'is_anniversary_today' => $this->isAnniversaryToday($currentEmployee, $today),
+            'anniversary_person_name' => $currentEmployee?->name ?: auth()->user()?->name,
+            'anniversary_greeting' => $this->anniversaryGreeting($currentEmployee, $today),
+            'is_work_anniversary_today' => $this->isWorkAnniversaryToday($currentEmployee, $today),
+            'work_anniversary_person_name' => $currentEmployee?->name ?: auth()->user()?->name,
+            'work_anniversary_greeting' => $this->workAnniversaryGreeting($currentEmployee, $today),
             'can_manage_exit_requests' => $canManageExitRequests,
+            'can_manage_announcements' => $this->canManageAnnouncements(),
             'exit_approval_queue' => $exitApprovalQueue,
             'exit_request' => $exitRequest,
             'can_raise_exit' => (bool) ($currentEmployee && $currentEmployee->status === EmployeeOnboarding::STATUS_ACTIVE && ! ($exitRequest && $exitRequest->isOpenForEmployee())),
@@ -219,6 +227,16 @@ class DashboardController extends Controller
                 && optional($employee->date_of_birth)?->day === $today->day
                 ? collect([$employee])
                 : collect(),
+            'today_anniversaries' => $employee
+                && optional($employee->date_of_marriage)?->month === $today->month
+                && optional($employee->date_of_marriage)?->day === $today->day
+                ? collect([$employee])
+                : collect(),
+            'today_work_anniversaries' => $employee
+                && optional($employee->joining_date)?->month === $today->month
+                && optional($employee->joining_date)?->day === $today->day
+                ? collect([$employee])
+                : collect(),
             'upcoming_holidays' => HolidayCalendar::where('holiday_date', '>=', $today)
                 ->where('holiday_date', '<=', $today->copy()->addDays(7))
                 ->orderBy('holiday_date')
@@ -226,18 +244,19 @@ class DashboardController extends Controller
             'salary_day_1_employees' => 0,
             'salary_day_10_employees' => 0,
             'monthly_leave_data' => $monthlyLeaveData,
-            'announcements' => [[
-                'title' => 'HRMS Self Service',
-                'message' => 'You can review your attendance history and download your latest payslip here.',
-                'priority' => 'medium',
-                'date' => $today->format('Y-m-d'),
-            ]],
+            'announcements' => $this->announcementsForDashboard(),
             'self_service_mode' => true,
             'latest_payroll_item' => $latestPayrollItem,
             'employee_name' => $employee?->name,
             'is_birthday_today' => $this->isBirthdayToday($employee, $today),
             'birthday_person_name' => $employee?->name ?: auth()->user()?->name,
             'birthday_greeting' => $this->birthdayGreeting($employee, $today),
+            'is_anniversary_today' => $this->isAnniversaryToday($employee, $today),
+            'anniversary_person_name' => $employee?->name ?: auth()->user()?->name,
+            'anniversary_greeting' => $this->anniversaryGreeting($employee, $today),
+            'is_work_anniversary_today' => $this->isWorkAnniversaryToday($employee, $today),
+            'work_anniversary_person_name' => $employee?->name ?: auth()->user()?->name,
+            'work_anniversary_greeting' => $this->workAnniversaryGreeting($employee, $today),
             'exit_request' => $exitRequest,
             'can_raise_exit' => (bool) ($employee && $employee->status === EmployeeOnboarding::STATUS_ACTIVE && ! ($exitRequest && $exitRequest->isOpenForEmployee())),
         ];
@@ -265,6 +284,30 @@ class DashboardController extends Controller
         return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
     }
 
+    private function canManageAnnouncements(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && ($user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+    }
+
+    private function announcementsForDashboard()
+    {
+        return HrmsAnnouncement::query()
+            ->visibleForCompany(auth()->user()?->company_id)
+            ->active()
+            ->orderByDesc('announcement_date')
+            ->latest('id')
+            ->limit(8)
+            ->get()
+            ->map(fn (HrmsAnnouncement $announcement) => [
+                'title' => $announcement->title,
+                'message' => $announcement->message,
+                'priority' => $announcement->priority,
+                'date' => optional($announcement->announcement_date)->toDateString() ?: now()->toDateString(),
+            ]);
+    }
+
     private function isBirthdayToday(?EmployeeOnboarding $employee, Carbon $today): bool
     {
         return (bool) (
@@ -283,5 +326,45 @@ class DashboardController extends Controller
         $name = $employee?->name ?: auth()->user()?->name ?: 'You';
 
         return "Happy Birthday, {$name}! Wishing you a day full of joy, surprises, and a fantastic year ahead.";
+    }
+
+    private function isAnniversaryToday(?EmployeeOnboarding $employee, Carbon $today): bool
+    {
+        return (bool) (
+            $employee
+            && optional($employee->date_of_marriage)?->month === $today->month
+            && optional($employee->date_of_marriage)?->day === $today->day
+        );
+    }
+
+    private function anniversaryGreeting(?EmployeeOnboarding $employee, Carbon $today): ?string
+    {
+        if (! $this->isAnniversaryToday($employee, $today)) {
+            return null;
+        }
+
+        $name = $employee?->name ?: auth()->user()?->name ?: 'You';
+
+        return "Happy Wedding Anniversary, {$name}! Wishing you a beautiful day filled with love, joy, and togetherness.";
+    }
+
+    private function isWorkAnniversaryToday(?EmployeeOnboarding $employee, Carbon $today): bool
+    {
+        return (bool) (
+            $employee
+            && optional($employee->joining_date)?->month === $today->month
+            && optional($employee->joining_date)?->day === $today->day
+        );
+    }
+
+    private function workAnniversaryGreeting(?EmployeeOnboarding $employee, Carbon $today): ?string
+    {
+        if (! $this->isWorkAnniversaryToday($employee, $today)) {
+            return null;
+        }
+
+        $name = $employee?->name ?: auth()->user()?->name ?: 'You';
+
+        return "Happy Work Anniversary, {$name}! Thank you for your dedication, contribution, and the positive energy you bring every day.";
     }
 }

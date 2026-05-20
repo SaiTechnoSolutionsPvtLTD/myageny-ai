@@ -36,7 +36,7 @@
     </div>
 
     <div class="eob-group full">
-        <label class="eob-label">Remarks</label>
+        <label class="eob-label">Purpose of Visit</label>
         <textarea name="remarks" class="eob-textarea" placeholder="Optional notes">{{ old('remarks', $visitor->remarks) }}</textarea>
         @error('remarks')<div class="eob-error">{{ $message }}</div>@enderror
     </div>

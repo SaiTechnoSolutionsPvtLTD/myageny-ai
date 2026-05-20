@@ -100,7 +100,7 @@
                 <div style="margin-top:4px;color:#9e9e9e;font-size:12px;">Attendance values can be adjusted before saving. Gross salary automatically splits into Basic 50%, HRA 30%, Travel 10%, and Other 10%. PF and ESI follow the same formula used in employee onboarding.</div>
                 <div style="margin-top:8px;color:#7c8595;font-size:12px;">Payable Days = Present + Leave, capped by Working Days. LOP = Working Days - Payable Days.</div>
                 <div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:#eff6ff;border:1px solid #dbeafe;color:#1d4ed8;font-size:12px;font-weight:600;">
-                    PF formula: if Basic is 15,000 or more, PF uses only 15,000. Otherwise PF uses Basic + Travel + Other. ESI formula: 4% of Gross Salary. Both PF and ESI round to the nearest whole number.
+                    PF formula: if Gross Salary is above 21,000, PF uses fixed 15,000. Otherwise PF uses Basic + Travel + Other. ESI formula: 4% of Gross Salary. Both PF and ESI round to the nearest whole number.
                 </div>
                 <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:12px;font-weight:600;">
                     Paid Leave: {{ number_format((float) $payrollSettings->paid_leave_days, 2, '.', '') }} day(s) per month. Permission: {{ (int) $payrollSettings->permission_days_per_month }} day(s) per month up to {{ number_format((float) $payrollSettings->permission_hours_per_day, 2, '.', '') }} hour(s) per day. Late login after {{ \Carbon\Carbon::createFromFormat('H:i:s', (string) $payrollSettings->grace_login_time)->format('h:i A') }} consumes one permission day.
@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const earnedBasic = basicSalary * ratio;
         const earnedTravel = travel * ratio;
         const earnedOther = other * ratio;
-        const pfBaseAmount = earnedBasic >= 15000 ? 15000 : (earnedBasic + earnedTravel + earnedOther);
+        const pfBaseAmount = grossSalary > 21000 ? 15000 : (earnedBasic + earnedTravel + earnedOther);
         const pfValue = pfToggle && pfToggle.checked ? Math.round(pfBaseAmount * 0.25) : 0;
         const esiValue = esiToggle && esiToggle.checked ? Math.round(earnedGross * 0.04) : 0;
         const totalDeductions = pfValue + esiValue + professionalTax + tds + loan + otherDeduction;

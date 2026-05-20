@@ -8,6 +8,7 @@
         || request()->routeIs('interns.*')
         || request()->routeIs('attendance.*')
         || request()->routeIs('payroll.*')
+        || request()->routeIs('hrms-announcements.*')
         || request()->routeIs('leave-requests.*')
         || request()->routeIs('permission-requests.*')
         || request()->routeIs('visitor-management.*')
@@ -155,6 +156,21 @@
                             <path d="M7 14h6"></path>
                         </svg>
                         <span>Payroll</span>
+                    </div>
+                </a>
+                @endif
+
+                @if(! $hrmsSelfService && (auth()->user()?->belongsToHrDepartment() || auth()->user()?->hasHrLikeRole()))
+                <a href="{{ route('hrms-announcements.index') }}" class="nav-item {{ request()->routeIs('hrms-announcements.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms-announcements.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span>Announcements</span>
                     </div>
                 </a>
                 @endif

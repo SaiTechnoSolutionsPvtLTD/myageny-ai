@@ -240,7 +240,7 @@ class User extends Authenticatable
             return 'hrms.dashboard';
         }
 
-        if ($this->belongsToHrDepartment()) {
+        if ($this->belongsToHrDepartment() || $this->hasHrLikeRole()) {
             return 'hrms.dashboard';
         }
 
@@ -257,6 +257,21 @@ class User extends Authenticatable
             'hr',
             'human_resource',
             'human_resources',
+            'hrms',
+            'people_operations',
+            'talent_acquisition',
+            'recruitment',
+        ])->isNotEmpty();
+    }
+
+    public function hasHrLikeRole(): bool
+    {
+        return $this->roleKeys()->intersect([
+            'hr',
+            'human_resource',
+            'human_resources',
+            'hr_manager',
+            'hr_executive',
             'hrms',
             'people_operations',
             'talent_acquisition',

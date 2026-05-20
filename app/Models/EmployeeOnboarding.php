@@ -47,6 +47,7 @@ class EmployeeOnboarding extends Model
         'mobile',
         'email',
         'date_of_birth',
+        'joining_date',
         'blood_group',
         'marital_status',
         'date_of_marriage',
@@ -115,6 +116,7 @@ class EmployeeOnboarding extends Model
     {
         return [
             'date_of_birth' => 'date',
+            'joining_date' => 'date',
             'date_of_marriage' => 'date',
             'salary_effective_from' => 'date',
             'gross_salary' => 'decimal:2',
