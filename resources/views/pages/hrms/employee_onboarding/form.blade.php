@@ -94,6 +94,7 @@
         'mobile' => 'personal',
         'email' => 'personal',
         'date_of_birth' => 'personal',
+        'joining_date' => 'personal',
         'blood_group' => 'personal',
         'marital_status' => 'personal',
         'date_of_marriage' => 'personal',
@@ -263,6 +264,11 @@
                                 <label class="eob-label">Date of Birth <span class="eob-label-required">*</span></label>
                                 <input type="date" name="date_of_birth" class="eob-input" value="{{ old('date_of_birth', optional($employee?->date_of_birth)->format('Y-m-d')) }}" required>
                                 @error('date_of_birth')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="eob-group">
+                                <label class="eob-label">Joining Date</label>
+                                <input type="date" name="joining_date" class="eob-input" value="{{ old('joining_date', optional($employee?->joining_date)->format('Y-m-d')) }}">
+                                @error('joining_date')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Blood Group</label>
@@ -635,7 +641,7 @@
                                 @error('salary_payment_mode')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">Gross Salary</label>
+                                <label class="eob-label">CTC Salary</label>
                                 <input type="number" step="0.01" min="0" name="gross_salary" class="eob-input" data-salary-input="gross_salary" value="{{ old('gross_salary', $employee?->gross_salary) }}">
                                 @error('gross_salary')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
@@ -1294,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const pfEnabled = salaryInputs.pfToggle ? salaryInputs.pfToggle.checked : false;
         const esiEnabled = salaryInputs.esiToggle ? salaryInputs.esiToggle.checked : false;
 
-        const pfBaseAmount = breakdown.basicSalary >= 15000
+        const pfBaseAmount = grossSalary > 21000
             ? 15000
             : (breakdown.basicSalary + breakdown.specialAllowance + breakdown.otherAllowance);
         const pfEmployee = pfEnabled ? Math.round(pfBaseAmount * 0.25) : 0;

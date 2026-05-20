@@ -12,8 +12,8 @@ class Permission extends SpatiePermission
     use BelongsToCompany;
 
     private const CRM_PERMISSION_MAP = [
-        'dashboard' => ['view'],
-        'masters' => ['view'],
+        'dashboard' => ['menuview', 'view'],
+        'masters' => ['menuview', 'view'],
         'products' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'form_customization' => ['menuview'],
         'leads' => ['menuview', 'view', 'create', 'edit', 'delete', 'update'],
@@ -26,6 +26,19 @@ class Permission extends SpatiePermission
         'roles' => ['view', 'manage'],
         'permissions' => ['view', 'manage'],
         'companies' => ['view', 'manage'],
+        'employees' => ['menuview'],
+        'recruitment' => ['menuview'],
+        'interns' => ['menuview'],
+        'attendance' => ['menuview'],
+        'payroll' => ['menuview'],
+        'announcements' => ['menuview'],
+        'leave_requests' => ['menuview'],
+        'permission_requests' => ['menuview'],
+        'visitor_management' => ['menuview'],
+        'dynamic_forms' => ['menuview'],
+        'facility_management' => ['menuview'],
+        'assets' => ['menuview'],
+        'holiday_calendar' => ['menuview'],
     ];
 
     protected $fillable = [

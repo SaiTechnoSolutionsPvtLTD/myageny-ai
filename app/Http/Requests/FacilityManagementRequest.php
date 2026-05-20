@@ -20,6 +20,7 @@ class FacilityManagementRequest extends FormRequest
                 'integer',
                 Rule::exists('facility_titles', 'id')->whereNull('deleted_at'),
             ],
+            'remarks' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

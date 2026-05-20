@@ -39,6 +39,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'mobile' => ['required', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:150'],
             'date_of_birth' => ['required', 'date'],
+            'joining_date' => ['nullable', 'date'],
             'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
             'marital_status' => ['required', Rule::in(['single', 'married'])],
             'date_of_marriage' => ['nullable', 'date', 'required_if:marital_status,married'],

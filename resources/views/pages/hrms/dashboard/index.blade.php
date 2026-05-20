@@ -185,6 +185,49 @@
 .hrms-birthday-character-text{
     margin-top:10px;text-align:center;font-size:12px;font-weight:800;line-height:1.45;color:#9f4b1c;
 }
+.hrms-couple-scene{
+    position:relative;display:flex;align-items:flex-end;justify-content:center;gap:10px;
+    min-width:148px;padding:8px 8px 0;
+}
+.hrms-couple-person{
+    position:relative;width:54px;padding-top:34px;
+}
+.hrms-couple-head{
+    position:absolute;left:50%;top:0;transform:translateX(-50%);
+    width:34px;height:34px;border-radius:50%;
+    background:linear-gradient(180deg,#ffdcbf 0%,#ffc9a0 100%);
+    border:1px solid #efb88b;
+}
+.hrms-couple-head::before,
+.hrms-couple-head::after{
+    content:"";position:absolute;top:13px;width:4px;height:4px;border-radius:50%;background:#53311d;
+}
+.hrms-couple-head::before{left:10px}
+.hrms-couple-head::after{right:10px}
+.hrms-couple-head span{
+    position:absolute;left:50%;bottom:7px;width:12px;height:6px;transform:translateX(-50%);
+    border-bottom:2px solid #d66a4d;border-radius:0 0 12px 12px;
+}
+.hrms-couple-body{
+    height:52px;border-radius:16px 16px 12px 12px;background:linear-gradient(180deg,#ff9f68 0%,#fe7b3b 100%);
+    box-shadow:0 12px 24px rgba(18,18,18,.08);
+}
+.hrms-couple-person.alt .hrms-couple-body{
+    background:linear-gradient(180deg,#f472b6 0%,#ec4899 100%);
+}
+.hrms-couple-heart{
+    position:absolute;left:50%;top:14px;transform:translateX(-50%);
+    color:#ec4899;font-size:16px;font-weight:900;animation:hrmsBirthdayFloat 2.8s ease-in-out infinite;
+}
+.hrms-couple-text{
+    margin-top:10px;text-align:center;font-size:12px;font-weight:800;line-height:1.45;color:#be185d;
+}
+.hrms-celebration-section{display:flex;flex-direction:column;gap:10px}
+.hrms-celebration-chip{
+    display:inline-flex;align-items:center;gap:8px;width:max-content;padding:6px 10px;border-radius:999px;
+    font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:#fff3eb;color:#c25513;border:1px solid #f6d9c6;
+}
+.hrms-celebration-empty{padding:18px;border-radius:16px;background:#faf7f4;border:1px dashed #e7ddd5;color:#9ca3af;text-align:center}
 .hrms-hero{
     display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.8fr);gap:20px;
 }
@@ -313,6 +356,15 @@
 .hrms-birthday-role{font-size:12px;color:#7d7d7d;margin-top:2px}
 
 /* Holiday Cards */
+.hrms-filter-form{display:flex;flex-direction:column;gap:12px}
+.hrms-filter-bar{display:flex;gap:10px;flex-wrap:wrap}
+.hrms-filter-select,
+.hrms-filter-input{
+    min-height:42px;padding:10px 12px;border-radius:12px;border:1px solid #e6ddd6;background:#fff;color:#121212;
+    font-size:13px;font-family:inherit;
+}
+.hrms-filter-input{min-width:160px}
+.hrms-filter-actions{display:flex;gap:10px;flex-wrap:wrap}
 .hrms-holiday-list{display:flex;flex-direction:column;gap:10px}
 .hrms-holiday-item{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:#fff;border:1px solid #f0e9e3}
 .hrms-holiday-date{width:60px;height:60px;border-radius:12px;background:#fe5f04;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;text-align:center}
@@ -511,6 +563,93 @@
         </section>
         @endif
 
+        @if($stats['is_anniversary_today'] ?? false)
+        <section class="hrms-birthday-banner" style="border-color:#fbcfe8;background:linear-gradient(135deg,#fff1f7 0%,#fff8fb 55%,#ffffff 100%);box-shadow:0 18px 36px rgba(236,72,153,.10);">
+            <div class="hrms-birthday-sparkles" aria-hidden="true">
+                <span style="background:#f9a8d4;"></span>
+                <span style="background:#f472b6;"></span>
+                <span style="background:#fbcfe8;"></span>
+                <span style="background:#f9a8d4;"></span>
+            </div>
+            <div class="hrms-birthday-crackers" aria-hidden="true">
+                <div class="hrms-birthday-cracker"></div>
+                <div class="hrms-birthday-cracker"></div>
+            </div>
+            <div class="hrms-birthday-copy">
+                <span class="hrms-birthday-kicker" style="color:#be185d;border-color:#fbcfe8;background:#fff;">Anniversary Wishes</span>
+                <div class="hrms-birthday-title">Happy Wedding Anniversary {{ $stats['anniversary_person_name'] ?? auth()->user()->name }}!</div>
+                <div class="hrms-birthday-text" style="color:#8b4563;">{{ $stats['anniversary_greeting'] }}</div>
+                <div class="hrms-birthday-badges">
+                    <span class="hrms-birthday-pill" style="color:#be185d;border-color:#fbcfe8;">Celebrate love today</span>
+                    <span class="hrms-birthday-pill" style="color:#be185d;border-color:#fbcfe8;">Wishing many more joyful years</span>
+                </div>
+            </div>
+            <div class="hrms-birthday-scene" aria-hidden="true">
+                <div class="hrms-birthday-cake">
+                    <div class="hrms-birthday-cake-top" style="background:linear-gradient(180deg,#fff5fb 0%,#fbcfe8 100%);border-color:#f9a8d4;"></div>
+                    <div class="hrms-birthday-cake-base" style="background:linear-gradient(180deg,#f9a8d4 0%,#ec4899 100%);border-color:#ec4899;"></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                </div>
+                <div class="hrms-birthday-character" style="background:linear-gradient(180deg,#fff 0%,#fff1f7 100%);border-color:#fbcfe8;width:150px;">
+                    <div class="hrms-couple-scene">
+                        <div class="hrms-couple-person">
+                            <div class="hrms-couple-head"><span></span></div>
+                            <div class="hrms-couple-body"></div>
+                        </div>
+                        <div class="hrms-couple-heart">❤</div>
+                        <div class="hrms-couple-person alt">
+                            <div class="hrms-couple-head"><span></span></div>
+                            <div class="hrms-couple-body"></div>
+                        </div>
+                    </div>
+                    <div class="hrms-couple-text">Wishing you both<br>love and happiness!</div>
+                </div>
+                <div class="hrms-birthday-burst" style="background:linear-gradient(135deg,#ec4899,#f472b6);">💍</div>
+            </div>
+        </section>
+        @endif
+
+        @if($stats['is_work_anniversary_today'] ?? false)
+        <section class="hrms-birthday-banner" style="border-color:#bfdbfe;background:linear-gradient(135deg,#eef6ff 0%,#f8fbff 55%,#ffffff 100%);box-shadow:0 18px 36px rgba(59,130,246,.10);">
+            <div class="hrms-birthday-sparkles" aria-hidden="true">
+                <span style="background:#93c5fd;"></span>
+                <span style="background:#60a5fa;"></span>
+                <span style="background:#bfdbfe;"></span>
+                <span style="background:#93c5fd;"></span>
+            </div>
+            <div class="hrms-birthday-crackers" aria-hidden="true">
+                <div class="hrms-birthday-cracker"></div>
+                <div class="hrms-birthday-cracker"></div>
+            </div>
+            <div class="hrms-birthday-copy">
+                <span class="hrms-birthday-kicker" style="color:#1d4ed8;border-color:#bfdbfe;background:#fff;">Work Anniversary</span>
+                <div class="hrms-birthday-title">Happy Work Anniversary {{ $stats['work_anniversary_person_name'] ?? auth()->user()->name }}!</div>
+                <div class="hrms-birthday-text" style="color:#486581;">{{ $stats['work_anniversary_greeting'] }}</div>
+                <div class="hrms-birthday-badges">
+                    <span class="hrms-birthday-pill" style="color:#1d4ed8;border-color:#bfdbfe;">Celebrating your journey</span>
+                    <span class="hrms-birthday-pill" style="color:#1d4ed8;border-color:#bfdbfe;">Thank you for growing with us</span>
+                </div>
+            </div>
+            <div class="hrms-birthday-scene" aria-hidden="true">
+                <div class="hrms-birthday-cake">
+                    <div class="hrms-birthday-cake-top" style="background:linear-gradient(180deg,#f7fbff 0%,#dbeafe 100%);border-color:#93c5fd;"></div>
+                    <div class="hrms-birthday-cake-base" style="background:linear-gradient(180deg,#93c5fd 0%,#3b82f6 100%);border-color:#3b82f6;"></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                    <div class="hrms-birthday-candle"><span class="hrms-birthday-flame"></span></div>
+                </div>
+                <div class="hrms-birthday-character" style="background:linear-gradient(180deg,#fff 0%,#eff6ff 100%);border-color:#bfdbfe;">
+                    <div class="hrms-birthday-character-head"><span></span></div>
+                    <div class="hrms-birthday-character-body" style="background:linear-gradient(180deg,#60a5fa 0%,#2563eb 100%);"></div>
+                    <div class="hrms-birthday-character-text" style="color:#1d4ed8;">Cheers to your<br>work milestone!</div>
+                </div>
+                <div class="hrms-birthday-burst" style="background:linear-gradient(135deg,#3b82f6,#60a5fa);">🏆</div>
+            </div>
+        </section>
+        @endif
+
 
         <!-- Key Metrics -->
         <section class="hrms-stats">
@@ -551,56 +690,94 @@
             <!-- Department-wise Employee Count & Salary -->
 
 
-            <!-- Today's Birthdays -->
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">🎂 Today's Birthdays</div>
-                        <div class="hrms-panel-sub">Celebrate with your colleagues</div>
+                        <div class="hrms-panel-title">Today's Celebrations</div>
+                        <div class="hrms-panel-sub">Birthdays, wedding anniversaries, and work anniversaries in one place.</div>
                     </div>
                 </div>
-                <div class="hrms-birthday-grid">
-                    @forelse($stats['today_birthdays'] as $employee)
-                    <div class="hrms-birthday-card">
-                        <div class="hrms-birthday-avatar">
-                            {{ strtoupper(substr($employee->name, 0, 1)) }}
-                        </div>
-                        <div class="hrms-birthday-info">
-                            <div class="hrms-birthday-name">{{ $employee->name }}</div>
-                            <div class="hrms-birthday-role">{{ $employee->role->name ?? 'Employee' }}</div>
+                <div class="hrms-feature-list">
+                    <div class="hrms-celebration-section">
+                        <span class="hrms-celebration-chip">🎂 Birthdays</span>
+                        <div class="hrms-birthday-grid">
+                            @forelse($stats['today_birthdays'] as $employee)
+                            <div class="hrms-birthday-card">
+                                <div class="hrms-birthday-avatar">
+                                    {{ strtoupper(substr($employee->name, 0, 1)) }}
+                                </div>
+                                <div class="hrms-birthday-info">
+                                    <div class="hrms-birthday-name">{{ $employee->name }}</div>
+                                    <div class="hrms-birthday-role">{{ $employee->role->name ?? 'Employee' }}</div>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="hrms-celebration-empty">No birthdays today</div>
+                            @endforelse
                         </div>
                     </div>
-                    @empty
-                    <div style="text-align:center;padding:20px;color:#9ca3af;">
-                        No birthdays today
+
+                    <div class="hrms-celebration-section">
+                        <span class="hrms-celebration-chip" style="background:#fff1f7;color:#be185d;border-color:#fbcfe8;">💍 Wedding Anniversaries</span>
+                        <div class="hrms-birthday-grid">
+                            @forelse($stats['today_anniversaries'] as $employee)
+                            <div class="hrms-birthday-card">
+                                <div class="hrms-birthday-avatar" style="background:#ec4899;box-shadow:0 10px 18px rgba(236,72,153,.18);">
+                                    {{ strtoupper(substr($employee->name, 0, 1)) }}
+                                </div>
+                                <div class="hrms-birthday-info">
+                                    <div class="hrms-birthday-name">{{ $employee->name }}</div>
+                                    <div class="hrms-birthday-role">{{ $employee->role->name ?? 'Employee' }}</div>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="hrms-celebration-empty">No wedding anniversaries today</div>
+                            @endforelse
+                        </div>
                     </div>
-                    @endforelse
+
+                    <div class="hrms-celebration-section">
+                        <span class="hrms-celebration-chip" style="background:#eef6ff;color:#1d4ed8;border-color:#bfdbfe;">🏆 Work Anniversaries</span>
+                        <div class="hrms-birthday-grid">
+                            @forelse($stats['today_work_anniversaries'] as $employee)
+                            <div class="hrms-birthday-card">
+                                <div class="hrms-birthday-avatar" style="background:#3b82f6;box-shadow:0 10px 18px rgba(59,130,246,.18);">
+                                    {{ strtoupper(substr($employee->name, 0, 1)) }}
+                                </div>
+                                <div class="hrms-birthday-info">
+                                    <div class="hrms-birthday-name">{{ $employee->name }}</div>
+                                    <div class="hrms-birthday-role">{{ $employee->role->name ?? 'Employee' }}</div>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="hrms-celebration-empty">No work anniversaries today</div>
+                            @endforelse
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Upcoming Holidays -->
-            <div class="hrms-card hrms-panel">
+            <!-- Announcements -->
+            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">📅 Upcoming Holidays</div>
-                        <div class="hrms-panel-sub">Next 7 days schedule</div>
+                        <div class="hrms-panel-title">📢 Announcements</div>
+                        <div class="hrms-panel-sub">Important updates and notices</div>
                     </div>
+                    @if($stats['can_manage_announcements'] ?? false)
+                    <a href="{{ route('hrms-announcements.index') }}" class="hrms-link">Create Announcement</a>
+                    @endif
                 </div>
-                <div class="hrms-holiday-list">
-                    @forelse($stats['upcoming_holidays'] as $holiday)
-                    <div class="hrms-holiday-item">
-                        <div class="hrms-holiday-date">
-                            <div>{{ $holiday->holiday_date->format('M') }}</div>
-                            <div>{{ $holiday->holiday_date->format('d') }}</div>
-                        </div>
-                        <div class="hrms-holiday-info">
-                            <div class="hrms-holiday-name">{{ $holiday->reason }}</div>
-                            <div class="hrms-holiday-desc">{{ $holiday->holiday_date->format('l, F j, Y') }}</div>
-                        </div>
+                <div class="hrms-announcement-list">
+                    @forelse($stats['announcements'] as $announcement)
+                    <div class="hrms-announcement-item hrms-announcement-priority-{{ $announcement['priority'] }}">
+                        <div class="hrms-announcement-title">{{ $announcement['title'] }}</div>
+                        <div class="hrms-announcement-message">{{ $announcement['message'] }}</div>
+                        <div class="hrms-announcement-date">{{ \Carbon\Carbon::parse($announcement['date'])->format('M j, Y') }}</div>
                     </div>
                     @empty
-                    <div style="text-align:center;padding:20px;color:#9ca3af;">
-                        No upcoming holidays
+                    <div class="hrms-announcement-item" style="background:#faf7f4;">
+                        <div class="hrms-announcement-message" style="margin-bottom:0;">No announcements available right now.</div>
                     </div>
                     @endforelse
                 </div>
@@ -817,22 +994,48 @@
             </div>
             @endif
 
-            <!-- Announcements -->
-            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
+            <!-- Upcoming Holidays -->
+            <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">📢 Announcements</div>
-                        <div class="hrms-panel-sub">Important updates and notices</div>
+                        <div class="hrms-panel-title">📅 Upcoming Holidays</div>
+                        <div class="hrms-panel-sub">{{ $stats['holiday_filter']['label'] ?? 'Next 7 days schedule' }}</div>
                     </div>
                 </div>
-                <div class="hrms-announcement-list">
-                    @foreach($stats['announcements'] as $announcement)
-                    <div class="hrms-announcement-item hrms-announcement-priority-{{ $announcement['priority'] }}">
-                        <div class="hrms-announcement-title">{{ $announcement['title'] }}</div>
-                        <div class="hrms-announcement-message">{{ $announcement['message'] }}</div>
-                        <div class="hrms-announcement-date">{{ \Carbon\Carbon::parse($announcement['date'])->format('M j, Y') }}</div>
+                <form method="GET" action="{{ route('hrms.dashboard') }}" class="hrms-filter-form" style="margin-bottom:16px;">
+                    <div class="hrms-filter-bar">
+                        <select name="holiday_filter" class="hrms-filter-select" onchange="this.form.submit()">
+                            <option value="week" @selected(($stats['holiday_filter']['type'] ?? 'week') === 'week')>This Week</option>
+                            <option value="month" @selected(($stats['holiday_filter']['type'] ?? '') === 'month')>This Month</option>
+                            <option value="custom" @selected(($stats['holiday_filter']['type'] ?? '') === 'custom')>Custom Dates</option>
+                        </select>
+                        @if(($stats['holiday_filter']['type'] ?? 'week') === 'custom')
+                        <input type="date" name="holiday_start_date" class="hrms-filter-input" value="{{ $stats['holiday_filter']['start_input'] ?? '' }}">
+                        <input type="date" name="holiday_end_date" class="hrms-filter-input" value="{{ $stats['holiday_filter']['end_input'] ?? '' }}">
+                        <div class="hrms-filter-actions">
+                            <button type="submit" class="hrms-btn hrms-btn-primary">Apply</button>
+                            <a href="{{ route('hrms.dashboard', ['holiday_filter' => 'week']) }}" class="hrms-btn hrms-btn-ghost">Reset</a>
+                        </div>
+                        @endif
                     </div>
-                    @endforeach
+                </form>
+                <div class="hrms-holiday-list">
+                    @forelse($stats['upcoming_holidays'] as $holiday)
+                    <div class="hrms-holiday-item">
+                        <div class="hrms-holiday-date">
+                            <div>{{ $holiday->holiday_date->format('M') }}</div>
+                            <div>{{ $holiday->holiday_date->format('d') }}</div>
+                        </div>
+                        <div class="hrms-holiday-info">
+                            <div class="hrms-holiday-name">{{ $holiday->reason }}</div>
+                            <div class="hrms-holiday-desc">{{ $holiday->holiday_date->format('l, F j, Y') }}</div>
+                        </div>
+                    </div>
+                    @empty
+                    <div style="text-align:center;padding:20px;color:#9ca3af;">
+                        No holidays found for the selected range
+                    </div>
+                    @endforelse
                 </div>
             </div>
 

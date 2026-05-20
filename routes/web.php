@@ -14,6 +14,7 @@ use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\HolidayCalendarController;
+use App\Http\Controllers\HrmsAnnouncementController;
 use App\Http\Controllers\InternJoiningFormController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadCallUpdateController;
@@ -68,6 +69,8 @@ Route::post('/logout', [AuthController::class, 'logout'])
 
 Route::get('/visitor-entry', [VisitorManagementController::class, 'publicCreate'])->name('visitor-entry.create');
 Route::post('/visitor-entry', [VisitorManagementController::class, 'publicStore'])->name('visitor-entry.store');
+Route::get('/facility-entry', [FacilityManagementController::class, 'publicCreate'])->name('facility-entry.create');
+Route::post('/facility-entry', [FacilityManagementController::class, 'publicStore'])->name('facility-entry.store');
 
 // Forgot password placeholder
 Route::get('/forgot-password', function () {
@@ -161,6 +164,9 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+    Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
+    Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
+    Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/create', [AttendanceController::class, 'create'])->name('attendance.create');
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
@@ -212,6 +218,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/visitor-management/{visitorEntry}/edit', [VisitorManagementController::class, 'edit'])->name('visitor-management.edit');
     Route::put('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'update'])->name('visitor-management.update');
     Route::delete('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'destroy'])->name('visitor-management.destroy');
+    Route::get('/facility-management/qr-code', [FacilityManagementController::class, 'qrCode'])->name('facility-management.qr-code');
     Route::get('/lead-price-requests', [LeadProductPriceRequestController::class, 'index'])
         ->middleware('can:price_requests.view')
         ->name('lead-price-requests.index');

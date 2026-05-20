@@ -26,6 +26,7 @@ class PayrollController extends Controller
     private const HRA_RATIO = 0.30;
     private const TRAVEL_ALLOWANCE_RATIO = 0.10;
     private const PF_BASIC_CAP = 15000.00;
+    private const PF_GROSS_THRESHOLD = 21000.00;
 
     public function index(Request $request): View
     {
@@ -104,7 +105,7 @@ class PayrollController extends Controller
                 'employee_code' => $employee->employee_id,
                 'employee_name' => $employee->name,
                 'designation' => $employee->role?->display_name ?: ($employee->role?->name ? Str::of(Str::afterLast($employee->role->name, '__'))->replace('_', ' ')->title()->value() : 'Employee'),
-                'date_of_joining' => optional($employee->salary_effective_from)->format('Y-m-d'),
+                'date_of_joining' => optional($employee->joining_date ?: $employee->salary_effective_from)->format('Y-m-d'),
                 'uan_no' => $employee->uan_no,
                 'esi_no' => $employee->esi_no,
                 'working_days' => $workingDays,
@@ -215,7 +216,7 @@ class PayrollController extends Controller
                     'employee_code' => $employee->employee_id,
                     'employee_name' => $employee->name,
                     'designation' => $employee->role?->display_name ?: ($employee->role?->name ? Str::of(Str::afterLast($employee->role->name, '__'))->replace('_', ' ')->title()->value() : 'Employee'),
-                    'date_of_joining' => optional($employee->salary_effective_from)->format('Y-m-d'),
+                    'date_of_joining' => optional($employee->joining_date ?: $employee->salary_effective_from)->format('Y-m-d'),
                     'uan_no' => $employee->uan_no,
                     'esi_no' => $employee->esi_no,
                     'working_days' => $item['working_days'],
@@ -593,7 +594,7 @@ class PayrollController extends Controller
         $esiEmployerPercentage = round((float) ($row['esi_employer_percentage'] ?? 4), 2);
         $esiSalaryLimit = round((float) ($row['esi_salary_limit'] ?? 21000), 2);
 
-        $pfBaseAmount = $earnedBasic >= self::PF_BASIC_CAP
+        $pfBaseAmount = $grossSalary > self::PF_GROSS_THRESHOLD
             ? self::PF_BASIC_CAP
             : ($earnedBasic + $earnedTravel + $earnedOther);
         $pfEmployee = $usePf ? round($pfBaseAmount * 0.25, 0) : 0;

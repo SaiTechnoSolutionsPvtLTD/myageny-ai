@@ -255,6 +255,7 @@
                     <div class="eob-card-head"><div><div class="eob-card-title">Employee Salaries</div></div></div>
                     <div class="eob-card-body">
                         <div class="eob-show-grid">
+                            <div class="eob-show-item"><div class="eob-show-label">Joining Date</div><div class="eob-show-value">{{ optional($employee->joining_date)->format('d M Y') ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Salary Effective From</div><div class="eob-show-value">{{ optional($employee->salary_effective_from)->format('d M Y') ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Salary Payment Mode</div><div class="eob-show-value">{{ $employee->salary_payment_mode ? ucwords(str_replace('_', ' ', $employee->salary_payment_mode)) : 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Gross Salary</div><div class="eob-show-value">{{ $employee->gross_salary !== null ? number_format((float) $employee->gross_salary, 2) : 'N/A' }}</div></div>

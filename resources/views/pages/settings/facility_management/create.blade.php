@@ -60,6 +60,11 @@
                             <input type="text" class="crm-input crm-readonly" value="{{ $currentDateTime->format('h:i A') }}" readonly>
                         </div>
                     </div>
+
+                    <div>
+                        <label class="crm-label">Remarks</label>
+                        <textarea name="remarks" class="crm-input" rows="4" placeholder="Optional remarks">{{ old('remarks') }}</textarea>
+                    </div>
                 </div>
                 <div class="crm-form-foot">
                     <a href="{{ route('facility-management.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>

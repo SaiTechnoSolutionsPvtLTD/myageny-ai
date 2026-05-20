@@ -30,6 +30,7 @@ class EmployeeOnboardingController extends Controller
     private const SPECIAL_ALLOWANCE_RATIO = 0.10;
     private const PF_CONTRIBUTION_RATE = 0.25;
     private const PF_BASIC_SALARY_CAP = 15000.00;
+    private const PF_GROSS_SALARY_THRESHOLD = 21000.00;
     private const ESI_CONTRIBUTION_RATE = 0.04;
 
     private const DOCUMENT_LABELS = [
@@ -278,7 +279,7 @@ class EmployeeOnboardingController extends Controller
         $pfEnabled = (bool) ($attributes['pf_enabled'] ?? false);
         $esiEnabled = (bool) ($attributes['esi_enabled'] ?? false);
 
-        $pfBaseAmount = $basicSalary >= self::PF_BASIC_SALARY_CAP
+        $pfBaseAmount = $grossSalary > self::PF_GROSS_SALARY_THRESHOLD
             ? self::PF_BASIC_SALARY_CAP
             : ($basicSalary + $specialAllowance + $otherAllowance);
         $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * self::PF_CONTRIBUTION_RATE, 0) : 0;

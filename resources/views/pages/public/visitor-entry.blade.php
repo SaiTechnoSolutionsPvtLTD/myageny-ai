@@ -64,8 +64,8 @@
                 @error('person_to_meet')<div class="ve-error">{{ $message }}</div>@enderror
             </div>
             <div class="ve-field full">
-                <label class="ve-label">Remarks</label>
-                <textarea name="remarks" class="ve-textarea" placeholder="Optional notes">{{ old('remarks') }}</textarea>
+                <label class="ve-label">Purpose of Meet <span class="ve-req">*</span></label>
+                <textarea name="remarks" class="ve-textarea" placeholder="Enter purpose of meeting" required>{{ old('remarks') }}</textarea>
                 @error('remarks')<div class="ve-error">{{ $message }}</div>@enderror
             </div>
         </div>
