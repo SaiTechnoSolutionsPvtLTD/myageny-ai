@@ -6,6 +6,7 @@ use App\Http\Controllers\AssetEntryController;
 use App\Http\Controllers\AssetCategoryController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BranchController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DynamicFormController;
@@ -323,6 +324,10 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->except(['create', 'show']);
 
     Route::resource('departments', DepartmentController::class)
+         ->middleware('can:settings.manage')
+         ->except(['show']);
+
+    Route::resource('branches', BranchController::class)
          ->middleware('can:settings.manage')
          ->except(['show']);
 

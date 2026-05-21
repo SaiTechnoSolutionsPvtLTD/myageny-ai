@@ -46,7 +46,7 @@ class UserController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
         $roles    = Role::orderBy('name')->get();
 
         return view('pages.users.index', compact('query', 'branches', 'roles'));
@@ -67,7 +67,8 @@ class UserController extends Controller
                 ->with('error', 'User limit reached for this company. Please contact admin to increase the limit.');
         }
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        Branch::ensureDefaultForCurrentCompany();
+        $branches = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
         $roles    = Role::orderBy('name')->get();
 
         return view('pages.users.create', compact('branches', 'roles'));
@@ -134,7 +135,8 @@ class UserController extends Controller
     {
         // $this->authorize('users.manage');
 
-        $branches    = Branch::where('is_active', true)->orderBy('name')->get();
+        Branch::ensureDefaultForCurrentCompany();
+        $branches    = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
         $roles       = Role::orderBy('display_name')->get();
         $currentRole = $user->roles->first()?->name;
 

@@ -115,6 +115,7 @@
 .settings-card.attribute::after { background: #14b8a6; }
 .settings-card.quotation::after { background: #0ea5e9; }
 .settings-card.facebook::after { background: #2563eb; }
+.settings-card.branch::after { background: #0f766e; }
 .settings-card.department::after { background: #059669; }
 .settings-card.holiday::after { background: #ef4444; }
 .settings-card.payroll::after { background: #16a34a; }
@@ -168,6 +169,10 @@
 .settings-card-icon.facebook {
     background: linear-gradient(135deg, #eff6ff, #dbeafe);
     color: #1d4ed8;
+}
+.settings-card-icon.branch {
+    background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
+    color: #0f766e;
 }
 .settings-card-icon.department {
     background: linear-gradient(135deg, #ecfdf5, #d1fae5);
@@ -311,6 +316,28 @@
             <p class="settings-card-text">Connect campaign flows and manage mapped lead intake from Facebook forms inside your CRM.</p>
             <span class="settings-card-link">
                 Open Facebook Integration
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.branches.index') }}" class="settings-card branch">
+            <div class="settings-card-icon branch">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 21h18"></path>
+                    <path d="M5 21V7l7-4 7 4v14"></path>
+                    <path d="M9 10h6"></path>
+                    <path d="M9 14h6"></path>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Branches</h4>
+            <p class="settings-card-text">Create company-wise branches and keep one default branch ready even when no branch was added manually.</p>
+            <span class="settings-card-link">
+                Open Branches
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

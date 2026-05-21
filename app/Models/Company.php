@@ -39,6 +39,11 @@ class Company extends Model
         return $this->hasMany(User::class);
     }
 
+    public function branches(): HasMany
+    {
+        return $this->hasMany(Branch::class);
+    }
+
     public function activeUsers(): HasMany
     {
         return $this->users()->where('is_active', true);

@@ -21,7 +21,7 @@ class AuthController extends Controller
             return redirect()->route('dashboard');
         }
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = Branch::withoutGlobalScopes()->where('is_active', true)->orderBy('name')->get();
 
         return view('pages.auth.signin', compact('branches'));
     }

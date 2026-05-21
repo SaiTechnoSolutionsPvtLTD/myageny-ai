@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Branch;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use App\Models\Role;
@@ -24,7 +25,21 @@ class UpdateUserRequest extends FormRequest
             'phone'                 => ['nullable', 'string', 'max:20'],
             'password'              => ['nullable', 'string', 'min:8', 'confirmed'],
             'password_confirmation' => ['nullable'],
-            'branch_id'             => ['nullable', 'exists:branches,id'],
+            'branch_id'             => [
+                'nullable',
+                'exists:branches,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($companyId) {
+                    if (! $value || $companyId === null) {
+                        return;
+                    }
+
+                    $branch = Branch::withoutGlobalScopes()->find($value);
+
+                    if ($branch && (int) $branch->company_id !== (int) $companyId) {
+                        $fail('Selected branch does not belong to your company.');
+                    }
+                },
+            ],
             'role'                  => [
                 'required',
                 function (string $attribute, mixed $value, \Closure $fail) use ($companyId) {

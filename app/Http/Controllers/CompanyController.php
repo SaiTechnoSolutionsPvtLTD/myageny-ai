@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCompanyRequest;
 use App\Http\Requests\UpdateCompanyRequest;
 use App\Models\Company;
+use App\Models\Branch;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -92,6 +93,17 @@ class CompanyController extends Controller
             $superAdmin->assignRole($role);
 
             $company->update(['super_admin_user_id' => $superAdmin->id]);
+
+            Branch::withoutGlobalScopes()->create([
+                'company_id' => $company->id,
+                'name' => 'Default Branch',
+                'code' => 'CMP' . $company->id . '-MAIN',
+                'address' => $company->address,
+                'email' => $company->email,
+                'phone' => $company->mobile_number,
+                'is_active' => true,
+                'is_default' => true,
+            ]);
 
             return $company;
         });
