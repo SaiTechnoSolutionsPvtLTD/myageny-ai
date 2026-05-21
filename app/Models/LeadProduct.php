@@ -229,4 +229,17 @@ protected static function booted()
             'payments' => $this->payments->map(fn($p) => $p->toJsPayload())->toArray(),
         ];
     }
+
+    public function syncPaymentStatus(): void
+    {
+        $paid = $this->payments()->sum('amount');
+        if ($paid <= 0) {
+            $status = 'pending';
+        } elseif ($paid >= $this->total_price) {
+            $status = 'paid';
+        } else {
+            $status = 'partial';
+        }
+        $this->updateQuietly(['payment_status' => $status]);
+    }
 }
