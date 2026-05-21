@@ -274,7 +274,7 @@ class AuthController extends Controller
             'profile_photo' => $user->photo ?? null,
 
             'employee' => $emp ? [
-                'employee_id'     => $emp->employee_id,
+                'employee_id'     => $emp->id,
                 'mobile'          => $emp->mobile,
                 'date_of_birth'   => $emp->date_of_birth?->toDateString(),
                 'blood_group'     => $emp->blood_group,
