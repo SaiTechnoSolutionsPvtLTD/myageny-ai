@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class EmployeeOnboarding extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToCompany;
 
     public const STATUS_ACTIVE = 'active';
     public const STATUS_RESIGNED = 'resigned';
@@ -40,6 +41,7 @@ class EmployeeOnboarding extends Model
         'role_id',
         'department_id',
         'portal_user_id',
+        'company_id',
         'name',
         'father_name',
         'correspondence_address',
@@ -189,5 +191,4 @@ class EmployeeOnboarding extends Model
     {
         return $query->where('status', self::STATUS_ACTIVE);
     }
-    
 }

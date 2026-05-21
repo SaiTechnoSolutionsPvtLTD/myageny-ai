@@ -418,7 +418,7 @@ class PermissionRequestApiController extends Controller
                 ->where('user_id', $current->id)
                 ->first()?->manager;
 
-            if (! $manager || ! $manager->is_active || $visited->contains($manager->id)) {
+            if (! $manager || ! $manager->is_active || $manager->isSuperAdmin() || $visited->contains($manager->id)) {
                 break;
             }
 

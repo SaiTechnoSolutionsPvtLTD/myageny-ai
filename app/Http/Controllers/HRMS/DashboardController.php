@@ -10,15 +10,18 @@ use App\Models\EmployeeOnboarding;
 use App\Models\HolidayCalendar;
 use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
+use App\Models\LeaveRequest;
 use App\Models\PayrollItem;
+use App\Models\PermissionRequest;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
     public function index(Request $request)
     {
-        if (auth()->user()?->isHrmsAttendanceOnlyUser()) {
+        if (! $this->canViewOrganizationDashboard()) {
             return $this->selfServiceDashboard($request);
         }
 
@@ -68,6 +71,10 @@ class DashboardController extends Controller
             ->leftJoin('employee_onboardings as eo', function($join) {
                 $join->on('eo.department_id', '=', 'departments.id')
                      ->where('eo.status', EmployeeOnboarding::STATUS_ACTIVE);
+
+                if (auth()->user()?->company_id !== null) {
+                    $join->where('eo.company_id', auth()->user()->company_id);
+                }
             })
             ->where('departments.deleted_at', null)
             ->groupBy('departments.id', 'departments.name', 'departments.description', 'departments.created_at', 'departments.updated_at', 'departments.deleted_at')
@@ -120,6 +127,8 @@ class DashboardController extends Controller
         }
 
         $announcements = $this->announcementsForDashboard();
+        $todayLeaveApprovals = $this->todayLeaveApprovals($today);
+        $todayPermissionApprovals = $this->todayPermissionApprovals($today);
 
         $stats = [
             'employees_total' => $employees_total,
@@ -139,6 +148,8 @@ class DashboardController extends Controller
             'salary_day_10_employees' => $salary_day_10_employees,
             'monthly_leave_data' => $monthly_leave_data,
             'announcements' => $announcements,
+            'today_leave_approvals' => $todayLeaveApprovals,
+            'today_permission_approvals' => $todayPermissionApprovals,
             'is_birthday_today' => $this->isBirthdayToday($currentEmployee, $today),
             'birthday_person_name' => $currentEmployee?->name ?: auth()->user()?->name,
             'birthday_greeting' => $this->birthdayGreeting($currentEmployee, $today),
@@ -243,6 +254,8 @@ class DashboardController extends Controller
             'salary_day_10_employees' => 0,
             'monthly_leave_data' => $monthlyLeaveData,
             'announcements' => $this->announcementsForDashboard(),
+            'today_leave_approvals' => $this->todayLeaveApprovals($today),
+            'today_permission_approvals' => $this->todayPermissionApprovals($today),
             'self_service_mode' => true,
             'latest_payroll_item' => $latestPayrollItem,
             'employee_name' => $employee?->name,
@@ -335,6 +348,13 @@ class DashboardController extends Controller
             ->first();
     }
 
+    private function canViewOrganizationDashboard(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
+    }
+
     private function canManageExitRequests(): bool
     {
         $user = auth()->user();
@@ -364,6 +384,27 @@ class DashboardController extends Controller
                 'priority' => $announcement->priority,
                 'date' => optional($announcement->announcement_date)->toDateString() ?: now()->toDateString(),
             ]);
+    }
+
+    private function todayLeaveApprovals(Carbon $today): Collection
+    {
+        return LeaveRequest::with(['employee.role', 'employee.department'])
+            ->whereDate('start_date', '<=', $today->toDateString())
+            ->whereDate('end_date', '>=', $today->toDateString())
+            ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->orderBy('start_date')
+            ->limit(6)
+            ->get();
+    }
+
+    private function todayPermissionApprovals(Carbon $today): Collection
+    {
+        return PermissionRequest::with(['employee.role', 'employee.department'])
+            ->whereDate('permission_date', $today->toDateString())
+            ->where('status', PermissionRequest::STATUS_APPROVED)
+            ->orderBy('from_time')
+            ->limit(6)
+            ->get();
     }
 
     private function isBirthdayToday(?EmployeeOnboarding $employee, Carbon $today): bool

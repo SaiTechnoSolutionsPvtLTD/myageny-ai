@@ -36,6 +36,10 @@ class DashboardApiController extends Controller
             ->leftJoin('employee_onboardings as eo', function ($join) {
                 $join->on('eo.department_id', '=', 'departments.id')
                      ->where('eo.status', 'verified');
+
+                if (auth()->user()?->company_id !== null) {
+                    $join->where('eo.company_id', auth()->user()->company_id);
+                }
             })
             ->whereNull('departments.deleted_at')
             ->groupBy('departments.id', 'departments.name', 'departments.description')

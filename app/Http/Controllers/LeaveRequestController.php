@@ -14,28 +14,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class LeaveRequestController extends Controller
 {
-    private const APPROVAL_STEPS = [
-        [
-            'key' => 'tl',
-            'name' => 'Team Lead',
-            'aliases' => ['tl', 'team_lead', 'team_leader', 'teamlead', 'manager'],
-        ],
-        [
-            'key' => 'project_coordinator',
-            'name' => 'Project Coordinator',
-            'aliases' => ['project_coordinator', 'project_coordination', 'pc'],
-        ],
-        [
-            'key' => 'hr',
-            'name' => 'HR',
-            'aliases' => ['hr', 'human_resource', 'human_resources', 'hr_manager'],
-        ],
-    ];
 
     public function index(): View
     {
@@ -69,7 +51,7 @@ class LeaveRequestController extends Controller
         return view('pages.hrms.leave_requests.create', [
             'leaveTypes' => LeaveType::orderBy('name')->get(),
             'employee' => $this->resolveEmployee($user),
-            'tlApprover' => $this->resolveTlApprover($user),
+            'approvalChain' => $this->approvalChainFor($user),
         ]);
     }
 
@@ -77,8 +59,15 @@ class LeaveRequestController extends Controller
     {
         $user = auth()->user();
         $validated = $request->validated();
+        $approvalRows = $this->approvalRowsFor($user);
 
-        $leaveRequest = DB::transaction(function () use ($user, $validated) {
+        if ($approvalRows === []) {
+            return back()
+                ->withInput()
+                ->with('error', 'Approval hierarchy not mapped. Please map this user under a manager first.');
+        }
+
+        $leaveRequest = DB::transaction(function () use ($user, $validated, $approvalRows) {
             $leaveRequest = LeaveRequest::create([
                 'user_id' => $user->id,
                 'employee_id' => $this->resolveEmployee($user)?->id,
@@ -88,18 +77,18 @@ class LeaveRequestController extends Controller
                 'total_days' => $this->calculateTotalDays($validated['start_date'], $validated['end_date']),
                 'reason' => $validated['reason'],
                 'status' => LeaveRequest::STATUS_PENDING,
-                'current_step' => self::APPROVAL_STEPS[0]['key'],
+                'current_step' => $approvalRows[0]['step_key'],
                 'submitted_at' => now(),
             ]);
 
-            $this->syncApprovalRows($leaveRequest, $user);
+            $leaveRequest->approvals()->createMany($approvalRows);
 
             return $leaveRequest;
         });
 
         return redirect()
             ->route('leave-requests.show', $leaveRequest)
-            ->with('success', 'Leave request submitted successfully. Approval flow started with Team Lead.');
+            ->with('success', 'Leave request submitted successfully. Approval started with your hierarchy.');
     }
 
     public function show(LeaveRequest $leaveRequest): View
@@ -202,30 +191,18 @@ class LeaveRequestController extends Controller
 
     private function approvalRowsFor(User $requester): array
     {
-        $tlApprover = $this->resolveTlApprover($requester);
-
-        return collect(self::APPROVAL_STEPS)
+        return $this->approvalChainFor($requester)
             ->values()
-            ->map(function (array $step, int $index) use ($tlApprover) {
+            ->map(function (User $approver, int $index) {
                 return [
                     'step_order' => $index + 1,
-                    'step_key' => $step['key'],
-                    'step_name' => $step['name'],
-                    'approver_user_id' => $step['key'] === 'tl' ? $tlApprover?->id : null,
+                    'step_key' => 'user_' . $approver->id,
+                    'step_name' => 'Level ' . ($index + 1) . ' - ' . $approver->name,
+                    'approver_user_id' => $approver->id,
                     'status' => LeaveApproval::STATUS_PENDING,
                 ];
             })
             ->all();
-    }
-
-    private function syncApprovalRows(LeaveRequest $leaveRequest, User $requester): void
-    {
-        foreach ($this->approvalRowsFor($requester) as $attributes) {
-            $leaveRequest->approvals()->updateOrCreate(
-                ['step_key' => $attributes['step_key']],
-                $attributes
-            );
-        }
     }
 
     private function pendingApprovalsFor(User $user): Collection
@@ -276,11 +253,7 @@ class LeaveRequestController extends Controller
             return false;
         }
 
-        if ($approval->approver_user_id) {
-            return (int) $approval->approver_user_id === (int) $user->id;
-        }
-
-        return $this->userHasStepRole($user, $approval->step_key);
+        return (int) $approval->approver_user_id === (int) $user->id;
     }
 
     private function resolveEmployee(User $user): ?EmployeeOnboarding
@@ -295,73 +268,27 @@ class LeaveRequestController extends Controller
             ->first();
     }
 
-    private function resolveTlApprover(User $requester): ?User
+    private function approvalChainFor(User $requester): Collection
     {
-        $mappedManager = UserMapping::with('manager.roles')
-            ->where('user_id', $requester->id)
-            ->first()?->manager;
+        $chain = collect();
+        $visited = collect([$requester->id]);
+        $current = $requester;
 
-        if ($mappedManager && $mappedManager->is_active) {
-            return $mappedManager;
+        while ($current) {
+            $manager = UserMapping::with('manager.roles')
+                ->where('user_id', $current->id)
+                ->first()?->manager;
+
+            if (! $manager || ! $manager->is_active || $manager->isSuperAdmin() || $visited->contains($manager->id)) {
+                break;
+            }
+
+            $chain->push($manager);
+            $visited->push($manager->id);
+            $current = $manager;
         }
 
-        return $this->firstUserForStep('tl', $requester);
-    }
-
-    private function firstUserForStep(string $stepKey, User $requester): ?User
-    {
-        return User::with('roles')
-            ->where('id', '!=', $requester->id)
-            ->where('is_active', true)
-            ->when($requester->company_id, fn ($query) => $query->where('company_id', $requester->company_id))
-            ->orderBy('name')
-            ->get()
-            ->first(fn (User $candidate) => $this->userHasStepRole($candidate, $stepKey));
-    }
-
-    private function userHasStepRole(User $user, string $stepKey): bool
-    {
-        $step = collect(self::APPROVAL_STEPS)->firstWhere('key', $stepKey);
-
-        if (! $step) {
-            return false;
-        }
-
-        $aliases = collect($step['aliases'])
-            ->push($step['key'])
-            ->push($step['name'])
-            ->map(fn (string $value) => $this->normalizeRoleKey($value))
-            ->unique();
-
-        return $this->roleKeysFor($user)->intersect($aliases)->isNotEmpty();
-    }
-
-    private function roleKeysFor(User $user): Collection
-    {
-        $user->loadMissing('roles');
-
-        return $user->roles
-            ->flatMap(fn ($role) => [$role->name, $role->display_name])
-            ->filter()
-            ->flatMap(function (string $roleName) {
-                $normalized = $this->normalizeRoleKey($roleName);
-                $tenantless = Str::after($normalized, '__');
-
-                return [$normalized, $tenantless];
-            })
-            ->unique()
-            ->values();
-    }
-
-    private function normalizeRoleKey(string $value): string
-    {
-        return Str::of($value)
-            ->lower()
-            ->replace(['-', ' '], '_')
-            ->replaceMatches('/[^a-z0-9_]+/', '')
-            ->replaceMatches('/_+/', '_')
-            ->trim('_')
-            ->value();
+        return $chain;
     }
 
     private function calculateTotalDays(string $startDate, string $endDate): int

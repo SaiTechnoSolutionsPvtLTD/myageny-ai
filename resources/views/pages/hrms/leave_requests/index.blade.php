@@ -7,6 +7,7 @@
     <style>
         .lr-page { display:flex; flex-direction:column; gap:18px; }
         .lr-summary-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; }
+        .lr-summary-grid.lr-summary-grid-single { grid-template-columns:minmax(0, 1fr); }
         .lr-summary-card { background:linear-gradient(135deg, #fffaf5 0%, #ffffff 100%); border:1px solid #f1e5d7; border-radius:18px; padding:18px; box-shadow:0 14px 28px rgba(18, 18, 18, 0.04); }
         .lr-summary-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#9a6b39; }
         .lr-summary-value { margin-top:10px; font-size:28px; font-weight:800; color:#121212; line-height:1; }
@@ -64,30 +65,39 @@
 
         <div class="lr-page">
             <div class="lr-summary-grid">
+                @can('leaverequest.approve')
                 <div class="lr-summary-card">
                     <div class="lr-summary-label">Waiting For Me</div>
                     <div class="lr-summary-value">{{ $pendingApprovals->count() }}</div>
                     <div class="lr-summary-sub">Leave approvals currently blocked at your stage.</div>
                 </div>
+                @endcan
                 <div class="lr-summary-card">
                     <div class="lr-summary-label">My Requests</div>
                     <div class="lr-summary-value">{{ $leaveRequests->total() }}</div>
-                    <div class="lr-summary-sub">All leave requests you have submitted and tracked here.</div>
+                    <div class="lr-summary-sub">Your leave requests with current approval status.</div>
                 </div>
+                @can('leaverequest.approve')
                 <div class="lr-summary-card">
                     <div class="lr-summary-label">Recent Decisions</div>
                     <div class="lr-summary-value">{{ $handledApprovals->count() }}</div>
                     <div class="lr-summary-sub">Approvals or rejections you completed recently.</div>
                 </div>
+                @endcan
             </div>
 
             <div class="lr-nav">
+                @can('leaverequest.approve')
                 <a href="#leave-approvals" class="lr-nav-link">Waiting For My Approval <span class="lr-nav-count">{{ $pendingApprovals->count() }}</span></a>
+                @endcan
                 <a href="#leave-my-requests" class="lr-nav-link">My Leave Requests <span class="lr-nav-count">{{ $leaveRequests->total() }}</span></a>
+                @can('leaverequest.approve')
                 <a href="#leave-decisions" class="lr-nav-link">My Recent Decisions <span class="lr-nav-count">{{ $handledApprovals->count() }}</span></a>
+                @endcan
             </div>
 
             <div class="lr-grid">
+            @can('leaverequest.approve')
             <div id="leave-approvals" class="eob-table-card lr-section-card">
                 <div class="lr-section-head">
                     <div>
@@ -142,12 +152,13 @@
                     </div>
                 @endif
             </div>
+            @endcan
 
             <div id="leave-my-requests" class="eob-table-card lr-section-card">
                 <div class="lr-section-head">
                     <div>
                         <div class="lr-section-title">My Leave Requests</div>
-                        <div class="lr-section-sub">Track each approval stage from TL to HR.</div>
+                        <div class="lr-section-sub">Check whether your leave request is pending, approved, or rejected.</div>
                     </div>
                     <div class="lr-section-badge">{{ $leaveRequests->total() }} request(s)</div>
                 </div>
@@ -193,7 +204,7 @@
                                         </td>
                                         <td>{{ optional($leaveRequest->submitted_at)->format('d M Y') }}</td>
                                         <td>
-                                            <a href="{{ route('leave-requests.show', $leaveRequest) }}" class="eob-icon-btn" title="View"><i class="bi bi-eye"></i></a>
+                                            <a href="{{ route('leave-requests.show', $leaveRequest) }}" class="eob-icon-btn" title="View Status"><i class="bi bi-eye"></i></a>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -207,7 +218,7 @@
                     @endif
                 @endif
             </div>
-
+             @can('leaverequest.approve')
             <div id="leave-decisions" class="eob-table-card lr-section-card">
                 <div class="lr-section-head">
                     <div>
@@ -255,6 +266,7 @@
                     </div>
                 @endif
             </div>
+            @endcan
             </div>
         </div>
     </div>

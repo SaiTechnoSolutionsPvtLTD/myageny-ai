@@ -43,6 +43,16 @@
                         <label class="crm-label">Description</label>
                         <textarea name="description" class="crm-textarea" placeholder="Optional department description">{{ old('description') }}</textarea>
                     </div>
+                    <div>
+                        <label class="crm-label">Department Dashboard</label>
+                        <select name="dashboard_route" class="crm-input">
+                            <option value="">Default User Dashboard</option>
+                            @foreach($dashboardRouteOptions as $routeName => $routeLabel)
+                                <option value="{{ $routeName }}" @selected(old('dashboard_route') === $routeName)>{{ $routeLabel }}</option>
+                            @endforeach
+                        </select>
+                        <small style="display:block; margin-top:6px; color:#6b7280;">Users in this department will open this dashboard after login.</small>
+                    </div>
                 </div>
                 <div class="crm-form-foot">
                     <a href="{{ route('settings.departments.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>

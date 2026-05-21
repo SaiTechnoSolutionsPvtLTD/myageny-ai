@@ -20,10 +20,12 @@ class HolidayCalendarController extends Controller
 {
     public function index(Request $request): View
     {
+        $companyId = auth()->user()?->company_id;
         $selectedMonth = $request->input('month', now()->format('Y-m'));
         $calendarMonth = Carbon::createFromFormat('Y-m', $selectedMonth)->startOfMonth();
 
         $holidays = HolidayCalendar::query()
+            ->ownedByCompany($companyId)
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -37,6 +39,7 @@ class HolidayCalendarController extends Controller
             ->withQueryString();
 
         $calendarHolidays = HolidayCalendar::query()
+            ->ownedByCompany($companyId)
             ->whereBetween('holiday_date', [$calendarMonth->copy()->startOfMonth(), $calendarMonth->copy()->endOfMonth()])
             ->orderBy('holiday_date')
             ->get()
@@ -74,6 +77,8 @@ class HolidayCalendarController extends Controller
 
     public function edit(HolidayCalendar $holiday_calendar): View
     {
+        $this->authorizeCompanyOwnership($holiday_calendar);
+
         return view('pages.settings.holiday_calendar.edit', [
             'holiday' => $holiday_calendar,
         ]);
@@ -81,6 +86,7 @@ class HolidayCalendarController extends Controller
 
     public function update(HolidayCalendarRequest $request, HolidayCalendar $holiday_calendar): RedirectResponse
     {
+        $this->authorizeCompanyOwnership($holiday_calendar);
         $holiday_calendar->update($request->validated());
 
         return redirect()
@@ -90,6 +96,7 @@ class HolidayCalendarController extends Controller
 
     public function destroy(HolidayCalendar $holiday_calendar): RedirectResponse
     {
+        $this->authorizeCompanyOwnership($holiday_calendar);
         $date = $holiday_calendar->holiday_date->format('d M Y');
         $holiday_calendar->delete();
 
@@ -116,9 +123,12 @@ class HolidayCalendarController extends Controller
         $updated = 0;
 
         DB::transaction(function () use ($rows, &$created, &$updated) {
+            $companyId = auth()->user()?->company_id;
+
             foreach ($rows as $row) {
-                $holiday = HolidayCalendar::withTrashed()->firstOrNew([
+                $holiday = HolidayCalendar::withTrashed()->ownedByCompany($companyId)->firstOrNew([
                     'holiday_date' => $row['holiday_date'],
+                    'company_id' => $companyId,
                 ]);
 
                 $wasExisting = $holiday->exists;
@@ -141,6 +151,17 @@ class HolidayCalendarController extends Controller
         return redirect()
             ->route('settings.holiday-calendars.index', ['month' => now()->format('Y-m')])
             ->with('success', "{$created} holiday(s) imported and {$updated} holiday(s) updated successfully.");
+    }
+
+    private function authorizeCompanyOwnership(HolidayCalendar $holiday): void
+    {
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId === null) {
+            return;
+        }
+
+        abort_unless((int) $holiday->company_id === (int) $companyId, 403);
     }
 
     private function parseImportFile(string $path, string $extension): Collection

@@ -12,7 +12,10 @@ class LeaveTypeController extends Controller
 {
     public function index(Request $request): View
     {
+        $companyId = auth()->user()?->company_id;
+
         $leaveTypes = LeaveType::query()
+            ->ownedByCompany($companyId)
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -44,11 +47,14 @@ class LeaveTypeController extends Controller
 
     public function edit(LeaveType $leaveType): View
     {
+        $this->authorizeCompanyOwnership($leaveType);
+
         return view('pages.settings.leave-type.edit', compact('leaveType'));
     }
 
     public function update(LeaveTypeRequest $request, LeaveType $leaveType): RedirectResponse
     {
+        $this->authorizeCompanyOwnership($leaveType);
         $leaveType->update($request->validated());
 
         return redirect()
@@ -58,11 +64,23 @@ class LeaveTypeController extends Controller
 
     public function destroy(LeaveType $leaveType): RedirectResponse
     {
+        $this->authorizeCompanyOwnership($leaveType);
         $leaveTypeName = $leaveType->name;
         $leaveType->delete();
 
         return redirect()
             ->route('settings.leave-types.index')
             ->with('success', "Leave type {$leaveTypeName} deleted successfully.");
+    }
+
+    private function authorizeCompanyOwnership(LeaveType $leaveType): void
+    {
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId === null) {
+            return;
+        }
+
+        abort_unless((int) $leaveType->company_id === (int) $companyId, 403);
     }
 }

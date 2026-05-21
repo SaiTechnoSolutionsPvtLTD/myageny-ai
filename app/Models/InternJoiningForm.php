@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InternJoiningForm extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToCompany;
 
     public const INTERN_ID_PREFIX = 'STSINT';
     public const STATUS_ACTIVE = 'active';
@@ -60,6 +61,7 @@ class InternJoiningForm extends Model
         'role_id',
         'department_id',
         'portal_user_id',
+        'company_id',
         'declaration_accepted',
         'declaration_date',
         'declaration_place',

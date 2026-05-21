@@ -42,7 +42,7 @@
         <div class="nav-section">
             <div class="nav-title">HRMS</div>
             <div class="nav-items">
-                @can('dashboard.menuview')
+                @can('dashboard.view')
                 <a href="{{ route('hrms.dashboard') }}" class="nav-item {{ request()->routeIs('hrms.dashboard') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.dashboard'))
                         <div class="active-indicator"></div>
@@ -192,7 +192,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('leaverequests.menuview')
+                @can('leaverequest.menuview')
                 <a href="{{ route('leave-requests.index') }}" class="nav-item {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('leave-requests.*'))
                         <div class="active-indicator"></div>

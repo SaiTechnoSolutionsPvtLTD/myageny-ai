@@ -1,56 +1,84 @@
+@php
+    $headerUser = auth()->user()?->loadMissing('roles', 'employeeOnboarding');
+    $headerRole = $headerUser?->role_display_name ?: ($headerUser?->roles->first()?->display_name ?? $headerUser?->roles->first()?->name ?? 'User');
+    $profileUrl = $headerUser?->employeeOnboarding
+        ? route('employee-onboarding.show', $headerUser->employeeOnboarding)
+        : null;
+@endphp
+
 <style>
 .site-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 32px;
-    border-bottom: 1px solid #e1dee3;
-    height: 72px;
-    background-color: #fcfcfc;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    padding:18px 32px;
+    border-bottom:1px solid #e1dee3;
+    background:#fcfcfc;
 }
-.breadcrumbs { display: flex; align-items: center; gap: 2px; font-size: 14px; }
-.crumb-item { color: #9e9e9e; }
-.crumb-item.active { color: #121212; font-weight: 500; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
-.icon-btn-group { display: flex; gap: 12px; }
-.icon-btn {
-    width: 32px; height: 32px; border: 1px solid #e1dee3;
-    border-radius: 16px; display: flex; align-items: center;
-    justify-content: center; background-color: #fcfcfc; cursor: pointer;
+.site-header__identity {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
 }
-.btn-ai-insight {
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px; border-radius: 16px;
-    background: linear-gradient(90deg, #fff0e6 0%, #fff 100%);
-    border: 1px solid #ffe0d0; cursor: pointer;
+.site-header__name {
+    font-size:20px;
+    font-weight:700;
+    color:#121212;
+    line-height:1.1;
 }
-.btn-text { color: #fa6203; font-size: 14px; font-weight: 600; }
-.user-menu { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.site-header__role {
+    font-size:13px;
+    color:#8b8b8b;
+    font-weight:500;
+}
+.site-header__actions {
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+.site-header__btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:10px 16px;
+    border-radius:12px;
+    border:1px solid #e1dee3;
+    background:#fff;
+    color:#121212;
+    font-size:13px;
+    font-weight:700;
+    text-decoration:none;
+}
+.site-header__btn:hover {
+    border-color:#ffb68b;
+    color:#fe5f04;
+}
+.site-header__btn.is-disabled {
+    color:#9e9e9e;
+    cursor:default;
+    pointer-events:none;
+    background:#f7f7f7;
+}
+@media (max-width: 720px) {
+    .site-header {
+        padding:16px 20px;
+        flex-direction:column;
+        align-items:flex-start;
+    }
+}
 </style>
 
 <header class="site-header">
-    <div class="breadcrumbs">
-        <span class="crumb-item">@yield('breadcrumb-1', 'Home')</span>
-        <img src="{{ asset('images/42_3018.svg') }}" alt="/" class="crumb-sep">
-        <span class="crumb-item active">@yield('breadcrumb-2', 'Dashboard')</span>
+    <div class="site-header__identity">
+        <div class="site-header__name">{{ $headerUser?->name ?: 'User' }}</div>
+        <div class="site-header__role">{{ $headerRole }}</div>
     </div>
-    <div class="header-actions">
-        <div class="icon-btn-group">
-            <div class="icon-btn">
-                <img src="{{ asset('images/42_3022.svg') }}" alt="Messages">
-            </div>
-            <div class="icon-btn">
-                <img src="{{ asset('images/42_3024.svg') }}" alt="Notifications">
-            </div>
-        </div>
-        <button class="btn-ai-insight">
-            <span class="btn-text">Get AI Insight</span>
-            <img src="{{ asset('images/42_3027.svg') }}" alt="Flare">
-        </button>
-        <div class="user-menu">
-            <img src="{{ asset('images/42_3029.svg') }}" alt="User">
-            <img src="{{ asset('images/42_3030.svg') }}" alt="Down">
-        </div>
+    <div class="site-header__actions">
+        @if($profileUrl)
+        <a href="{{ $profileUrl }}" class="site-header__btn">My Profile</a>
+        @else
+        <span class="site-header__btn is-disabled">My Profile</span>
+        @endif
     </div>
-
 </header>

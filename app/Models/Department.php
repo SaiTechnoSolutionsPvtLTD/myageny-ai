@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,12 +10,27 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Department extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, BelongsToCompany;
 
     protected $fillable = [
+        'company_id',
         'name',
         'description',
+        'dashboard_route',
     ];
+
+    public static function dashboardRouteOptions(): array
+    {
+        return [
+            'hrms.dashboard' => 'HR Dashboard',
+            'dashboard.admin' => 'CRM / Admin Dashboard',
+        ];
+    }
+
+    public function getDashboardRouteLabelAttribute(): string
+    {
+        return static::dashboardRouteOptions()[$this->dashboard_route] ?? 'Default User Dashboard';
+    }
 
     public function roles(): HasMany
     {

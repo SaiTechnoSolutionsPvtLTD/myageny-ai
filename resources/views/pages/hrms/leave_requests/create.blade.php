@@ -61,7 +61,7 @@
                 <div class="eob-card-head">
                     <div>
                         <div class="eob-card-title">Leave Details</div>
-                        <div class="eob-card-sub">Submit your leave request for TL, Project Coordinator, and HR approval.</div>
+                        <div class="eob-card-sub">Submit your leave request through your mapped approval hierarchy.</div>
                     </div>
                 </div>
                 <div class="eob-card-body">
@@ -105,27 +105,23 @@
             <div class="eob-card">
                 <div class="eob-card-head">
                     <div>
-                        <div class="eob-card-title">Approval Flow</div>
-                        <div class="eob-card-sub">Final approval happens only after all stages approve.</div>
+                        <div class="eob-card-title">Approval Hierarchy</div>
+                        <div class="eob-card-sub">Approval follows User Mapping from manager to manager.</div>
                     </div>
                 </div>
                 <div class="eob-card-body">
-                    <div class="lr-flow">
-                        <div class="lr-flow-step">
-                            <div class="lr-flow-title">1. Team Lead</div>
-                            <div class="lr-flow-sub">
-                                {{ $tlApprover ? $tlApprover->name . ' will receive the first approval.' : 'Uses User Mapping first. If no mapping exists, any Team Lead role can approve.' }}
-                            </div>
+                    @if($approvalChain->isEmpty())
+                        <div class="lr-note">No manager hierarchy is mapped for your user. Please map this user under a manager before submitting.</div>
+                    @else
+                        <div class="lr-flow">
+                            @foreach($approvalChain as $approver)
+                                <div class="lr-flow-step">
+                                    <div class="lr-flow-title">{{ $loop->iteration }}. {{ $approver->name }}</div>
+                                    <div class="lr-flow-sub">{{ $approver->roles->first()?->display_name ?? $approver->roles->first()?->name ?? 'No Role' }} · {{ $approver->email }}</div>
+                                </div>
+                            @endforeach
                         </div>
-                        <div class="lr-flow-step">
-                            <div class="lr-flow-title">2. Project Coordinator</div>
-                            <div class="lr-flow-sub">Any active Project Coordinator role can approve after TL approval.</div>
-                        </div>
-                        <div class="lr-flow-step">
-                            <div class="lr-flow-title">3. HR</div>
-                            <div class="lr-flow-sub">Any active HR role can give the final approval.</div>
-                        </div>
-                    </div>
+                    @endif
 
                     @if(! $employee)
                         <div class="lr-note" style="margin-top:14px;">

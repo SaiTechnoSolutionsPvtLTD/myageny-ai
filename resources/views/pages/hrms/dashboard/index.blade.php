@@ -514,6 +514,7 @@
 
 @section('content')
 @php($selfServiceMode = $stats['self_service_mode'] ?? false)
+@include('layouts.header')
 <div class="hrms-dashboard">
     <div class="hrms-shell">
         @if(session('success'))
@@ -651,6 +652,7 @@
         @endif
 
 
+        @if(! $selfServiceMode)
         <!-- Key Metrics -->
         <section class="hrms-stats">
             <div class="hrms-card hrms-stat-card">
@@ -684,12 +686,11 @@
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Rs '.number_format((float) optional($stats['latest_payroll_item'] ?? null)->net_salary, 2) : 'No longer active' }}</div>
             </div>
         </section>
+        @endif
 
         <!-- Main Content Panels -->
         <section class="hrms-panels">
             <!-- Department-wise Employee Count & Salary -->
-
-
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
@@ -783,6 +784,69 @@
                 </div>
             </div>
 
+            <div class="hrms-card hrms-panel">
+                <div class="hrms-panel-head">
+                    <div>
+                        <div class="hrms-panel-title">Today's Leave Approvals</div>
+                        <div class="hrms-panel-sub">{{ collect($stats['today_leave_approvals'] ?? [])->count() }} employee(s) on approved leave today</div>
+                    </div>
+                </div>
+                <div class="hrms-feature-list">
+                    @forelse($stats['today_leave_approvals'] as $leaveRequest)
+                    <div class="hrms-feature" style="align-items:flex-start;">
+                        <div class="hrms-feature-icon" style="background:#ecfdf3;color:#047857;">
+                            {{ strtoupper(substr($leaveRequest->employee?->name ?: 'L', 0, 1)) }}
+                        </div>
+                        <div style="flex:1;">
+                            <strong>{{ $leaveRequest->employee?->name ?: 'Employee' }}</strong>
+                            <span>{{ $leaveRequest->employee?->department?->name ?: 'No department mapped' }}</span>
+                            <span>{{ $leaveRequest->employee?->role?->name ?: 'No role mapped' }}</span>
+                        </div>
+                    </div>
+                    @empty
+                    <div class="hrms-feature" style="align-items:flex-start;">
+                        <div class="hrms-feature-icon" style="background:#fff7ed;color:#ea580c;">:)</div>
+                        <div>
+                            <strong>No one is on leave today</strong>
+                            <span>Looks like the whole team is in action today.</span>
+                        </div>
+                    </div>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="hrms-card hrms-panel">
+                <div class="hrms-panel-head">
+                    <div>
+                        <div class="hrms-panel-title">Today's Permission Approvals</div>
+                        <div class="hrms-panel-sub">{{ collect($stats['today_permission_approvals'] ?? [])->count() }} employee(s) with approved permission today</div>
+                    </div>
+                </div>
+                <div class="hrms-feature-list">
+                    @forelse($stats['today_permission_approvals'] as $permissionRequest)
+                    <div class="hrms-feature" style="align-items:flex-start;">
+                        <div class="hrms-feature-icon" style="background:#eff6ff;color:#1d4ed8;">
+                            {{ strtoupper(substr($permissionRequest->employee?->name ?: 'P', 0, 1)) }}
+                        </div>
+                        <div style="flex:1;">
+                            <strong>{{ $permissionRequest->employee?->name ?: 'Employee' }}</strong>
+                            <span>{{ $permissionRequest->employee?->department?->name ?: 'No department mapped' }}</span>
+                            <span>{{ $permissionRequest->employee?->role?->name ?: 'No role mapped' }}</span>
+                        </div>
+                    </div>
+                    @empty
+                    <div class="hrms-feature" style="align-items:flex-start;">
+                        <div class="hrms-feature-icon" style="background:#eef2ff;color:#4338ca;">^_^</div>
+                        <div>
+                            <strong>No one has permission today</strong>
+                            <span>All clear for the day, no permission outings lined up.</span>
+                        </div>
+                    </div>
+                    @endforelse
+                </div>
+            </div>
+
+            @if(! $selfServiceMode)
             <!-- Today's Attendance Chart -->
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
@@ -809,13 +873,14 @@
                     </div>
                 </div>
             </div>
+            @endif
 
             <!-- Monthly Leave Chart -->
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
                         <div class="hrms-panel-title">📈 Monthly Leave Trends</div>
-                        <div class="hrms-panel-sub">Leave requests over the past 6 months</div>
+                        <div class="hrms-panel-sub">{{ $selfServiceMode ? 'Your leave pattern over the past 6 months' : 'Leave requests over the past 6 months' }}</div>
                     </div>
                 </div>
                 <div class="hrms-chart-container">
@@ -823,6 +888,7 @@
                 </div>
             </div>
 
+            @if(! $selfServiceMode)
             <!-- Payroll Information -->
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
@@ -865,8 +931,9 @@
                     @endif
                 </div>
             </div>
+            @endif
 
-            @if(($stats['can_raise_exit'] ?? false) || ($stats['exit_request'] ?? null))
+            @if(! $selfServiceMode && (($stats['can_raise_exit'] ?? false) || ($stats['exit_request'] ?? null)))
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
@@ -938,14 +1005,14 @@
             </div>
             @endif
 
-            @if(($stats['can_manage_exit_requests'] ?? false) && collect($stats['exit_approval_queue'] ?? [])->isNotEmpty())
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
                         <div class="hrms-panel-title">Exit Approval Queue</div>
-                        <div class="hrms-panel-sub">Approve employee exit and revoke requests directly from the dashboard.</div>
+                        <div class="hrms-panel-sub">{{ ($stats['can_manage_exit_requests'] ?? false) ? 'Approve employee exit and revoke requests directly from the dashboard.' : 'Track whether any exit approval is waiting today.' }}</div>
                     </div>
                 </div>
+                @if(collect($stats['exit_approval_queue'] ?? [])->isNotEmpty())
                 <div class="hrms-exit-list">
                     @foreach($stats['exit_approval_queue'] as $requestItem)
                     <div class="hrms-exit-item">
@@ -963,6 +1030,7 @@
                         <div class="hrms-exit-reason">
                             {{ $requestItem->revoke_status === \App\Models\EmployeeExitRequest::REVOKE_STATUS_PENDING ? ($requestItem->revoke_reason ?: 'No revoke reason provided.') : ($requestItem->exit_reason ?: 'No exit reason provided.') }}
                         </div>
+                        @if($stats['can_manage_exit_requests'] ?? false)
                         <div class="hrms-form-actions">
                             @if($requestItem->revoke_status === \App\Models\EmployeeExitRequest::REVOKE_STATUS_PENDING)
                             <form method="POST" action="{{ route('employee-exit-requests.approve-revoke', $requestItem) }}" onsubmit="return confirm('Approve this revoke request?');">
@@ -988,11 +1056,16 @@
                             </form>
                             @endif
                         </div>
+                        @endif
                     </div>
                     @endforeach
                 </div>
+                @else
+                <div style="text-align:center;padding:20px;color:#9ca3af;">
+                    No exit approvals waiting today
+                </div>
+                @endif
             </div>
-            @endif
 
             <!-- Upcoming Holidays -->
             <div class="hrms-card hrms-panel">
@@ -1039,6 +1112,7 @@
                 </div>
             </div>
 
+            @if(! $selfServiceMode)
             <!-- Quick Actions -->
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
@@ -1083,6 +1157,7 @@
                     @endif
                 </div>
             </div>
+            @endif
         </section>
     </div>
 </div>
@@ -1091,27 +1166,30 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Today's Attendance Chart
-const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
-new Chart(attendanceCtx, {
-    type: 'doughnut',
-    data: {
-        labels: ['Present', 'Late', 'Absent'],
-        datasets: [{
-            data: [{{ $stats['today_present'] }}, {{ $stats['today_late'] }}, {{ $stats['today_absent'] }}],
-            backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
+const attendanceCanvas = document.getElementById('attendanceChart');
+if (attendanceCanvas) {
+    const attendanceCtx = attendanceCanvas.getContext('2d');
+    new Chart(attendanceCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Present', 'Late', 'Absent'],
+            datasets: [{
+                data: [{{ $stats['today_present'] }}, {{ $stats['today_late'] }}, {{ $stats['today_absent'] }}],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
             }
         }
-    }
-});
+    });
+}
 
 // Monthly Leave Chart
 const leaveCtx = document.getElementById('leaveChart').getContext('2d');

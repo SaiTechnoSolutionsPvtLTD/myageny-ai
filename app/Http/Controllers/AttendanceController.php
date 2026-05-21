@@ -32,6 +32,7 @@ class AttendanceController extends Controller
             'attendances' => $attendances,
             'selectedDate' => Carbon::parse($attendanceData['selected_date']),
             'stats' => $attendanceData['stats'],
+            'canViewAllAttendance' => $this->canViewAllAttendance(),
             'thresholds' => [
                 'early_before' => self::EARLY_LOGIN_BEFORE,
                 'late_after' => $this->graceLoginTime(),
@@ -77,7 +78,7 @@ class AttendanceController extends Controller
 
     public function create(): View
     {
-        abort_if($this->isSelfServiceUser(), 403);
+        abort_unless($this->canViewAllAttendance(), 403);
 
         return view('pages.hrms.attendance.create', [
             'attendees' => $this->accessibleAttendees(),
@@ -86,7 +87,7 @@ class AttendanceController extends Controller
 
     public function createCheckout(): View
     {
-        abort_if($this->isSelfServiceUser(), 403);
+        abort_unless($this->canViewAllAttendance(), 403);
 
         return view('pages.hrms.attendance.checkout', [
             'attendees' => $this->accessibleAttendees(),
@@ -95,7 +96,7 @@ class AttendanceController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        abort_if($this->isSelfServiceUser(), 403);
+        abort_unless($this->canViewAllAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
@@ -188,7 +189,7 @@ class AttendanceController extends Controller
 
     public function storeCheckout(Request $request): RedirectResponse
     {
-        abort_if($this->isSelfServiceUser(), 403);
+        abort_unless($this->canViewAllAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
@@ -243,7 +244,7 @@ class AttendanceController extends Controller
 
     public function lookupAttendance(Request $request): JsonResponse
     {
-        abort_if($this->isSelfServiceUser(), 403);
+        abort_unless($this->canViewAllAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
@@ -275,7 +276,7 @@ class AttendanceController extends Controller
 
     private function validateAttendanceFilters(Request $request): array
     {
-        return $request->validate([
+        $rules = [
             'employee_name' => ['nullable', 'string', 'max:255'],
             'employee_id' => ['nullable', 'string', 'max:255'],
             'attendance_date' => ['nullable', 'date'],
@@ -284,7 +285,13 @@ class AttendanceController extends Controller
             'attendee_type' => ['nullable', 'in:employee,intern'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
-        ]);
+        ];
+
+        if (! $this->canViewAllAttendance()) {
+            unset($rules['employee_name'], $rules['employee_id'], $rules['attendee_type']);
+        }
+
+        return $request->validate($rules);
     }
 
     private function buildAttendanceData(array $validated): array
@@ -513,14 +520,44 @@ class AttendanceController extends Controller
         return auth()->user()?->isHrmsAttendanceOnlyUser() ?? false;
     }
 
+    private function canViewAllAttendance(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+    }
+
+    private function currentEmployee(): ?EmployeeOnboarding
+    {
+        $user = auth()->user();
+
+        return EmployeeOnboarding::query()
+            ->where(function ($query) use ($user) {
+                $query->where('portal_user_id', $user?->id)
+                    ->orWhere('email', $user?->email);
+            })
+            ->active()
+            ->latest('id')
+            ->first();
+    }
+
     private function accessibleAttendees(): Collection
     {
-        $employees = EmployeeOnboarding::query()
+        $employeeQuery = EmployeeOnboarding::query()
             ->active()
-            // ->when($this->isSelfServiceUser(), function ($query) {
-            //     $query->where('portal_user_id', auth()->id());
-            // })
-            ->whereNotNull('name')
+            ->whereNotNull('name');
+
+        if (! $this->canViewAllAttendance()) {
+            $currentEmployee = $this->currentEmployee();
+
+            if (! $currentEmployee) {
+                return collect();
+            }
+
+            $employeeQuery->whereKey($currentEmployee->id);
+        }
+
+        $employees = $employeeQuery
             ->orderBy('name')
             ->get(['id', 'employee_id', 'name', 'status', 'photograph'])
             ->map(fn (EmployeeOnboarding $employee) => [
@@ -533,7 +570,7 @@ class AttendanceController extends Controller
                 'select_key' => 'employee:' . $employee->id,
             ]);
 
-        if ($this->isSelfServiceUser()) {
+        if (! $this->canViewAllAttendance()) {
             return $employees->values();
         }
 

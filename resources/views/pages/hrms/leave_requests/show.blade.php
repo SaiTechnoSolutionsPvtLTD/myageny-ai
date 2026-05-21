@@ -92,9 +92,10 @@
                 <div class="eob-card-head">
                     <div>
                         <div class="eob-card-title">Approval Status</div>
-                        <div class="eob-card-sub">The request is approved only after TL, Project Coordinator, and HR approve.</div>
+                        <div class="eob-card-sub">Each mapped hierarchy level must approve before final approval.</div>
                     </div>
                 </div>
+
                 <div class="eob-card-body">
                     <div class="lr-timeline">
                         @foreach($leaveRequest->approvals as $approval)
@@ -110,7 +111,7 @@
                                             @if($approval->actionedBy)
                                                 {{ ucfirst($approval->status) }} by {{ $approval->actionedBy->name }} on {{ $approval->actioned_at?->format('d M Y h:i A') }}
                                             @elseif($isCurrent)
-                                                Waiting for {{ $approval->approver?->name ?: $approval->step_name }}
+                                                Waiting for {{ $approval->approver?->name }}
                                             @elseif($approval->status === 'pending')
                                                 Waiting for previous approval
                                             @else
@@ -123,7 +124,7 @@
 
                                 <div class="lr-step-body">
                                     <div class="lr-muted">
-                                        Assigned approver: {{ $approval->approver?->name ?: 'Any active ' . $approval->step_name . ' role' }}
+                                        Assigned approver: {{ $approval->approver?->name }} · {{ $approval->approver?->email }}
                                     </div>
 
                                     @if($approval->remarks)

@@ -30,7 +30,9 @@ class DepartmentController extends Controller
 
     public function create(): View
     {
-        return view('pages.settings.department.create');
+        return view('pages.settings.department.create', [
+            'dashboardRouteOptions' => Department::dashboardRouteOptions(),
+        ]);
     }
 
     public function store(DepartmentRequest $request): RedirectResponse
@@ -44,7 +46,10 @@ class DepartmentController extends Controller
 
     public function edit(Department $department): View
     {
-        return view('pages.settings.department.edit', compact('department'));
+        return view('pages.settings.department.edit', [
+            'department' => $department,
+            'dashboardRouteOptions' => Department::dashboardRouteOptions(),
+        ]);
     }
 
     public function update(DepartmentRequest $request, Department $department): RedirectResponse

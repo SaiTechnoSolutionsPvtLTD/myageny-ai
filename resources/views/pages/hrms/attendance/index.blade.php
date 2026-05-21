@@ -86,17 +86,18 @@
 @section('content')
 <div class="att-page">
     @php($selfServiceMode = auth()->user()?->isHrmsAttendanceOnlyUser())
+    @php($managerAttendanceView = $canViewAllAttendance ?? false)
     <div class="att-topbar">
         <div>
-            <div class="att-title">{{ $selfServiceMode ? 'My Attendance' : 'Attendance' }}</div>
+            <div class="att-title">{{ $managerAttendanceView ? 'Attendance' : 'My Attendance' }}</div>
             <div class="att-breadcrumb">HRMS > Attendance</div>
 
         </div>
         <div class="att-actions">
-            @unless($selfServiceMode)
+            @if($managerAttendanceView)
                 <a href="{{ route('attendance.create') }}" class="att-btn att-btn-primary">Check In</a>
                 <a href="{{ route('attendance.checkout.create') }}" class="att-btn att-btn-ghost">Checkout</a>
-            @endunless
+            @endif
             <a href="{{ route('hrms.dashboard') }}" class="att-btn att-btn-ghost">Back</a>
         </div>
     </div>
@@ -177,10 +178,10 @@
 
     <div class="att-filter-wrap att-card">
         <div class="att-card-title">Filter Attendance</div>
-        <div class="att-card-sub">{{ $selfServiceMode ? 'Review your attendance by date, status, or login timing.' : 'Filter by employee, employee ID, date, status, or login timing.' }}</div>
+        <div class="att-card-sub">{{ $managerAttendanceView ? 'Filter by employee, employee ID, date, status, or login timing.' : 'Review your attendance by date, status, or login timing.' }}</div>
 
         <form method="GET" action="{{ route('attendance.index') }}" class="att-filter-form" style="margin-top:16px;">
-            @unless($selfServiceMode)
+            @if($managerAttendanceView)
             <div class="att-field">
                 <label class="att-label">Employee</label>
                 <input type="text" name="employee_name" class="att-input" value="{{ request('employee_name') }}" placeholder="Search employee name">
@@ -211,6 +212,7 @@
                     <option value="early" @selected(request('login_timing') === 'early')>Early Login</option>
                 </select>
             </div>
+            @if($managerAttendanceView)
             <div class="att-field">
                 <label class="att-label">Attendee Type</label>
                 <select name="attendee_type" class="att-select">
@@ -219,11 +221,12 @@
                     <option value="intern" @selected(request('attendee_type') === 'intern')>Interns</option>
                 </select>
             </div>
+            @endif
             <div class="att-actions">
                 <button type="submit" class="att-btn att-btn-primary">Apply Filter</button>
-                @unless($selfServiceMode)
+                @if($managerAttendanceView)
                     <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
-                @endunless
+                @endif
                 @if(request()->hasAny(['employee_name', 'employee_id', 'attendance_date', 'status', 'login_timing', 'attendee_type']))
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
@@ -234,10 +237,10 @@
     <div class="att-table-wrap att-card">
         <div class="att-meta-row">
             <div>
-                <div class="att-card-title">{{ $selfServiceMode ? 'Your Attendance Details' : 'Attendance Details' }}</div>
+                <div class="att-card-title">{{ $managerAttendanceView ? 'Attendance Details' : 'Your Attendance Details' }}</div>
                 <div class="att-card-sub">{{ $attendances->total() }} record(s) matched your filters.</div>
             </div>
-            <div class="att-note">{{ $selfServiceMode ? 'Default view shows your attendance for the current day.' : 'Default view shows the current day\'s attendance.' }}</div>
+            <div class="att-note">{{ $managerAttendanceView ? 'Default view shows the current day\'s attendance.' : 'Default view shows only your attendance for the current day.' }}</div>
         </div>
 
         @if($attendances->isEmpty())

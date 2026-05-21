@@ -23,9 +23,16 @@ class DepartmentRequest extends FormRequest
                 'max:150',
                 Rule::unique('departments', 'name')
                     ->ignore($departmentId)
-                    ->whereNull('deleted_at'),
+                    ->where(function ($query) {
+                        $query->whereNull('deleted_at');
+
+                        if (auth()->user()?->company_id !== null) {
+                            $query->where('company_id', auth()->user()->company_id);
+                        }
+                    }),
             ],
             'description' => ['nullable', 'string', 'max:1000'],
+            'dashboard_route' => ['nullable', 'string', Rule::in(array_keys(\App\Models\Department::dashboardRouteOptions()))],
         ];
     }
 }

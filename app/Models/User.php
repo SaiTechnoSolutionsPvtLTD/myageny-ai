@@ -236,6 +236,10 @@ class User extends Authenticatable
             return 'dashboard.admin';
         }
 
+        if ($departmentRoute = $this->departmentDashboardRoute()) {
+            return $departmentRoute;
+        }
+
         if ($this->isHrmsAttendanceOnlyUser()) {
             return 'hrms.dashboard';
         }
@@ -249,6 +253,24 @@ class User extends Authenticatable
         }
 
         return 'dashboard.admin';
+    }
+
+    public function departmentDashboardRoute(): ?string
+    {
+        $roles = $this->relationLoaded('roles')
+            ? $this->roles->loadMissing('department')
+            : $this->roles()->with('department')->get();
+
+        $route = $roles
+            ->map(fn ($role) => $role->department?->dashboard_route)
+            ->filter()
+            ->first();
+
+        if (! $route || ! app('router')->has($route)) {
+            return null;
+        }
+
+        return $route;
     }
 
     public function belongsToHrDepartment(): bool

@@ -37,6 +37,7 @@
                     <tr>
                         <th>#</th>
                         <th>Department Name</th>
+                        <th>Dashboard</th>
                         <th>Description</th>
                         <th>Created</th>
                         <th class="text-right">Actions</th>
@@ -47,6 +48,7 @@
                     <tr>
                         <td>{{ ($departments->firstItem() ?? 1) + $loop->index }}</td>
                         <td><strong>{{ $department->name }}</strong></td>
+                        <td>{{ $department->dashboard_route_label }}</td>
                         <td>{{ \Illuminate\Support\Str::limit($department->description ?: 'No description added.', 70) }}</td>
                         <td>{{ $department->created_at->format('d M Y') }}</td>
                         <td class="text-right">
@@ -65,7 +67,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="crm-empty">No departments created yet.</td></tr>
+                    <tr><td colspan="6" class="crm-empty">No departments created yet.</td></tr>
                 @endforelse
                 </tbody>
             </table>
