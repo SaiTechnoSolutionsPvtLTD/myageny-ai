@@ -24,6 +24,8 @@ use App\Http\Controllers\App\HRMS\HolidayApiController;
 use App\Http\Controllers\App\HRMS\LeaveTypeApiController;
 use App\Http\Controllers\App\HRMS\LeaveRequestApiController;
 use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
+use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
+use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -162,6 +164,31 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     // Approve / Reject
     Route::post('permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestApiController::class, 'approve'])->name('permission-requests.approve');
     Route::post('permission-requests/{permissionRequest}/approvals/{approval}/reject',  [PermissionRequestApiController::class, 'reject'])->name('permission-requests.reject');
+
+    Route::get('facility-titles', [FacilityManagementApiController::class, 'titles'])
+        ->name('facility-titles.index');
+ 
+    // ── Facility Management CRUD ──────────────────────────────────────────────
+    Route::get('facility-management',             [FacilityManagementApiController::class, 'index'])
+        ->name('facility-management.index');
+ 
+    Route::post('facility-management',            [FacilityManagementApiController::class, 'store'])
+        ->name('facility-management.store');
+ 
+    Route::get('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'show'])
+        ->name('facility-management.show');
+ 
+    Route::put('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'update'])
+        ->name('facility-management.update');
+ 
+    Route::delete('facility-management/{facilityManagement}', [FacilityManagementApiController::class, 'destroy'])
+        ->name('facility-management.destroy');
+    
+    Route::get('visitor-management',              [VisitorManagementApiController::class, 'index'])  ->name('visitor-management.index');
+    Route::post('visitor-management',             [VisitorManagementApiController::class, 'store'])  ->name('visitor-management.store');
+    Route::get('visitor-management/{id}',         [VisitorManagementApiController::class, 'show'])   ->name('visitor-management.show');
+    Route::put('visitor-management/{id}',         [VisitorManagementApiController::class, 'update']) ->name('visitor-management.update');
+    Route::delete('visitor-management/{id}',      [VisitorManagementApiController::class, 'destroy'])->name('visitor-management.destroy');
 
   });
 
