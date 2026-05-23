@@ -328,30 +328,6 @@ class LeaveRequestApiController extends Controller
         ]);
     }
 
-    // =========================================================================
-    // PRIVATE — identical logic to web LeaveRequestController
-    // =========================================================================
-
-    /**
-     * Builds approval rows by walking the UserMapping manager chain.
-     * Mirrors web approvalRowsFor() exactly.
-     */
-    private function approvalRowsFor(User $requester): array
-    {
-        return $this->approvalChainFor($requester)
-            ->values()
-            ->map(function (User $approver, int $index) {
-                return [
-                    'step_order'       => $index + 1,
-                    'step_key'         => 'user_' . $approver->id,
-                    'step_name'        => 'Level ' . ($index + 1) . ' - ' . $approver->name,
-                    'approver_user_id' => $approver->id,
-                    'status'           => LeaveApproval::STATUS_PENDING,
-                ];
-            })
-            ->all();
-    }
-
     /**
      * Returns all pending approvals that this user can act on.
      * Mirrors web pendingApprovalsFor() exactly.
@@ -371,65 +347,6 @@ class LeaveRequestApiController extends Controller
             ->get()
             ->filter(fn (LeaveApproval $a) => $this->canActOnApproval($a, $user))
             ->values();
-    }
-
-    /**
-     * Mirrors web canViewLeaveRequest() exactly.
-     */
-    private function canViewLeaveRequest(LeaveRequest $leaveRequest, User $user): bool
-    {
-        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
-            return true;
-        }
-
-        return $leaveRequest->approvals->contains(function (LeaveApproval $approval) use ($user) {
-            return (int) $approval->approver_user_id === (int) $user->id
-                || (int) $approval->actioned_by     === (int) $user->id
-                || $this->canActOnApproval($approval, $user);
-        });
-    }
-
-    /**
-     * Mirrors web canActOnApproval() exactly.
-     *
-     * Rules:
-     *  1. Leave request must be pending.
-     *  2. This approval step must be pending AND be the current_step.
-     *  3. The requester cannot approve their own leave.
-     *  4. System admin can approve any.
-     *  5. Company cross-check.
-     *  6. approver_user_id must match the acting user.
-     */
-    private function canActOnApproval(LeaveApproval $approval, User $user): bool
-    {
-        $leaveRequest = $approval->leaveRequest;
-
-        if (! $leaveRequest || ! $leaveRequest->isPending()) {
-            return false;
-        }
-
-        if ($approval->status !== LeaveApproval::STATUS_PENDING
-            || $leaveRequest->current_step !== $approval->step_key) {
-            return false;
-        }
-
-        // Cannot approve own request
-        if ((int) $leaveRequest->user_id === (int) $user->id) {
-            return false;
-        }
-
-        if ($user->isSystemAdmin()) {
-            return true;
-        }
-
-        // Cross-company check
-        if ($leaveRequest->user?->company_id
-            && $user->company_id
-            && (int) $leaveRequest->user->company_id !== (int) $user->company_id) {
-            return false;
-        }
-
-        return (int) $approval->approver_user_id === (int) $user->id;
     }
 
     /**
@@ -470,12 +387,6 @@ class LeaveRequestApiController extends Controller
             })
             ->latest()
             ->first();
-    }
-
-    private function calculateTotalDays(string $startDate, string $endDate): int
-    {
-        return Carbon::parse($startDate)->startOfDay()
-            ->diffInDays(Carbon::parse($endDate)->startOfDay()) + 1;
     }
 
     // =========================================================================
@@ -603,13 +514,6 @@ class LeaveRequestApiController extends Controller
         if ($lr->user?->company_id && $user->company_id && (int) $lr->user->company_id !== (int) $user->company_id) return false;
         if ($approval->approver_user_id) return (int) $approval->approver_user_id === (int) $user->id;
         return $this->userHasStepRole($user, $approval->step_key);
-    }
-
-    private function resolveEmployee(User $user): ?EmployeeOnboarding
-    {
-        return EmployeeOnboarding::query()
-            ->where(fn ($q) => $q->where('portal_user_id', $user->id)->orWhere('email', $user->email))
-            ->latest()->first();
     }
 
     private function resolveTlApprover(User $requester): ?User
