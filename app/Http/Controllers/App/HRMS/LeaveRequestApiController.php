@@ -13,30 +13,20 @@ use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
+/**
+ * Mobile API — Leave Requests
+ *
+ * Mirrors LeaveRequestController (web) exactly:
+ *   - Approval chain = UserMapping hierarchy (manager chain), NOT fixed roles.
+ *   - canActOnApproval, canViewLeaveRequest are identical.
+ *   - approvalRowsFor walks the manager chain (same as web).
+ */
 class LeaveRequestApiController extends Controller
 {
-    private const APPROVAL_STEPS = [
-        [
-            'key'     => 'tl',
-            'name'    => 'Team Lead',
-            'aliases' => ['tl', 'team_lead', 'team_leader', 'teamlead', 'manager'],
-        ],
-        [
-            'key'     => 'project_coordinator',
-            'name'    => 'Project Coordinator',
-            'aliases' => ['project_coordinator', 'project_coordination', 'pc'],
-        ],
-        [
-            'key'     => 'hr',
-            'name'    => 'HR',
-            'aliases' => ['hr', 'human_resource', 'human_resources', 'hr_manager'],
-        ],
-    ];
-
-    // ── GET /api/mobile/hrms/leave-requests ───────────────────────────────────
+    // ── GET /api/mobile/hrms/leave-requests ──────────────────────────────────
     public function index(Request $request): JsonResponse
     {
         $user  = $request->user();
@@ -48,7 +38,7 @@ class LeaveRequestApiController extends Controller
             $query->where('status', $request->status);
         }
 
-        $perPage      = (int) ($request->per_page ?? 15);
+        $perPage      = min((int) ($request->per_page ?? 15), 50);
         $leaveRequests = $query->paginate($perPage);
 
         return response()->json([
@@ -66,21 +56,12 @@ class LeaveRequestApiController extends Controller
         ]);
     }
 
-    // ── GET /api/mobile/hrms/leave-requests/meta ──────────────────────────────
+    // ── GET /api/mobile/hrms/leave-requests/meta ─────────────────────────────
     public function meta(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $pendingApprovals = LeaveApproval::with([
-            'leaveRequest.user', 'leaveRequest.employee',
-            'leaveRequest.leaveType', 'approver', 'actionedBy',
-        ])
-            ->where('status', LeaveApproval::STATUS_PENDING)
-            ->whereHas('leaveRequest', fn ($q) => $q->where('status', LeaveRequest::STATUS_PENDING))
-            ->oldest()
-            ->get()
-            ->filter(fn (LeaveApproval $a) => $this->canActOnApproval($a, $user))
-            ->values()
+        $pendingApprovals = $this->pendingApprovalsFor($user)
             ->map(fn ($a) => $this->mapPendingApproval($a));
 
         $leaveTypes = LeaveType::orderBy('name')->get()
@@ -93,6 +74,19 @@ class LeaveRequestApiController extends Controller
             'rejected' => LeaveRequest::where('user_id', $user->id)->where('status', 'rejected')->count(),
         ];
 
+        // Approval chain preview (so app can show who will approve)
+        $approvalChain = $this->approvalChainFor($user)
+            ->values()
+            ->map(fn (User $mgr, int $idx) => [
+                'level'    => $idx + 1,
+                'user_id'  => $mgr->id,
+                'name'     => $mgr->name,
+                'email'    => $mgr->email,
+                'step_key' => 'user_' . $mgr->id,
+            ]);
+
+        $hasApprovalChain = $approvalChain->isNotEmpty();
+
         return response()->json([
             'success' => true,
             'data'    => [
@@ -100,30 +94,25 @@ class LeaveRequestApiController extends Controller
                 'pending_approvals_count' => $pendingApprovals->count(),
                 'leave_types'             => $leaveTypes,
                 'my_stats'                => $myStats,
+                'approval_chain'          => $approvalChain,
+                'has_approval_chain'      => $hasApprovalChain,
             ],
         ]);
     }
 
-    // ── GET /api/mobile/hrms/leave-requests/pending-approvals ─────────────────
+    // ── GET /api/mobile/hrms/leave-requests/pending-approvals ────────────────
     public function pendingApprovals(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        $approvals = LeaveApproval::with([
-            'leaveRequest.user', 'leaveRequest.employee',
-            'leaveRequest.leaveType', 'approver', 'actionedBy',
-        ])
-            ->where('status', LeaveApproval::STATUS_PENDING)
-            ->whereHas('leaveRequest', fn ($q) => $q->where('status', LeaveRequest::STATUS_PENDING))
-            ->oldest()
-            ->get()
-            ->filter(fn (LeaveApproval $a) => $this->canActOnApproval($a, $user))
-            ->values()
+        $user      = $request->user();
+        $approvals = $this->pendingApprovalsFor($user)
             ->map(fn ($a) => $this->mapPendingApproval($a));
 
         return response()->json([
             'success' => true,
-            'data'    => ['approvals' => $approvals, 'total' => $approvals->count()],
+            'data'    => [
+                'approvals' => $approvals,
+                'total'     => $approvals->count(),
+            ],
         ]);
     }
 
@@ -133,7 +122,9 @@ class LeaveRequestApiController extends Controller
         $user = $request->user();
 
         $approvals = LeaveApproval::with([
-            'leaveRequest.user', 'leaveRequest.employee', 'leaveRequest.leaveType',
+            'leaveRequest.user',
+            'leaveRequest.employee',
+            'leaveRequest.leaveType',
         ])
             ->where('actioned_by', $user->id)
             ->latest('actioned_at')
@@ -151,15 +142,19 @@ class LeaveRequestApiController extends Controller
     public function show(Request $request, LeaveRequest $leaveRequest): JsonResponse
     {
         $leaveRequest->load([
-            'user.roles', 'employee.role', 'employee.department',
-            'leaveType', 'approvals.approver.roles', 'approvals.actionedBy.roles',
+            'user.roles',
+            'employee.role',
+            'employee.department',
+            'leaveType',
+            'approvals.approver.roles',
+            'approvals.actionedBy.roles',
         ]);
 
         if (! $this->canViewLeaveRequest($leaveRequest, $request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
 
-        $user           = $request->user();
+        $user            = $request->user();
         $approvalActions = $leaveRequest->approvals
             ->mapWithKeys(fn (LeaveApproval $a) => [
                 $a->id => $this->canActOnApproval($a, $user),
@@ -168,13 +163,13 @@ class LeaveRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'leave_request'   => $this->mapLeaveRequest($leaveRequest, true),
+                'leave_request'    => $this->mapLeaveRequest($leaveRequest, true),
                 'approval_actions' => $approvalActions,
             ],
         ]);
     }
 
-    // ── POST /api/mobile/hrms/leave-requests ──────────────────────────────────
+    // ── POST /api/mobile/hrms/leave-requests ─────────────────────────────────
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -184,9 +179,18 @@ class LeaveRequestApiController extends Controller
             'reason'        => ['required', 'string', 'max:2000'],
         ]);
 
-        $user = $request->user();
+        $user        = $request->user();
+        $approvalRows = $this->approvalRowsFor($user);
 
-        $leaveRequest = DB::transaction(function () use ($user, $validated) {
+        // Mirror web: block if no approval hierarchy
+        if ($approvalRows === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Approval hierarchy not mapped. Please contact HR to map you under a manager first.',
+            ], 422);
+        }
+
+        $leaveRequest = DB::transaction(function () use ($user, $validated, $approvalRows) {
             $lr = LeaveRequest::create([
                 'user_id'       => $user->id,
                 'employee_id'   => $this->resolveEmployee($user)?->id,
@@ -194,32 +198,35 @@ class LeaveRequestApiController extends Controller
                 'start_date'    => $validated['start_date'],
                 'end_date'      => $validated['end_date'],
                 'total_days'    => $this->calculateTotalDays(
-                    $validated['start_date'], $validated['end_date']
+                    $validated['start_date'],
+                    $validated['end_date']
                 ),
                 'reason'        => $validated['reason'],
                 'status'        => LeaveRequest::STATUS_PENDING,
-                'current_step'  => self::APPROVAL_STEPS[0]['key'],
+                'current_step'  => $approvalRows[0]['step_key'],
                 'submitted_at'  => now(),
             ]);
 
-            $lr->approvals()->createMany($this->approvalRowsFor($user));
+            $lr->approvals()->createMany($approvalRows);
 
             return $lr;
         });
 
-        $leaveRequest->load(['user', 'leaveType', 'approvals.approver']);
-        app(HrmsApprovalNotificationService::class)->sendLeaveSubmitted($leaveRequest);
+        $leaveRequest->load(['leaveType', 'approvals.approver']);
 
         return response()->json([
             'success' => true,
-            'message' => 'Leave request submitted. Approval flow started with Team Lead.',
+            'message' => 'Leave request submitted successfully. Approval started with your hierarchy.',
             'data'    => $this->mapLeaveRequest($leaveRequest, true),
         ], 201);
     }
 
-    // ── POST /api/mobile/hrms/leave-requests/{leaveRequest}/approve ───────────
-    public function approve(Request $request, LeaveRequest $leaveRequest, LeaveApproval $approval): JsonResponse
-    {
+    // ── POST /api/mobile/hrms/leave-requests/{leaveRequest}/approvals/{approval}/approve
+    public function approve(
+        Request $request,
+        LeaveRequest $leaveRequest,
+        LeaveApproval $approval
+    ): JsonResponse {
         $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
 
         if ((int) $approval->leave_request_id !== (int) $leaveRequest->id) {
@@ -241,6 +248,7 @@ class LeaveRequestApiController extends Controller
                 'remarks'     => $request->input('remarks'),
             ]);
 
+            // Identical to web: advance to next pending step
             $next = $leaveRequest->approvals()
                 ->where('status', LeaveApproval::STATUS_PENDING)
                 ->where('step_order', '>', $approval->step_order)
@@ -270,9 +278,12 @@ class LeaveRequestApiController extends Controller
         ]);
     }
 
-    // ── POST /api/mobile/hrms/leave-requests/{leaveRequest}/reject ────────────
-    public function reject(Request $request, LeaveRequest $leaveRequest, LeaveApproval $approval): JsonResponse
-    {
+    // ── POST /api/mobile/hrms/leave-requests/{leaveRequest}/approvals/{approval}/reject
+    public function reject(
+        Request $request,
+        LeaveRequest $leaveRequest,
+        LeaveApproval $approval
+    ): JsonResponse {
         $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
 
         if ((int) $approval->leave_request_id !== (int) $leaveRequest->id) {
@@ -294,15 +305,16 @@ class LeaveRequestApiController extends Controller
                 'remarks'     => $request->input('remarks'),
             ]);
 
+            // Skip all other pending steps (identical to web)
             $leaveRequest->approvals()
                 ->where('status', LeaveApproval::STATUS_PENDING)
                 ->where('id', '!=', $approval->id)
                 ->update(['status' => LeaveApproval::STATUS_SKIPPED]);
 
             $leaveRequest->update([
-                'status'      => LeaveRequest::STATUS_REJECTED,
-                'current_step'=> null,
-                'rejected_at' => now(),
+                'status'       => LeaveRequest::STATUS_REJECTED,
+                'current_step' => null,
+                'rejected_at'  => now(),
             ]);
         });
 
@@ -316,30 +328,187 @@ class LeaveRequestApiController extends Controller
         ]);
     }
 
-    // ── Mappers ───────────────────────────────────────────────────────────────
+    // =========================================================================
+    // PRIVATE — identical logic to web LeaveRequestController
+    // =========================================================================
+
+    /**
+     * Builds approval rows by walking the UserMapping manager chain.
+     * Mirrors web approvalRowsFor() exactly.
+     */
+    private function approvalRowsFor(User $requester): array
+    {
+        return $this->approvalChainFor($requester)
+            ->values()
+            ->map(function (User $approver, int $index) {
+                return [
+                    'step_order'       => $index + 1,
+                    'step_key'         => 'user_' . $approver->id,
+                    'step_name'        => 'Level ' . ($index + 1) . ' - ' . $approver->name,
+                    'approver_user_id' => $approver->id,
+                    'status'           => LeaveApproval::STATUS_PENDING,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Returns all pending approvals that this user can act on.
+     * Mirrors web pendingApprovalsFor() exactly.
+     */
+    private function pendingApprovalsFor(User $user): Collection
+    {
+        return LeaveApproval::with([
+            'leaveRequest.user.roles',
+            'leaveRequest.employee',
+            'leaveRequest.leaveType',
+            'approver',
+            'actionedBy',
+        ])
+            ->where('status', LeaveApproval::STATUS_PENDING)
+            ->whereHas('leaveRequest', fn ($q) => $q->where('status', LeaveRequest::STATUS_PENDING))
+            ->oldest()
+            ->get()
+            ->filter(fn (LeaveApproval $a) => $this->canActOnApproval($a, $user))
+            ->values();
+    }
+
+    /**
+     * Mirrors web canViewLeaveRequest() exactly.
+     */
+    private function canViewLeaveRequest(LeaveRequest $leaveRequest, User $user): bool
+    {
+        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+            return true;
+        }
+
+        return $leaveRequest->approvals->contains(function (LeaveApproval $approval) use ($user) {
+            return (int) $approval->approver_user_id === (int) $user->id
+                || (int) $approval->actioned_by     === (int) $user->id
+                || $this->canActOnApproval($approval, $user);
+        });
+    }
+
+    /**
+     * Mirrors web canActOnApproval() exactly.
+     *
+     * Rules:
+     *  1. Leave request must be pending.
+     *  2. This approval step must be pending AND be the current_step.
+     *  3. The requester cannot approve their own leave.
+     *  4. System admin can approve any.
+     *  5. Company cross-check.
+     *  6. approver_user_id must match the acting user.
+     */
+    private function canActOnApproval(LeaveApproval $approval, User $user): bool
+    {
+        $leaveRequest = $approval->leaveRequest;
+
+        if (! $leaveRequest || ! $leaveRequest->isPending()) {
+            return false;
+        }
+
+        if ($approval->status !== LeaveApproval::STATUS_PENDING
+            || $leaveRequest->current_step !== $approval->step_key) {
+            return false;
+        }
+
+        // Cannot approve own request
+        if ((int) $leaveRequest->user_id === (int) $user->id) {
+            return false;
+        }
+
+        if ($user->isSystemAdmin()) {
+            return true;
+        }
+
+        // Cross-company check
+        if ($leaveRequest->user?->company_id
+            && $user->company_id
+            && (int) $leaveRequest->user->company_id !== (int) $user->company_id) {
+            return false;
+        }
+
+        return (int) $approval->approver_user_id === (int) $user->id;
+    }
+
+    /**
+     * Walks the UserMapping manager chain — identical to web approvalChainFor().
+     */
+    private function approvalChainFor(User $requester): Collection
+    {
+        $chain   = collect();
+        $visited = collect([$requester->id]);
+        $current = $requester;
+
+        while ($current) {
+            $manager = UserMapping::with('manager.roles')
+                ->where('user_id', $current->id)
+                ->first()?->manager;
+
+            if (! $manager
+                || ! $manager->is_active
+                || $manager->isSuperAdmin()
+                || $visited->contains($manager->id)) {
+                break;
+            }
+
+            $chain->push($manager);
+            $visited->push($manager->id);
+            $current = $manager;
+        }
+
+        return $chain;
+    }
+
+    private function resolveEmployee(User $user): ?EmployeeOnboarding
+    {
+        return EmployeeOnboarding::query()
+            ->where(function ($q) use ($user) {
+                $q->where('portal_user_id', $user->id)
+                    ->orWhere('email', $user->email);
+            })
+            ->latest()
+            ->first();
+    }
+
+    private function calculateTotalDays(string $startDate, string $endDate): int
+    {
+        return Carbon::parse($startDate)->startOfDay()
+            ->diffInDays(Carbon::parse($endDate)->startOfDay()) + 1;
+    }
+
+    // =========================================================================
+    // MAPPERS
+    // =========================================================================
+
     private function mapLeaveRequest(LeaveRequest $lr, bool $withApprovals = false): array
     {
         $data = [
-            'id'             => $lr->id,
-            'leave_type_id'  => $lr->leave_type_id,
-            'leave_type'     => $lr->leaveType ? ['id' => $lr->leaveType->id, 'name' => $lr->leaveType->name] : null,
-            'start_date'     => $lr->start_date instanceof Carbon
+            'id'           => $lr->id,
+            'leave_type_id' => $lr->leave_type_id,
+            'leave_type'   => $lr->leaveType
+                ? ['id' => $lr->leaveType->id, 'name' => $lr->leaveType->name]
+                : null,
+            'start_date'   => $lr->start_date instanceof Carbon
                 ? $lr->start_date->format('Y-m-d')
                 : $lr->start_date,
-            'end_date'       => $lr->end_date instanceof Carbon
+            'end_date'     => $lr->end_date instanceof Carbon
                 ? $lr->end_date->format('Y-m-d')
                 : $lr->end_date,
-            'total_days'     => $lr->total_days,
-            'reason'         => $lr->reason ?? '',
-            'status'         => $lr->status,
-            'current_step'   => $lr->current_step,
-            'submitted_at'   => $lr->submitted_at?->format('Y-m-d H:i:s'),
-            'approved_at'    => $lr->approved_at?->format('Y-m-d H:i:s'),
-            'rejected_at'    => $lr->rejected_at?->format('Y-m-d H:i:s'),
+            'total_days'   => $lr->total_days,
+            'reason'       => $lr->reason ?? '',
+            'status'       => $lr->status,
+            'current_step' => $lr->current_step,
+            'submitted_at' => $lr->submitted_at?->format('Y-m-d H:i:s'),
+            'approved_at'  => $lr->approved_at?->format('Y-m-d H:i:s'),
+            'rejected_at'  => $lr->rejected_at?->format('Y-m-d H:i:s'),
         ];
 
         if ($withApprovals && $lr->relationLoaded('approvals')) {
-            $data['approvals'] = $lr->approvals->map(fn ($a) => $this->mapApproval($a))->values();
+            $data['approvals'] = $lr->approvals
+                ->map(fn ($a) => $this->mapApproval($a))
+                ->values();
         }
 
         return $data;
@@ -355,6 +524,7 @@ class LeaveRequestApiController extends Controller
             'status'           => $a->status,
             'approver_user_id' => $a->approver_user_id,
             'approver_name'    => $a->approver?->name,
+            'approver_email'   => $a->approver?->email,
             'actioned_by'      => $a->actioned_by,
             'actioned_by_name' => $a->actionedBy?->name,
             'actioned_at'      => $a->actioned_at?->format('Y-m-d H:i:s'),
@@ -370,11 +540,11 @@ class LeaveRequestApiController extends Controller
             'step_key'        => $a->step_key,
             'step_name'       => $a->step_name,
             'step_order'      => $a->step_order,
-            'leave_request'   => $this->mapLeaveRequest($lr),
             'employee_name'   => $lr->user?->name ?? $lr->employee?->name ?? 'Unknown',
             'employee_code'   => $lr->employee?->employee_id ?? '',
             'leave_type_name' => $lr->leaveType?->name ?? '',
             'submitted_at'    => $lr->submitted_at?->format('Y-m-d H:i:s'),
+            'leave_request'   => $this->mapLeaveRequest($lr),
         ];
     }
 

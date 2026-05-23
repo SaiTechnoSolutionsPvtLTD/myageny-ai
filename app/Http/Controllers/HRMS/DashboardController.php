@@ -68,20 +68,38 @@ class DashboardController extends Controller
         $today_absent = max(0, $employees_total - $today_present - $today_leave);
 
         // Department-wise employee count and salary
-        $department_stats = Department::select('departments.*')
-            ->selectRaw('COUNT(eo.id) as employee_count')
-            ->selectRaw('COALESCE(SUM(eo.gross_salary), 0) as total_salary')
-            ->leftJoin('employee_onboardings as eo', function($join) {
-                $join->on('eo.department_id', '=', 'departments.id')
-                     ->where('eo.status', EmployeeOnboarding::STATUS_ACTIVE);
+        $department_stats = Department::select(
+        'departments.id',
+        'departments.company_id',
+        'departments.name',
+        'departments.description',
+        'departments.dashboard_route',  // add any other columns you actually use
+        'departments.created_at',
+        'departments.updated_at',
+        'departments.deleted_at'
+    )
+    ->selectRaw('COUNT(eo.id) as employee_count')
+    ->selectRaw('COALESCE(SUM(eo.gross_salary), 0) as total_salary')
+    ->leftJoin('employee_onboardings as eo', function ($join) {
+        $join->on('eo.department_id', '=', 'departments.id')
+             ->where('eo.status', EmployeeOnboarding::STATUS_ACTIVE);
 
-                if (auth()->user()?->company_id !== null) {
-                    $join->where('eo.company_id', auth()->user()->company_id);
-                }
-            })
-            ->where('departments.deleted_at', null)
-            ->groupBy('departments.id', 'departments.name', 'departments.description', 'departments.created_at', 'departments.updated_at', 'departments.deleted_at')
-            ->get();
+        if (auth()->user()?->company_id !== null) {
+            $join->where('eo.company_id', auth()->user()->company_id);
+        }
+    })
+    ->whereNull('departments.deleted_at')
+    ->groupBy(
+        'departments.id',
+        'departments.company_id',
+        'departments.name',
+        'departments.description',
+        'departments.dashboard_route',
+        'departments.created_at',
+        'departments.updated_at',
+        'departments.deleted_at'
+    )
+    ->get();
 
         // Today's birthdays
         $today_birthdays = $this->todayBirthdays($today);
