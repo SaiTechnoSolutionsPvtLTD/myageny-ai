@@ -174,16 +174,39 @@ class RolePermissionController extends Controller
     /**
      * List all permissions grouped by module.
      */
-    public function permissionsIndex()
+    public function permissionsIndex(Request $request)
     {
-        $permissionPages = Permission::orderBy('module')
+        $selectedModule = trim((string) $request->input('module', ''));
+        $search = trim((string) $request->input('search', ''));
+
+        $permissionPages = Permission::query()
+            ->when($selectedModule !== '', function ($query) use ($selectedModule) {
+                $query->where('module', $selectedModule);
+            })
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('display_name', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%')
+                        ->orWhere('module', 'like', '%' . $search . '%');
+                });
+            })
+            ->orderBy('module')
             ->orderByRaw('COALESCE(display_name, name)')
             ->paginate(15)
             ->withQueryString();
+
+        $modules = Permission::query()
+            ->select('module')
+            ->whereNotNull('module')
+            ->distinct()
+            ->orderBy('module')
+            ->pluck('module');
+
         $permissions = $permissionPages->getCollection()
             ->groupBy(fn (Permission $permission) => $permission->module ?: 'general');
 
-        return view('pages.auth_menu.permissions.index', compact('permissions', 'permissionPages'));
+        return view('pages.auth_menu.permissions.index', compact('permissions', 'permissionPages', 'modules', 'selectedModule', 'search'));
     }
 
     /**

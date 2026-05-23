@@ -9,6 +9,7 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
 use App\Models\UserMapping;
+use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -206,7 +207,8 @@ class LeaveRequestApiController extends Controller
             return $lr;
         });
 
-        $leaveRequest->load(['leaveType', 'approvals']);
+        $leaveRequest->load(['user', 'leaveType', 'approvals.approver']);
+        app(HrmsApprovalNotificationService::class)->sendLeaveSubmitted($leaveRequest);
 
         return response()->json([
             'success' => true,
@@ -257,6 +259,11 @@ class LeaveRequestApiController extends Controller
             ]);
         });
 
+        $leaveRequest->refresh()->load(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        $nextApproval = $leaveRequest->approvals->firstWhere('step_key', $leaveRequest->current_step);
+        app(HrmsApprovalNotificationService::class)->sendLeaveApproved($leaveRequest, $approval, $nextApproval);
+
         return response()->json([
             'success' => true,
             'message' => "{$approval->step_name} approval completed.",
@@ -298,6 +305,10 @@ class LeaveRequestApiController extends Controller
                 'rejected_at' => now(),
             ]);
         });
+
+        $leaveRequest->refresh()->load(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        app(HrmsApprovalNotificationService::class)->sendLeaveRejected($leaveRequest, $approval);
 
         return response()->json([
             'success' => true,

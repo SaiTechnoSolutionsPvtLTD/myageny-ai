@@ -75,6 +75,7 @@ class DailyAttendanceController extends Controller
             'employee_id' => ['required', 'integer'],
             'logout_latitude' => ['required', 'numeric'],
             'logout_longitude' => ['required', 'numeric'],
+            'logout_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'logout_location' => ['nullable', 'string'],
             'remarks' => ['nullable', 'string'],
         ]);
@@ -111,8 +112,12 @@ class DailyAttendanceController extends Controller
         $logoutAt = Carbon::now();
         $loginAt = Carbon::parse($attendance->attendance_date->format('Y-m-d') . ' ' . $attendance->login_time);
         $workingSeconds = max($loginAt->diffInSeconds($logoutAt, false), 0);
+        $logoutPhotoPath = $request->hasFile('logout_photo')
+            ? $this->storeAttendancePhoto($request->file('logout_photo'))
+            : $attendance->logout_photo;
 
         $attendance->update([
+            'logout_photo' => $logoutPhotoPath,
             'logout_location' => $request->input('logout_location'),
             'logout_latitude' => $request->logout_latitude,
             'logout_longitude' => $request->logout_longitude,
@@ -226,6 +231,8 @@ class DailyAttendanceController extends Controller
             'employee_name' => $attendance->employee_name,
             'attendance_photo' => $attendance->attendance_photo,
             'attendance_photo_url' => $attendance->attendance_photo ? asset($attendance->attendance_photo) : null,
+            'logout_photo' => $attendance->logout_photo,
+            'logout_photo_url' => $attendance->logout_photo ? asset($attendance->logout_photo) : null,
             'login_location' => $attendance->login_location,
             'login_latitude' => $attendance->login_latitude,
             'login_longitude' => $attendance->login_longitude,

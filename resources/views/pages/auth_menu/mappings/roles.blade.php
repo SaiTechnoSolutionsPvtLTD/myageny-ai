@@ -52,7 +52,9 @@
 .map-tree-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .map-icon-btn { width:36px; height:36px; border:1px solid #e5e7eb; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; background:#fff; color:#475569; cursor:pointer; transition:all .16s ease; }
 .map-icon-btn:hover { border-color:#fdba74; color:#ea580c; background:#fff7ed; }
+.map-zoom-label { display:inline-flex; align-items:center; justify-content:center; min-width:64px; height:36px; padding:0 10px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; color:#475569; font-size:12px; font-weight:800; }
 .map-tree-viewport { position:relative; min-height:640px; max-height:74vh; overflow:auto; background:#f8efcf; scrollbar-gutter:stable; }
+.map-tree-viewport.is-panning { cursor:grabbing; }
 .map-tree-stage { position:relative; min-width:1160px; min-height:720px; background:#f8efcf; background-image:linear-gradient(rgba(148,163,184,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.18) 1px, transparent 1px); background-size:34px 34px; }
 .map-tree-svg { position:absolute; inset:0; overflow:visible; pointer-events:none; }
 .map-tree-nodes { position:absolute; inset:0; pointer-events:none; }
@@ -154,6 +156,16 @@
                                 <span class="map-legend-chip"><span class="map-legend-dot self"></span>Self</span>
                             </div>
                             <div class="map-tree-actions">
+                                <button type="button" class="map-icon-btn" data-chart-zoom-out title="Zoom out" aria-label="Zoom out">
+                                    <i class="bi bi-zoom-out"></i>
+                                </button>
+                                <div class="map-zoom-label" data-chart-zoom-label>100%</div>
+                                <button type="button" class="map-icon-btn" data-chart-zoom-in title="Zoom in" aria-label="Zoom in">
+                                    <i class="bi bi-zoom-in"></i>
+                                </button>
+                                <button type="button" class="map-icon-btn" data-chart-zoom-reset title="Reset zoom" aria-label="Reset zoom">
+                                    <i class="bi bi-aspect-ratio"></i>
+                                </button>
                                 <button type="button" class="map-icon-btn" data-chart-center title="Center chart" aria-label="Center chart">
                                     <i class="bi bi-bullseye"></i>
                                 </button>
@@ -273,9 +285,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const chartCard = document.getElementById('roleChartCard');
     const fullscreenButton = document.querySelector('[data-chart-fullscreen]');
     const fullscreenIcon = document.querySelector('[data-chart-fullscreen-icon]');
+    const zoomLabel = document.querySelector('[data-chart-zoom-label]');
     const state = {
         roles: @json($roleChart['nodes']),
         centered: false,
+        zoom: 1,
     };
 
     const sizes = {
@@ -289,6 +303,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let dragState = null;
     let activeDropCard = null;
+    let panState = null;
 
     if (!viewport || !stage || !svg || !nodeLayer || !Array.isArray(state.roles) || state.roles.length === 0) {
         return;
@@ -324,6 +339,46 @@ document.addEventListener('DOMContentLoaded', function () {
         showStatus.timer = window.setTimeout(function () {
             statusElement.classList.remove('is-visible');
         }, 2600);
+    }
+
+    function clampZoom(value) {
+        return Math.min(1.8, Math.max(0.6, value));
+    }
+
+    function updateZoomUi() {
+        if (zoomLabel) {
+            zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
+        }
+    }
+
+    function applyZoom() {
+        stage.style.zoom = String(state.zoom);
+        updateZoomUi();
+    }
+
+    function setZoom(value) {
+        state.zoom = clampZoom(value);
+        applyZoom();
+    }
+
+    function setZoomFromWheel(nextZoom, clientX, clientY) {
+        const boundedZoom = clampZoom(nextZoom);
+
+        if (Math.abs(boundedZoom - state.zoom) < 0.001) {
+            return;
+        }
+
+        const rect = viewport.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const offsetY = clientY - rect.top;
+        const contentX = (viewport.scrollLeft + offsetX) / state.zoom;
+        const contentY = (viewport.scrollTop + offsetY) / state.zoom;
+
+        state.zoom = boundedZoom;
+        applyZoom();
+
+        viewport.scrollLeft = Math.max(0, (contentX * state.zoom) - offsetX);
+        viewport.scrollTop = Math.max(0, (contentY * state.zoom) - offsetY);
     }
 
     function roleById(roleId) {
@@ -682,6 +737,56 @@ document.addEventListener('DOMContentLoaded', function () {
         document.removeEventListener('pointercancel', cleanupPointerDrag);
     }
 
+    function cleanupPan() {
+        if (!panState) {
+            return;
+        }
+
+        viewport.classList.remove('is-panning');
+        panState = null;
+        document.removeEventListener('pointermove', handlePanMove);
+        document.removeEventListener('pointerup', endPan);
+        document.removeEventListener('pointercancel', cleanupPan);
+    }
+
+    function handlePanMove(event) {
+        if (!panState) {
+            return;
+        }
+
+        event.preventDefault();
+        const deltaX = event.clientX - panState.startX;
+        const deltaY = event.clientY - panState.startY;
+        viewport.scrollLeft = panState.scrollLeft - deltaX;
+        viewport.scrollTop = panState.scrollTop - deltaY;
+    }
+
+    function endPan() {
+        cleanupPan();
+    }
+
+    function startPan(event) {
+        if (event.button !== undefined && event.button !== 0) {
+            return;
+        }
+
+        if (event.target.closest('.map-tree-card')) {
+            return;
+        }
+
+        panState = {
+            startX: event.clientX,
+            startY: event.clientY,
+            scrollLeft: viewport.scrollLeft,
+            scrollTop: viewport.scrollTop,
+        };
+
+        viewport.classList.add('is-panning');
+        document.addEventListener('pointermove', handlePanMove);
+        document.addEventListener('pointerup', endPan);
+        document.addEventListener('pointercancel', cleanupPan);
+    }
+
     function endPointerDrag(event) {
         if (!dragState) {
             return;
@@ -816,6 +921,31 @@ document.addEventListener('DOMContentLoaded', function () {
         showStatus('Chart refreshed.');
     });
 
+    viewport.addEventListener('pointerdown', function (event) {
+        startPan(event);
+    });
+
+    viewport.addEventListener('wheel', function (event) {
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? 0.1 : -0.1;
+        setZoomFromWheel(state.zoom + delta, event.clientX, event.clientY);
+    }, { passive: false });
+
+    document.querySelector('[data-chart-zoom-in]')?.addEventListener('click', function () {
+        setZoom(state.zoom + 0.1);
+        showStatus('Chart zoomed in.');
+    });
+
+    document.querySelector('[data-chart-zoom-out]')?.addEventListener('click', function () {
+        setZoom(state.zoom - 0.1);
+        showStatus('Chart zoomed out.');
+    });
+
+    document.querySelector('[data-chart-zoom-reset]')?.addEventListener('click', function () {
+        setZoom(1);
+        showStatus('Chart zoom reset.');
+    });
+
     fullscreenButton?.addEventListener('click', function () {
         toggleFullscreen();
     });
@@ -832,6 +962,7 @@ document.addEventListener('DOMContentLoaded', function () {
         showStatus('Chart centered.');
     });
 
+    applyZoom();
     renderChart(false);
 });
 </script>

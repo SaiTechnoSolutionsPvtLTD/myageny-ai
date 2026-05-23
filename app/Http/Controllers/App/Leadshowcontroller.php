@@ -297,7 +297,7 @@ class LeadShowController extends Controller
     )]
     public function storeProduct(Request $request, Lead $lead): JsonResponse
     {
-        dd($request);
+
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
 
         $data = $request->validate([

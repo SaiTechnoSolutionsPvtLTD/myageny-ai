@@ -13,6 +13,11 @@
 .perm-flash { margin-bottom:16px; padding:12px 14px; border-radius:10px; font-size:13px; }
 .perm-flash.success { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
 .perm-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:hidden; }
+.perm-filter { display:flex; gap:12px; flex-wrap:wrap; align-items:end; padding:18px 20px; border-bottom:1px solid #f1eff3; background:#fcfcfc; }
+.perm-field { display:flex; flex-direction:column; gap:6px; min-width:180px; }
+.perm-label { font-size:11px; font-weight:800; color:#8a8a8a; text-transform:uppercase; letter-spacing:.6px; }
+.perm-input, .perm-select { min-height:42px; padding:10px 12px; border:1px solid #e1dee3; border-radius:10px; background:#fff; font-size:13px; color:#222; }
+.perm-input { min-width:280px; }
 .perm-section { border-bottom:1px solid #f1eff3; }
 .perm-section:last-child { border-bottom:none; }
 .perm-head { padding:16px 20px; background:#fafafa; font-size:12px; font-weight:800; color:#8a8a8a; letter-spacing:.8px; }
@@ -45,6 +50,28 @@
     @endif
 
     <div class="perm-card">
+        <form method="GET" action="{{ route('auth.permissions.index') }}" class="perm-filter">
+            <div class="perm-field">
+                <label class="perm-label">Category</label>
+                <select name="module" class="perm-select">
+                    <option value="">All Categories</option>
+                    @foreach($modules as $module)
+                        <option value="{{ $module }}" @selected($selectedModule === $module)>{{ strtoupper($module) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="perm-field">
+                <label class="perm-label">Search</label>
+                <input type="text" name="search" class="perm-input" value="{{ $search }}" placeholder="Search permission name, key, description...">
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="submit" class="perm-btn primary">Apply</button>
+                @if($selectedModule !== '' || $search !== '')
+                    <a href="{{ route('auth.permissions.index') }}" class="perm-btn">Reset</a>
+                @endif
+            </div>
+        </form>
+
         @if($permissionPages->isEmpty())
             <div class="perm-empty">No permissions found yet. Create permissions first so roles can inherit them.</div>
         @else

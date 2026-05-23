@@ -229,7 +229,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('visitor_management.menuview')
+                @can('visitormanagement.menuview')
                 <a href="{{ route('visitor-management.index') }}" class="nav-item {{ request()->routeIs('visitor-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('visitor-management.*'))
                         <div class="active-indicator"></div>
@@ -248,7 +248,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('dynamic_forms.menuview')
+                @can('formbuilder.menuview')
                 <a href="{{ route('dynamic-forms.index') }}" class="nav-item {{ request()->routeIs('dynamic-forms.*') ? 'active' : '' }}">
                     @if(request()->routeIs('dynamic-forms.*'))
                         <div class="active-indicator"></div>
@@ -269,7 +269,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('facility_management.menuview')
+                @can('facilitymanagement.menuview')
                 <a href="{{ route('facility-management.index') }}" class="nav-item {{ request()->routeIs('facility-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('facility-management.*'))
                         <div class="active-indicator"></div>

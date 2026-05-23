@@ -76,7 +76,7 @@
                     <div class="pr-summary-value">{{ $permissionRequests->total() }}</div>
                     <div class="pr-summary-sub">All permission requests you have raised across dates and slots.</div>
                 </div>
-                @can('permissionrequest.approver')
+                @can('permissionrequest.approve')
                 <div class="pr-summary-card">
                     <div class="pr-summary-label">Recent Decisions</div>
                     <div class="pr-summary-value">{{ $handledApprovals->count() }}</div>
@@ -86,17 +86,17 @@
             </div>
 
             <div class="pr-nav">
-                @can('permissionrequest.approver')
+                @can('permissionrequest.approve')
                 <a href="#permission-approvals" class="pr-nav-link">Waiting For My Approval <span class="pr-nav-count">{{ $pendingApprovals->count() }}</span></a>
                 @endcan
                 <a href="#permission-my-requests" class="pr-nav-link">My Permission Requests <span class="pr-nav-count">{{ $permissionRequests->total() }}</span></a>
-                @can('permissionrequest.approver')
+                @can('permissionrequest.approve')
                 <a href="#permission-decisions" class="pr-nav-link">My Recent Decisions <span class="pr-nav-count">{{ $handledApprovals->count() }}</span></a>
                 @endcan
             </div>
 
             <div class="pr-grid">
-            @can('permissionrequest.approver')
+            @can('permissionrequest.approve')
             <div id="permission-approvals" class="eob-table-card pr-section-card">
                 <div class="pr-section-head">
                     <div>

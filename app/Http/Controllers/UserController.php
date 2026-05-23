@@ -13,6 +13,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\PermissionRegistrar;
 
 class UserController extends Controller
 {
@@ -89,6 +90,7 @@ class UserController extends Controller
         }
 
         $data = $request->validated();
+        $roleName = $data['role'] ?? null;
         $data['is_active'] = $request->boolean('is_active');
         $data['company_id'] = auth()->user()?->company_id;
 
@@ -103,9 +105,12 @@ class UserController extends Controller
         $user = User::create($data);
 
         // Assign role via Spatie
-        if ($request->filled('role')) {
-            $user->assignRole($request->role);
-            $this->syncCompanySuperAdmin($user, $request->role);
+        if ($roleName) {
+            $role = $this->resolveAssignableRole($roleName);
+
+            $user->syncRoles([$role]);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+            $this->syncCompanySuperAdmin($user, $role->name);
         }
 
         return redirect()
@@ -151,6 +156,7 @@ class UserController extends Controller
         // $this->authorize('users.manage');
 
         $data = $request->validated();
+        $roleName = $data['role'] ?? null;
         $data['is_active'] = $request->boolean('is_active');
 
         // Handle avatar
@@ -172,9 +178,12 @@ class UserController extends Controller
         $user->update($data);
 
         // Sync role
-        if ($request->filled('role')) {
-            $user->syncRoles([$request->role]);
-            $this->syncCompanySuperAdmin($user, $request->role);
+        if ($roleName) {
+            $role = $this->resolveAssignableRole($roleName);
+
+            $user->syncRoles([$role]);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+            $this->syncCompanySuperAdmin($user, $role->name);
         } else {
             $this->syncCompanySuperAdmin($user, null);
         }
@@ -307,5 +316,12 @@ class UserController extends Controller
         return Company::whereKey($user->company_id)
             ->where('super_admin_user_id', $user->id)
             ->exists();
+    }
+
+    private function resolveAssignableRole(string $roleName): Role
+    {
+        return Role::withoutGlobalScopes()
+            ->where('name', $roleName)
+            ->firstOrFail();
     }
 }

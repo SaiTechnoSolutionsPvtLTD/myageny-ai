@@ -26,6 +26,7 @@ use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\LeadSourceController;
 use App\Http\Controllers\LeadStatusController;
 use App\Http\Controllers\MastersController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\OutcomeSubCategoryController;
 use App\Http\Controllers\PermissionRequestController;
@@ -185,6 +186,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('permission-requests.approve');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/reject', [PermissionRequestController::class, 'reject'])
         ->name('permission-requests.reject');
+    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead'])
+        ->name('notifications.mark-all-read');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
+        ->name('notifications.read');
     Route::resource('recruitment', RecruitmentController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
     Route::post('/recruitment/{recruitment}/call-updates', [RecruitmentController::class, 'storeCallUpdate'])
         ->name('recruitment.call-updates.store');

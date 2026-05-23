@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyAttendance;
+use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
@@ -32,6 +33,7 @@ class AttendanceController extends Controller
             'attendances' => $attendances,
             'selectedDate' => Carbon::parse($attendanceData['selected_date']),
             'stats' => $attendanceData['stats'],
+            'departments' => $this->attendanceDepartments(),
             'canViewAllAttendance' => $this->canViewAllAttendance(),
             'thresholds' => [
                 'early_before' => self::EARLY_LOGIN_BEFORE,
@@ -59,7 +61,8 @@ class AttendanceController extends Controller
                 'Login Timing' => $record['login_timing'] ? ucfirst(str_replace('-', ' ', $record['login_timing'])) : 'N/A',
                 'Login Location' => $record['login_location'] ?: 'N/A',
                 'Logout Location' => $record['logout_location'] ?: 'N/A',
-                'Attendance Photo URL' => $record['attendance_photo_url'] ?: 'N/A',
+                'Check-in Photo URL' => $record['attendance_photo_url'] ?: 'N/A',
+                'Checkout Photo URL' => $record['logout_photo_url'] ?: 'N/A',
             ];
         });
 
@@ -279,6 +282,7 @@ class AttendanceController extends Controller
         $rules = [
             'employee_name' => ['nullable', 'string', 'max:255'],
             'employee_id' => ['nullable', 'string', 'max:255'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'attendance_date' => ['nullable', 'date'],
             'status' => ['nullable', 'in:present,absent,leave'],
             'login_timing' => ['nullable', 'in:early,late'],
@@ -299,6 +303,7 @@ class AttendanceController extends Controller
         $selectedDate = $validated['attendance_date'] ?? now()->toDateString();
         $employeeNameFilter = trim((string) ($validated['employee_name'] ?? ''));
         $employeeIdFilter = trim((string) ($validated['employee_id'] ?? ''));
+        $departmentIdFilter = isset($validated['department_id']) ? (int) $validated['department_id'] : 0;
         $statusFilter = $validated['status'] ?? '';
         $loginTimingFilter = $validated['login_timing'] ?? '';
         $attendeeTypeFilter = $validated['attendee_type'] ?? '';
@@ -324,7 +329,7 @@ class AttendanceController extends Controller
         $accessibleInternIds = $accessibleAttendees->where('attendee_type', 'intern')->pluck('id')->values();
 
         $attendanceCollection = DailyAttendance::query()
-            ->with(['employee', 'intern'])
+            ->with(['employee.department', 'intern.department'])
             ->whereDate('attendance_date', $selectedDate)
             ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
                 if ($accessibleEmployeeIds->isNotEmpty()) {
@@ -357,6 +362,10 @@ class AttendanceController extends Controller
                 'employee_id' => (string) $attendeeId,
                 'employee_name' => $attendeeName,
                 'attendee_type' => $isIntern ? 'intern' : 'employee',
+                'department_id' => $isIntern ? $attendance->intern?->department_id : $attendance->employee?->department_id,
+                'department_name' => $isIntern
+                    ? ($attendance->intern?->department?->name ?? null)
+                    : ($attendance->employee?->department?->name ?? null),
                 'attendance_date' => optional($attendance->attendance_date)->format('Y-m-d'),
                 'attendance_status' => strtolower((string) $attendance->attendance_status) ?: 'present',
                 'login_time' => $attendance->login_time,
@@ -365,7 +374,11 @@ class AttendanceController extends Controller
                 'login_location' => $attendance->login_location,
                 'logout_location' => $attendance->logout_location,
                 'remarks' => $attendance->remarks,
+                'profile_photo_url' => $isIntern
+                    ? ($attendance->intern?->photograph ? asset('storage/' . $attendance->intern->photograph) : null)
+                    : ($attendance->employee?->photograph ? asset('storage/' . $attendance->employee->photograph) : null),
                 'attendance_photo_url' => $attendance->attendance_photo ? asset($attendance->attendance_photo) : null,
+                'logout_photo_url' => $attendance->logout_photo ? asset($attendance->logout_photo) : null,
                 'login_timing' => $this->resolveLoginTiming($attendance->login_time),
                 'is_derived' => false,
             ];
@@ -386,6 +399,8 @@ class AttendanceController extends Controller
                     'employee_id' => $attendee['display_id'],
                     'employee_name' => $attendee['name'],
                     'attendee_type' => $attendee['attendee_type'],
+                    'department_id' => $attendee['department_id'],
+                    'department_name' => $attendee['department_name'],
                     'attendance_date' => $selectedDate,
                     'attendance_status' => 'absent',
                     'login_time' => null,
@@ -394,7 +409,9 @@ class AttendanceController extends Controller
                     'login_location' => null,
                     'logout_location' => null,
                     'remarks' => 'No check-in record found for the selected date.',
+                    'profile_photo_url' => $attendee['photo_url'],
                     'attendance_photo_url' => $attendee['photo_url'],
+                    'logout_photo_url' => null,
                     'login_timing' => null,
                     'is_derived' => true,
                 ];
@@ -418,12 +435,16 @@ class AttendanceController extends Controller
         };
 
         $records = $records
-            ->filter(function (array $record) use ($employeeNameFilter, $employeeIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
+            ->filter(function (array $record) use ($employeeNameFilter, $employeeIdFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
                 if ($employeeNameFilter !== '' && ! str_contains($this->normalizeValue($record['employee_name']), $this->normalizeValue($employeeNameFilter))) {
                     return false;
                 }
 
                 if ($employeeIdFilter !== '' && ! str_contains($this->normalizeValue($record['employee_id']), $this->normalizeValue($employeeIdFilter))) {
+                    return false;
+                }
+
+                if ($departmentIdFilter > 0 && (int) ($record['department_id'] ?? 0) !== $departmentIdFilter) {
                     return false;
                 }
 
@@ -545,7 +566,8 @@ class AttendanceController extends Controller
     {
         $employeeQuery = EmployeeOnboarding::query()
             ->active()
-            ->whereNotNull('name');
+            ->whereNotNull('name')
+            ->with('department');
 
         if (! $this->canViewAllAttendance()) {
             $currentEmployee = $this->currentEmployee();
@@ -559,13 +581,15 @@ class AttendanceController extends Controller
 
         $employees = $employeeQuery
             ->orderBy('name')
-            ->get(['id', 'employee_id', 'name', 'status', 'photograph'])
+            ->get(['id', 'employee_id', 'name', 'status', 'photograph', 'department_id'])
             ->map(fn (EmployeeOnboarding $employee) => [
                 'id' => $employee->id,
                 'attendee_type' => 'employee',
                 'display_id' => (string) $employee->employee_id,
                 'name' => $employee->name,
                 'status' => $employee->status,
+                'department_id' => $employee->department_id,
+                'department_name' => $employee->department?->name,
                 'photo_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 'select_key' => 'employee:' . $employee->id,
             ]);
@@ -577,14 +601,17 @@ class AttendanceController extends Controller
         $interns = InternJoiningForm::query()
             ->active()
             ->whereNotNull('name')
+            ->with('department')
             ->orderBy('name')
-            ->get(['id', 'intern_id', 'name', 'photograph'])
+            ->get(['id', 'intern_id', 'name', 'photograph', 'department_id'])
             ->map(fn (InternJoiningForm $intern) => [
                 'id' => $intern->id,
                 'attendee_type' => 'intern',
                 'display_id' => (string) ($intern->intern_id ?: 'INT-' . $intern->id),
                 'name' => $intern->name,
                 'status' => null,
+                'department_id' => $intern->department_id,
+                'department_name' => $intern->department?->name,
                 'photo_url' => $intern->photograph ? asset('storage/' . $intern->photograph) : null,
                 'select_key' => 'intern:' . $intern->id,
             ]);
@@ -602,5 +629,16 @@ class AttendanceController extends Controller
             $parts[0] ?? '',
             isset($parts[1]) ? (int) $parts[1] : 0,
         ];
+    }
+
+    private function attendanceDepartments(): Collection
+    {
+        if (! $this->canViewAllAttendance()) {
+            return collect();
+        }
+
+        return Department::query()
+            ->orderBy('name')
+            ->get(['id', 'name']);
     }
 }

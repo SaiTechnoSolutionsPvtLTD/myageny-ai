@@ -283,14 +283,15 @@
                         </div>
                     </div>
                     <div class="ufrm-card-body">
-                        <form method="POST" action="{{ route('users.destroy', $user) }}"
-                              onsubmit="return confirm('Permanently delete {{ addslashes($user->name) }}? This cannot be undone.')">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="ufrm-btn" style="width:100%;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;justify-content:center;">
-                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
-                                Delete This User
-                            </button>
-                        </form>
+                        <button
+                            type="button"
+                            class="ufrm-btn"
+                            style="width:100%;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;justify-content:center;"
+                            onclick="confirmDeleteUser()"
+                        >
+                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
+                            Delete This User
+                        </button>
                     </div>
                 </div>
                 @endif
@@ -298,6 +299,19 @@
             </div>
         </div>
     </form>
+
+    @if($user->id !== auth()->id() && !$user->isSystemAdmin() && !($user->company && $user->company->super_admin_user_id === $user->id))
+    <form
+        method="POST"
+        action="{{ route('users.destroy', $user) }}"
+        id="deleteUserForm"
+        onsubmit="return confirm('Permanently delete {{ addslashes($user->name) }}? This cannot be undone.')"
+        style="display:none;"
+    >
+        @csrf
+        @method('DELETE')
+    </form>
+    @endif
     </div>
 
 </div>
@@ -344,6 +358,9 @@ function selectRole(el) {
     document.querySelectorAll('.ufrm-role-option').forEach(o=>o.classList.remove('selected'));
     el.classList.add('selected');
     el.querySelector('input[type="radio"]').checked=true;
+}
+function confirmDeleteUser() {
+    document.getElementById('deleteUserForm')?.requestSubmit();
 }
 </script>
 @endpush

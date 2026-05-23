@@ -18,6 +18,7 @@ class DailyAttendance extends Model
         'intern_joining_form_id',
         'employee_name',
         'attendance_photo',
+        'logout_photo',
         'login_location',
         'login_latitude',
         'login_longitude',

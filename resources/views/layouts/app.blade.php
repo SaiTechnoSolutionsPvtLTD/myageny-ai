@@ -158,6 +158,168 @@
             min-width: auto;
             padding: 6px 2px;
         }
+        .app-notify-fab {
+            position: fixed;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 4300;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+        .app-notify-toggle {
+            position: relative;
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%);
+            color: #fff;
+            box-shadow: 0 18px 40px rgba(254, 95, 4, 0.28);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        .app-notify-badge {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 999px;
+            background: #fff;
+            color: #fe5f04;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,.65);
+        }
+        .app-notify-panel {
+            width: 360px;
+            max-width: calc(100vw - 88px);
+            max-height: min(72vh, 620px);
+            overflow: hidden;
+            border-radius: 18px;
+            border: 1px solid #ebe7ef;
+            background: #fff;
+            box-shadow: 0 24px 60px rgba(18,18,18,.16);
+            display: none;
+        }
+        .app-notify-fab.is-open .app-notify-panel { display: flex; flex-direction: column; }
+        .app-notify-head {
+            padding: 16px 18px;
+            border-bottom: 1px solid #f1eff3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        .app-notify-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #121212;
+        }
+        .app-notify-sub {
+            margin-top: 3px;
+            font-size: 12px;
+            color: #8a8a8a;
+        }
+        .app-notify-readall {
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid #e1dee3;
+            background: #fff;
+            color: #666;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .app-notify-list {
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 10px;
+            gap: 8px;
+        }
+        .app-notify-item {
+            width: 100%;
+            text-align: left;
+            border: 1px solid #eee9f0;
+            border-radius: 14px;
+            padding: 12px 13px;
+            background: #fff;
+            transition: all .16s ease;
+        }
+        .app-notify-item:hover {
+            border-color: #fdba74;
+            background: #fffaf5;
+        }
+        .app-notify-item.is-unread {
+            border-color: #fed7aa;
+            background: #fff7ed;
+        }
+        .app-notify-item-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .app-notify-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+        .app-notify-time {
+            font-size: 11px;
+            color: #8a8a8a;
+            white-space: nowrap;
+        }
+        .app-notify-item-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #121212;
+            line-height: 1.35;
+        }
+        .app-notify-item-copy {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #666;
+        }
+        .app-notify-item-detail {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #8a8a8a;
+        }
+        .app-notify-empty {
+            padding: 26px 20px;
+            text-align: center;
+            color: #8a8a8a;
+            font-size: 13px;
+        }
+        @media (max-width: 768px) {
+            .app-notify-fab {
+                right: 14px;
+                top: auto;
+                bottom: 18px;
+                transform: none;
+            }
+            .app-notify-panel {
+                width: min(360px, calc(100vw - 28px));
+            }
+        }
         img, svg { display: block; max-width: 100%; }
         h1, h2, h3, h4, h5, h6, p { margin: 0; }
         a { text-decoration: none; color: inherit; }
@@ -516,6 +678,16 @@
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 </head>
 <body>
+    @php
+        $notificationUser = auth()->user();
+        $notificationItems = collect();
+        $notificationUnreadCount = 0;
+
+        if ($notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications')) {
+            $notificationUnreadCount = $notificationUser->unreadNotifications()->count();
+            $notificationItems = $notificationUser->notifications()->latest()->limit(8)->get();
+        }
+    @endphp
 
     @include('layouts.sidebar')
 
@@ -523,6 +695,60 @@
 
         @yield('content')
     </main>
+
+    @if($notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications'))
+        <div class="app-notify-fab" id="appNotifyFab">
+            <button type="button" class="app-notify-toggle" id="appNotifyToggle" aria-label="Open notifications" aria-expanded="false">
+                <i class="bi bi-bell-fill"></i>
+                @if($notificationUnreadCount > 0)
+                    <span class="app-notify-badge">{{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}</span>
+                @endif
+            </button>
+
+            <div class="app-notify-panel" id="appNotifyPanel">
+                <div class="app-notify-head">
+                    <div>
+                        <div class="app-notify-title">Notifications</div>
+                        <div class="app-notify-sub">{{ $notificationUnreadCount }} unread update{{ $notificationUnreadCount === 1 ? '' : 's' }}</div>
+                    </div>
+                    @if($notificationUnreadCount > 0)
+                        <form method="POST" action="{{ route('notifications.mark-all-read') }}">
+                            @csrf
+                            <button type="submit" class="app-notify-readall">Mark all read</button>
+                        </form>
+                    @endif
+                </div>
+
+                <div class="app-notify-list">
+                    @forelse($notificationItems as $notification)
+                        @php
+                            $data = $notification->data ?? [];
+                            $isUnread = $notification->read_at === null;
+                        @endphp
+                        <form method="POST" action="{{ route('notifications.read', $notification->id) }}">
+                            @csrf
+                            <button type="submit" class="app-notify-item {{ $isUnread ? 'is-unread' : '' }}">
+                                <div class="app-notify-item-top">
+                                    <span class="app-notify-chip">
+                                        <i class="bi {{ ($data['request_type'] ?? '') === 'permission' ? 'bi-clock-history' : 'bi-calendar-check' }}"></i>
+                                        {{ $data['request_type'] ?? 'update' }}
+                                    </span>
+                                    <span class="app-notify-time">{{ $notification->created_at?->diffForHumans() }}</span>
+                                </div>
+                                <div class="app-notify-item-title">{{ $data['title'] ?? 'HRMS Notification' }}</div>
+                                <div class="app-notify-item-copy">{{ $data['message'] ?? 'You have a new update.' }}</div>
+                                @if(!empty($data['detail']))
+                                    <div class="app-notify-item-detail">{{ $data['detail'] }}</div>
+                                @endif
+                            </button>
+                        </form>
+                    @empty
+                        <div class="app-notify-empty">No notifications yet.</div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+    @endif
 
     @include('layouts.module_sidebar')
 
@@ -565,6 +791,28 @@ function toggleDropdown(element) {
     submenu.classList.add('show');
     element.classList.add('open');
 }
+
+(function () {
+    const notifyFab = document.getElementById('appNotifyFab');
+    const notifyToggle = document.getElementById('appNotifyToggle');
+    const notifyPanel = document.getElementById('appNotifyPanel');
+
+    if (!notifyFab || !notifyToggle || !notifyPanel) {
+        return;
+    }
+
+    notifyToggle.addEventListener('click', function () {
+        const isOpen = notifyFab.classList.toggle('is-open');
+        notifyToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!notifyFab.contains(event.target)) {
+            notifyFab.classList.remove('is-open');
+            notifyToggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+})();
 
 (function () {
     const moduleFab = document.getElementById('moduleFab');

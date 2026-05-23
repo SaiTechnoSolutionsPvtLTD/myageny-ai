@@ -8,6 +8,7 @@ use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Models\UserMapping;
+use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -83,6 +84,9 @@ class PermissionRequestController extends Controller
             return $permissionRequest;
         });
 
+        $permissionRequest->load(['user', 'approvals.approver']);
+        app(HrmsApprovalNotificationService::class)->sendPermissionSubmitted($permissionRequest);
+
         return redirect()
             ->route('permission-requests.show', $permissionRequest)
             ->with('success', 'Permission request submitted successfully. Approval started with your hierarchy.');
@@ -134,6 +138,11 @@ class PermissionRequestController extends Controller
             ]);
         });
 
+        $permissionRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        $nextApproval = $permissionRequest->approvals->firstWhere('step_key', $permissionRequest->current_step);
+        app(HrmsApprovalNotificationService::class)->sendPermissionApproved($permissionRequest, $approval, $nextApproval);
+
         return redirect()
             ->route('permission-requests.show', $permissionRequest)
             ->with('success', "{$approval->step_name} approval completed.");
@@ -163,6 +172,10 @@ class PermissionRequestController extends Controller
                 'rejected_at' => now(),
             ]);
         });
+
+        $permissionRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        app(HrmsApprovalNotificationService::class)->sendPermissionRejected($permissionRequest, $approval);
 
         return redirect()
             ->route('permission-requests.show', $permissionRequest)

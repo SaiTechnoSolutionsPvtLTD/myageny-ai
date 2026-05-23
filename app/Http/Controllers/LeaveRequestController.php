@@ -9,6 +9,7 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
 use App\Models\UserMapping;
+use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,6 +87,9 @@ class LeaveRequestController extends Controller
             return $leaveRequest;
         });
 
+        $leaveRequest->load(['user', 'leaveType', 'approvals.approver']);
+        app(HrmsApprovalNotificationService::class)->sendLeaveSubmitted($leaveRequest);
+
         return redirect()
             ->route('leave-requests.show', $leaveRequest)
             ->with('success', 'Leave request submitted successfully. Approval started with your hierarchy.');
@@ -137,6 +141,11 @@ class LeaveRequestController extends Controller
             ]);
         });
 
+        $leaveRequest->refresh()->load(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        $nextApproval = $leaveRequest->approvals->firstWhere('step_key', $leaveRequest->current_step);
+        app(HrmsApprovalNotificationService::class)->sendLeaveApproved($leaveRequest, $approval, $nextApproval);
+
         return redirect()
             ->route('leave-requests.show', $leaveRequest)
             ->with('success', "{$approval->step_name} approval completed.");
@@ -166,6 +175,10 @@ class LeaveRequestController extends Controller
                 'rejected_at' => now(),
             ]);
         });
+
+        $leaveRequest->refresh()->load(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        app(HrmsApprovalNotificationService::class)->sendLeaveRejected($leaveRequest, $approval);
 
         return redirect()
             ->route('leave-requests.show', $leaveRequest)

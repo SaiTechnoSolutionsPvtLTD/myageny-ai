@@ -8,6 +8,7 @@ use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Models\UserMapping;
+use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -208,7 +209,8 @@ class PermissionRequestApiController extends Controller
             return $pr;
         });
 
-        $permissionRequest->load(['approvals']);
+        $permissionRequest->load(['user', 'approvals.approver']);
+        app(HrmsApprovalNotificationService::class)->sendPermissionSubmitted($permissionRequest);
 
         return response()->json([
             'success' => true,
@@ -262,6 +264,11 @@ class PermissionRequestApiController extends Controller
             ]);
         });
 
+        $permissionRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        $nextApproval = $permissionRequest->approvals->firstWhere('step_key', $permissionRequest->current_step);
+        app(HrmsApprovalNotificationService::class)->sendPermissionApproved($permissionRequest, $approval, $nextApproval);
+
         return response()->json([
             'success' => true,
             'message' => "{$approval->step_name} approval completed.",
@@ -306,6 +313,10 @@ class PermissionRequestApiController extends Controller
                 'rejected_at'  => now(),
             ]);
         });
+
+        $permissionRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+        app(HrmsApprovalNotificationService::class)->sendPermissionRejected($permissionRequest, $approval);
 
         return response()->json([
             'success' => true,

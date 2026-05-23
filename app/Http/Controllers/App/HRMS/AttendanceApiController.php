@@ -180,6 +180,7 @@ class AttendanceApiController extends Controller
             'logout_longitude'      => $a->logout_longitude,
             'remarks'               => $a->remarks,
             'attendance_photo_url'  => $a->attendance_photo ? asset($a->attendance_photo) : null,
+            'logout_photo_url'      => $a->logout_photo ? asset($a->logout_photo) : null,
             'login_timing'          => $this->resolveLoginTiming($a->login_time),
             'is_derived'            => false,
         ];
@@ -204,6 +205,7 @@ class AttendanceApiController extends Controller
             'logout_longitude'      => null,
             'remarks'               => 'No check-in record found for the selected date.',
             'attendance_photo_url'  => null,
+            'logout_photo_url'      => null,
             'login_timing'          => null,
             'is_derived'            => true,
         ];

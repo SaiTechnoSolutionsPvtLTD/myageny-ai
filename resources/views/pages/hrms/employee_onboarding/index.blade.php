@@ -34,6 +34,17 @@
                     <input type="text" name="search" class="eob-input" value="{{ request('search') }}" placeholder="Employee ID, name, email, mobile, aadhaar">
                 </div>
                 <div class="eob-field" style="max-width:220px;">
+                    <label class="eob-label">Department</label>
+                    <select name="department_id" class="eob-select">
+                        <option value="">All Departments</option>
+                        @foreach($departments as $department)
+                            <option value="{{ $department->id }}" @selected((string) request('department_id') === (string) $department->id)>
+                                {{ $department->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="eob-field" style="max-width:220px;">
                     <label class="eob-label">Status</label>
                     <select name="status" class="eob-select">
                         <option value="">All Status</option>
@@ -43,7 +54,7 @@
                 </div>
                 <div class="eob-actions">
                     <button type="submit" class="eob-btn eob-btn-primary">Filter</button>
-                    @if(request()->hasAny(['search', 'status']))
+                    @if(request()->hasAny(['search', 'status', 'department_id']))
                         <a href="{{ route('employee-onboarding.index') }}" class="eob-btn eob-btn-ghost">Reset</a>
                     @endif
                 </div>

@@ -8,8 +8,10 @@ use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\HolidayCalendar;
 use App\Models\InternJoiningForm;
+use App\Models\PayrollSetting;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 class DashboardApiController extends Controller
 {
@@ -26,8 +28,9 @@ class DashboardApiController extends Controller
         // ── Today's attendance stats ──────────────────────────────────────────
         $today_attendance = DailyAttendance::where('attendance_date', $today)->get();
         $today_present    = $today_attendance->where('attendance_status', 'present')->count();
-        $today_late       = $today_attendance->where('attendance_status', 'late')->count();
-        $today_absent     = $employees_total - $today_present - $today_late;
+        $today_leave      = $today_attendance->where('attendance_status', 'leave')->count();
+        $today_late       = $this->lateAttendanceCount($today_attendance);
+        $today_absent     = max(0, $employees_total - $today_present - $today_leave);
 
         // ── Department-wise employee count and salary ─────────────────────────
         $department_stats = Department::select('departments.id', 'departments.name', 'departments.description')
@@ -161,5 +164,15 @@ class DashboardApiController extends Controller
                 'announcements'      => $announcements,
             ],
         ]);
+    }
+
+    private function lateAttendanceCount(Collection $attendanceRows): int
+    {
+        $graceLoginTime = (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
+
+        return $attendanceRows
+            ->where('attendance_status', 'present')
+            ->filter(fn (DailyAttendance $attendance) => filled($attendance->login_time) && $attendance->login_time > $graceLoginTime)
+            ->count();
     }
 }

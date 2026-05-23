@@ -45,9 +45,26 @@
                             <label class="intern-filter-label">Search Intern</label>
                             <input type="text" name="search" class="intern-input" value="{{ request('search') }}" placeholder="Search by intern ID, name, email, mobile, aadhaar">
                         </div>
+                        <div class="intern-filter-field">
+                            <label class="intern-filter-label">Department</label>
+                            <select name="department_id" class="intern-input">
+                                <option value="">All Departments</option>
+                                @foreach($departments as $department)
+                                    <option value="{{ $department->id }}" @selected((string) request('department_id') === (string) $department->id)>{{ $department->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="intern-filter-field">
+                            <label class="intern-filter-label">Status</label>
+                            <select name="internship_status" class="intern-input">
+                                <option value="">All Status</option>
+                                <option value="active" @selected(request('internship_status') === 'active')>Active</option>
+                                <option value="resigned" @selected(request('internship_status') === 'resigned')>Resigned</option>
+                            </select>
+                        </div>
                         <div class="intern-filter-actions">
                             <button type="submit" class="btn btn-primary">Search</button>
-                            @if(request()->filled('search'))
+                            @if(request()->filled('search') || request()->filled('department_id') || request()->filled('internship_status'))
                                 <a href="{{ route('interns.index') }}" class="btn btn-outline-secondary">Reset</a>
                             @endif
                         </div>
@@ -92,7 +109,14 @@
                                 </td>
                                 <td>
                                     <div class="intern-date-main">{{ optional($item->internship_start_date)->format('d M Y') ?: 'N/A' }} to {{ optional($item->internship_end_date)->format('d M Y') ?: 'N/A' }}</div>
-                                    <div class="intern-date-sub">{{ $item->internship_duration_months ? $item->internship_duration_months . ' month(s)' : 'Duration not set' }}</div>
+                                    <div class="intern-date-sub">
+                                        {{ $item->department?->name ?: 'Department not mapped' }}
+                                        @if($item->internship_duration_months)
+                                            • {{ $item->internship_duration_months }} month(s)
+                                        @else
+                                            • Duration not set
+                                        @endif
+                                    </div>
                                 </td>
                                 <td>
                                     <div class="intern-date-main">{{ ucfirst($item->internship_status ?: 'active') }}</div>

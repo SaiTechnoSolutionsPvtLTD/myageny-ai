@@ -69,12 +69,17 @@ class EmployeeOnboardingController extends Controller
                         ->orWhere('aadhaar_card_no', 'like', '%' . $search . '%');
                 });
             })
+            ->when($request->filled('department_id'), function ($query) use ($request) {
+                $query->where('department_id', $request->integer('department_id'));
+            })
             ->when($request->status, fn ($query) => $query->where('status', $request->status))
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
-        return view('pages.hrms.employee_onboarding.index', compact('employees'));
+        $departments = Department::orderBy('name')->get(['id', 'name']);
+
+        return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments'));
     }
 
     public function create(): View

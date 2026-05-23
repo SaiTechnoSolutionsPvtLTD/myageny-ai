@@ -12,8 +12,10 @@ use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\LeaveRequest;
 use App\Models\PayrollItem;
+use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -61,8 +63,9 @@ class DashboardController extends Controller
         // Today's attendance stats
         $today_attendance = DailyAttendance::where('attendance_date', $today)->get();
         $today_present = $today_attendance->where('attendance_status', 'present')->count();
-        $today_late = $today_attendance->where('attendance_status', 'late')->count();
-        $today_absent = $employees_total - $today_present - $today_late;
+        $today_leave = $today_attendance->where('attendance_status', 'leave')->count();
+        $today_late = $this->lateAttendanceCount($today_attendance);
+        $today_absent = max(0, $employees_total - $today_present - $today_leave);
 
         // Department-wise employee count and salary
         $department_stats = Department::select('departments.*')
@@ -81,23 +84,9 @@ class DashboardController extends Controller
             ->get();
 
         // Today's birthdays
-        $today_birthdays = EmployeeOnboarding::whereMonth('date_of_birth', $today->month)
-            ->whereDay('date_of_birth', $today->day)
-            ->active()
-            ->with('role')
-            ->get();
-
-        $today_anniversaries = EmployeeOnboarding::whereMonth('date_of_marriage', $today->month)
-            ->whereDay('date_of_marriage', $today->day)
-            ->active()
-            ->with('role')
-            ->get();
-
-        $today_work_anniversaries = EmployeeOnboarding::whereMonth('joining_date', $today->month)
-            ->whereDay('joining_date', $today->day)
-            ->active()
-            ->with('role')
-            ->get();
+        $today_birthdays = $this->todayBirthdays($today);
+        $today_anniversaries = $this->todayAnniversaries($today);
+        $today_work_anniversaries = $this->todayWorkAnniversaries($today);
 
         $holidayFilter = $this->resolveHolidayFilter($request, $today);
         $upcoming_holidays = $this->upcomingHolidays($holidayFilter);
@@ -192,7 +181,7 @@ class DashboardController extends Controller
             : collect();
 
         $presentCount = $todayAttendance->where('attendance_status', 'present')->count();
-        $lateCount = $todayAttendance->where('attendance_status', 'late')->count();
+        $lateCount = $this->lateAttendanceCount($todayAttendance);
         $leaveCount = $todayAttendance->where('attendance_status', 'leave')->count();
         $latestPayrollItem = $employee
             ? PayrollItem::query()
@@ -233,21 +222,9 @@ class DashboardController extends Controller
             'today_late' => $lateCount,
             'today_absent' => $employee && ($presentCount + $lateCount + $leaveCount) === 0 ? 1 : 0,
             'department_stats' => collect(),
-            'today_birthdays' => $employee
-                && optional($employee->date_of_birth)?->month === $today->month
-                && optional($employee->date_of_birth)?->day === $today->day
-                ? collect([$employee])
-                : collect(),
-            'today_anniversaries' => $employee
-                && optional($employee->date_of_marriage)?->month === $today->month
-                && optional($employee->date_of_marriage)?->day === $today->day
-                ? collect([$employee])
-                : collect(),
-            'today_work_anniversaries' => $employee
-                && optional($employee->joining_date)?->month === $today->month
-                && optional($employee->joining_date)?->day === $today->day
-                ? collect([$employee])
-                : collect(),
+            'today_birthdays' => $this->todayBirthdays($today),
+            'today_anniversaries' => $this->todayAnniversaries($today),
+            'today_work_anniversaries' => $this->todayWorkAnniversaries($today),
             'upcoming_holidays' => $this->upcomingHolidays($holidayFilter),
             'holiday_filter' => $holidayFilter,
             'salary_day_1_employees' => 0,
@@ -339,7 +316,7 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        return EmployeeOnboarding::query()
+        return $this->employeeQueryForDashboard()
             ->where(function ($query) use ($user) {
                 $query->where('portal_user_id', $user?->id)
                     ->orWhere('email', $user?->email);
@@ -348,18 +325,60 @@ class DashboardController extends Controller
             ->first();
     }
 
+    private function employeeQueryForDashboard(): Builder
+    {
+        $query = EmployeeOnboarding::withoutGlobalScopes()->active();
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query;
+    }
+
+    private function todayBirthdays(Carbon $today): Collection
+    {
+        return $this->employeeQueryForDashboard()
+            ->whereMonth('date_of_birth', $today->month)
+            ->whereDay('date_of_birth', $today->day)
+            ->with('role')
+            ->get();
+    }
+
+    private function todayAnniversaries(Carbon $today): Collection
+    {
+        return $this->employeeQueryForDashboard()
+            ->whereMonth('date_of_marriage', $today->month)
+            ->whereDay('date_of_marriage', $today->day)
+            ->with('role')
+            ->get();
+    }
+
+    private function todayWorkAnniversaries(Carbon $today): Collection
+    {
+        return $this->employeeQueryForDashboard()
+            ->whereMonth('joining_date', $today->month)
+            ->whereDay('joining_date', $today->day)
+            ->with('role')
+            ->get();
+    }
+
     private function canViewOrganizationDashboard(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageExitRequests(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageAnnouncements(): bool
@@ -465,5 +484,15 @@ class DashboardController extends Controller
         $name = $employee?->name ?: auth()->user()?->name ?: 'You';
 
         return "Happy Work Anniversary, {$name}! Thank you for your dedication, contribution, and the positive energy you bring every day.";
+    }
+
+    private function lateAttendanceCount(Collection $attendanceRows): int
+    {
+        $graceLoginTime = (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
+
+        return $attendanceRows
+            ->where('attendance_status', 'present')
+            ->filter(fn (DailyAttendance $attendance) => filled($attendance->login_time) && $attendance->login_time > $graceLoginTime)
+            ->count();
     }
 }

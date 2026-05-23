@@ -67,7 +67,14 @@
 .att-thumb-row{display:flex;align-items:center;gap:12px}
 .att-note{font-size:12px;color:#8a8a97}
 .att-capture-photo{width:68px;height:68px;border-radius:14px;object-fit:cover;border:1px solid #ece4dc;background:#fafafa}
+.att-capture-photo.is-clickable{cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}
+.att-capture-photo.is-clickable:hover{transform:translateY(-1px) scale(1.02);box-shadow:0 10px 24px rgba(18,18,18,.12)}
 .att-capture-empty{width:68px;height:68px;border-radius:14px;border:1px dashed #d7d7de;background:#fafafa;display:flex;align-items:center;justify-content:center;color:#9e9e9e;font-size:10px;font-weight:700;text-align:center;padding:6px}
+.att-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.72);backdrop-filter:blur(4px);z-index:1200}
+.att-modal.is-open{display:flex}
+.att-modal-dialog{position:relative;max-width:min(92vw,960px);max-height:92vh;display:flex;align-items:center;justify-content:center}
+.att-modal-image{max-width:100%;max-height:92vh;border-radius:18px;background:#fff;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.att-modal-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border:none;border-radius:999px;background:rgba(18,18,18,.72);color:#fff;font-size:22px;line-height:1;cursor:pointer}
 @media (max-width: 900px){
     .att-topbar{padding:16px 20px}
     .att-body{padding:16px 20px 24px}
@@ -178,7 +185,7 @@
 
     <div class="att-filter-wrap att-card">
         <div class="att-card-title">Filter Attendance</div>
-        <div class="att-card-sub">{{ $managerAttendanceView ? 'Filter by employee, employee ID, date, status, or login timing.' : 'Review your attendance by date, status, or login timing.' }}</div>
+        <div class="att-card-sub">{{ $managerAttendanceView ? 'Filter by employee, employee ID, department, date, status, or login timing.' : 'Review your attendance by date, status, or login timing.' }}</div>
 
         <form method="GET" action="{{ route('attendance.index') }}" class="att-filter-form" style="margin-top:16px;">
             @if($managerAttendanceView)
@@ -190,7 +197,16 @@
                 <label class="att-label">Employee ID</label>
                 <input type="text" name="employee_id" class="att-input" value="{{ request('employee_id') }}" placeholder="Search employee ID">
             </div>
-            @endunless
+            <div class="att-field">
+                <label class="att-label">Department</label>
+                <select name="department_id" class="att-select">
+                    <option value="">All Departments</option>
+                    @foreach($departments as $department)
+                        <option value="{{ $department->id }}" @selected((string) request('department_id') === (string) $department->id)>{{ $department->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
             <div class="att-field">
                 <label class="att-label">Date</label>
                 <input type="date" name="attendance_date" class="att-input" value="{{ request('attendance_date', $selectedDate->format('Y-m-d')) }}">
@@ -227,7 +243,7 @@
                 @if($managerAttendanceView)
                     <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
                 @endif
-                @if(request()->hasAny(['employee_name', 'employee_id', 'attendance_date', 'status', 'login_timing', 'attendee_type']))
+                @if(request()->hasAny(['employee_name', 'employee_id', 'department_id', 'attendance_date', 'status', 'login_timing', 'attendee_type']))
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
             </div>
@@ -265,8 +281,8 @@
                             <tr class="{{ $attendance['attendee_type'] === 'intern' ? 'att-row-intern' : '' }}">
                                 <td>
                                     <div class="att-thumb-row">
-                                        @if($attendance['attendance_photo_url'])
-                                            <img src="{{ $attendance['attendance_photo_url'] }}" alt="{{ $attendance['employee_name'] }}" class="att-photo">
+                                        @if($attendance['profile_photo_url'] ?? null)
+                                            <img src="{{ $attendance['profile_photo_url'] }}" alt="{{ $attendance['employee_name'] }}" class="att-photo">
                                         @endif
                                         <div>
                                             <div class="att-cell-title">{{ $attendance['employee_name'] }}</div>
@@ -311,7 +327,7 @@
                                 </td>
                                 <td>
                                     @if($attendance['attendance_photo_url'])
-                                        <img src="{{ $attendance['attendance_photo_url'] }}" alt="{{ $attendance['employee_name'] }} attendance photo" class="att-capture-photo">
+                                        <img src="{{ $attendance['attendance_photo_url'] }}" alt="{{ $attendance['employee_name'] }} check-in photo" class="att-capture-photo is-clickable" data-att-preview="{{ $attendance['attendance_photo_url'] }}">
                                     @else
                                         <div class="att-capture-empty">No Photo</div>
                                     @endif
@@ -329,4 +345,59 @@
     </div>
     </div>
 </div>
+
+<div class="att-modal" id="attendanceImageModal" aria-hidden="true">
+    <div class="att-modal-dialog">
+        <button type="button" class="att-modal-close" id="attendanceImageModalClose" aria-label="Close image preview">&times;</button>
+        <img src="" alt="Attendance photo preview" class="att-modal-image" id="attendanceImageModalPreview">
+    </div>
+</div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('attendanceImageModal');
+    const modalImage = document.getElementById('attendanceImageModalPreview');
+    const modalClose = document.getElementById('attendanceImageModalClose');
+    const previewImages = document.querySelectorAll('[data-att-preview]');
+
+    if (!modal || !modalImage || !modalClose || previewImages.length === 0) {
+        return;
+    }
+
+    const closeModal = function () {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        modalImage.src = '';
+    };
+
+    previewImages.forEach(function (image) {
+        image.addEventListener('click', function () {
+            const src = image.getAttribute('data-att-preview');
+
+            if (!src) {
+                return;
+            }
+
+            modalImage.src = src;
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        });
+    });
+
+    modalClose.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (event) {
+        if (event.target === modal) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeModal();
+        }
+    });
+});
+</script>
+@endpush

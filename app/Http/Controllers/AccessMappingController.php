@@ -114,6 +114,10 @@ class AccessMappingController extends Controller
         $selectedUserIds = $selectedManagerId
             ? UserMapping::where('manager_id', $selectedManagerId)->pluck('user_id')->map(fn ($id) => (int) $id)->all()
             : [];
+        $parentMap = UserMapping::query()
+            ->pluck('manager_id', 'user_id')
+            ->map(fn ($managerId) => (int) $managerId)
+            ->all();
 
         $mappings = UserMapping::with(['manager.roles', 'user.roles'])
             ->latest()
@@ -123,6 +127,7 @@ class AccessMappingController extends Controller
         $userTree = $selectedManager
             ? $this->buildUserTree($selectedManager, $users, collect([$selectedManager->id]))
             : null;
+        $userChart = $this->buildUserChart($users, $parentMap);
 
         return view('pages.auth_menu.mappings.users', compact(
             'users',
@@ -130,62 +135,21 @@ class AccessMappingController extends Controller
             'selectedUserIds',
             'mappings',
             'selectedManager',
-            'userTree'
+            'userTree',
+            'parentMap',
+            'userChart'
         ));
     }
 
     public function userUpdate(Request $request)
     {
-        $data = $request->validate([
-            'manager_id' => ['required', 'exists:users,id'],
-            'user_ids' => ['nullable', 'array'],
-            'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
-        ]);
+        $hasParentsPayload = is_array($request->input('parents'));
 
-        $manager = User::findOrFail($data['manager_id']);
-        $userIds = collect($data['user_ids'] ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->reject(fn (int $id) => $id === (int) $manager->id)
-            ->unique()
-            ->values();
-
-        if (auth()->user()?->company_id !== null) {
-            $idsToCheck = $userIds->merge([$manager->id])->unique();
-
-            $invalidCompanyUser = User::whereIn('id', $idsToCheck)
-                ->where('company_id', '!=', auth()->user()->company_id)
-                ->exists();
-
-            abort_if($invalidCompanyUser, 403);
+        if ($hasParentsPayload) {
+            return $this->updateUserHierarchy($request);
         }
 
-        foreach ($userIds as $userId) {
-            $candidate = User::find($userId);
-
-            if ($candidate && $this->visibility->descendantUserIds($candidate)->contains($manager->id)) {
-                return back()
-                    ->withInput()
-                    ->with('error', 'This mapping would create a reporting loop. Please choose another user.');
-            }
-        }
-
-        UserMapping::where('manager_id', $manager->id)
-            ->whereNotIn('user_id', $userIds)
-            ->delete();
-
-        foreach ($userIds as $userId) {
-            UserMapping::updateOrCreate(
-                ['user_id' => $userId],
-                [
-                    'manager_id' => $manager->id,
-                    'company_id' => $manager->company_id ?: auth()->user()?->company_id,
-                ]
-            );
-        }
-
-        return redirect()
-            ->route('auth.user-mappings.index', ['manager_id' => $manager->id])
-            ->with('success', 'User mapping updated successfully.');
+        return $this->updateUserMappingsFromChecklist($request);
     }
 
     public function userDestroy(UserMapping $mapping)
@@ -314,5 +278,201 @@ class AccessMappingController extends Controller
             'email' => $user->email,
             'role' => $this->roleLabel($user),
         ];
+    }
+
+    private function buildUserChart(Collection $users, array $parentMap): array
+    {
+        $childCounts = array_fill_keys($users->pluck('id')->map(fn ($id) => (int) $id)->all(), 0);
+
+        foreach ($parentMap as $userId => $managerId) {
+            $managerId = (int) $managerId;
+
+            if (isset($childCounts[$managerId])) {
+                $childCounts[$managerId]++;
+            }
+        }
+
+        $nodes = $users
+            ->map(function (User $user) use ($childCounts, $parentMap) {
+                $userId = (int) $user->id;
+                $childCount = $childCounts[$userId] ?? 0;
+                $parentUserId = isset($parentMap[$userId]) ? (int) $parentMap[$userId] : null;
+                $category = $childCount > 0
+                    ? ($parentUserId ? 'lead' : 'manager')
+                    : 'individual';
+
+                return [
+                    'id' => 'user-' . $userId,
+                    'userId' => $userId,
+                    'parentUserId' => $parentUserId,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $this->roleLabel($user),
+                    'childCount' => $childCount,
+                    'category' => $category,
+                    'meta' => $childCount > 0
+                        ? $childCount . ' direct report' . ($childCount === 1 ? '' : 's')
+                        : 'Individual contributor',
+                ];
+            })
+            ->values();
+
+        $links = $nodes
+            ->filter(fn (array $node) => ! empty($node['parentUserId']))
+            ->map(fn (array $node) => ['user-' . $node['parentUserId'], $node['id']])
+            ->values();
+
+        return [
+            'nodes' => $nodes,
+            'links' => $links,
+            'mappedCount' => $links->count(),
+            'parentCount' => $nodes->where('childCount', '>', 0)->count(),
+        ];
+    }
+
+    private function updateUserHierarchy(Request $request)
+    {
+        $data = $request->validate([
+            'parents' => ['required', 'array'],
+            'parents.*' => ['nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        $parentMap = collect($data['parents'])
+            ->mapWithKeys(fn ($managerId, $userId) => [(int) $userId => $managerId ? (int) $managerId : null]);
+
+        $userIds = $parentMap->keys()->map(fn ($id) => (int) $id)->values();
+        $users = User::with('roles')
+            ->whereIn('id', $userIds)
+            ->get()
+            ->keyBy(fn ($user) => (int) $user->id);
+
+        if (auth()->user()?->company_id !== null) {
+            $companyId = auth()->user()->company_id;
+            $invalidCompanyUser = $users->contains(fn (User $user) => (int) $user->company_id !== (int) $companyId);
+            abort_if($invalidCompanyUser, 403);
+        }
+
+        foreach ($parentMap as $userId => $managerId) {
+            if (! $users->has($userId)) {
+                continue;
+            }
+
+            if ($managerId !== null && ! $users->has($managerId)) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Every selected manager must be part of the active user list.');
+            }
+
+            if ($managerId !== null && (int) $userId === (int) $managerId) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'A user cannot be mapped under themselves.');
+            }
+        }
+
+        foreach ($parentMap as $userId => $managerId) {
+            if (! $managerId) {
+                continue;
+            }
+
+            if ($this->userHierarchyWouldLoop((int) $userId, (int) $managerId, $parentMap->all())) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'This mapping would create a reporting loop. Please choose another user.');
+            }
+        }
+
+        UserMapping::query()
+            ->whereIn('user_id', $userIds)
+            ->delete();
+
+        foreach ($parentMap as $userId => $managerId) {
+            if (! $managerId) {
+                continue;
+            }
+
+            $manager = $users->get((int) $managerId);
+
+            UserMapping::create([
+                'user_id' => (int) $userId,
+                'manager_id' => (int) $managerId,
+                'company_id' => $manager?->company_id ?: auth()->user()?->company_id,
+            ]);
+        }
+
+        return redirect()
+            ->route('auth.user-mappings.index')
+            ->with('success', 'User hierarchy updated successfully.');
+    }
+
+    private function updateUserMappingsFromChecklist(Request $request)
+    {
+        $data = $request->validate([
+            'manager_id' => ['required', 'exists:users,id'],
+            'user_ids' => ['nullable', 'array'],
+            'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+        ]);
+
+        $manager = User::findOrFail($data['manager_id']);
+        $userIds = collect($data['user_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->reject(fn (int $id) => $id === (int) $manager->id)
+            ->unique()
+            ->values();
+
+        if (auth()->user()?->company_id !== null) {
+            $idsToCheck = $userIds->merge([$manager->id])->unique();
+
+            $invalidCompanyUser = User::whereIn('id', $idsToCheck)
+                ->where('company_id', '!=', auth()->user()->company_id)
+                ->exists();
+
+            abort_if($invalidCompanyUser, 403);
+        }
+
+        foreach ($userIds as $userId) {
+            $candidate = User::find($userId);
+
+            if ($candidate && $this->visibility->descendantUserIds($candidate)->contains($manager->id)) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'This mapping would create a reporting loop. Please choose another user.');
+            }
+        }
+
+        UserMapping::where('manager_id', $manager->id)
+            ->whereNotIn('user_id', $userIds)
+            ->delete();
+
+        foreach ($userIds as $userId) {
+            UserMapping::updateOrCreate(
+                ['user_id' => $userId],
+                [
+                    'manager_id' => $manager->id,
+                    'company_id' => $manager->company_id ?: auth()->user()?->company_id,
+                ]
+            );
+        }
+
+        return redirect()
+            ->route('auth.user-mappings.index', ['manager_id' => $manager->id])
+            ->with('success', 'User mapping updated successfully.');
+    }
+
+    private function userHierarchyWouldLoop(int $userId, int $managerId, array $parentMap): bool
+    {
+        $visited = [$userId => true];
+        $currentManagerId = $managerId;
+
+        while ($currentManagerId) {
+            if (isset($visited[$currentManagerId])) {
+                return true;
+            }
+
+            $visited[$currentManagerId] = true;
+            $currentManagerId = $parentMap[$currentManagerId] ?? null;
+        }
+
+        return false;
     }
 }

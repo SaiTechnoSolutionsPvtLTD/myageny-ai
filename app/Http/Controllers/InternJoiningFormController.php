@@ -51,7 +51,7 @@ class InternJoiningFormController extends Controller
     public function index(Request $request): View
     {
         $forms = InternJoiningForm::query()
-            ->with(['documents', 'convertedEmployee'])
+            ->with(['documents', 'convertedEmployee', 'department'])
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -63,11 +63,19 @@ class InternJoiningFormController extends Controller
                         ->orWhere('aadhaar_card_no', 'like', '%' . $search . '%');
                 });
             })
+            ->when($request->filled('department_id'), function ($query) use ($request) {
+                $query->where('department_id', $request->integer('department_id'));
+            })
+            ->when($request->filled('internship_status'), function ($query) use ($request) {
+                $query->where('internship_status', $request->string('internship_status')->toString());
+            })
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
-        return view('pages.hrms.Interns.intern_joining_forms.index', compact('forms'));
+        $departments = Department::orderBy('name')->get(['id', 'name']);
+
+        return view('pages.hrms.Interns.intern_joining_forms.index', compact('forms', 'departments'));
     }
 
     public function create(): View

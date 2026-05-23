@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Models\LeadFieldValue;
 use App\Models\LeadFormField;
 use App\Models\LeadProduct;
+use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -108,7 +109,10 @@ class FacebookLeadImporter
                 Log::error('Facebook lead import failed for submission.', [
                     'campaign_master_id' => $campaign->id,
                     'facebook_lead_id' => data_get($submission, 'id'),
-                'message' => $e->getMessage(),
+                    'facebook_campaign_name' => $campaign->campaign_name,
+                    'message' => $e->getMessage(),
+                    'mapped_field_names' => $fieldMappings->pluck('crm_field_name')->filter()->values()->all(),
+                    'mapped_values' => $mappedValues['core'] ?? [],
                 ]);
             }
         }
@@ -499,6 +503,7 @@ class FacebookLeadImporter
             'deal_value' => $this->normalizeMoney($value),
             'product_id' => $this->normalizeProductId($value),
             'lead_date' => $this->normalizeDate($value),
+            'lead_status' => $this->normalizeLeadStatusId($value),
             default => trim((string) $value),
         };
     }
@@ -586,7 +591,8 @@ class FacebookLeadImporter
             'mobile_number' => $mobileNumber !== '' ? $mobileNumber : '0000000000',
             'email' => $core['email'] ?? null,
             'lead_source' => $core['lead_source'] ?? 'Facebook',
-            'lead_status' => $core['lead_status'] ?? $this->defaultLeadStatus(),
+            'lead_status' => $this->normalizeLeadStatusId($core['lead_status'] ?? null, $assignedUser?->company_id)
+                ?? $this->defaultLeadStatusId($assignedUser?->company_id),
             'product_name' => $core['product_name'] ?? null,
             'product_id' => $this->normalizeProductId($core['product_id'] ?? null),
             'priority' => $this->normalizePriority($core['priority'] ?? null),
@@ -606,18 +612,39 @@ class FacebookLeadImporter
         $productId = $this->normalizeProductId($coreValues['product_id'] ?? null);
         $productName = $coreValues['product_name'] ?? null;
 
-        if (!$productId && !$productName) {
+        if (! $productId && ! $productName) {
             return;
         }
 
-        $product = $productId ? Product::find($productId) : null;
+        if (! $productId) {
+            Log::warning('Skipping Facebook lead product creation because mapped product_id is missing.', [
+                'lead_id' => $lead->id,
+                'facebook_lead_id' => $lead->facebook_lead_id,
+                'product_name' => $productName,
+            ]);
+
+            return;
+        }
+
+        $product = Product::find($productId);
+
+        if (! $product) {
+            Log::warning('Skipping Facebook lead product creation because mapped product_id was not found.', [
+                'lead_id' => $lead->id,
+                'facebook_lead_id' => $lead->facebook_lead_id,
+                'product_id' => $productId,
+                'product_name' => $productName,
+            ]);
+
+            return;
+        }
 
         LeadProduct::create([
             'lead_id' => $lead->id,
-            'product_id' => $product?->id,
-            'product_name' => $productName ?: $product?->product_name ?: 'Facebook Imported Product',
-            'description' => $product?->description,
-            'unit_price' => (float) ($product?->final_price ?? 0),
+            'product_id' => $product->id,
+            'product_name' => $productName ?: $product->product_name ?: 'Facebook Imported Product',
+            'description' => $product->description,
+            'unit_price' => (float) ($product->final_price ?? 0),
             'quantity' => 1,
             'discount_percent' => 0,
             'remarks' => 'Created automatically from Facebook lead import.',
@@ -682,11 +709,21 @@ class FacebookLeadImporter
         return Str::limit(implode("\n", $parts), 65000, '');
     }
 
-    protected function defaultLeadStatus(): string
+    protected function defaultLeadStatusId(?int $companyId = null): ?int
     {
-        $statuses = Lead::statusKeys();
+        $query = LeadStatus::query();
 
-        return in_array('new', $statuses, true) ? 'new' : ($statuses[0] ?? 'new');
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $statuses = $query->orderBy('id')->get(['id', 'name']);
+
+        $preferred = $statuses->first(function (LeadStatus $status) {
+            return $this->normalizeStatusKey($status->name) === 'new';
+        });
+
+        return $preferred?->id ?: $statuses->first()?->id;
     }
 
     protected function normalizePriority(?string $priority): string
@@ -708,6 +745,42 @@ class FacebookLeadImporter
     protected function normalizeProductId(mixed $value): ?int
     {
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    protected function normalizeLeadStatusId(mixed $value, ?int $companyId = null): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $statusKey = $this->normalizeStatusKey((string) $value);
+
+        if ($statusKey === '') {
+            return null;
+        }
+
+        $query = LeadStatus::query();
+
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $statuses = $query->get(['id', 'name']);
+
+        $matchedStatus = $statuses->first(function (LeadStatus $status) use ($statusKey) {
+            return $this->normalizeStatusKey($status->name) === $statusKey;
+        });
+
+        return $matchedStatus?->id;
+    }
+
+    protected function normalizeStatusKey(?string $value): string
+    {
+        return strtolower(trim(preg_replace('/[^a-z0-9]+/i', '_', (string) $value), '_'));
     }
 
     protected function normalizeLeadColumnName(?string $crmFieldName): ?string
