@@ -15,6 +15,7 @@ use App\Models\PayrollItem;
 use App\Models\PermissionRequest;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class DashboardApiController extends Controller
 {

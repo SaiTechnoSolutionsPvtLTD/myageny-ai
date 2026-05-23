@@ -125,7 +125,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
       Route::get('interns/{id}', [InternApiController::class, 'show'])->name('interns.show');
 
       Route::get('attendance',      [AttendanceApiController::class, 'index'])->name('attendance.index');
-      Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');  
+      Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');
 
       Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');
       Route::get('assets',        [AssetApiController::class, 'index'])->name('assets.index');
@@ -225,6 +225,6 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::patch('/{lead}/quotations/{quotation}/status', [MobileLeadShowController::class, 'updateQuotationStatus'])->name('quotations.status');
     Route::delete('/{lead}/quotations/{quotation}',       [MobileLeadShowController::class, 'destroyQuotation'])->name('quotations.destroy');
 
-    
+
 
 });
