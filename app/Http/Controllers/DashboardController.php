@@ -77,7 +77,7 @@ class DashboardController extends Controller
             'apiBase'   => url('/api'),
             'leadBase'  => url('/leads'),
             'userName'  => $user->name,
-            'userRole'  => $user->roles->first()?->display_name ?? 'Admin',
+            'userRole'  => $user->resolvedRoles()->first()?->display_name ?? 'Admin',
             'today'     => now()->format('D, d M Y'),
             'branches'  => $branches,
             'users'     => $users,

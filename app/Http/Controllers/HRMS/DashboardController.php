@@ -55,13 +55,13 @@ class DashboardController extends Controller
             : collect();
 
         // Basic counts
-        $employees_total = EmployeeOnboarding::active()->count();
-        $employees_pending = EmployeeOnboarding::where('status', EmployeeOnboarding::STATUS_RESIGNED)->count();
-        $employees_verified = EmployeeOnboarding::active()->count();
-        $interns_total = InternJoiningForm::active()->count();
+        $employees_total = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_ACTIVE)->count();
+        $employees_pending = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED)->count();
+        $employees_verified = $employees_total;
+        $interns_total = $this->internStatusQuery(InternJoiningForm::STATUS_ACTIVE)->count();
 
         // Today's attendance stats
-        $today_attendance = DailyAttendance::where('attendance_date', $today)->get();
+        $today_attendance = $this->activeEmployeeAttendanceForDate($today);
         $today_present = $today_attendance->where('attendance_status', 'present')->count();
         $today_leave = $today_attendance->where('attendance_status', 'leave')->count();
         $today_late = $this->lateAttendanceCount($today_attendance);
@@ -88,7 +88,12 @@ class DashboardController extends Controller
             $join->where('eo.company_id', auth()->user()->company_id);
         }
     })
+    ->leftJoin('users as portal_users', 'portal_users.id', '=', 'eo.portal_user_id')
     ->whereNull('departments.deleted_at')
+    ->where(function ($query) {
+        $query->whereNull('eo.portal_user_id')
+            ->orWhere('portal_users.is_active', true);
+    })
     ->groupBy(
         'departments.id',
         'departments.company_id',
@@ -110,11 +115,11 @@ class DashboardController extends Controller
         $upcoming_holidays = $this->upcomingHolidays($holidayFilter);
 
         // Payroll information
-        $salary_day_1_employees = EmployeeOnboarding::active()
+        $salary_day_1_employees = $this->employeeQueryForDashboard()
             ->where('salary_payment_mode', 'monthly_1st')
             ->count();
 
-        $salary_day_10_employees = EmployeeOnboarding::active()
+        $salary_day_10_employees = $this->employeeQueryForDashboard()
             ->where('salary_payment_mode', 'monthly_10th')
             ->count();
 
@@ -355,7 +360,77 @@ class DashboardController extends Controller
             });
         }
 
+        $query->where(function ($userQuery) {
+            $userQuery->whereNull('portal_user_id')
+                ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
+        });
+
         return $query;
+    }
+
+    private function employeeStatusQuery(string $status): Builder
+    {
+        $query = EmployeeOnboarding::withoutGlobalScopes()->where('status', $status);
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query;
+    }
+
+    private function internQueryForDashboard(): Builder
+    {
+        $query = InternJoiningForm::withoutGlobalScopes()->active();
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        $query->where(function ($userQuery) {
+            $userQuery->whereNull('portal_user_id')
+                ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
+        });
+
+        return $query;
+    }
+
+    private function internStatusQuery(string $status): Builder
+    {
+        $query = InternJoiningForm::withoutGlobalScopes()->where('internship_status', $status);
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query;
+    }
+
+    private function activeEmployeeAttendanceForDate(Carbon $date): Collection
+    {
+        $employeeIds = $this->employeeQueryForDashboard()->pluck('id');
+
+        if ($employeeIds->isEmpty()) {
+            return collect();
+        }
+
+        return DailyAttendance::query()
+            ->whereDate('attendance_date', $date)
+            ->where('attendee_type', 'employee')
+            ->whereIn('employee_id', $employeeIds)
+            ->get();
     }
 
     private function todayBirthdays(Carbon $today): Collection
@@ -389,21 +464,21 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageExitRequests(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageAnnouncements(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        return (bool) ($user && ($user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function announcementsForDashboard()
