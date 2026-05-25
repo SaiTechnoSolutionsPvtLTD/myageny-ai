@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
@@ -130,7 +131,7 @@ class AttendanceController extends Controller
                 'attendee_key.unique' => 'Attendance is already entered for this employee on the selected date.',
             ]);
 
-            $employee = EmployeeOnboarding::findOrFail($attendeeId);
+            $employee = $this->activeEmployeesQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
                 'employee_id' => $employee->id,
@@ -151,7 +152,7 @@ class AttendanceController extends Controller
                 'attendee_key.unique' => 'Attendance is already entered for this intern on the selected date.',
             ]);
 
-            $intern = InternJoiningForm::findOrFail($attendeeId);
+            $intern = $this->activeInternsQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
                 'employee_id' => null,
@@ -552,20 +553,18 @@ class AttendanceController extends Controller
     {
         $user = auth()->user();
 
-        return EmployeeOnboarding::query()
+        return $this->activeEmployeesQuery()
             ->where(function ($query) use ($user) {
                 $query->where('portal_user_id', $user?->id)
                     ->orWhere('email', $user?->email);
             })
-            ->active()
             ->latest('id')
             ->first();
     }
 
     private function accessibleAttendees(): Collection
     {
-        $employeeQuery = EmployeeOnboarding::query()
-            ->active()
+        $employeeQuery = $this->activeEmployeesQuery()
             ->whereNotNull('name')
             ->with('department');
 
@@ -598,8 +597,7 @@ class AttendanceController extends Controller
             return $employees->values();
         }
 
-        $interns = InternJoiningForm::query()
-            ->active()
+        $interns = $this->activeInternsQuery()
             ->whereNotNull('name')
             ->with('department')
             ->orderBy('name')
@@ -619,6 +617,26 @@ class AttendanceController extends Controller
         return $employees->concat($interns)
             ->sortBy(fn (array $attendee) => $this->normalizeValue($attendee['name']))
             ->values();
+    }
+
+    private function activeEmployeesQuery(): Builder
+    {
+        return EmployeeOnboarding::query()
+            ->active()
+            ->where(function (Builder $query) {
+                $query->whereNull('portal_user_id')
+                    ->orWhereHas('portalUser', fn (Builder $userQuery) => $userQuery->where('is_active', true));
+            });
+    }
+
+    private function activeInternsQuery(): Builder
+    {
+        return InternJoiningForm::query()
+            ->active()
+            ->where(function (Builder $query) {
+                $query->whereNull('portal_user_id')
+                    ->orWhereHas('portalUser', fn (Builder $userQuery) => $userQuery->where('is_active', true));
+            });
     }
 
     private function parseAttendeeKey(string $attendeeKey): array

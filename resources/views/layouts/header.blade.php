@@ -1,6 +1,6 @@
 @php
-    $headerUser = auth()->user()?->loadMissing('roles', 'employeeOnboarding');
-    $headerRole = $headerUser?->role_display_name ?: ($headerUser?->roles->first()?->display_name ?? $headerUser?->roles->first()?->name ?? 'User');
+    $headerUser = auth()->user()?->loadMissing('employeeOnboarding');
+    $headerRole = $headerUser?->role_display_name ?: ($headerUser?->resolvedRoles()->first()?->display_name ?? $headerUser?->resolvedRoles()->first()?->name ?? 'User');
     $profileUrl = $headerUser?->employeeOnboarding
         ? route('employee-onboarding.show', $headerUser->employeeOnboarding)
         : null;

@@ -97,9 +97,11 @@ Route::middleware(['auth'])->group(function () {
 
     // Default redirect by role
     Route::get('/dashboard', function () {
-        $user = auth()->user()?->loadMissing('roles.department');
+        $user = auth()->user();
 
         abort_unless($user, 403);
+
+        $user->resolvedRoles(withDepartment: true);
 
         return redirect()->route($user->dashboardRoute());
     })->name('dashboard');

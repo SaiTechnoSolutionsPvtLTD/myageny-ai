@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -16,7 +17,20 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes, HasRoles, HasApiTokens, BelongsToCompany;
+    use HasFactory, Notifiable, SoftDeletes, HasRoles, HasApiTokens, BelongsToCompany {
+        hasRole as protected spatieHasRole;
+        hasAnyRole as protected spatieHasAnyRole;
+        hasAllRoles as protected spatieHasAllRoles;
+        hasExactRoles as protected spatieHasExactRoles;
+        getRoleNames as protected spatieGetRoleNames;
+        hasPermissionTo as protected spatieHasPermissionTo;
+        checkPermissionTo as protected spatieCheckPermissionTo;
+        hasAnyPermission as protected spatieHasAnyPermission;
+        hasAllPermissions as protected spatieHasAllPermissions;
+        hasDirectPermission as protected spatieHasDirectPermission;
+        getAllPermissions as protected spatieGetAllPermissions;
+        getPermissionsViaRoles as protected spatieGetPermissionsViaRoles;
+    }
 
     protected $fillable = [
         'name',
@@ -136,7 +150,7 @@ class User extends Authenticatable
      */
     public function getRoleNameAttribute(): string
     {
-        return $this->roles->first()?->name ?? 'No Role';
+        return $this->resolvedRoles()->first()?->name ?? 'No Role';
     }
 
     /**
@@ -144,7 +158,7 @@ class User extends Authenticatable
      */
     public function getRoleDisplayNameAttribute(): string
     {
-        $role = $this->roles->first();
+        $role = $this->resolvedRoles()->first();
         return $role ? ($role->display_name ?? ucfirst(str_replace('_', ' ', $role->name))) : 'No Role';
     }
 
@@ -185,7 +199,7 @@ class User extends Authenticatable
     private function hasExactRoleName(string $roleName): bool
     {
         if ($this->relationLoaded('roles')) {
-            return $this->roles->contains('name', $roleName);
+            return $this->resolvedRoles()->contains('name', $roleName);
         }
 
         return DB::table('model_has_roles')
@@ -214,7 +228,7 @@ class User extends Authenticatable
     private function hasSystemRole(): bool
     {
         if ($this->relationLoaded('roles')) {
-            return $this->roles->contains(fn ($role) => $this->isSystemRoleName($role->name));
+            return $this->resolvedRoles()->contains(fn ($role) => $this->isSystemRoleName($role->name));
         }
 
         return DB::table('model_has_roles')
@@ -257,9 +271,7 @@ class User extends Authenticatable
 
     public function departmentDashboardRoute(): ?string
     {
-        $roles = $this->relationLoaded('roles')
-            ? $this->roles->loadMissing('department')
-            : $this->roles()->with('department')->get();
+        $roles = $this->resolvedRoles(withDepartment: true);
 
         $route = $roles
             ->map(fn ($role) => $role->department?->dashboard_route)
@@ -275,7 +287,7 @@ class User extends Authenticatable
 
     public function belongsToHrDepartment(): bool
     {
-        return $this->departmentKeys()->intersect([
+        return collect($this->departmentKeys()->all())->intersect([
             'hr',
             'human_resource',
             'human_resources',
@@ -288,7 +300,7 @@ class User extends Authenticatable
 
     public function hasHrLikeRole(): bool
     {
-        return $this->roleKeys()->intersect([
+        return collect($this->roleKeys()->all())->intersect([
             'hr',
             'human_resource',
             'human_resources',
@@ -303,7 +315,7 @@ class User extends Authenticatable
 
     public function belongsToSalesDepartment(): bool
     {
-        return $this->departmentKeys()->intersect([
+        return collect($this->departmentKeys()->all())->intersect([
             'sales',
             'crm',
             'business_development',
@@ -314,7 +326,7 @@ class User extends Authenticatable
 
     public function hasExecutiveLikeRole(): bool
     {
-        return $this->roleKeys()->intersect([
+        return collect($this->roleKeys()->all())->intersect([
             'executive',
             'sales_executive',
             'hr_executive',
@@ -326,7 +338,7 @@ class User extends Authenticatable
 
     public function hasAdminLikeRole(): bool
     {
-        return $this->roleKeys()->intersect([
+        return collect($this->roleKeys()->all())->intersect([
             'super_admin',
             'admin',
             'company_admin',
@@ -354,9 +366,9 @@ class User extends Authenticatable
 
     private function roleKeys(): \Illuminate\Support\Collection
     {
-        $roles = $this->relationLoaded('roles') ? $this->roles : $this->roles()->get();
+        $roles = $this->resolvedRoles();
 
-        return $roles
+        return collect($roles
             ->flatMap(function ($role) {
                 return array_filter([
                     $this->normalizeDashboardKey((string) $role->name),
@@ -364,20 +376,20 @@ class User extends Authenticatable
                 ]);
             })
             ->unique()
-            ->values();
+            ->values()
+            ->all());
     }
 
     private function departmentKeys(): \Illuminate\Support\Collection
     {
-        $roles = $this->relationLoaded('roles')
-            ? $this->roles->loadMissing('department')
-            : $this->roles()->with('department')->get();
+        $roles = $this->resolvedRoles(withDepartment: true);
 
-        return $roles
+        return collect($roles
             ->map(fn ($role) => $this->normalizeDashboardKey((string) ($role->department?->name ?? '')))
             ->filter()
             ->unique()
-            ->values();
+            ->values()
+            ->all());
     }
 
     private function normalizeDashboardKey(string $value): string
@@ -394,6 +406,155 @@ class User extends Authenticatable
             ->replaceMatches('/_+/', '_')
             ->trim('_')
             ->value();
+    }
+
+    public function resolvedRoles(bool $withDepartment = false): EloquentCollection
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        if ($this->relationLoaded('roles')) {
+            $roles = $this->getRelation('roles');
+
+            if ($roles instanceof EloquentCollection && $roles->every(fn ($role) => $role instanceof Role)) {
+                return $withDepartment ? $roles->loadMissing('department') : $roles;
+            }
+
+            $this->unsetRelation('roles');
+        }
+
+        $query = $this->roles();
+
+        if ($withDepartment) {
+            $query->with('department');
+        }
+
+        $roles = $query->get();
+        $this->setRelation('roles', $roles);
+
+        return $roles;
+    }
+
+    public function resolvedPermissions(): EloquentCollection
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        if ($this->relationLoaded('permissions')) {
+            $permissions = $this->getRelation('permissions');
+
+            if ($permissions instanceof EloquentCollection && $permissions->every(fn ($permission) => $permission instanceof Permission)) {
+                return $permissions;
+            }
+
+            $this->unsetRelation('permissions');
+        }
+
+        $permissions = $this->permissions()->get();
+        $this->setRelation('permissions', $permissions);
+
+        return $permissions;
+    }
+
+    public function hasRole($roles, ?string $guard = null): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasRole($roles, $guard);
+    }
+
+    public function hasAnyRole(...$roles): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasAnyRole(...$roles);
+    }
+
+    public function hasAllRoles($roles, ?string $guard = null): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasAllRoles($roles, $guard);
+    }
+
+    public function hasExactRoles($roles, ?string $guard = null): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasExactRoles($roles, $guard);
+    }
+
+    public function getRoleNames(): \Illuminate\Support\Collection
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieGetRoleNames();
+    }
+
+    public function hasPermissionTo($permission, $guardName = null): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasPermissionTo($permission, $guardName);
+    }
+
+    public function checkPermissionTo($permission, $guardName = null): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieCheckPermissionTo($permission, $guardName);
+    }
+
+    public function hasAnyPermission(...$permissions): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasAnyPermission(...$permissions);
+    }
+
+    public function hasAllPermissions(...$permissions): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasAllPermissions(...$permissions);
+    }
+
+    public function hasDirectPermission($permission): bool
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieHasDirectPermission($permission);
+    }
+
+    public function getAllPermissions(): \Illuminate\Support\Collection
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieGetAllPermissions();
+    }
+
+    public function getPermissionsViaRoles(): \Illuminate\Support\Collection
+    {
+        $this->ensureSpatieRelationsAreModels();
+
+        return $this->spatieGetPermissionsViaRoles();
+    }
+
+    private function ensureSpatieRelationsAreModels(): void
+    {
+        if ($this->relationLoaded('roles')) {
+            $roles = $this->getRelation('roles');
+
+            if (! ($roles instanceof EloquentCollection) || ! $roles->every(fn ($role) => $role instanceof Role)) {
+                $this->unsetRelation('roles');
+            }
+        }
+
+        if ($this->relationLoaded('permissions')) {
+            $permissions = $this->getRelation('permissions');
+
+            if (! ($permissions instanceof EloquentCollection) || ! $permissions->every(fn ($permission) => $permission instanceof Permission)) {
+                $this->unsetRelation('permissions');
+            }
+        }
     }
 
     public function employeeOnboarding(): \Illuminate\Database\Eloquent\Relations\HasOne

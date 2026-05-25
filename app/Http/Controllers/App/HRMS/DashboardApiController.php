@@ -12,8 +12,10 @@ use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\LeaveRequest;
 use App\Models\PayrollItem;
+use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -49,16 +51,17 @@ class DashboardApiController extends Controller
         }
 
         // ── Basic counts ──────────────────────────────────────────────────────
-        $employees_total    = EmployeeOnboarding::active()->count();
-        $employees_pending  = EmployeeOnboarding::where('status', EmployeeOnboarding::STATUS_RESIGNED)->count();
-        $employees_verified = EmployeeOnboarding::active()->count();
-        $interns_total      = InternJoiningForm::active()->count();
+        $employees_total    = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_ACTIVE)->count();
+        $employees_pending  = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED)->count();
+        $employees_verified = $employees_total;
+        $interns_total      = $this->internStatusQuery(InternJoiningForm::STATUS_ACTIVE)->count();
 
         // ── Today's attendance stats ──────────────────────────────────────────
-        $today_attendance = DailyAttendance::where('attendance_date', $today)->get();
+        $today_attendance = $this->activeEmployeeAttendanceForDate($today);
         $today_present    = $today_attendance->where('attendance_status', 'present')->count();
-        $today_late       = $today_attendance->where('attendance_status', 'late')->count();
-        $today_absent     = max(0, $employees_total - $today_present - $today_late);
+        $today_leave      = $today_attendance->where('attendance_status', 'leave')->count();
+        $today_late       = $this->lateAttendanceCount($today_attendance);
+        $today_absent     = max(0, $employees_total - $today_present - $today_leave);
 
         // ── Department-wise employee count and salary ─────────────────────────
         $department_stats = Department::select(
@@ -81,7 +84,12 @@ class DashboardApiController extends Controller
                     $join->where('eo.company_id', auth()->user()->company_id);
                 }
             })
+            ->leftJoin('users as portal_users', 'portal_users.id', '=', 'eo.portal_user_id')
             ->whereNull('departments.deleted_at')
+            ->where(function ($query) {
+                $query->whereNull('eo.portal_user_id')
+                    ->orWhere('portal_users.is_active', true);
+            })
             ->groupBy(
                 'departments.id',
                 'departments.company_id',
@@ -102,9 +110,8 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's birthdays ─────────────────────────────────────────────────
-        $today_birthdays = EmployeeOnboarding::whereMonth('date_of_birth', $today->month)
+        $today_birthdays = $this->employeeQueryForDashboard()->whereMonth('date_of_birth', $today->month)
             ->whereDay('date_of_birth', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -115,9 +122,8 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's work anniversaries ────────────────────────────────────────
-        $today_work_anniversaries = EmployeeOnboarding::whereMonth('joining_date', $today->month)
+        $today_work_anniversaries = $this->employeeQueryForDashboard()->whereMonth('joining_date', $today->month)
             ->whereDay('joining_date', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -130,9 +136,8 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's marriage anniversaries ────────────────────────────────────
-        $today_anniversaries = EmployeeOnboarding::whereMonth('date_of_marriage', $today->month)
+        $today_anniversaries = $this->employeeQueryForDashboard()->whereMonth('date_of_marriage', $today->month)
             ->whereDay('date_of_marriage', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -147,9 +152,9 @@ class DashboardApiController extends Controller
         $upcoming_holidays = $this->upcomingHolidays($holidayFilter);
 
         // ── Payroll ───────────────────────────────────────────────────────────
-        $salary_day_1_employees  = EmployeeOnboarding::active()
+        $salary_day_1_employees  = $this->employeeQueryForDashboard()
             ->where('salary_payment_mode', 'monthly_1st')->count();
-        $salary_day_10_employees = EmployeeOnboarding::active()
+        $salary_day_10_employees = $this->employeeQueryForDashboard()
             ->where('salary_payment_mode', 'monthly_10th')->count();
 
         // ── Monthly leave data (last 6 months) ────────────────────────────────
@@ -354,9 +359,8 @@ class DashboardApiController extends Controller
         $isWorkAnniversaryToday = $this->isWorkAnniversaryToday($employee, $today);
 
         // ── All employees celebrating today (mirrors web self-service) ─────────
-        $today_birthdays = EmployeeOnboarding::whereMonth('date_of_birth', $today->month)
+        $today_birthdays = $this->employeeQueryForDashboard()->whereMonth('date_of_birth', $today->month)
             ->whereDay('date_of_birth', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -366,9 +370,8 @@ class DashboardApiController extends Controller
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
-        $today_anniversaries = EmployeeOnboarding::whereMonth('date_of_marriage', $today->month)
+        $today_anniversaries = $this->employeeQueryForDashboard()->whereMonth('date_of_marriage', $today->month)
             ->whereDay('date_of_marriage', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -378,9 +381,8 @@ class DashboardApiController extends Controller
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
-        $today_work_anniversaries = EmployeeOnboarding::whereMonth('joining_date', $today->month)
+        $today_work_anniversaries = $this->employeeQueryForDashboard()->whereMonth('joining_date', $today->month)
             ->whereDay('joining_date', $today->day)
-            ->active()
             ->with('role')
             ->get()
             ->map(fn ($emp) => [
@@ -617,31 +619,126 @@ class DashboardApiController extends Controller
     {
         $user = auth()->user();
 
-        return EmployeeOnboarding::query()
+        return $this->employeeQueryForDashboard()
             ->where(fn ($q) => $q->where('portal_user_id', $user?->id)->orWhere('email', $user?->email))
             ->latest('id')
             ->first();
+    }
+
+    private function employeeQueryForDashboard(): Builder
+    {
+        $query = EmployeeOnboarding::withoutGlobalScopes()->active();
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        $query->where(function ($userQuery) {
+            $userQuery->whereNull('portal_user_id')
+                ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
+        });
+
+        return $query;
+    }
+
+    private function employeeStatusQuery(string $status): Builder
+    {
+        $query = EmployeeOnboarding::withoutGlobalScopes()->where('status', $status);
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query;
+    }
+
+    private function internQueryForDashboard(): Builder
+    {
+        $query = InternJoiningForm::withoutGlobalScopes()->active();
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        $query->where(function ($userQuery) {
+            $userQuery->whereNull('portal_user_id')
+                ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
+        });
+
+        return $query;
+    }
+
+    private function internStatusQuery(string $status): Builder
+    {
+        $query = InternJoiningForm::withoutGlobalScopes()->where('internship_status', $status);
+        $companyId = auth()->user()?->company_id;
+
+        if ($companyId) {
+            $query->where(function ($companyQuery) use ($companyId) {
+                $companyQuery->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query;
+    }
+
+    private function activeEmployeeAttendanceForDate(Carbon $date)
+    {
+        $employeeIds = $this->employeeQueryForDashboard()->pluck('id');
+
+        if ($employeeIds->isEmpty()) {
+            return collect();
+        }
+
+        return DailyAttendance::query()
+            ->whereDate('attendance_date', $date)
+            ->where('attendee_type', 'employee')
+            ->whereIn('employee_id', $employeeIds)
+            ->get();
+    }
+
+    private function lateAttendanceCount($attendanceRows): int
+    {
+        $graceLoginTime = (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
+
+        return $attendanceRows
+            ->where('attendance_status', 'present')
+            ->filter(fn (DailyAttendance $attendance) => filled($attendance->login_time) && $attendance->login_time > $graceLoginTime)
+            ->count();
     }
 
     private function canViewOrganizationDashboard(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageExitRequests(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment()));
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageAnnouncements(): bool
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        return (bool) ($user && ($user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function isBirthdayToday(?EmployeeOnboarding $employee, Carbon $today): bool
