@@ -37,19 +37,30 @@ class AuthController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "User registered successfully",
+            new OA\Response(
+                response: 201,
+                description: "User registered successfully",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Developer account created successfully."),
                     new OA\Property(property: "user",    ref: "#/components/schemas/AuthUser"),
                 ])
             ),
-            new OA\Response(response: 401, description: "Unauthenticated",
-                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
-            new OA\Response(response: 403, description: "Forbidden — caller is not a super_admin",
-                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 422, description: "Validation error",
-                content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
+            new OA\Response(
+                response: 401,
+                description: "Unauthenticated",
+                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")
+            ),
+            new OA\Response(
+                response: 403,
+                description: "Forbidden — caller is not a super_admin",
+                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Validation error",
+                content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")
+            ),
         ]
     )]
     public function register(Request $request): JsonResponse
@@ -100,7 +111,9 @@ class AuthController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Login successful",
+            new OA\Response(
+                response: 200,
+                description: "Login successful",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",     type: "boolean", example: true),
                     new OA\Property(property: "message",    type: "string",  example: "Login successful"),
@@ -109,14 +122,26 @@ class AuthController extends Controller
                     new OA\Property(property: "user",       ref: "#/components/schemas/AuthUser"),
                 ])
             ),
-            new OA\Response(response: 401, description: "Invalid credentials",
-                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 403, description: "Account inactive",
-                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 422, description: "Validation error",
-                content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
-            new OA\Response(response: 429, description: "Too many login attempts",
-                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
+            new OA\Response(
+                response: 401,
+                description: "Invalid credentials",
+                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")
+            ),
+            new OA\Response(
+                response: 403,
+                description: "Account inactive",
+                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Validation error",
+                content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")
+            ),
+            new OA\Response(
+                response: 429,
+                description: "Too many login attempts",
+                content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")
+            ),
         ]
     )]
     public function login(Request $request): JsonResponse
@@ -163,7 +188,13 @@ class AuthController extends Controller
             'message'    => 'Login successful',
             'token'      => $token,
             'token_type' => 'Bearer',
-            'user' => $this->formatUser($user->load('employeeOnboarding.department', 'employeeOnboarding.role', 'roles.department')),
+            'user' => $this->formatUser($user->load(
+                'employeeOnboarding.department',
+                'employeeOnboarding.role',
+                'roles.department',
+                'internJoiningForm.department',
+                'internJoiningForm.role',
+            )),
         ]);
     }
 
@@ -178,14 +209,19 @@ class AuthController extends Controller
         security: [["sanctum" => []]],
         tags: ["Auth"],
         responses: [
-            new OA\Response(response: 200, description: "Logged out successfully",
+            new OA\Response(
+                response: 200,
+                description: "Logged out successfully",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "You have been signed out successfully."),
                 ])
             ),
-            new OA\Response(response: 401, description: "Unauthenticated",
-                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
+            new OA\Response(
+                response: 401,
+                description: "Unauthenticated",
+                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")
+            ),
         ]
     )]
     public function logout(Request $request): JsonResponse
@@ -209,14 +245,19 @@ class AuthController extends Controller
         security: [["sanctum" => []]],
         tags: ["Auth"],
         responses: [
-            new OA\Response(response: 200, description: "User profile retrieved",
+            new OA\Response(
+                response: 200,
+                description: "User profile retrieved",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status", type: "boolean", example: true),
                     new OA\Property(property: "data",   ref: "#/components/schemas/AuthUser"),
                 ])
             ),
-            new OA\Response(response: 401, description: "Unauthenticated",
-                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
+            new OA\Response(
+                response: 401,
+                description: "Unauthenticated",
+                content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")
+            ),
         ]
     )]
     public function me(Request $request): JsonResponse
@@ -255,63 +296,85 @@ class AuthController extends Controller
     }
 
     protected function formatUser(User $user, mixed $activeBranchId = null): array
-{
-    $emp = $user->employeeOnboarding;
+    {
+        $emp    = $user->employeeOnboarding;
+        $intern = $user->internJoiningForm;   // ← ADD
 
-    // Get department dashboard route from user's role→department
-    $departmentRoute = null;
-    if ($user->relationLoaded('roles') || $user->roles !== null) {
-        $roles = $user->relationLoaded('roles')
-            ? $user->roles->loadMissing('department')
-            : $user->roles()->with('department')->get();
+        $departmentRoute = null;
+        if ($user->relationLoaded('roles') || $user->roles !== null) {
+            $roles = $user->relationLoaded('roles')
+                ? $user->roles->loadMissing('department')
+                : $user->roles()->with('department')->get();
 
-        $departmentRoute = $roles
-            ->map(fn($role) => $role->department?->dashboard_route)
-            ->filter()
-            ->first();
+            $departmentRoute = $roles
+                ->map(fn($role) => $role->department?->dashboard_route)
+                ->filter()
+                ->first();
+        }
+
+        $mobileRoute = match ($departmentRoute) {
+            'hrms.dashboard'  => '/hrms-dashboard',
+            'dashboard.admin' => '/',
+            default           => null,
+        };
+
+        return [
+            'id'              => $user->id,
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'role'            => $user->roles->first()?->name ?? null,
+            'role_display'    => $user->role_display_name,
+            'dashboard_route' => $mobileRoute,
+            'is_active'       => $user->is_active,
+            'branch_id'       => $activeBranchId ?? $user->branch_id,
+            'branch'          => $user->branch ? [
+                'id'   => $user->branch->id,
+                'name' => $user->branch->name,
+            ] : null,
+            'last_login_at'   => $user->last_login_at?->toIso8601String(),
+            'profile_photo'   => $user->photo ?? null,
+
+            'employee' => $emp ? [
+                'employee_id'     => $emp->id,
+                'mobile'          => $emp->mobile,
+                'date_of_birth'   => $emp->date_of_birth?->toDateString(),
+                'blood_group'     => $emp->blood_group,
+                'marital_status'  => $emp->marital_status,
+                'date_of_joining' => $emp->salary_effective_from?->toDateString(),
+                'gross_salary'    => $emp->gross_salary,
+                'net_salary'      => $emp->net_salary,
+                'status'          => $emp->status,
+                'department'      => $emp->department ? [
+                    'id'   => $emp->department->id,
+                    'name' => $emp->department->name,
+                ] : null,
+                'designation'     => $emp->role ? [
+                    'id'   => $emp->role->id,
+                    'name' => $emp->role->name,
+                ] : null,
+            ] : null,
+
+            // ── ADD intern block ──────────────────────────────────────────
+            'intern' => $intern ? [
+                'intern_id'       => $intern->id,
+                'intern_code'     => $intern->intern_id,   // e.g. STSINT001
+                'name'            => $intern->name,
+                'mobile'          => $intern->mobile,
+                'date_of_birth'   => $intern->date_of_birth?->toDateString(),
+                'blood_group'     => $intern->blood_group,
+                'marital_status'  => $intern->marital_status,
+                'date_of_joining' => $intern->internship_start_date?->toDateString(),
+                'date_of_ending'  => $intern->internship_end_date?->toDateString(),
+                'status'          => $intern->internship_status,
+                'department'      => $intern->department ? [
+                    'id'   => $intern->department->id,
+                    'name' => $intern->department->name,
+                ] : null,
+                'designation'     => $intern->role ? [
+                    'id'   => $intern->role->id,
+                    'name' => $intern->role->name,
+                ] : null,
+            ] : null,
+        ];
     }
-
-    // Map Laravel route name → mobile route path
-    $mobileRoute = match($departmentRoute) {
-        'hrms.dashboard'    => '/hrms-dashboard',
-        'dashboard.admin'   => '/',
-        default             => null,
-    };
-
-    return [
-        'id'               => $user->id,
-        'name'             => $user->name,
-        'email'            => $user->email,
-        'role'             => $user->roles->first()?->name ?? null,
-        'role_display'     => $user->role_display_name,
-        'dashboard_route'  => $mobileRoute,   // ← new field
-        'is_active'        => $user->is_active,
-        'branch_id'        => $activeBranchId ?? $user->branch_id,
-        'branch'           => $user->branch ? [
-            'id'   => $user->branch->id,
-            'name' => $user->branch->name,
-        ] : null,
-        'last_login_at'    => $user->last_login_at?->toIso8601String(),
-        'profile_photo'    => $user->photo ?? null,
-        'employee'         => $emp ? [
-            'employee_id'     => $emp->id,
-            'mobile'          => $emp->mobile,
-            'date_of_birth'   => $emp->date_of_birth?->toDateString(),
-            'blood_group'     => $emp->blood_group,
-            'marital_status'  => $emp->marital_status,
-            'date_of_joining' => $emp->salary_effective_from?->toDateString(),
-            'gross_salary'    => $emp->gross_salary,
-            'net_salary'      => $emp->net_salary,
-            'status'          => $emp->status,
-            'department'      => $emp->department ? [
-                'id'   => $emp->department->id,
-                'name' => $emp->department->name,
-            ] : null,
-            'designation'     => $emp->role ? [
-                'id'   => $emp->role->id,
-                'name' => $emp->role->name,
-            ] : null,
-        ] : null,
-    ];
-}
 }
