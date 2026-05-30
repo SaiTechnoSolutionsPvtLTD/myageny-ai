@@ -392,7 +392,7 @@ class PayrollController extends Controller
         $rows = DailyAttendance::query()
             ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('employee_id', $employeeIds)
-            ->get(['employee_id', 'attendance_date', 'attendance_status', 'login_time']);
+            ->get(['employee_id', 'attendance_date', 'attendance_status', 'leave_category', 'login_time']);
 
         $approvedLeaves = LeaveRequest::query()
             ->where('status', LeaveRequest::STATUS_APPROVED)
@@ -423,11 +423,25 @@ class PayrollController extends Controller
 
             $manualLeaveDates = $employeeRows
                 ->where('attendance_status', 'leave')
-                ->pluck('attendance_date')
-                ->map(fn ($date) => optional($date)->toDateString())
-                ->filter(fn (?string $date) => $date && isset($workingDateLookup[$date]) && ! isset($presentDateLookup[$date]))
-                ->unique()
-                ->values();
+                ->mapWithKeys(function ($row) use ($workingDateLookup, $presentDateLookup) {
+                    $date = optional($row->attendance_date)->toDateString();
+
+                    if (! $date || ! isset($workingDateLookup[$date]) || isset($presentDateLookup[$date])) {
+                        return [];
+                    }
+
+                    $value = match ($row->leave_category) {
+                        'paid' => 1.0,
+                        'half_day' => 0.5,
+                        default => 0.0,
+                    };
+
+                    if ($value <= 0) {
+                        return [];
+                    }
+
+                    return [$date => $value];
+                });
 
             $approvedLeaveDates = collect();
 
@@ -443,13 +457,17 @@ class PayrollController extends Controller
                 );
             }
 
-            $leaveDates = $manualLeaveDates
-                ->merge($approvedLeaveDates)
-                ->unique()
-                ->reject(fn (string $date) => isset($presentDateLookup[$date]))
-                ->values();
+            $approvedLeaveMap = $approvedLeaveDates
+                ->filter(fn (?string $date) => $date && ! isset($presentDateLookup[$date]))
+                ->mapWithKeys(fn (string $date) => [$date => 1.0]);
 
-            $paidLeaveDays = min($leaveDates->count(), $paidLeaveAllowance);
+            $leaveDaysByDate = $approvedLeaveMap;
+
+            foreach ($manualLeaveDates as $date => $value) {
+                $leaveDaysByDate[$date] = max((float) ($leaveDaysByDate[$date] ?? 0), min((float) $value, 1.0));
+            }
+
+            $paidLeaveDays = min($leaveDaysByDate->sum(), $paidLeaveAllowance);
 
             $permissionUsage = [];
 

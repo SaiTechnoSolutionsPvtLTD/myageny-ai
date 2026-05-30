@@ -30,6 +30,8 @@ class DailyAttendance extends Model
         'overall_working_hours',
         'attendance_date',
         'attendance_status',
+        'leave_category',
+        'leave_session',
         'remarks',
     ];
 

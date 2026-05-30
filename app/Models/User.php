@@ -228,7 +228,7 @@ class User extends Authenticatable
     private function hasSystemRole(): bool
     {
         if ($this->relationLoaded('roles')) {
-            return $this->resolvedRoles()->contains(fn ($role) => $this->isSystemRoleName($role->name));
+            return $this->resolvedRoles()->contains(fn($role) => $this->isSystemRoleName($role->name));
         }
 
         return DB::table('model_has_roles')
@@ -236,7 +236,7 @@ class User extends Authenticatable
             ->where('model_has_roles.model_type', self::class)
             ->where('model_has_roles.model_id', $this->getKey())
             ->get(['roles.name'])
-            ->contains(fn ($role) => $this->isSystemRoleName($role->name));
+            ->contains(fn($role) => $this->isSystemRoleName($role->name));
     }
 
     private function isSystemRoleName(string $roleName): bool
@@ -274,7 +274,7 @@ class User extends Authenticatable
         $roles = $this->resolvedRoles(withDepartment: true);
 
         $route = $roles
-            ->map(fn ($role) => $role->department?->dashboard_route)
+            ->map(fn($role) => $role->department?->dashboard_route)
             ->filter()
             ->first();
 
@@ -385,7 +385,7 @@ class User extends Authenticatable
         $roles = $this->resolvedRoles(withDepartment: true);
 
         return collect($roles
-            ->map(fn ($role) => $this->normalizeDashboardKey((string) ($role->department?->name ?? '')))
+            ->map(fn($role) => $this->normalizeDashboardKey((string) ($role->department?->name ?? '')))
             ->filter()
             ->unique()
             ->values()
@@ -415,7 +415,7 @@ class User extends Authenticatable
         if ($this->relationLoaded('roles')) {
             $roles = $this->getRelation('roles');
 
-            if ($roles instanceof EloquentCollection && $roles->every(fn ($role) => $role instanceof Role)) {
+            if ($roles instanceof EloquentCollection && $roles->every(fn($role) => $role instanceof Role)) {
                 return $withDepartment ? $roles->loadMissing('department') : $roles;
             }
 
@@ -441,7 +441,7 @@ class User extends Authenticatable
         if ($this->relationLoaded('permissions')) {
             $permissions = $this->getRelation('permissions');
 
-            if ($permissions instanceof EloquentCollection && $permissions->every(fn ($permission) => $permission instanceof Permission)) {
+            if ($permissions instanceof EloquentCollection && $permissions->every(fn($permission) => $permission instanceof Permission)) {
                 return $permissions;
             }
 
@@ -543,7 +543,7 @@ class User extends Authenticatable
         if ($this->relationLoaded('roles')) {
             $roles = $this->getRelation('roles');
 
-            if (! ($roles instanceof EloquentCollection) || ! $roles->every(fn ($role) => $role instanceof Role)) {
+            if (! ($roles instanceof EloquentCollection) || ! $roles->every(fn($role) => $role instanceof Role)) {
                 $this->unsetRelation('roles');
             }
         }
@@ -551,15 +551,19 @@ class User extends Authenticatable
         if ($this->relationLoaded('permissions')) {
             $permissions = $this->getRelation('permissions');
 
-            if (! ($permissions instanceof EloquentCollection) || ! $permissions->every(fn ($permission) => $permission instanceof Permission)) {
+            if (! ($permissions instanceof EloquentCollection) || ! $permissions->every(fn($permission) => $permission instanceof Permission)) {
                 $this->unsetRelation('permissions');
             }
         }
     }
 
     public function employeeOnboarding(): \Illuminate\Database\Eloquent\Relations\HasOne
-{
-    return $this->hasOne(\App\Models\EmployeeOnboarding::class, 'portal_user_id');
-}
+    {
+        return $this->hasOne(\App\Models\EmployeeOnboarding::class, 'portal_user_id');
+    }
 
+    public function internJoiningForm(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\InternJoiningForm::class, 'portal_user_id');
+    }
 }

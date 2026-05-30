@@ -56,6 +56,9 @@ class AttendanceController extends Controller
                 'Attendee Name' => $record['employee_name'],
                 'Attendance Date' => Carbon::parse($record['attendance_date'])->format('d-m-Y'),
                 'Status' => ucfirst($record['attendance_status']),
+                'Leave Category' => $record['attendance_status'] === 'leave'
+                    ? ($record['leave_label'] ?: 'N/A')
+                    : 'N/A',
                 'Login Time' => $record['login_time'] ? Carbon::createFromFormat('H:i:s', $record['login_time'])->format('h:i A') : 'N/A',
                 'Logout Time' => $record['logout_time'] ? Carbon::createFromFormat('H:i:s', $record['logout_time'])->format('h:i A') : 'N/A',
                 'Working Hours' => $record['overall_working_hours'] ?: 'N/A',
@@ -105,13 +108,33 @@ class AttendanceController extends Controller
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
             'attendance_date' => ['required', 'date'],
-            'login_time' => ['required', 'date_format:H:i'],
+            'login_time' => ['nullable', 'date_format:H:i'],
             'logout_time' => ['nullable', 'date_format:H:i', 'after:login_time'],
             'attendance_status' => ['required', 'in:present,leave'],
+            'leave_category' => ['nullable', 'in:paid,lop,half_day'],
+            'leave_session' => ['nullable', 'in:first_half,second_half'],
             'remarks' => ['nullable', 'string', 'max:1000'],
         ], [
             'logout_time.after' => 'Out time must be after in time.',
         ]);
+
+        if ($validated['attendance_status'] === 'present') {
+            $request->validate([
+                'login_time' => ['required', 'date_format:H:i'],
+            ]);
+        }
+
+        if ($validated['attendance_status'] === 'leave') {
+            $request->validate([
+                'leave_category' => ['required', 'in:paid,lop,half_day'],
+            ]);
+
+            if (($validated['leave_category'] ?? null) === 'half_day') {
+                $request->validate([
+                    'leave_session' => ['required', 'in:first_half,second_half'],
+                ]);
+            }
+        }
 
         [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
 
@@ -165,30 +188,36 @@ class AttendanceController extends Controller
 
         $workingHours = $this->calculateWorkingHours(
             $validated['attendance_date'],
-            $validated['login_time'],
+            $validated['login_time'] ?? '',
             $validated['logout_time'] ?? null
         );
 
         DailyAttendance::create(array_merge($attendanceAttributes, [
-            'login_location' => 'Manual HR Entry',
+            'login_location' => $validated['attendance_status'] === 'leave' ? 'Manual HR Leave Entry' : 'Manual HR Entry',
             'login_latitude' => 0,
             'login_longitude' => 0,
-            'login_time' => Carbon::createFromFormat('H:i', $validated['login_time'])->format('H:i:s'),
+            'login_time' => filled($validated['login_time'] ?? null)
+                ? Carbon::createFromFormat('H:i', $validated['login_time'])->format('H:i:s')
+                : '00:00:00',
             'logout_location' => filled($validated['logout_time'] ?? null) ? 'Manual HR Entry' : null,
             'logout_latitude' => filled($validated['logout_time'] ?? null) ? 0 : null,
             'logout_longitude' => filled($validated['logout_time'] ?? null) ? 0 : null,
             'logout_time' => filled($validated['logout_time'] ?? null)
                 ? Carbon::createFromFormat('H:i', $validated['logout_time'])->format('H:i:s')
                 : null,
-            'overall_working_hours' => $workingHours,
+            'overall_working_hours' => $validated['attendance_status'] === 'leave' ? null : $workingHours,
             'attendance_date' => $validated['attendance_date'],
             'attendance_status' => $validated['attendance_status'],
+            'leave_category' => $validated['attendance_status'] === 'leave' ? ($validated['leave_category'] ?? null) : null,
+            'leave_session' => $validated['attendance_status'] === 'leave' ? ($validated['leave_session'] ?? null) : null,
             'remarks' => $validated['remarks'] ?? null,
         ]));
 
         return redirect()
             ->route('attendance.index', ['attendance_date' => $validated['attendance_date']])
-            ->with('success', 'Attendance entry created successfully.');
+            ->with('success', $validated['attendance_status'] === 'leave'
+                ? 'Leave entry created successfully.'
+                : 'Attendance entry created successfully.');
     }
 
     public function storeCheckout(Request $request): RedirectResponse
@@ -275,6 +304,8 @@ class AttendanceController extends Controller
             'login_time' => $attendance?->login_time ? Carbon::createFromFormat('H:i:s', $attendance->login_time)->format('H:i') : '',
             'logout_time' => $attendance?->logout_time ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('H:i') : '',
             'status' => $attendance?->attendance_status,
+            'leave_category' => $attendance?->leave_category,
+            'leave_session' => $attendance?->leave_session,
         ]);
     }
 
@@ -369,9 +400,14 @@ class AttendanceController extends Controller
                     : ($attendance->employee?->department?->name ?? null),
                 'attendance_date' => optional($attendance->attendance_date)->format('Y-m-d'),
                 'attendance_status' => strtolower((string) $attendance->attendance_status) ?: 'present',
-                'login_time' => $attendance->login_time,
-                'logout_time' => $attendance->logout_time,
-                'overall_working_hours' => $attendance->overall_working_hours,
+                'leave_category' => $attendance->leave_category,
+                'leave_session' => $attendance->leave_session,
+                'leave_category_label' => $this->leaveCategoryLabel($attendance->leave_category),
+                'leave_session_label' => $this->leaveSessionLabel($attendance->leave_session),
+                'leave_label' => $this->buildLeaveLabel($attendance->leave_category, $attendance->leave_session),
+                'login_time' => strtolower((string) $attendance->attendance_status) === 'leave' ? null : $attendance->login_time,
+                'logout_time' => strtolower((string) $attendance->attendance_status) === 'leave' ? null : $attendance->logout_time,
+                'overall_working_hours' => strtolower((string) $attendance->attendance_status) === 'leave' ? null : $attendance->overall_working_hours,
                 'login_location' => $attendance->login_location,
                 'logout_location' => $attendance->logout_location,
                 'remarks' => $attendance->remarks,
@@ -380,7 +416,7 @@ class AttendanceController extends Controller
                     : ($attendance->employee?->photograph ? asset('storage/' . $attendance->employee->photograph) : null),
                 'attendance_photo_url' => $attendance->attendance_photo ? asset($attendance->attendance_photo) : null,
                 'logout_photo_url' => $attendance->logout_photo ? asset($attendance->logout_photo) : null,
-                'login_timing' => $this->resolveLoginTiming($attendance->login_time),
+                'login_timing' => strtolower((string) $attendance->attendance_status) === 'leave' ? null : $this->resolveLoginTiming($attendance->login_time),
                 'is_derived' => false,
             ];
         });
@@ -404,6 +440,11 @@ class AttendanceController extends Controller
                     'department_name' => $attendee['department_name'],
                     'attendance_date' => $selectedDate,
                     'attendance_status' => 'absent',
+                    'leave_category' => null,
+                    'leave_session' => null,
+                    'leave_category_label' => null,
+                    'leave_session_label' => null,
+                    'leave_label' => null,
                     'login_time' => null,
                     'logout_time' => null,
                     'overall_working_hours' => null,
@@ -504,7 +545,7 @@ class AttendanceController extends Controller
 
     private function calculateWorkingHours(string $attendanceDate, string $loginTime, ?string $logoutTime): ?string
     {
-        if (! $logoutTime) {
+        if (! $logoutTime || ! $loginTime) {
             return null;
         }
 
@@ -658,5 +699,41 @@ class AttendanceController extends Controller
         return Department::query()
             ->orderBy('name')
             ->get(['id', 'name']);
+    }
+
+    private function leaveCategoryLabel(?string $leaveCategory): ?string
+    {
+        return match ($leaveCategory) {
+            'paid' => 'Paid Leave',
+            'lop' => 'Loss of Pay',
+            'half_day' => 'Half Day Leave',
+            default => null,
+        };
+    }
+
+    private function leaveSessionLabel(?string $leaveSession): ?string
+    {
+        return match ($leaveSession) {
+            'first_half' => 'First Half',
+            'second_half' => 'Second Half',
+            default => null,
+        };
+    }
+
+    private function buildLeaveLabel(?string $leaveCategory, ?string $leaveSession): ?string
+    {
+        $categoryLabel = $this->leaveCategoryLabel($leaveCategory);
+
+        if (! $categoryLabel) {
+            return null;
+        }
+
+        if ($leaveCategory !== 'half_day') {
+            return $categoryLabel;
+        }
+
+        $sessionLabel = $this->leaveSessionLabel($leaveSession);
+
+        return $sessionLabel ? $categoryLabel . ' - ' . $sessionLabel : $categoryLabel;
     }
 }

@@ -106,12 +106,12 @@
                 <div class="eob-card-head">
                     <div>
                         <div class="eob-card-title">Approval Hierarchy</div>
-                        <div class="eob-card-sub">Approval follows User Mapping from manager to manager.</div>
+                        <div class="eob-card-sub">Approval uses the first 2 mapped hierarchy levels, then sends the final approval to HR.</div>
                     </div>
                 </div>
                 <div class="eob-card-body">
                     @if($approvalChain->isEmpty())
-                        <div class="lr-note">No manager hierarchy is mapped for your user. Please map this user under a manager before submitting.</div>
+                        <div class="lr-note">No approval hierarchy could be resolved for your user. Please verify the first manager mapping and the role parent mappings before submitting.</div>
                     @else
                         <div class="lr-flow">
                             @foreach($approvalChain as $approver)

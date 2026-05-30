@@ -25,6 +25,7 @@
 .att-error{font-size:12px;color:#dc2626}
 .att-help{font-size:12px;color:#8a8a97}
 .att-help.is-warning{color:#c2410c}
+.att-hidden{display:none}
 .att-foot{padding:18px 22px;border-top:1px solid #f0eef2;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .att-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:10px;border:1px solid transparent;background:#fff;color:#121212;text-decoration:none;font-size:13px;font-weight:700;cursor:pointer}
 .att-btn-primary{background:linear-gradient(135deg,#fe5f04,#ff7c30);border-color:#fe5f04;color:#fff}
@@ -60,7 +61,7 @@
             @csrf
             <div class="att-card-head">
                 <div class="att-card-title">Manual HR Check-In Entry</div>
-                <div class="att-card-sub">Select employee or intern, choose date, and enter only the check-in time. Checkout can be added separately.</div>
+                <div class="att-card-sub">Select employee or intern, choose date, and record either attendance or leave. Checkout can be added separately for present entries.</div>
             </div>
             <div class="att-card-body">
                 <div class="att-grid">
@@ -85,16 +86,37 @@
 
                     <div class="att-field">
                         <label class="att-label">Status <span class="att-req">*</span></label>
-                        <select name="attendance_status" class="att-select" required>
-                            <option value="present" @selected(old('attendance_status', 'present') === 'present')>Present</option>
-                            <option value="leave" @selected(old('attendance_status') === 'leave')>Leave</option>
+                        <select name="attendance_status" class="att-select" id="attendance_status" required>
+                            <option value="present" @selected(old('attendance_status', request('attendance_status', 'present')) === 'present')>Present</option>
+                            <option value="leave" @selected(old('attendance_status', request('attendance_status')) === 'leave')>Leave</option>
                         </select>
                         @error('attendance_status')<div class="att-error">{{ $message }}</div>@enderror
                     </div>
 
+                    <div class="att-field" id="leave_category_wrap">
+                        <label class="att-label">Leave Type <span class="att-req">*</span></label>
+                        <select name="leave_category" class="att-select" id="leave_category">
+                            <option value="">Select leave type</option>
+                            <option value="paid" @selected(old('leave_category') === 'paid')>Paid Leave</option>
+                            <option value="lop" @selected(old('leave_category') === 'lop')>Loss of Pay</option>
+                            <option value="half_day" @selected(old('leave_category') === 'half_day')>Half Day Leave</option>
+                        </select>
+                        @error('leave_category')<div class="att-error">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="att-field" id="leave_session_wrap">
+                        <label class="att-label">Half Day Session <span class="att-req">*</span></label>
+                        <select name="leave_session" class="att-select" id="leave_session">
+                            <option value="">Select session</option>
+                            <option value="first_half" @selected(old('leave_session') === 'first_half')>First Half</option>
+                            <option value="second_half" @selected(old('leave_session') === 'second_half')>Second Half</option>
+                        </select>
+                        @error('leave_session')<div class="att-error">{{ $message }}</div>@enderror
+                    </div>
+
                     <div class="att-field">
-                        <label class="att-label">In Time <span class="att-req">*</span></label>
-                        <input type="time" name="login_time" id="login_time" class="att-input" value="{{ old('login_time') }}" required>
+                        <label class="att-label">In Time <span class="att-req" id="login_time_req">*</span></label>
+                        <input type="time" name="login_time" id="login_time" class="att-input" value="{{ old('login_time') }}">
                         @error('login_time')<div class="att-error">{{ $message }}</div>@enderror
                         <div class="att-help" id="login_time_help">If a check-in already exists for the selected date, that time will appear here. Otherwise this stays blank.</div>
                     </div>
@@ -120,9 +142,42 @@
 document.addEventListener('DOMContentLoaded', function () {
     const attendeeField = document.getElementById('attendee_key');
     const dateField = document.getElementById('attendance_date');
+    const statusField = document.getElementById('attendance_status');
+    const leaveCategoryWrap = document.getElementById('leave_category_wrap');
+    const leaveCategoryField = document.getElementById('leave_category');
+    const leaveSessionWrap = document.getElementById('leave_session_wrap');
+    const leaveSessionField = document.getElementById('leave_session');
     const loginField = document.getElementById('login_time');
+    const loginReq = document.getElementById('login_time_req');
     const helpField = document.getElementById('login_time_help');
     let activeLookup = 0;
+
+    const syncStatusState = function () {
+        const isLeave = statusField.value === 'leave';
+        const isHalfDay = isLeave && leaveCategoryField.value === 'half_day';
+
+        leaveCategoryWrap.classList.toggle('att-hidden', !isLeave);
+        leaveCategoryField.required = isLeave;
+        leaveSessionWrap.classList.toggle('att-hidden', !isHalfDay);
+        leaveSessionField.required = isHalfDay;
+        loginField.required = !isLeave;
+        loginReq.classList.toggle('att-hidden', isLeave);
+
+        if (!isHalfDay) {
+            leaveSessionField.value = '';
+        }
+
+        if (isLeave) {
+            loginField.value = '';
+            helpField.textContent = isHalfDay
+                ? 'Half day leave selected. Choose whether it is first half or second half.'
+                : 'Leave entries do not need a check-in time.';
+            helpField.classList.remove('is-warning');
+            return;
+        }
+
+        helpField.textContent = 'If a check-in already exists for the selected date, that time will appear here. Otherwise this stays blank.';
+    };
 
     const resetLoginState = function (message, warning) {
         loginField.value = '';
@@ -133,6 +188,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const lookupAttendance = function () {
         const attendeeKey = attendeeField.value;
         const attendanceDate = dateField.value;
+
+        if (statusField.value === 'leave') {
+            resetLoginState('Leave entries do not need a check-in time.', false);
+            return;
+        }
 
         if (!attendeeKey || !attendanceDate) {
             resetLoginState('Choose attendee and date to load any existing check-in time.', false);
@@ -182,6 +242,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     attendeeField.addEventListener('change', lookupAttendance);
     dateField.addEventListener('change', lookupAttendance);
+    statusField.addEventListener('change', function () {
+        syncStatusState();
+        lookupAttendance();
+    });
+    leaveCategoryField.addEventListener('change', syncStatusState);
+
+    syncStatusState();
 
     if (attendeeField.value && dateField.value) {
         lookupAttendance();

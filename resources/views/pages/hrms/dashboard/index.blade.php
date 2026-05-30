@@ -656,9 +656,9 @@
         <!-- Key Metrics -->
         <section class="hrms-stats">
             <div class="hrms-card hrms-stat-card">
-                <div class="hrms-stat-label">{{ $selfServiceMode ? 'Profile' : 'Total Employees' }}</div>
+                <div class="hrms-stat-label">{{ $selfServiceMode ? 'Profile' : 'People' }}</div>
                 <div class="hrms-stat-value">{{ $stats['employees_total'] }}</div>
-                <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Your HRMS profile' : 'Active workforce' }}</div>
+                <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Your HRMS profile' : (($stats['employee_count'] ?? 0) . ' Emp / ' . ($stats['interns_total'] ?? 0) . ' Int') }}</div>
             </div>
             <div class="hrms-card hrms-stat-card">
                 <div class="hrms-stat-label">Present Today</div>
@@ -668,7 +668,7 @@
             <div class="hrms-card hrms-stat-card">
                 <div class="hrms-stat-label">Late Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_late'] }}</div>
-                <div class="hrms-stat-meta">Late arrivals</div>
+                <div class="hrms-stat-meta">Late arrivals @if(($stats['today_early'] ?? 0) > 0) / Early: {{ $stats['today_early'] }} @endif</div>
             </div>
             <div class="hrms-card hrms-stat-card">
                 <div class="hrms-stat-label">Absent Today</div>
@@ -787,20 +787,21 @@
             <div class="hrms-card hrms-panel">
                 <div class="hrms-panel-head">
                     <div>
-                        <div class="hrms-panel-title">Today's Leave Approvals</div>
-                        <div class="hrms-panel-sub">{{ collect($stats['today_leave_approvals'] ?? [])->count() }} employee(s) on approved leave today</div>
+                        <div class="hrms-panel-title">Today's Leaves</div>
+                        <div class="hrms-panel-sub">{{ collect($stats['today_leave_approvals'] ?? [])->count() }} employee(s) marked on leave today</div>
                     </div>
                 </div>
                 <div class="hrms-feature-list">
-                    @forelse($stats['today_leave_approvals'] as $leaveRequest)
+                    @forelse($stats['today_leave_approvals'] as $leaveEntry)
                     <div class="hrms-feature" style="align-items:flex-start;">
                         <div class="hrms-feature-icon" style="background:#ecfdf3;color:#047857;">
-                            {{ strtoupper(substr($leaveRequest->employee?->name ?: 'L', 0, 1)) }}
+                            {{ strtoupper(substr($leaveEntry['employee_name'] ?: 'L', 0, 1)) }}
                         </div>
                         <div style="flex:1;">
-                            <strong>{{ $leaveRequest->employee?->name ?: 'Employee' }}</strong>
-                            <span>{{ $leaveRequest->employee?->department?->name ?: 'No department mapped' }}</span>
-                            <span>{{ $leaveRequest->employee?->role?->name ?: 'No role mapped' }}</span>
+                            <strong>{{ $leaveEntry['employee_name'] ?: 'Employee' }}</strong>
+                            <span>{{ $leaveEntry['department_name'] ?: 'No department mapped' }}</span>
+                            <span>{{ $leaveEntry['role_name'] ?: 'No role mapped' }}</span>
+                            <span>{{ $leaveEntry['leave_label'] ?: 'Leave' }}</span>
                         </div>
                     </div>
                     @empty
