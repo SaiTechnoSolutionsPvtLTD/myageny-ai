@@ -8,7 +8,7 @@ use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
-use App\Models\UserMapping;
+use App\Services\HrmsApprovalHierarchyService;
 use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +19,7 @@ use Illuminate\View\View;
 
 class LeaveRequestController extends Controller
 {
+    public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
 
     public function index(): View
     {
@@ -283,25 +284,7 @@ class LeaveRequestController extends Controller
 
     private function approvalChainFor(User $requester): Collection
     {
-        $chain = collect();
-        $visited = collect([$requester->id]);
-        $current = $requester;
-
-        while ($current) {
-            $manager = UserMapping::with('manager.roles')
-                ->where('user_id', $current->id)
-                ->first()?->manager;
-
-            if (! $manager || ! $manager->is_active || $manager->isSuperAdmin() || $visited->contains($manager->id)) {
-                break;
-            }
-
-            $chain->push($manager);
-            $visited->push($manager->id);
-            $current = $manager;
-        }
-
-        return $chain;
+        return $this->approvalHierarchy->leaveApprovalChainFor($requester);
     }
 
     private function calculateTotalDays(string $startDate, string $endDate): int

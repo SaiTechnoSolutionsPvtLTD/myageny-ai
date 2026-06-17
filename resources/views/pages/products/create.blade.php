@@ -67,8 +67,10 @@
                 @include('pages.products.partials.form', [
                     'product'    => new \App\Models\Product(),
                     'categories' => $categories,
+                    'departments' => $departments,
                     'users'      => $users,
                 ])
+
 
                 <div class="pm-form-actions">
                     <a href="{{ route('products.index') }}" class="pm-btn pm-btn--ghost">Cancel</a>

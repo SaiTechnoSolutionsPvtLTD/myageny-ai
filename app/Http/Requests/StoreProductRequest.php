@@ -25,6 +25,8 @@ class StoreProductRequest extends FormRequest
             'status'                => ['required', 'in:active,inactive,draft'],
             'sort_order'            => ['nullable', 'integer', 'min:0'],
             'assigned_to'           => ['nullable', 'exists:users,id'],
+            'department_ids'        => ['nullable', 'array'],
+            'department_ids.*'      => ['integer', 'exists:departments,id'],
 
             // Dynamic attributes
             'attributes'            => ['nullable', 'array'],

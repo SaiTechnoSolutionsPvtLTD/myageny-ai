@@ -26,6 +26,11 @@ class ProductService
             $this->productFields($data)
         );
 
+        $this->syncDepartments(
+            $product,
+            $data['department_ids'] ?? []
+        );
+
         $this->syncAttributes(
             $product,
             $data['attributes'] ?? []
@@ -45,8 +50,9 @@ class ProductService
     {
         return DB::transaction(function () use ($product, $data) {
             $product->update($this->productFields($data));
+            $this->syncDepartments($product, $data['department_ids'] ?? []);
             $this->syncAttributes($product, $data['attributes'] ?? []);
-            return $product->fresh(['category', 'attributeValues.attribute']);
+            return $product->fresh(['category', 'attributeValues.attribute', 'departments']);
         });
     }
 
@@ -73,6 +79,18 @@ class ProductService
             'discount_type', 'discount_value',
             'description', 'status', 'sort_order', 'assigned_to',
         ]));
+    }
+
+    private function syncDepartments(Product $product, array $departmentIds): void
+    {
+        $ids = collect($departmentIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $product->departments()->sync($ids);
     }
 
     /**

@@ -8,7 +8,7 @@ use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
-use App\Models\UserMapping;
+use App\Services\HrmsApprovalHierarchyService;
 use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class LeaveRequestApiController extends Controller
 {
+    public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
+
     // ── GET /api/mobile/hrms/leave-requests ──────────────────────────────────
     public function index(Request $request): JsonResponse
     {
@@ -213,6 +215,7 @@ class LeaveRequestApiController extends Controller
         });
 
         $leaveRequest->load(['leaveType', 'approvals.approver']);
+        app(HrmsApprovalNotificationService::class)->sendLeaveSubmitted($leaveRequest);
 
         return response()->json([
             'success' => true,
@@ -354,28 +357,7 @@ class LeaveRequestApiController extends Controller
      */
     private function approvalChainFor(User $requester): Collection
     {
-        $chain   = collect();
-        $visited = collect([$requester->id]);
-        $current = $requester;
-
-        while ($current) {
-            $manager = UserMapping::with('manager.roles')
-                ->where('user_id', $current->id)
-                ->first()?->manager;
-
-            if (! $manager
-                || ! $manager->is_active
-                || $manager->isSuperAdmin()
-                || $visited->contains($manager->id)) {
-                break;
-            }
-
-            $chain->push($manager);
-            $visited->push($manager->id);
-            $current = $manager;
-        }
-
-        return $chain;
+        return $this->approvalHierarchy->leaveApprovalChainFor($requester);
     }
 
     private function resolveEmployee(User $user): ?EmployeeOnboarding
@@ -477,17 +459,15 @@ class LeaveRequestApiController extends Controller
     // ── Helpers (mirrored from web controller) ────────────────────────────────
     private function approvalRowsFor(User $requester): array
     {
-        $tlApprover = $this->resolveTlApprover($requester);
-
-        return collect(self::APPROVAL_STEPS)
+        return $this->approvalChainFor($requester)
             ->values()
-            ->map(function (array $step, int $index) use ($tlApprover) {
+            ->map(function (User $approver, int $index) {
                 return [
-                    'step_order'       => $index + 1,
-                    'step_key'         => $step['key'],
-                    'step_name'        => $step['name'],
-                    'approver_user_id' => $step['key'] === 'tl' ? $tlApprover?->id : null,
-                    'status'           => LeaveApproval::STATUS_PENDING,
+                    'step_order' => $index + 1,
+                    'step_key' => 'user_' . $approver->id,
+                    'step_name' => 'Level ' . ($index + 1) . ' - ' . $approver->name,
+                    'approver_user_id' => $approver->id,
+                    'status' => LeaveApproval::STATUS_PENDING,
                 ];
             })
             ->all();
@@ -512,54 +492,7 @@ class LeaveRequestApiController extends Controller
         if ((int) $lr->user_id === (int) $user->id) return false;
         if ($user->isSystemAdmin()) return true;
         if ($lr->user?->company_id && $user->company_id && (int) $lr->user->company_id !== (int) $user->company_id) return false;
-        if ($approval->approver_user_id) return (int) $approval->approver_user_id === (int) $user->id;
-        return $this->userHasStepRole($user, $approval->step_key);
-    }
-
-    private function resolveTlApprover(User $requester): ?User
-    {
-        $mapped = UserMapping::with('manager.roles')
-            ->where('user_id', $requester->id)->first()?->manager;
-        if ($mapped && $mapped->is_active) return $mapped;
-        return $this->firstUserForStep('tl', $requester);
-    }
-
-    private function firstUserForStep(string $stepKey, User $requester): ?User
-    {
-        return User::with('roles')
-            ->where('id', '!=', $requester->id)
-            ->where('is_active', true)
-            ->when($requester->company_id, fn ($q) => $q->where('company_id', $requester->company_id))
-            ->orderBy('name')->get()
-            ->first(fn (User $c) => $this->userHasStepRole($c, $stepKey));
-    }
-
-    private function userHasStepRole(User $user, string $stepKey): bool
-    {
-        $step = collect(self::APPROVAL_STEPS)->firstWhere('key', $stepKey);
-        if (! $step) return false;
-        $aliases = collect($step['aliases'])
-            ->push($step['key'])->push($step['name'])
-            ->map(fn ($v) => $this->normalizeRoleKey($v))->unique();
-        return $this->roleKeysFor($user)->intersect($aliases)->isNotEmpty();
-    }
-
-    private function roleKeysFor(User $user): \Illuminate\Support\Collection
-    {
-        $user->loadMissing('roles');
-        return $user->roles
-            ->flatMap(fn ($r) => [$r->name, $r->display_name])->filter()
-            ->flatMap(function (string $name) {
-                $n = $this->normalizeRoleKey($name);
-                return [$n, Str::after($n, '__')];
-            })->unique()->values();
-    }
-
-    private function normalizeRoleKey(string $value): string
-    {
-        return Str::of($value)->lower()->replace(['-', ' '], '_')
-            ->replaceMatches('/[^a-z0-9_]+/', '')->replaceMatches('/_+/', '_')
-            ->trim('_')->value();
+        return (int) $approval->approver_user_id === (int) $user->id;
     }
 
     private function calculateTotalDays(string $start, string $end): int

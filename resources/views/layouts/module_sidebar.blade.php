@@ -5,6 +5,7 @@
             'title' => 'CRM',
             'description' => 'Leads, quotations, products, settings, and customer workflows.',
             'icon' => 'bi-briefcase-fill',
+            'permission' => 'dashboard.view',
             'url' => route('dashboard'),
         ],
         [
@@ -12,7 +13,16 @@
             'title' => 'HRMS',
             'description' => 'Employees, attendance, payroll, and team workflows.',
             'icon' => 'bi-people-fill',
+            'permission' => 'dashboard.view',
             'url' => route('hrms.dashboard'),
+        ],
+        [
+            'key' => 'projects',
+            'title' => 'Projects',
+            'description' => 'Projects, tasks, time tracking, and project workflows.',
+            'icon' => 'bi-diagram-3-fill',
+            'accessor' => 'canAccessProjectsModule',
+            'url' => route('projects.dashboard'),
         ],
     ];
 @endphp
@@ -51,7 +61,13 @@
 
     <div class="module-grid">
         @foreach($modules as $module)
-            @if($module['url'])
+            @php
+                $canAccessModule = isset($module['accessor'])
+                    ? (bool) auth()->user()?->{$module['accessor']}()
+                    : auth()->user()?->can($module['permission'] ?? '');
+            @endphp
+
+            @if($canAccessModule && !empty($module['url']))
                 <a href="{{ $module['url'] }}" class="module-card module-card--{{ $module['key'] }}">
                     <span class="module-card__icon" aria-hidden="true">
                         <i class="bi {{ $module['icon'] }}"></i>
@@ -60,7 +76,7 @@
                     <div class="module-card__desc">{{ $module['description'] }}</div>
                 </a>
             @else
-                <button type="button" class="module-card module-card--button module-card--{{ $module['key'] }}">
+                <button type="button" class="module-card module-card--button module-card--{{ $module['key'] }}" disabled aria-disabled="true">
                     <span class="module-card__icon" aria-hidden="true">
                         <i class="bi {{ $module['icon'] }}"></i>
                     </span>

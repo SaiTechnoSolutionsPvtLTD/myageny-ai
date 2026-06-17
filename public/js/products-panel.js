@@ -24,6 +24,14 @@
         deals       : [],   // fetched deals (accordion)
         summary     : {},
         activePayProdId : null,   // which lead_product is open in payment modal
+        dealNameTouched : false,
+        lastSuggestedDealName : '',
+        production  : {
+            leadProductId: null,
+            detail: null,
+            selectedDepartmentId: null,
+            lastSubmission: null,
+        },
     };
 
     /* ─────────────────────────────────────────────────────────────
@@ -79,10 +87,26 @@
         });
     }
 
+    function apiFormData(path, formData) {
+        return fetch(API_BASE + path, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': CSRF,
+            },
+            body: formData,
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok) throw data;
+                return data;
+            });
+        });
+    }
+
     /* ─────────────────────────────────────────────────────────────
        MODAL HELPERS
     ───────────────────────────────────────────────────────────── */
-    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history'];
+    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production'];
 
     function ppShow(id) {
         var e = el(id);
@@ -92,6 +116,9 @@
     PP.ppHideModal = function (id) {
         var e = el(id);
         if (e) { e.classList.remove('pp-show'); document.body.style.overflow = ''; }
+        if (id === 'pp-modal-payment') {
+            handlePaymentModalClosed();
+        }
     };
 
     /* Close on backdrop */
@@ -124,8 +151,13 @@
 
     function resetAddModal() {
         var dealInp = el('pp-deal-name');
-        if (dealInp) dealInp.value = '';
+        if (dealInp) {
+            dealInp.value = '';
+            dealInp.dataset.autoSuggested = '';
+        }
         ppState.selected = {};
+        ppState.dealNameTouched = false;
+        ppState.lastSuggestedDealName = '';
         var multiSel = el('pp-product-multi-select');
         if (multiSel) {
             Array.from(multiSel.options).forEach(function (o) { o.selected = false; });
@@ -187,6 +219,7 @@
             if (!selIds.includes(parseInt(pid))) delete ppState.selected[pid];
         });
 
+        syncSuggestedDealName();
         renderSelectedTable();
     };
 
@@ -253,8 +286,42 @@
                 if (parseInt(o.value) === parseInt(pid)) o.selected = false;
             });
         }
+        syncSuggestedDealName();
         renderSelectedTable();
     };
+
+    function syncSuggestedDealName() {
+        var dealInp = el('pp-deal-name');
+        if (!dealInp) return;
+
+        var suggested = buildSuggestedDealName();
+        ppState.lastSuggestedDealName = suggested;
+
+        if (!suggested) {
+            if (!ppState.dealNameTouched || dealInp.value === dealInp.dataset.autoSuggested) {
+                dealInp.value = '';
+                dealInp.dataset.autoSuggested = '';
+            }
+            return;
+        }
+
+        if (!ppState.dealNameTouched || !dealInp.value.trim() || dealInp.value === dealInp.dataset.autoSuggested) {
+            dealInp.value = suggested;
+            dealInp.dataset.autoSuggested = suggested;
+        }
+    }
+
+    function buildSuggestedDealName() {
+        var selectedCount = Object.keys(ppState.selected).length;
+        if (!selectedCount) {
+            return '';
+        }
+        return currentMonthShortName() + ' Deal';
+    }
+
+    function currentMonthShortName() {
+        return new Date().toLocaleString('en-US', { month: 'short' });
+    }
 
     /** Submit the Add Product form */
     PP.ppSubmitDeal = function () {
@@ -354,6 +421,7 @@
                 STATUS_OPTIONS = normalizeStatusOptions(res.statuses);
                 STATUS_CONFIG = buildStatusConfig(STATUS_OPTIONS);
             }
+            ppProductCache = {};
             ppState.deals   = res.deals   || [];
             ppState.summary = res.summary || {};
             renderSummaryBar();
@@ -399,9 +467,6 @@
     }
 
     function renderDealAccordion(deal, di) {
-        var statusValue = String(deal.status_id || deal.status || '');
-        var statusCfg = getStatusConfig(statusValue, deal.status_label);
-        var statusOptions = getStatusOptions(statusValue, deal.status_label);
         var progress  = deal.total_value > 0
             ? Math.min(100, Math.round((deal.total_paid / deal.total_value) * 100))
             : 0;
@@ -418,22 +483,6 @@
                     '<div class="pp-deal-meta">' + deal.products.length + ' product(s) · ' + fmt(deal.total_value) + '</div>' +
                 '</div>' +
                 '<div class="pp-deal-right">' +
-                    // Status dropdown
-                    '<div class="pp-status-select-wrap">' +
-                        '<select class="pp-status-select" ' +
-                            'style="background:' + statusCfg.bg + ';color:' + statusCfg.text + ';border-color:' + statusCfg.border + '" ' +
-                            'data-lead="' + LEAD_ID + '" data-deal="' + escAttr(deal.deal_name) + '" ' +
-                            'onchange="PP.ppUpdateDealStatus(this)" ' +
-                            'onclick="event.stopPropagation()">' +
-                            statusOptions.map(function (option) {
-                                var value = String(option.id);
-                                var sc = getStatusConfig(value, option.name);
-                                return '<option value="' + escAttr(value) + '" ' + (statusValue === value ? 'selected' : '') + '>' +
-                                    optionText(sc.icon, option.name) + '</option>';
-                            }).join('') +
-                        '</select>' +
-                        '<svg class="pp-status-caret" style="color:' + statusCfg.text + '" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
-                    '</div>' +
                     // Amounts pill
                     '<div class="pp-deal-amounts">' +
                         '<span class="pp-pill pp-pill-green">' + fmt(deal.total_paid) + ' paid</span>' +
@@ -462,16 +511,59 @@
     }
 
     function renderProductCard(p) {
-
+        var statusValue = String(p.status_id || p.status_value || '');
+        var statusCfg = getStatusConfig(statusValue, p.status_label);
+        var statusOptions = getStatusOptions(statusValue, p.status_label);
+        var currentStatusKey = statusKey(p.status_label || p.status_value || '');
+        var isConverted = isConvertedProduct(p);
         var progress  = p.total > 0 ? Math.min(100, Math.round((p.paid / p.total) * 100)) : 0;
         var prgColor  = progress >= 100 ? '#16a34a' : (progress > 0 ? '#fe5f04' : '#e1dee3');
         var pending   = p.total - p.paid;
         var pendingClr = pending > 0 ? '#dc2626' : '#16a34a';
+        var productionMeta = '';
+        var productNameHtml = '<span class="pp-prod-name">' + escHtml(p.name) + '</span>';
+
+        if (p.productionInitiation) {
+            var movedText = p.productionInitiation.department_name
+                ? 'Moved to ' + escHtml(p.productionInitiation.department_name)
+                : 'Moved to Production';
+            var dateText = p.productionInitiation.moved_at
+                ? ' | ' + escHtml(p.productionInitiation.moved_at)
+                : '';
+
+            if (p.productionInitiation.view_url) {
+                productNameHtml = '<a class="pp-prod-name" href="' + escAttr(p.productionInitiation.view_url) + '" style="color:#047857;text-decoration:none">' +
+                    escHtml(p.name) +
+                '</a>';
+            }
+
+            productionMeta = '<div class="pp-prod-desc-sub" style="margin-top:6px;color:#047857;font-weight:700">' +
+                'Product initiate completed | ' + movedText + dateText +
+            '</div>';
+        }
 
         return '<div class="pp-prod-card pp-prod-card--sub" id="pp-prod-' + p.id + '">' +
             '<div class="pp-prod-inner">' +
                 '<div class="pp-prod-name-row">' +
-                    '<span class="pp-prod-name">' + escHtml(p.name) + '</span>' +
+                    productNameHtml +
+                    productionMeta +
+                '</div>' +
+                '<div style="display:flex;justify-content:flex-end;margin:0 0 12px;">' +
+                    '<div class="pp-status-select-wrap">' +
+                        '<select class="pp-status-select" ' +
+                            'style="background:' + statusCfg.bg + ';color:' + statusCfg.text + ';border-color:' + statusCfg.border + '" ' +
+                            'data-product="' + p.id + '" ' +
+                            (isConverted ? 'disabled title="Converted products are locked"' : '') + ' ' +
+                            'onchange="PP.ppUpdateProductStatus(this)">' +
+                            statusOptions.map(function (option) {
+                                var value = String(option.id);
+                                var sc = getStatusConfig(value, option.name);
+                                return '<option value="' + escAttr(value) + '" ' + (statusValue === value ? 'selected' : '') + '>' +
+                                    optionText(sc.icon, option.name) + '</option>';
+                            }).join('') +
+                        '</select>' +
+                        '<svg class="pp-status-caret" style="color:' + statusCfg.text + '" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="pp-amounts-row">' +
                     '<div class="pp-amt-item"><div class="pp-amt-label">Total</div>' +
@@ -490,14 +582,32 @@
                 '</div>' +
                 '<div class="pp-prod-footer">' +
                     '<div class="pp-footer-actions">' +
-                        '<button type="button" class="pp-act-btn pp-btn-pay" onclick="PP.ppShowPayment(' + p.id + ')">' +
-                            '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' +
+                        '<button type="button" class="pp-act-btn pp-btn-pay" ' +
+                            (isConverted
+                                ? 'onclick="PP.ppShowPayment(' + p.id + ')"'
+                                : 'disabled style="opacity:.55;cursor:not-allowed" title="' + escAttr(paymentLockedMessage()) + '"') +
+                            '>' +
+                            '' +
                             'Add Payment' +
                         '</button>' +
                         '<button type="button" class="pp-act-btn pp-btn-hist" onclick="PP.ppShowHistory(' + p.id + ')">' +
                             '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><circle cx="12" cy="12" r="10"/></svg>' +
                             'History (' + p.payments.length + ')' +
                         '</button>' +
+                        (p.productionInitiation
+                            ? '<a class="pp-act-btn pp-btn-prod" href="' + escAttr(p.productionInitiation.view_url || '#') + '" style="opacity:.9">' +
+                                '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
+                                'Product Initiated' +
+                              '</a>'
+                            : !canMoveToProduction(p)
+                                ? '<button type="button" class="pp-act-btn pp-btn-prod" disabled style="opacity:.55;cursor:not-allowed" title="' + escAttr(productionLockedMessage(p)) + '">' +
+                                    '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
+                                    'Move to Production' +
+                                  '</button>'
+                            : '<button type="button" class="pp-act-btn pp-btn-prod" onclick="PP.ppShowProduction(' + p.id + ')">' +
+                                '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
+                                'Move to Production' +
+                              '</button>') +
                         '<button type="button" class="pp-act-btn pp-btn-del" ' +
                             'onclick="PP.ppDeleteProduct(' + p.id + ',\'' + escAttr(p.name) + '\')">' +
                             '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>' +
@@ -531,12 +641,20 @@
     /* ─────────────────────────────────────────────────────────────
        STATUS UPDATE
     ───────────────────────────────────────────────────────────── */
-    PP.ppUpdateDealStatus = function (sel) {
-        var dealName = sel.dataset.deal;
+    PP.ppUpdateProductStatus = function (sel) {
+        var productId = sel.dataset.product;
         var statusId = sel.value;
+        var product = findProduct(parseInt(productId, 10));
+        var currentStatusKey = statusKey(product && (product.status_label || product.status_value || ''));
         var option   = getStatusOption(statusId);
         var label    = option ? option.name : statusId;
         var cfg      = getStatusConfig(statusId, label);
+
+        if (currentStatusKey === 'converted') {
+            toast('Converted product status cannot be changed again.', 'error');
+            loadDeals();
+            return;
+        }
 
         // Optimistic UI
         sel.style.background   = cfg.bg;
@@ -547,7 +665,7 @@
 
         var payload = {
             lead_id        : LEAD_ID,
-            deal_name      : dealName,
+            product_id     : productId,
         };
         if (/^\d+$/.test(statusId)) {
             payload.lead_status_id = statusId;
@@ -555,8 +673,15 @@
             payload.product_status = statusId;
         }
 
-        api('PUT', '/lead-products/status', payload)
-        .then(function (res) {
+        submitProductStatusChange(payload, label)
+        .then(function () { loadDeals(); })
+        .catch(function () { toast('Failed to update status', 'error'); loadDeals(); });
+    };
+
+    function submitProductStatusChange(payload, fallbackLabel) {
+        return api('PUT', '/lead-products/status', payload).then(function (res) {
+            var label = fallbackLabel;
+
             if (res.status) {
                 var updated = normalizeStatusOptions([res.status])[0];
                 if (updated && !getStatusOption(updated.id)) {
@@ -565,10 +690,11 @@
                 }
                 label = updated ? updated.name : label;
             }
+
             toast('Status updated to ' + label);
-        })
-        .catch(function () { toast('Failed to update status', 'error'); loadDeals(); });
-    };
+            return res;
+        });
+    }
 
     /* ─────────────────────────────────────────────────────────────
        PAYMENT MODAL
@@ -586,9 +712,41 @@
         return null;
     }
 
+    function isConvertedProduct(product) {
+        return statusKey(product && (product.status_label || product.status_value || '')) === 'converted';
+    }
+
+    function paymentLockedMessage() {
+        return 'Convert the product status first to enable payments.';
+    }
+
+    function productionLockedMessage(product) {
+        if (!isConvertedProduct(product)) {
+            return 'Convert the product first to initiate production.';
+        }
+
+        if ((product.payments || []).length < 1) {
+            return 'At least 1 received payment is required before moving this product to production.';
+        }
+
+        return '';
+    }
+
+    function canOpenPaymentModal(product) {
+        return isConvertedProduct(product);
+    }
+
+    function canMoveToProduction(product) {
+        return isConvertedProduct(product) && (product.payments || []).length >= 1;
+    }
+
     PP.ppShowPayment = function (prodId) {
         var p = findProduct(prodId);
         if (!p) { toast('Product not found. Try refreshing.', 'error'); return; }
+        if (!canOpenPaymentModal(p)) {
+            toast(paymentLockedMessage(), 'error');
+            return;
+        }
 
         ppState.activePayProdId = prodId;
 
@@ -638,6 +796,9 @@
             notes            : notes,
         })
         .then(function () {
+            return null;
+        })
+        .then(function () {
             PP.ppHideModal('pp-modal-payment');
             toast('Payment of ' + fmt(amount) + ' recorded!');
             ppProductCache = {};   // clear cache
@@ -663,13 +824,18 @@
         .then(function (res) {
             var p = res.product;
             setInner('pp-hist-name', p.name);
-
-            // Wire Add Payment button
+            var canAddPayment = isConvertedProduct(p);
             var addBtn = el('pp-hist-add-btn');
-            if (addBtn) addBtn.onclick = function () {
-                PP.ppHideModal('pp-modal-history');
-                PP.ppShowPayment(prodId);
-            };
+            if (addBtn) {
+                addBtn.disabled = !canAddPayment;
+                addBtn.style.opacity = canAddPayment ? '' : '.55';
+                addBtn.style.cursor = canAddPayment ? '' : 'not-allowed';
+                addBtn.title = canAddPayment ? '' : paymentLockedMessage();
+                addBtn.onclick = canAddPayment ? function () {
+                    PP.ppHideModal('pp-modal-history');
+                    PP.ppShowPayment(prodId);
+                } : null;
+            }
 
             setInner('pp-hist-body', renderHistoryBody(p, res.overall || []));
         })
@@ -677,6 +843,439 @@
             setInner('pp-hist-body', '<div class="pp-hist-empty"><div class="pp-hist-empty-ico">⚠️</div><div>Failed to load history.</div></div>');
         });
     };
+
+    PP.ppShowProduction = function (prodId) {
+        var p = findProduct(prodId);
+        if (!p) { toast('Product not found. Try refreshing.', 'error'); return; }
+
+        if (!canMoveToProduction(p)) {
+            toast(productionLockedMessage(p), 'error');
+            return;
+        }
+
+        ppState.production.leadProductId = prodId;
+        ppState.production.detail = null;
+        ppState.production.selectedDepartmentId = null;
+        ppState.production.lastSubmission = null;
+
+        setInner('pp-production-name', 'Loading...');
+        setInner('pp-production-body', '<div class="pp-production-empty"><div class="pp-production-empty-title">Loading production mapping</div><div class="pp-production-empty-copy">Please wait while we load the mapped departments and workflow stages.</div></div>');
+        ppShow('pp-modal-production');
+
+        api('GET', '/lead-products/' + prodId + '/production')
+            .then(function (res) {
+                var departments = Array.isArray(res.departments) ? res.departments : [];
+                var preferredDepartment = departments.find(function (department) {
+                    return department.is_development;
+                }) || departments[0] || null;
+
+                ppState.production.detail = res;
+                ppState.production.selectedDepartmentId = preferredDepartment ? preferredDepartment.id : null;
+                setInner('pp-production-name', escHtml((res.product && res.product.name) || p.name || 'Product'));
+                renderProductionBody();
+            })
+            .catch(function (err) {
+                var msg = err && err.message ? err.message : 'Failed to load production mapping.';
+                setInner('pp-production-name', escHtml(p.name || 'Product'));
+                setInner('pp-production-body', '<div class="pp-production-empty"><div class="pp-production-empty-title">Unable to load production mapping</div><div class="pp-production-empty-copy">' + escHtml(msg) + '</div></div>');
+                toast(msg, 'error');
+            });
+    };
+
+    PP.ppOnProductionDepartmentChange = function (value) {
+        ppState.production.selectedDepartmentId = value ? parseInt(value, 10) : null;
+        renderProductionBody();
+    };
+
+    PP.ppSubmitProductionInitiation = function () {
+        var detail = ppState.production.detail;
+        var leadProductId = ppState.production.leadProductId;
+        var department = selectedProductionDepartment();
+        var submitBtn = el('pp-production-submit-btn');
+
+        if (!detail || !leadProductId) {
+            toast('Production details are not loaded yet.', 'error');
+            return;
+        }
+
+        if (!department) {
+            toast('Please choose a mapped department.', 'error');
+            return;
+        }
+
+        if (!department.workflow_mapped) {
+            toast('No production workflow mapping is configured for the selected department.', 'error');
+            return;
+        }
+
+        var productName = (el('pp-production-product-name') || {}).value || '';
+        var customFieldErrors = validateProductionCustomFields(detail.ovp_form_schema || []);
+
+        if (!productName.trim()) { toast('Product name is required.', 'error'); return; }
+        if (customFieldErrors.length) { toast(customFieldErrors[0], 'error'); return; }
+
+        var formData = new FormData();
+        formData.append('department_id', String(department.id));
+        formData.append('product_name', productName.trim());
+        appendProductionCustomFields(formData, detail.ovp_form_schema || []);
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+        }
+
+        apiFormData('/lead-products/' + leadProductId + '/production-initiations', formData)
+            .then(function (res) {
+                ppState.production.lastSubmission = res;
+                ppProductCache = {};
+                PP.ppHideModal('pp-modal-production');
+                loadDeals();
+                toast(res.message || 'Production initiation submitted successfully.');
+            })
+            .catch(function (err) {
+                var msg = firstErrorMessage(err) || err.message || 'Failed to submit production initiation.';
+                toast(msg, 'error');
+            })
+            .finally(function () {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit to Production';
+                }
+            });
+    };
+
+    function handlePaymentModalClosed() {
+        ppState.activePayProdId = null;
+    }
+
+    function renderProductionBody() {
+        var detail = ppState.production.detail;
+        var selectedDepartment = selectedProductionDepartment();
+        var submitBtn = el('pp-production-submit-btn');
+
+        if (!detail) {
+            return;
+        }
+
+        if (!detail.departments || !detail.departments.length) {
+            setInner('pp-production-body', '<div class="pp-production-empty"><div class="pp-production-empty-title">No departments mapped yet</div><div class="pp-production-empty-copy">This product does not have any department mapping in product master right now. Once departments are assigned there, they will appear here automatically.</div></div>');
+            if (submitBtn) submitBtn.classList.add('pp-production-hidden');
+            return;
+        }
+
+        var statusHtml = '';
+        if (ppState.production.lastSubmission && ppState.production.lastSubmission.initiation) {
+            var submission = ppState.production.lastSubmission.initiation;
+            statusHtml = '<div class="pp-production-status">' +
+                '<strong>Production initiated successfully.</strong><br>' +
+                'Department: ' + escHtml(submission.department_name) + '<br>' +
+                'Product: ' + escHtml(submission.product_name || ((detail.product && detail.product.name) || '')) +
+            '</div>';
+        }
+
+        var mappingNote = selectedDepartment && !selectedDepartment.workflow_mapped
+            ? '<div class="pp-production-empty" style="margin-top:12px"><div class="pp-production-empty-title">Workflow mapping is missing</div><div class="pp-production-empty-copy">Configure the production workflow for this department in Development Production Mapping before submitting this request.</div></div>'
+            : '';
+        var dynamicFieldsHtml = renderProductionCustomFields(detail.ovp_form_schema || [], detail.latest_initiation);
+        var previousCustomDataHtml = renderProductionCustomDataSummary(detail.latest_initiation && detail.latest_initiation.custom_form_data);
+
+        var bodyHtml = statusHtml +
+            '<div class="pp-production-card">' +
+                '<div class="pp-production-form">' +
+                    '<div class="pp-production-form-grid">' +
+                        '<div class="ppf-grp">' +
+                            '<label class="ppf-lbl">Product Name <span class="ppf-req">*</span></label>' +
+                            '<input id="pp-production-product-name" class="ppf-inp ni" type="text" value="' + escAttr((detail.product && detail.product.name) || '') + '" readonly>' +
+                        '</div>' +
+                        dynamicFieldsHtml +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            previousCustomDataHtml +
+            mappingNote;
+
+        setInner('pp-production-body', bodyHtml);
+
+        if (submitBtn) {
+            if (selectedDepartment && selectedDepartment.workflow_mapped) {
+                submitBtn.classList.remove('pp-production-hidden');
+            } else {
+                submitBtn.classList.add('pp-production-hidden');
+            }
+        }
+    }
+
+    function selectedProductionDepartment() {
+        var detail = ppState.production.detail;
+        var selectedDepartmentId = ppState.production.selectedDepartmentId;
+
+        if (!detail || !Array.isArray(detail.departments)) {
+            return null;
+        }
+
+        return detail.departments.find(function (department) {
+            return Number(department.id) === Number(selectedDepartmentId);
+        }) || null;
+    }
+
+    function renderProductionCustomFields(fields, latestInitiation) {
+        fields = Array.isArray(fields) ? fields : [];
+
+        if (!fields.length) {
+            return '';
+        }
+
+        var previousValues = {};
+        (latestInitiation && Array.isArray(latestInitiation.custom_form_data) ? latestInitiation.custom_form_data : []).forEach(function (entry) {
+            if (entry && entry.field_name) {
+                previousValues[String(entry.field_name)] = entry.value;
+            }
+        });
+
+        return '<div class="ppf-grp pp-production-form-full">' +
+            '<label class="ppf-lbl"></label>' +
+            '<div class="pp-production-dynamic-grid">' +
+                fields.map(function (field) {
+                    return renderProductionCustomField(field, previousValues[field.field_name], detailLeadDefaults());
+                }).join('') +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderProductionCustomField(field, previousValue, leadDefaults) {
+        var id = 'pp-custom-' + field.field_name;
+        var label = escHtml(field.label || field.field_name);
+        var placeholder = escAttr(field.placeholder || '');
+        var helpText = field.help_text ? '<div class="pp-production-field-help">' + escHtml(field.help_text) + '</div>' : '';
+        var required = field.is_required ? ' <span class="ppf-req">*</span>' : '';
+        var value = resolveProductionFieldValue(field, previousValue, leadDefaults);
+        var inputHtml = '';
+
+        if (field.field_type === 'textarea') {
+            inputHtml = '<textarea id="' + id + '" data-field-type="' + escAttr(field.field_type) + '" data-field-name="' + escAttr(field.field_name) + '" class="ppf-ta pp-production-dynamic-input" placeholder="' + placeholder + '">' + escHtml(value) + '</textarea>';
+        } else if (field.field_type === 'select') {
+            inputHtml = '<div class="ppf-rel"><select id="' + id + '" data-field-type="' + escAttr(field.field_type) + '" data-field-name="' + escAttr(field.field_name) + '" class="ppf-sel ni pp-production-dynamic-input">' +
+                '<option value="">Choose an option</option>' +
+                (field.options || []).map(function (option) {
+                    var selected = String(value) === String(option.value) ? ' selected' : '';
+                    return '<option value="' + escAttr(option.value) + '"' + selected + '>' + escHtml(option.label) + '</option>';
+                }).join('') +
+                '</select><svg class="ppf-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>';
+        } else if (field.field_type === 'radio') {
+            inputHtml = '<div class="pp-production-choice-group">' +
+                (field.options || []).map(function (option, index) {
+                    var checked = String(value) === String(option.value) ? ' checked' : '';
+                    return '<label class="pp-production-choice"><input type="radio" name="' + escAttr(id) + '" data-field-type="radio" data-field-name="' + escAttr(field.field_name) + '" value="' + escAttr(option.value) + '"' + checked + '> <span>' + escHtml(option.label) + '</span></label>';
+                }).join('') +
+                '</div>';
+        } else if (field.field_type === 'checkbox') {
+            var selectedValues = Array.isArray(value) ? value.map(String) : (value ? [String(value)] : []);
+            inputHtml = '<div class="pp-production-choice-group">' +
+                (field.options || []).map(function (option) {
+                    var checked = selectedValues.indexOf(String(option.value)) !== -1 ? ' checked' : '';
+                    return '<label class="pp-production-choice"><input type="checkbox" data-field-type="checkbox" data-field-name="' + escAttr(field.field_name) + '" value="' + escAttr(option.value) + '"' + checked + '> <span>' + escHtml(option.label) + '</span></label>';
+                }).join('') +
+                '</div>';
+        } else if (field.field_type === 'file') {
+            var previousFile = value && typeof value === 'object' && value.name
+                ? '<div class="pp-production-file-note">Last file: <a href="' + escAttr(value.url || '#') + '" target="_blank" rel="noopener">' + escHtml(value.name) + '</a></div>'
+                : '';
+            inputHtml = '<input id="' + id + '" data-field-type="file" data-field-name="' + escAttr(field.field_name) + '" class="pp-production-file pp-production-dynamic-input" type="file">' + previousFile;
+        } else {
+            var inputType = field.field_type === 'number' ? 'number' : (field.field_type === 'date' ? 'date' : 'text');
+            var minAttr = field.validation_rules && field.validation_rules.min !== undefined ? ' min="' + escAttr(field.validation_rules.min) + '"' : '';
+            var maxAttr = field.validation_rules && field.validation_rules.max !== undefined ? ' max="' + escAttr(field.validation_rules.max) + '"' : '';
+            var stepAttr = field.field_type === 'number' ? ' step="0.01"' : '';
+            inputHtml = '<input id="' + id + '" data-field-type="' + escAttr(field.field_type) + '" data-field-name="' + escAttr(field.field_name) + '" class="ppf-inp ni pp-production-dynamic-input" type="' + inputType + '" placeholder="' + placeholder + '" value="' + escAttr(value) + '"' + minAttr + maxAttr + stepAttr + '>';
+        }
+
+        return '<div class="ppf-grp pp-production-dynamic-field">' +
+            '<label class="ppf-lbl">' + label + required + '</label>' +
+            inputHtml +
+            helpText +
+        '</div>';
+    }
+
+    function detailLeadDefaults() {
+        return (ppState.production.detail && ppState.production.detail.lead) || {};
+    }
+
+    function resolveProductionFieldValue(field, previousValue, leadDefaults) {
+        if (previousValue !== undefined && previousValue !== null && previousValue !== '') {
+            return previousValue;
+        }
+
+        var mappedLeadValue = mappedLeadValueForField(field, leadDefaults || {});
+        if (mappedLeadValue !== '') {
+            return mappedLeadValue;
+        }
+
+        return field.default_value || '';
+    }
+
+    function mappedLeadValueForField(field, leadDefaults) {
+        var lookup = normalizedProductionFieldLookup(field);
+
+        if (lookup.indexOf('contact_name') !== -1) {
+            return leadDefaults.contact_name || '';
+        }
+
+        if (lookup.indexOf('mobile_number') !== -1) {
+            return leadDefaults.mobile_number || '';
+        }
+
+        if (lookup.indexOf('email') !== -1) {
+            return leadDefaults.email || '';
+        }
+
+        if (lookup.indexOf('company_name') !== -1) {
+            return leadDefaults.company_name || '';
+        }
+
+        return '';
+    }
+
+    function normalizedProductionFieldLookup(field) {
+        var source = [
+            field && field.field_name,
+            field && field.label,
+            field && field.placeholder,
+        ].filter(Boolean).join(' ');
+
+        var normalized = String(source || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+
+        var matches = [];
+
+        if (/(customer|client|contact|full|cust(omer)?)\s*name/.test(normalized)) {
+            matches.push('contact_name');
+        }
+        if (/(mobile|phone|contact)\s*(number|no)?/.test(normalized) || /\bmobile_number\b/.test(normalized)) {
+            matches.push('mobile_number');
+        }
+        if (/email\s*(id|address)?/.test(normalized) || /\bemail\b/.test(normalized)) {
+            matches.push('email');
+        }
+        if (/company\s*name/.test(normalized) || /\bcompany\b/.test(normalized)) {
+            matches.push('company_name');
+        }
+
+        return matches;
+    }
+
+    function validateProductionCustomFields(fields) {
+        var errors = [];
+
+        (Array.isArray(fields) ? fields : []).forEach(function (field) {
+            var value = readProductionCustomFieldValue(field);
+            if (field.is_required) {
+                if (field.field_type === 'file' && !value) {
+                    errors.push(field.label + ' is required.');
+                    return;
+                }
+                if (field.field_type === 'checkbox' && (!Array.isArray(value) || !value.length)) {
+                    errors.push('Select at least one option for ' + field.label + '.');
+                    return;
+                }
+                if ((value === null || value === undefined || value === '') && field.field_type !== 'file') {
+                    errors.push(field.label + ' is required.');
+                    return;
+                }
+            }
+
+            if (field.field_type === 'number' && value !== '' && value !== null && value !== undefined) {
+                var num = parseFloat(value);
+                if (isNaN(num)) {
+                    errors.push(field.label + ' must be a valid number.');
+                    return;
+                }
+                if (field.validation_rules && field.validation_rules.min !== undefined && num < parseFloat(field.validation_rules.min)) {
+                    errors.push(field.label + ' must be at least ' + field.validation_rules.min + '.');
+                    return;
+                }
+                if (field.validation_rules && field.validation_rules.max !== undefined && num > parseFloat(field.validation_rules.max)) {
+                    errors.push(field.label + ' must be at most ' + field.validation_rules.max + '.');
+                }
+            }
+        });
+
+        return errors;
+    }
+
+    function appendProductionCustomFields(formData, fields) {
+        (Array.isArray(fields) ? fields : []).forEach(function (field) {
+            var value = readProductionCustomFieldValue(field);
+
+            if (field.field_type === 'file') {
+                if (value) {
+                    formData.append('custom_files[' + field.field_name + ']', value);
+                }
+                return;
+            }
+
+            if (field.field_type === 'checkbox') {
+                (Array.isArray(value) ? value : []).forEach(function (item, index) {
+                    formData.append('custom_fields[' + field.field_name + '][' + index + ']', item);
+                });
+                return;
+            }
+
+            if (value !== null && value !== undefined && value !== '') {
+                formData.append('custom_fields[' + field.field_name + ']', value);
+            }
+        });
+    }
+
+    function readProductionCustomFieldValue(field) {
+        var selector = '[data-field-name="' + field.field_name + '"]';
+
+        if (field.field_type === 'radio') {
+            var checked = document.querySelector(selector + ':checked');
+            return checked ? checked.value : '';
+        }
+
+        if (field.field_type === 'checkbox') {
+            return Array.prototype.slice.call(document.querySelectorAll(selector + ':checked')).map(function (input) {
+                return input.value;
+            });
+        }
+
+        if (field.field_type === 'file') {
+            var fileInput = document.querySelector(selector);
+            return fileInput && fileInput.files ? fileInput.files[0] : null;
+        }
+
+        var input = document.querySelector(selector);
+        return input ? input.value : '';
+    }
+
+    function renderProductionCustomDataSummary(entries) {
+        entries = Array.isArray(entries) ? entries : [];
+        if (!entries.length) {
+            return '';
+        }
+
+        return '<div class="pp-production-status" style="margin-top:12px;">' +
+            '<strong>Previous Customization Data</strong>' +
+            entries.map(function (entry) {
+                return '<div style="margin-top:6px;"><span style="font-weight:700;">' + escHtml(entry.label || entry.field_name || 'Field') + ':</span> ' + formatProductionCustomValue(entry) + '</div>';
+            }).join('') +
+        '</div>';
+    }
+
+    function formatProductionCustomValue(entry) {
+        if (entry.type === 'file' && entry.value && typeof entry.value === 'object') {
+            return '<a href="' + escAttr(entry.value.url || '#') + '" target="_blank" rel="noopener">' + escHtml(entry.value.name || 'View file') + '</a>';
+        }
+
+        if (Array.isArray(entry.value)) {
+            return escHtml(entry.value.join(', '));
+        }
+
+        return escHtml(entry.value == null ? '' : String(entry.value));
+    }
 
     function renderHistoryBody(p, overall) {
         var progress  = p.total > 0 ? Math.min(100, Math.round((p.paid / p.total) * 100)) : 0;
@@ -835,6 +1434,20 @@
         return String(str || '').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
     }
 
+    function firstErrorMessage(err) {
+        if (!err || !err.errors) {
+            return '';
+        }
+
+        var keys = Object.keys(err.errors);
+        if (!keys.length) {
+            return '';
+        }
+
+        var first = err.errors[keys[0]];
+        return Array.isArray(first) && first.length ? first[0] : '';
+    }
+
     function normalizeStatusOptions(raw) {
         var options = (raw || []).map(function (status) {
             var id = status && (status.id !== undefined ? status.id : status.value);
@@ -868,6 +1481,13 @@
         return STATUS_OPTIONS.find(function (option) {
             return String(option.id) === value;
         });
+    }
+
+    function getStatusOptionByKey(key) {
+        key = statusKey(key);
+        return STATUS_OPTIONS.find(function (option) {
+            return statusKey(option.name) === key;
+        }) || null;
     }
 
     function getStatusOptions(selectedValue, selectedLabel) {
@@ -909,7 +1529,22 @@
     function boot() {
         if (!LEAD_ID) return;
         STATUS_CONFIG = buildStatusConfig(STATUS_OPTIONS);
+        bindDealNameInput();
         loadDeals();
+    }
+
+    function bindDealNameInput() {
+        var dealInp = el('pp-deal-name');
+        if (!dealInp || dealInp.dataset.bound === '1') {
+            return;
+        }
+
+        dealInp.dataset.bound = '1';
+        dealInp.addEventListener('input', function () {
+            var currentValue = dealInp.value.trim();
+            var autoSuggested = dealInp.dataset.autoSuggested || '';
+            ppState.dealNameTouched = currentValue !== '' && currentValue !== autoSuggested;
+        });
     }
 
     if (document.readyState === 'loading') {

@@ -282,6 +282,16 @@ class LeadController extends Controller
             'branch',
             'assignedTo',
             'createdBy',
+            'callUpdates.user',
+            'reminders',
+            'products.payments',
+            'products.latestProductionInitiation.department',
+            'products.latestProductionInitiation.initiatedBy',
+            'products.latestProductionInitiation.reviewedBy',
+            'products.latestProductionInitiation.productionApprovalReviewedBy',
+            'products.latestProductionInitiation.projectAllocatedBy',
+            'products.latestProductionInitiation.employeeAllocatedBy',
+            'products.latestProductionInitiation.projectUpdates.createdBy',
             'quotations',
             'customFieldValues.field' => function ($query) {
                 $query->where('is_active', true)->orderBy('sort_order')->orderBy('label');

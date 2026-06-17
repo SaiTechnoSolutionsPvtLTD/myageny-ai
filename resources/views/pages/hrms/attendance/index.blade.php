@@ -103,6 +103,7 @@
         <div class="att-actions">
             @if($managerAttendanceView)
                 <a href="{{ route('attendance.create') }}" class="att-btn att-btn-primary">Check In</a>
+                <a href="{{ route('attendance.create', ['attendance_status' => 'leave']) }}" class="att-btn att-btn-ghost">Mark Leave</a>
                 <a href="{{ route('attendance.checkout.create') }}" class="att-btn att-btn-ghost">Checkout</a>
             @endif
             <a href="{{ route('hrms.dashboard') }}" class="att-btn att-btn-ghost">Back</a>
@@ -294,13 +295,18 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="att-cell-title">{{ \Carbon\Carbon::parse($attendance['attendance_date'])->format('d M Y') }}</div>
+                                        <div class="att-cell-title">{{ \Carbon\Carbon::parse($attendance['attendance_date'])->format('d M Y') }}</div>
                                 </td>
                                 <td>
                                     <span class="att-chip att-chip-{{ $attendance['attendance_status'] }}">{{ $attendance['attendance_status'] }}</span>
+                                    @if($attendance['attendance_status'] === 'leave' && $attendance['leave_label'])
+                                        <div class="att-cell-sub">{{ $attendance['leave_label'] }}</div>
+                                    @endif
                                 </td>
                                 <td>
-                                    @if($attendance['login_time'])
+                                    @if($attendance['attendance_status'] === 'leave')
+                                        <div class="att-cell-sub">Leave day</div>
+                                    @elseif($attendance['login_time'])
                                         <div class="att-cell-title">{{ \Carbon\Carbon::createFromFormat('H:i:s', $attendance['login_time'])->format('h:i A') }}</div>
                                         <div class="att-cell-sub">
                                             <span class="att-chip att-chip-{{ $attendance['login_timing'] }}">{{ str_replace('-', ' ', $attendance['login_timing']) }}</span>
@@ -310,14 +316,16 @@
                                     @endif
                                 </td>
                                 <td>
-                                    @if($attendance['logout_time'])
+                                    @if($attendance['attendance_status'] === 'leave')
+                                        <div class="att-cell-sub">No checkout</div>
+                                    @elseif($attendance['logout_time'])
                                         <div class="att-cell-title">{{ \Carbon\Carbon::createFromFormat('H:i:s', $attendance['logout_time'])->format('h:i A') }}</div>
                                     @else
                                         <div class="att-cell-sub">Not checked out</div>
                                     @endif
                                 </td>
                                 <td>
-                                    <div class="att-cell-title">{{ $attendance['overall_working_hours'] ?: 'N/A' }}</div>
+                                    <div class="att-cell-title">{{ $attendance['attendance_status'] === 'leave' ? 'N/A' : ($attendance['overall_working_hours'] ?: 'N/A') }}</div>
                                 </td>
                                 <td>
                                     <div class="att-cell-title">{{ $attendance['login_location'] ?: 'N/A' }}</div>

@@ -21,6 +21,8 @@ use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
+    private const EARLY_LOGIN_BEFORE = '09:00:00';
+
     public function index(Request $request)
     {
         if (! $this->canViewOrganizationDashboard()) {
@@ -54,18 +56,20 @@ class DashboardController extends Controller
                 ->get()
             : collect();
 
+        $attendanceStats = $this->organizationAttendanceStatsForDate($today);
+
         // Basic counts
-        $employees_total = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_ACTIVE)->count();
+        $employees_total = $attendanceStats['total_employees'];
         $employees_pending = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED)->count();
         $employees_verified = $employees_total;
-        $interns_total = $this->internStatusQuery(InternJoiningForm::STATUS_ACTIVE)->count();
+        $interns_total = $attendanceStats['intern_count'];
 
         // Today's attendance stats
-        $today_attendance = $this->activeEmployeeAttendanceForDate($today);
-        $today_present = $today_attendance->where('attendance_status', 'present')->count();
-        $today_leave = $today_attendance->where('attendance_status', 'leave')->count();
-        $today_late = $this->lateAttendanceCount($today_attendance);
-        $today_absent = max(0, $employees_total - $today_present - $today_leave);
+        $today_present = $attendanceStats['present_count'];
+        $today_leave = $attendanceStats['leave_count'];
+        $today_late = $attendanceStats['late_count'];
+        $today_early = $attendanceStats['early_count'];
+        $today_absent = $attendanceStats['absent_count'];
 
         // Department-wise employee count and salary
         $department_stats = Department::select(
@@ -139,7 +143,7 @@ class DashboardController extends Controller
         }
 
         $announcements = $this->announcementsForDashboard();
-        $todayLeaveApprovals = $this->todayLeaveApprovals($today);
+        $todayLeaveApprovals = $this->todayLeaveEntries($today);
         $todayPermissionApprovals = $this->todayPermissionApprovals($today);
 
         $stats = [
@@ -149,7 +153,10 @@ class DashboardController extends Controller
             'interns_total' => $interns_total,
             'today_present' => $today_present,
             'today_late' => $today_late,
+            'today_early' => $today_early,
+            'today_leave' => $today_leave,
             'today_absent' => $today_absent,
+            'employee_count' => $attendanceStats['employee_count'],
             'department_stats' => $department_stats,
             'today_birthdays' => $today_birthdays,
             'today_anniversaries' => $today_anniversaries,
@@ -254,7 +261,7 @@ class DashboardController extends Controller
             'salary_day_10_employees' => 0,
             'monthly_leave_data' => $monthlyLeaveData,
             'announcements' => $this->announcementsForDashboard(),
-            'today_leave_approvals' => $this->todayLeaveApprovals($today),
+            'today_leave_approvals' => $this->todayLeaveEntries($today),
             'today_permission_approvals' => $this->todayPermissionApprovals($today),
             'self_service_mode' => true,
             'latest_payroll_item' => $latestPayrollItem,
@@ -433,6 +440,85 @@ class DashboardController extends Controller
             ->get();
     }
 
+    private function organizationAttendanceStatsForDate(Carbon $date): array
+    {
+        $employees = $this->employeeQueryForDashboard()
+            ->whereNotNull('name')
+            ->get(['id']);
+
+        $interns = $this->internQueryForDashboard()
+            ->whereNotNull('name')
+            ->get(['id']);
+
+        $employeeIds = $employees->pluck('id');
+        $internIds = $interns->pluck('id');
+
+        if ($employeeIds->isEmpty() && $internIds->isEmpty()) {
+            return [
+                'total_employees' => 0,
+                'employee_count' => 0,
+                'intern_count' => 0,
+                'present_count' => 0,
+                'leave_count' => 0,
+                'absent_count' => 0,
+                'late_count' => 0,
+                'early_count' => 0,
+            ];
+        }
+
+        $attendanceRows = DailyAttendance::query()
+            ->whereDate('attendance_date', $date)
+            ->where(function ($query) use ($employeeIds, $internIds) {
+                if ($employeeIds->isNotEmpty()) {
+                    $query->orWhere(function ($employeeQuery) use ($employeeIds) {
+                        $employeeQuery->where('attendee_type', 'employee')
+                            ->whereIn('employee_id', $employeeIds);
+                    });
+                }
+
+                if ($internIds->isNotEmpty()) {
+                    $query->orWhere(function ($internQuery) use ($internIds) {
+                        $internQuery->where('attendee_type', 'intern')
+                            ->whereIn('intern_joining_form_id', $internIds);
+                    });
+                }
+            })
+            ->get();
+
+        $presentKeys = $attendanceRows
+            ->filter(function (DailyAttendance $attendance) {
+                return ($attendance->attendee_type === 'employee' && filled($attendance->employee_id))
+                    || ($attendance->attendee_type === 'intern' && filled($attendance->intern_joining_form_id));
+            })
+            ->map(function (DailyAttendance $attendance) {
+                $entityId = $attendance->attendee_type === 'intern'
+                    ? $attendance->intern_joining_form_id
+                    : $attendance->employee_id;
+
+                return $attendance->attendee_type . ':' . $entityId;
+            })
+            ->unique();
+
+        $totalPeople = $employees->count() + $interns->count();
+
+        return [
+            'total_employees' => $totalPeople,
+            'employee_count' => $employees->count(),
+            'intern_count' => $interns->count(),
+            'present_count' => $attendanceRows->where('attendance_status', 'present')->count(),
+            'leave_count' => $attendanceRows->where('attendance_status', 'leave')->count(),
+            'absent_count' => max(0, $totalPeople - $presentKeys->count()),
+            'late_count' => $attendanceRows
+                ->where('attendance_status', 'present')
+                ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'late')
+                ->count(),
+            'early_count' => $attendanceRows
+                ->where('attendance_status', 'present')
+                ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'early')
+                ->count(),
+        ];
+    }
+
     private function todayBirthdays(Carbon $today): Collection
     {
         return $this->employeeQueryForDashboard()
@@ -498,15 +584,55 @@ class DashboardController extends Controller
             ]);
     }
 
-    private function todayLeaveApprovals(Carbon $today): Collection
+    private function todayLeaveEntries(Carbon $today): Collection
     {
-        return LeaveRequest::with(['employee.role', 'employee.department'])
+        $approvedLeaves = LeaveRequest::with(['employee.role', 'employee.department'])
             ->whereDate('start_date', '<=', $today->toDateString())
             ->whereDate('end_date', '>=', $today->toDateString())
             ->where('status', LeaveRequest::STATUS_APPROVED)
             ->orderBy('start_date')
-            ->limit(6)
-            ->get();
+            ->get()
+            ->map(function (LeaveRequest $leaveRequest) {
+                return [
+                    'person_key' => 'employee:' . $leaveRequest->employee_id,
+                    'employee_name' => $leaveRequest->employee?->name ?: 'Employee',
+                    'department_name' => $leaveRequest->employee?->department?->name ?: 'No department mapped',
+                    'role_name' => $leaveRequest->employee?->role?->name ?: 'No role mapped',
+                    'leave_label' => $leaveRequest->leaveType?->name ?: 'Approved Leave',
+                    'source' => 'leave_request',
+                ];
+            });
+
+        $manualLeaves = DailyAttendance::query()
+            ->with(['employee.role', 'employee.department', 'intern.department'])
+            ->whereDate('attendance_date', $today->toDateString())
+            ->where('attendance_status', 'leave')
+            ->orderBy('created_at')
+            ->get()
+            ->map(function (DailyAttendance $attendance) {
+                $isIntern = $attendance->attendee_type === 'intern';
+
+                return [
+                    'person_key' => $attendance->attendee_type . ':' . ($isIntern ? $attendance->intern_joining_form_id : $attendance->employee_id),
+                    'employee_name' => $isIntern
+                        ? ($attendance->intern?->name ?: $attendance->employee_name ?: 'Intern')
+                        : ($attendance->employee?->name ?: $attendance->employee_name ?: 'Employee'),
+                    'department_name' => $isIntern
+                        ? ($attendance->intern?->department?->name ?: 'No department mapped')
+                        : ($attendance->employee?->department?->name ?: 'No department mapped'),
+                    'role_name' => $isIntern
+                        ? 'Intern'
+                        : ($attendance->employee?->role?->name ?: 'No role mapped'),
+                    'leave_label' => $this->manualLeaveLabel($attendance),
+                    'source' => 'attendance',
+                ];
+            });
+
+        return $approvedLeaves
+            ->concat($manualLeaves)
+            ->unique('person_key')
+            ->take(6)
+            ->values();
     }
 
     private function todayPermissionApprovals(Carbon $today): Collection
@@ -517,6 +643,20 @@ class DashboardController extends Controller
             ->orderBy('from_time')
             ->limit(6)
             ->get();
+    }
+
+    private function manualLeaveLabel(DailyAttendance $attendance): string
+    {
+        return match ($attendance->leave_category) {
+            'paid' => 'Paid Leave',
+            'lop' => 'Loss of Pay',
+            'half_day' => 'Half Day Leave' . match ($attendance->leave_session) {
+                'first_half' => ' - First Half',
+                'second_half' => ' - Second Half',
+                default => '',
+            },
+            default => 'Manual Leave',
+        };
     }
 
     private function isBirthdayToday(?EmployeeOnboarding $employee, Carbon $today): bool
@@ -587,5 +727,27 @@ class DashboardController extends Controller
             ->where('attendance_status', 'present')
             ->filter(fn (DailyAttendance $attendance) => filled($attendance->login_time) && $attendance->login_time > $graceLoginTime)
             ->count();
+    }
+
+    private function resolveLoginTiming(?string $loginTime): ?string
+    {
+        if (! $loginTime) {
+            return null;
+        }
+
+        if ($loginTime <= self::EARLY_LOGIN_BEFORE) {
+            return 'early';
+        }
+
+        if ($loginTime > $this->graceLoginTime()) {
+            return 'late';
+        }
+
+        return 'on-time';
+    }
+
+    private function graceLoginTime(): string
+    {
+        return (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
     }
 }

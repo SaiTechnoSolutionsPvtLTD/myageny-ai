@@ -13,7 +13,7 @@ class HrmsApprovalNotificationService
 {
     public function sendLeaveSubmitted(LeaveRequest $leaveRequest): void
     {
-        $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver']);
+        $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
 
         $currentApproval = $this->currentLeaveApproval($leaveRequest);
 
@@ -49,8 +49,9 @@ class HrmsApprovalNotificationService
 
     public function sendLeaveApproved(LeaveRequest $leaveRequest, LeaveApproval $actedApproval, ?LeaveApproval $nextApproval): void
     {
-        $leaveRequest->loadMissing(['user', 'leaveType']);
+        $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
         $actedApproval->loadMissing(['approver', 'actionedBy']);
+        $previousApprovals = $this->leaveApprovalHistoryText($leaveRequest);
 
         if ($nextApproval?->approver) {
             $nextApproval->loadMissing('approver');
@@ -66,6 +67,7 @@ class HrmsApprovalNotificationService
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
                 'requester_name' => $leaveRequest->user?->name,
                 'status' => LeaveRequest::STATUS_PENDING,
+                'previous_approvals' => $previousApprovals,
             ]);
         }
 
@@ -85,14 +87,16 @@ class HrmsApprovalNotificationService
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
                 'requester_name' => $leaveRequest->user?->name,
                 'status' => $isFinalApproval ? LeaveRequest::STATUS_APPROVED : LeaveRequest::STATUS_PENDING,
+                'previous_approvals' => $previousApprovals,
             ]);
         }
     }
 
     public function sendLeaveRejected(LeaveRequest $leaveRequest, LeaveApproval $actedApproval): void
     {
-        $leaveRequest->loadMissing(['user', 'leaveType']);
+        $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
         $actedApproval->loadMissing(['approver', 'actionedBy']);
+        $previousApprovals = $this->leaveApprovalHistoryText($leaveRequest);
 
         if ($leaveRequest->user) {
             $this->notifyUser($leaveRequest->user, [
@@ -106,6 +110,7 @@ class HrmsApprovalNotificationService
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
                 'requester_name' => $leaveRequest->user?->name,
                 'status' => LeaveRequest::STATUS_REJECTED,
+                'previous_approvals' => $previousApprovals,
             ]);
         }
     }
@@ -228,6 +233,22 @@ class HrmsApprovalNotificationService
         $endDate = $leaveRequest->end_date?->format('d M Y') ?? '-';
 
         return "{$type} from {$startDate} to {$endDate}.";
+    }
+
+    private function leaveApprovalHistoryText(LeaveRequest $leaveRequest): ?string
+    {
+        $approvedBy = $leaveRequest->approvals
+            ->where('status', LeaveApproval::STATUS_APPROVED)
+            ->map(fn (LeaveApproval $approval) => $approval->actionedBy?->name ?? $approval->approver?->name)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($approvedBy->isEmpty()) {
+            return null;
+        }
+
+        return 'Previous approvals: ' . $approvedBy->join(', ') . '.';
     }
 
     private function permissionDetail(PermissionRequest $permissionRequest): string

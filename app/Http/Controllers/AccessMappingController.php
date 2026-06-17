@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
+use App\Models\ProductionWorkflowMapping;
 use App\Models\Role;
 use App\Models\RoleHierarchyMapping;
 use App\Models\RoleMapping;
@@ -157,6 +159,106 @@ class AccessMappingController extends Controller
         $mapping->delete();
 
         return back()->with('success', 'User mapping removed successfully.');
+    }
+
+    public function productionIndex()
+    {
+        $departments = Department::with(['products' => function ($query) {
+                $query->select('products.id', 'package_name', 'product_name', 'final_price', 'status')
+                    ->orderBy('package_name')
+                    ->orderBy('product_name');
+            }])
+            ->orderBy('name')
+            ->get();
+
+        $mappedProductsCount = $departments->sum(fn (Department $department) => $department->products->count());
+
+        return view('pages.auth_menu.mappings.production', [
+            'departments' => $departments,
+            'mappedProductsCount' => $mappedProductsCount,
+        ]);
+    }
+
+    public function productionShow(Department $department)
+    {
+        $department->load(['products' => function ($query) {
+            $query->select('products.id', 'package_name', 'product_name', 'final_price', 'status')
+                ->orderBy('package_name')
+                ->orderBy('product_name');
+        }]);
+
+        $roles = Role::query()
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
+
+        $stageDefinitions = $this->productionWorkflowStageDefinitions();
+        $workflowMapping = ProductionWorkflowMapping::query()
+            ->where('department_id', $department->id)
+            ->first();
+        $workflowData = $workflowMapping?->workflow_data ?? [];
+
+        return view('pages.auth_menu.mappings.production_flow', [
+            'department' => $department,
+            'roles' => $roles,
+            'stageDefinitions' => $stageDefinitions,
+            'workflowData' => $workflowData,
+            'workflowChart' => $this->buildProductionWorkflowChart($stageDefinitions, $workflowData, $roles),
+        ]);
+    }
+
+    public function productionUpdate(Request $request, Department $department)
+    {
+        $stageDefinitions = $this->productionWorkflowStageDefinitions();
+        $rules = [];
+
+        foreach ($stageDefinitions as $stageKey => $stage) {
+            foreach ($stage['role_fields'] as $fieldKey => $field) {
+                $path = "workflow.$stageKey.$fieldKey";
+                $rules[$path] = ['nullable', 'array'];
+                $rules["$path.*"] = ['integer', 'distinct', 'exists:roles,id'];
+            }
+
+            foreach ($stage['text_fields'] as $fieldKey => $field) {
+                $rules["workflow.$stageKey.$fieldKey"] = ['nullable', 'string', 'max:255'];
+            }
+        }
+
+        $validated = $request->validate($rules);
+        $workflowInput = $validated['workflow'] ?? [];
+        $workflowData = [];
+
+        foreach ($stageDefinitions as $stageKey => $stage) {
+            $stageInput = $workflowInput[$stageKey] ?? [];
+            $stagePayload = [];
+
+            foreach ($stage['role_fields'] as $fieldKey => $field) {
+                $stagePayload[$fieldKey] = collect($stageInput[$fieldKey] ?? [])
+                    ->map(fn ($roleId) => (int) $roleId)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            foreach ($stage['text_fields'] as $fieldKey => $field) {
+                $stagePayload[$fieldKey] = isset($stageInput[$fieldKey])
+                    ? trim((string) $stageInput[$fieldKey])
+                    : null;
+            }
+
+            $workflowData[$stageKey] = $stagePayload;
+        }
+
+        ProductionWorkflowMapping::updateOrCreate(
+            ['department_id' => $department->id],
+            [
+                'company_id' => $department->company_id ?: auth()->user()?->company_id,
+                'workflow_data' => $workflowData,
+            ]
+        );
+
+        return redirect()
+            ->route('auth.production-mappings.show', $department)
+            ->with('success', 'Production workflow mapping saved successfully.');
     }
 
     private function buildRoleChart(Collection $roles): array
@@ -474,5 +576,135 @@ class AccessMappingController extends Controller
         }
 
         return false;
+    }
+
+    private function productionWorkflowStageDefinitions(): array
+    {
+        return [
+            'production_initiation' => [
+                'step' => 'Stage 1',
+                'title' => 'Production Initiation',
+                'description' => 'The entry point where the production request is initiated by the business or intake team.',
+                'accent' => '#0f766e',
+                'role_fields' => [
+                    'initiation_roles' => ['label' => 'Initiation Roles', 'placeholder' => 'Choose initiation roles'],
+                ],
+                'text_fields' => [
+                    'priority_template' => ['label' => 'Priority Template', 'placeholder' => 'Ex: Standard / High / Critical'],
+                ],
+            ],
+            'ovp_team_review' => [
+                'step' => 'Stage 2',
+                'title' => 'OVP Team Review',
+                'description' => 'The stage where the OVP team reviews and verifies the incoming request.',
+                'accent' => '#0284c7',
+                'role_fields' => [
+                    'ovp_review_roles' => ['label' => 'OVP Review Roles', 'placeholder' => 'Choose OVP review roles'],
+                    'business_team_roles' => ['label' => 'Business Team Roles', 'placeholder' => 'Choose business team roles'],
+                ],
+                'text_fields' => [],
+            ],
+            'production_approval_team' => [
+                'step' => 'Stage 3',
+                'title' => 'Production Approval Team',
+                'description' => 'The stage for approval-side roles and checklist verification after OVP review.',
+                'accent' => '#7c3aed',
+                'role_fields' => [
+                    'approval_roles' => ['label' => 'Approval Roles', 'placeholder' => 'Choose approval roles'],
+                ],
+                'text_fields' => [
+                    'approval_checklist' => ['label' => 'Approval Checklist', 'placeholder' => 'Ex: SOW, PO, requirement doc'],
+                ],
+            ],
+            'project_coordinator' => [
+                'step' => 'Stage 4',
+                'title' => 'Project Coordinator',
+                'description' => 'The stage where the approved request is received and the project scope and timeline are coordinated.',
+                'accent' => '#ea580c',
+                'role_fields' => [
+                    'coordinator_roles' => ['label' => 'Project Coordinator Roles', 'placeholder' => 'Choose project coordinator roles'],
+                ],
+                'text_fields' => [
+                    'timeline_template' => ['label' => 'Timeline Template', 'placeholder' => 'Ex: 5 working days / 2 sprints'],
+                ],
+            ],
+            'allocation_multiple_tl_split' => [
+                'step' => 'Stage 5 & 6',
+                'title' => 'Allocation and Multiple TL Split',
+                'description' => 'Configure the required roles for the Project Coordinator to TL to Developer allocation flow.',
+                'accent' => '#2563eb',
+                'role_fields' => [
+                    'tl_roles' => ['label' => 'TL Roles', 'placeholder' => 'Choose TL roles'],
+                    'developer_roles' => ['label' => 'Developer Roles', 'placeholder' => 'Choose developer roles'],
+                ],
+                'text_fields' => [
+                    'allocation_note' => ['label' => 'Allocation Note', 'placeholder' => 'Ex: Split based on module scope'],
+                ],
+            ],
+        ];
+    }
+
+    private function buildProductionWorkflowChart(array $stageDefinitions, array $workflowData, Collection $roles): array
+    {
+        $roleNames = $roles->mapWithKeys(fn (Role $role) => [
+            (int) $role->id => $this->roleDisplayName($role),
+        ]);
+
+        $nodes = [];
+        $links = [];
+        $previousStageKey = null;
+
+        foreach ($stageDefinitions as $stageKey => $stage) {
+            $stagePayload = $workflowData[$stageKey] ?? [];
+            $roleGroups = [];
+            $assignedRoleCount = 0;
+            $notes = [];
+
+            foreach ($stage['role_fields'] as $fieldKey => $field) {
+                $names = collect($stagePayload[$fieldKey] ?? [])
+                    ->map(fn ($roleId) => $roleNames[(int) $roleId] ?? null)
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                $assignedRoleCount += count($names);
+                $roleGroups[] = [
+                    'label' => $field['label'],
+                    'roles' => $names,
+                ];
+            }
+
+            foreach ($stage['text_fields'] as $fieldKey => $field) {
+                $value = trim((string) ($stagePayload[$fieldKey] ?? ''));
+
+                if ($value !== '') {
+                    $notes[] = $field['label'] . ': ' . $value;
+                }
+            }
+
+            $nodes[] = [
+                'id' => $stageKey,
+                'step' => $stage['step'],
+                'title' => $stage['title'],
+                'accent' => $stage['accent'],
+                'description' => $stage['description'],
+                'roleGroups' => $roleGroups,
+                'notes' => $notes,
+                'assignedRoleCount' => $assignedRoleCount,
+            ];
+
+            if ($previousStageKey) {
+                $links[] = [$previousStageKey, $stageKey];
+            }
+
+            $previousStageKey = $stageKey;
+        }
+
+        return [
+            'nodes' => $nodes,
+            'links' => $links,
+            'mappedStageCount' => collect($nodes)->filter(fn (array $node) => $node['assignedRoleCount'] > 0)->count(),
+            'totalStageCount' => count($nodes),
+        ];
     }
 }
