@@ -1,5 +1,11 @@
 {{-- Sidebar - matches exact design from static HTML --}}
 @php
+    $isProjectsModule = request()->routeIs('projects.dashboard')
+        || request()->routeIs('projects.index')
+        || request()->routeIs('projects.show')
+        || request()->routeIs('projects.allocate')
+        || request()->routeIs('projects.employee-allocate')
+        || request()->routeIs('projects.timesheets');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
         || request()->routeIs('hrms.masters.*')
         || request()->routeIs('employee-onboarding.*')
@@ -21,6 +27,7 @@
         || request()->routeIs('settings.facility-titles.*')
         || request()->routeIs('settings.holiday-calendars.*');
     $hrmsSelfService = auth()->user()?->isHrmsAttendanceOnlyUser();
+    $canAccessProjectsModule = auth()->user()?->canAccessProjectsModule();
 @endphp
 
 <aside class="sidebar">
@@ -38,7 +45,62 @@
     </div>
 
     <nav class="sidebar-nav">
-        @if($isHrmsModule)
+        @if($isProjectsModule)
+        <div class="nav-section">
+            <div class="nav-title">PROJECTS</div>
+            <div class="nav-items">
+                @if($canAccessProjectsModule)
+                <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.dashboard') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.dashboard'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="8" height="8" rx="2"></rect>
+                            <rect x="13" y="3" width="8" height="5" rx="2"></rect>
+                            <rect x="13" y="10" width="8" height="11" rx="2"></rect>
+                            <rect x="3" y="13" width="8" height="8" rx="2"></rect>
+                        </svg>
+                        <span>Dashboard</span>
+                    </div>
+                </a>
+
+                <a href="{{ route('projects.index') }}" class="nav-item {{ request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 7h18"></path>
+                            <path d="M6 3h12l1 4H5l1-4z"></path>
+                            <path d="M5 11h14v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8z"></path>
+                            <path d="M10 15h4"></path>
+                        </svg>
+                        <span>All Projects</span>
+                    </div>
+                </a>
+
+                <a href="{{ route('projects.timesheets') }}" class="nav-item {{ request()->routeIs('projects.timesheets') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.timesheets'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 2v4"></path>
+                            <path d="M16 2v4"></path>
+                            <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                            <path d="M3 10h18"></path>
+                            <path d="M8 14h.01"></path>
+                            <path d="M12 14h.01"></path>
+                            <path d="M16 14h.01"></path>
+                        </svg>
+                        <span>Timesheets</span>
+                    </div>
+                </a>
+                @endif
+            </div>
+        </div>
+        @elseif($isHrmsModule)
         <div class="nav-section">
             <div class="nav-title">HRMS</div>
             <div class="nav-items">
@@ -459,6 +521,59 @@
                     </div>
                 </a>
                 @endif
+                @endcan
+
+                @if($canAccessProjectsModule)
+                <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 7h18"></path>
+                            <path d="M6 3h12l1 4H5l1-4z"></path>
+                            <path d="M5 11h14v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8z"></path>
+                            <path d="M10 15h4"></path>
+                        </svg>
+                        <span>Projects Dashboard</span>
+                    </div>
+                </a>
+                @endif
+
+                @can('ovp_module.menuview')
+                <a href="{{ route('ovp-module.index') }}" class="nav-item {{ request()->routeIs('ovp-module.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('ovp-module.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 7h16"></path>
+                            <path d="M4 12h10"></path>
+                            <path d="M4 17h7"></path>
+                            <path d="M17 10l3 3-3 3"></path>
+                            <path d="M14 13h6"></path>
+                        </svg>
+                        <span>OVP Module</span>
+                    </div>
+                </a>
+                @endcan
+
+                @can('production_approval_module.menuview')
+                <a href="{{ route('production-approvals.index') }}" class="nav-item {{ request()->routeIs('production-approvals.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('production-approvals.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 7h16"></path>
+                            <path d="M4 12h10"></path>
+                            <path d="M4 17h7"></path>
+                            <path d="M17 10l3 3-3 3"></path>
+                            <path d="M14 13h6"></path>
+                        </svg>
+                        <span>Production Approvals</span>
+                    </div>
+                </a>
                 @endcan
 
                 @can('settings.menuview')

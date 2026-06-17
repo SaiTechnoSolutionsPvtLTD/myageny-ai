@@ -635,6 +635,9 @@
         .module-card--invoice .module-card__icon {
             background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
         }
+        .module-card--projects .module-card__icon {
+            background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
+        }
         @keyframes moduleFabFloat {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
@@ -758,13 +761,23 @@
     <script>
 
             $(document).ready(function() {
-        $('.select2').select2({
-            allowClear: true,
-            width: '100%'
-        });
+        $('.select2').each(function() {
+            const $select = $(this);
+            const hasModalParent = $select.closest('#pp-modal-add-product').length > 0;
+            const config = {
+                allowClear: true,
+                width: '100%'
+            };
 
-        $('.select2').select2({
-            dropdownParent: $('#pp-modal-add-product')
+            if (hasModalParent) {
+                config.dropdownParent = $('#pp-modal-add-product');
+            }
+
+            if ($select.hasClass('select2-hidden-accessible')) {
+                $select.select2('destroy');
+            }
+
+            $select.select2(config);
         });
 });
 

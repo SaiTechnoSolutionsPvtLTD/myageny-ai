@@ -125,6 +125,16 @@ protected static function booted()
         return $this->hasMany(Payment::class, 'lead_product_id')->latest('payment_date');
     }
 
+    public function productionInitiations()
+    {
+        return $this->hasMany(ProductionInitiation::class, 'lead_product_id')->latest();
+    }
+
+    public function latestProductionInitiation()
+    {
+        return $this->hasOne(ProductionInitiation::class, 'lead_product_id')->latestOfMany();
+    }
+
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -217,15 +227,36 @@ protected static function booted()
      */
     public function toJsPayload(): array
     {
+        $product = $this->relationLoaded('product') ? $this->product : $this->product()->with('departments:id,name')->first();
+        $latestProductionInitiation = $this->relationLoaded('latestProductionInitiation')
+            ? $this->latestProductionInitiation
+            : $this->latestProductionInitiation()->first();
+        $productName = $product?->product_name ?: $this->product_name;
+
         return [
             'id'       => $this->id,
-            // 'name'     => $this->product_name,
-            'name'     => $this->product?->product_name." (Base Price : ".number_format($this->product?->final_price, 2).")",
+            'name'     => $productName . ($product ? ' (Base Price : ' . number_format((float) $product->final_price, 2) . ')' : ''),
+            'status_id' => $this->lead_status_id,
+            'status_value' => $this->lead_status_id ? (string) $this->lead_status_id : $this->product_status_key,
+            'status_label' => $this->status_label,
             'total'    => (float) $this->total_price,
             'paid'     => (float) $this->amount_paid,
             'pending'  => (float) $this->amount_pending,
             'progress' => $this->payment_progress,
             'payUrl'   => route('leads.products.payments.store', [$this->lead_id, $this->id]),
+            'departments' => $product?->departments
+                ? $product->departments->map(fn ($department) => [
+                    'id' => $department->id,
+                    'name' => $department->name,
+                ])->values()->all()
+                : [],
+            'productionInitiation' => $latestProductionInitiation ? [
+                'id' => $latestProductionInitiation->id,
+                'status' => $latestProductionInitiation->status,
+                'department_name' => $latestProductionInitiation->department?->name,
+                'moved_at' => optional($latestProductionInitiation->created_at)->format('d M Y h:i A'),
+                'view_url' => route('projects.show', $latestProductionInitiation),
+            ] : null,
             'payments' => $this->payments->map(fn($p) => $p->toJsPayload())->toArray(),
         ];
     }
@@ -242,4 +273,5 @@ protected static function booted()
         }
         $this->updateQuietly(['payment_status' => $status]);
     }
+
 }

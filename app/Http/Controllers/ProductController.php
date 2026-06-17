@@ -6,6 +6,7 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Resources\ProductCollection;
 use App\Models\Attribute;
+use App\Models\Department;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Services\DataVisibilityService;
@@ -57,9 +58,11 @@ class ProductController extends Controller
     public function create(): View
     {
         $categories = ProductCategory::active()->orderBy('name')->get();
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+
         $users = $this->visibility->visibleAssignableUsers();
 
-        return view('pages.products.create', compact('categories', 'users'));
+        return view('pages.products.create', compact('categories', 'departments', 'users'));
     }
 
     /**
@@ -91,7 +94,14 @@ class ProductController extends Controller
     {
         abort_unless($this->visibility->canAccessProduct($product), 403);
 
-        $product->load('category', 'attributeValues.attribute');
+        $product->load([
+            'category',
+            'attributeValues.attribute',
+            'departments',
+            'ovpFormFields',
+            'productionInitiations.lead:id,company_name',
+            'productionInitiations.department:id,name',
+        ]);
         return view('pages.products.show', compact('product'));
     }
 
@@ -102,8 +112,9 @@ class ProductController extends Controller
     {
         // abort_unless($this->visibility->canAccessProduct($product), 403);
 
-        $product->load('category', 'attributeValues.attribute');
+        $product->load('category', 'attributeValues.attribute', 'departments');
         $categories = ProductCategory::active()->orderBy('name')->get();
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
         $users = $this->visibility->visibleAssignableUsers();
 
         // Build a keyed map for pre-filling attribute values
@@ -111,7 +122,7 @@ class ProductController extends Controller
             ->keyBy('attribute_id')
             ->map(fn($pav) => $pav->value);
 
-        return view('pages.products.edit', compact('product', 'categories', 'existingValues', 'users'));
+        return view('pages.products.edit', compact('product', 'categories', 'departments', 'existingValues', 'users'));
     }
 
     /**

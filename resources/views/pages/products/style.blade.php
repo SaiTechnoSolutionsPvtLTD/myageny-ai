@@ -234,6 +234,88 @@
     color: #fe5f04;
 }
 .pm-error { font-size: 12px; color: #e53935; margin-top: 2px; }
+.pm-help { font-size: 12px; color: #8a8a8a; margin-top: 2px; }
+
+.select2-container--default .select2-selection--multiple.pm-select2-selection {
+    min-height: 44px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    padding: 4px 38px 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.select2-container--default.select2-container--focus .select2-selection--multiple.pm-select2-selection,
+.select2-container--default.select2-container--open .select2-selection--multiple.pm-select2-selection {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254,95,4,0.10);
+}
+.select2-container--default .select2-selection--multiple.pm-select2-selection .select2-selection__rendered {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+}
+.select2-container--default .select2-selection--multiple.pm-select2-selection .select2-selection__choice {
+    margin-top: 0;
+    border: 1px solid #ffd5b8;
+    background: #fff4ee;
+    color: #c44e11;
+    border-radius: 999px;
+    padding: 4px 10px 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.select2-container--default .select2-selection--multiple.pm-select2-selection .select2-selection__choice__remove {
+    border-right: none;
+    color: #c44e11;
+    margin-right: 6px;
+    padding-right: 0;
+}
+.select2-container--default .select2-selection--multiple.pm-select2-selection .select2-search--inline .select2-search__field {
+    margin-top: 0;
+    font-size: 14px;
+    font-family: inherit;
+}
+.select2-container--default .select2-selection--multiple.pm-select2-selection .select2-selection__placeholder {
+    color: #9e9e9e;
+}
+.select2-dropdown {
+    border: 1px solid #e1dee3;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(18,18,18,.08);
+}
+.select2-search--dropdown {
+    padding: 10px;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #e1dee3;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 9px 11px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #fe5f04;
+    color: #fff;
+}
+.select2-container--open {
+    z-index: 9999;
+}
+.select2-results__options {
+    max-height: 260px !important;
+}
+.select2-container--default .select2-results__option--selectable {
+    color: #121212;
+    background: #fff;
+}
 
 /* ── Pricing box ───────────────────────────────────────────────── */
 .pm-pricing-box {

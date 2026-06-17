@@ -11,6 +11,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormFieldController;
 use App\Http\Controllers\LeadProductController;
 use App\Http\Controllers\LeadProductPriceRequestController;
+use App\Http\Controllers\ProductOvpFormController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\App\AppApiController;
 use App\Http\Controllers\QuotationController;
@@ -50,10 +51,19 @@ Route::get('/getAllQuotations', [QuotationController::class, 'getAllQuotations']
 // ── Product catalogue ──────────────────────────────────────────
 Route::get('products',        [LeadProductController::class, 'productList']);
 Route::get('products/{id}',   [LeadProductController::class, 'productDetail']);
+Route::get('products/{product}/ovp-form-fields', [ProductOvpFormController::class, 'index']);
+Route::post('products/{product}/ovp-form-fields', [ProductOvpFormController::class, 'store']);
+Route::post('products/{product}/ovp-form-fields/reorder', [ProductOvpFormController::class, 'reorder']);
+Route::get('products/{product}/ovp-form-schema', [ProductOvpFormController::class, 'schema']);
+Route::put('products/{product}/ovp-form-fields/{field}', [ProductOvpFormController::class, 'update']);
+Route::patch('products/{product}/ovp-form-fields/{field}/toggle', [ProductOvpFormController::class, 'toggle']);
+Route::delete('products/{product}/ovp-form-fields/{field}', [ProductOvpFormController::class, 'destroy']);
 
 // ── Lead Products (Deals) ──────────────────────────────────────
 Route::get('lead-products/{lead_id}', [LeadProductController::class, 'index']);
 Route::post('lead-products',           [LeadProductController::class, 'store']);
+Route::get('lead-products/{id}/production', [LeadProductController::class, 'productionDetail']);
+Route::post('lead-products/{id}/production-initiations', [LeadProductController::class, 'storeProductionInitiation']);
 Route::post('lead-product-price-requests', [LeadProductPriceRequestController::class, 'store']);
 Route::put('lead-products/status',    [LeadProductController::class, 'updateStatus']);
 Route::delete('lead-products/{id}',    [LeadProductController::class, 'destroy']);

@@ -347,6 +347,26 @@
                 </svg>
             </span>
         </a>
+
+        <a href="{{ route('auth.production-mappings.index') }}" class="authdash-card mapping">
+            <div class="authdash-icon mapping">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M3 7h18"/>
+                    <path d="M6 12h12"/>
+                    <path d="M9 17h6"/>
+                    <path d="M5 5h14v14H5z"/>
+                </svg>
+            </div>
+            <h4 class="authdash-card-title">Production Mapping</h4>
+            <p class="authdash-card-text">Plan department-wise production ownership using product master department mappings as the base.</p>
+            <span class="authdash-link">
+                Open Production Mapping
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
         @endcan
     </div>
 </div>

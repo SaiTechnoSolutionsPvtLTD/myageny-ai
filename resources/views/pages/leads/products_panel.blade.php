@@ -273,7 +273,7 @@
             <button type="button"
                     class="pp-act-btn pp-btn-pay"
                     onclick="ppShowPayment({{ $prod->id }})">
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+
                 Add Payment
             </button>
 
@@ -425,7 +425,6 @@
                 <div class="ppf-grp">
                     <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
                     <div class="ppf-rel">
-                        <svg class="ppf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                         <input type="number" name="amount" id="pp-pay-amount" class="ppf-inp" placeholder="0.00" step="0.01" min="0.01" required>
                     </div>
                 </div>
@@ -485,7 +484,7 @@
         <div class="pp-mbody" id="pp-hist-body"></div>
         <div class="pp-mfoot">
             <button type="button" id="pp-hist-add-btn" class="ppf-btn ppf-btn-primary">
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+
                 Add Payment
             </button>
             <button type="button" class="ppf-btn ppf-btn-sec" onclick="ppHideModal('pp-modal-history')">Close</button>

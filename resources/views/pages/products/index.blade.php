@@ -126,6 +126,13 @@
                                         </a>
                                         @endcan
 
+                                        @can('products.edit')
+                                        <a href="{{ route('products.ovp-form.builder', $product) }}"
+                                           class="pm-icon-btn" title="OVP Form">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>
+                                        </a>
+                                        @endcan
+
                                          @can('products.edit')
                                         <a href="{{ route('products.edit', $product) }}"
                                            class="pm-icon-btn pm-icon-btn--edit" title="Edit">

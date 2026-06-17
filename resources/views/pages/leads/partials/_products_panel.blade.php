@@ -105,6 +105,8 @@
 .pp-btn-pay:hover{background:#fed7aa}
 .pp-btn-hist{background:#eef2ff;color:#4f46e5;border-color:#c7d2fe}
 .pp-btn-hist:hover{background:#c7d2fe}
+.pp-btn-prod{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
+.pp-btn-prod:hover{background:#d1fae5}
 .pp-btn-del{background:#fef2f2;color:#dc2626;border-color:#fecaca}
 .pp-btn-del:hover{background:#fecaca}
 .pp-remove-row{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 7px;cursor:pointer;display:flex;align-items:center;transition:all .15s}
@@ -152,6 +154,12 @@
 .ppf-r2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ppf-r3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .ppf-err{font-size:11px;color:#dc2626;margin-top:2px;display:none}
+.pp-production-dynamic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pp-production-dynamic-field{margin-bottom:0}
+.pp-production-choice-group{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid #e1dee3;border-radius:9px;background:#fafafa}
+.pp-production-choice{display:flex;align-items:center;gap:8px;font-size:13px;color:#3a3a3a}
+.pp-production-choice input{accent-color:#fe5f04}
+.pp-production-field-help,.pp-production-file-note{font-size:11px;color:#9e9e9e;margin-top:4px}
 
 /* ── Multi-select ────────────────────────────────────── */
 .pp-multi-select{width:100%;border:1px solid #e1dee3;border-radius:9px;font-size:13px;font-family:inherit;color:#121212;background:#fafafa;outline:none;padding:4px;min-height:100px;transition:all .15s}
@@ -216,6 +224,69 @@
 .pp-hist-del:hover{color:#dc2626}
 .pp-hist-empty{text-align:center;padding:32px 20px;color:#9e9e9e}
 .pp-hist-empty-ico{font-size:36px;margin-bottom:8px}
+.pp-prod-meta-card{background:linear-gradient(135deg,#f8fafc,#f0fdf4);border:1px solid #dcfce7;border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.pp-prod-meta-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;margin-bottom:4px}
+.pp-prod-meta-value{font-size:16px;font-weight:800;color:#121212}
+.pp-prod-meta-note{font-size:12px;color:#6b7280;margin-top:6px}
+.pp-dept-list{display:flex;flex-wrap:wrap;gap:8px}
+.pp-dept-pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;background:#fff;color:#065f46;border:1px solid #a7f3d0;font-size:12px;font-weight:700}
+.pp-prod-empty{padding:18px;border:1px dashed #d1d5db;border-radius:12px;background:#fafafa;color:#6b7280;font-size:13px;line-height:1.5}
+.pp-prod-helper{margin-top:14px;padding:12px 14px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:12px;line-height:1.5}
+.pp-production-modal{max-width:760px;overflow:hidden}
+.pp-production-head{display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1}
+.pp-production-icon{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#047857,#10b981);color:#fff;box-shadow:0 12px 30px rgba(4,120,87,.24);flex-shrink:0}
+.pp-production-title-wrap{min-width:0;flex:1}
+.pp-production-kicker{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#6b7280;margin-bottom:4px}
+.pp-production-name{font-size:16px;font-weight:800;line-height:1.15;color:#064e3b;word-break:break-word}
+.pp-production-sub{font-size:13px;color:#6b7280;margin-top:8px}
+.pp-production-shell{display:grid;gap:16px}
+.pp-production-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+.pp-production-card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:16px 18px;box-shadow:0 12px 35px rgba(15,23,42,.05)}
+.pp-production-card--hero{background:linear-gradient(135deg,#f5fffb,#ecfeff);border-color:#c7f9e8}
+.pp-production-card--soft{background:linear-gradient(135deg,#fffaf2,#fff7ed);border-color:#fed7aa}
+.pp-production-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#6b7280;margin-bottom:8px}
+.pp-production-value{font-size:16px;font-weight:800;color:#111827}
+.pp-production-note{font-size:13px;line-height:1.55;color:#6b7280;margin-top:8px}
+.pp-production-dept-wrap{display:grid;gap:12px}
+.pp-production-dept-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pp-production-count{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;padding:0 10px;border-radius:999px;background:#ecfdf5;color:#047857;font-size:13px;font-weight:800;border:1px solid #a7f3d0}
+.pp-dept-pill{padding:10px 14px;background:linear-gradient(135deg,#ffffff,#f0fdf4);font-size:13px;border-width:1px;box-shadow:0 8px 20px rgba(4,120,87,.08)}
+.pp-dept-pill::before{content:'•';margin-right:8px;color:#10b981}
+.pp-production-empty{display:grid;gap:10px;padding:18px;border:1px dashed #d1d5db;border-radius:16px;background:#fafafa}
+.pp-production-empty-title{font-size:14px;font-weight:800;color:#374151}
+.pp-production-empty-copy{font-size:13px;line-height:1.55;color:#6b7280}
+.pp-production-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
+.pp-production-footer-note{font-size:12px;color:#6b7280}
+.pp-production-form{display:grid;gap:16px}
+.pp-production-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pp-production-form-full{grid-column:1/-1}
+.pp-production-file{display:block;width:100%;padding:10px 12px;border:1px solid #e1dee3;border-radius:9px;background:#fafafa;font-size:13px}
+.pp-production-file:focus{outline:none;border-color:#fe5f04;background:#fff;box-shadow:0 0 0 3px rgba(254,95,4,.1)}
+.pp-production-workflow{display:grid;gap:12px}
+.pp-production-workflow-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pp-production-workflow-title{font-size:14px;font-weight:800;color:#111827}
+.pp-production-workflow-copy{font-size:12px;line-height:1.5;color:#6b7280}
+.pp-production-stage-list{display:grid;gap:12px}
+.pp-production-stage{padding:14px 16px;border-radius:16px;border:1px solid #e5e7eb;background:#fff}
+.pp-production-stage-step{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#6b7280}
+.pp-production-stage-title{margin-top:4px;font-size:15px;font-weight:800;color:#111827}
+.pp-production-stage-desc{margin-top:6px;font-size:12px;line-height:1.55;color:#6b7280}
+.pp-production-role-group{margin-top:10px}
+.pp-production-role-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#475569}
+.pp-production-role-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pp-production-role-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:11px;font-weight:700}
+.pp-production-note-item{margin-top:8px;font-size:12px;line-height:1.5;color:#6b7280}
+.pp-production-status{padding:14px 16px;border-radius:14px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-size:13px;line-height:1.55}
+.pp-production-hidden{display:none!important}
+@media (max-width: 720px){
+    .pp-production-grid{grid-template-columns:1fr}
+    .pp-production-dynamic-grid{grid-template-columns:1fr}
+    .pp-production-name{font-size:20px}
+    .pp-production-head{gap:12px}
+    .pp-production-icon{width:46px;height:46px;border-radius:14px}
+    .pp-production-footer{flex-direction:column;align-items:stretch}
+    .pp-production-form-grid{grid-template-columns:1fr}
+}
 .pp-hist-loading{display:flex;justify-content:center;padding:40px 20px}
 
 /* ── Toast notifications ─────────────────────────────── */
@@ -426,9 +497,8 @@
             <div class="ppf-grp">
                 <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
                 <div class="ppf-rel">
-                    <svg class="ppf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23"/>
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    <svg class="ppf-ico" viewBox="0 0 24 24" aria-hidden="true">
+                        <text x="12" y="16" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">₹</text>
                     </svg>
                     <input type="number" id="pp-pay-amount" class="ppf-inp"
                            placeholder="0.00" step="0.01" min="0.01">
@@ -505,9 +575,8 @@
         <div class="pp-mbody" id="pp-hist-body"></div>
         <div class="pp-mfoot">
             <button type="button" id="pp-hist-add-btn" class="ppf-btn ppf-btn-primary">
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="1" x2="12" y2="23"/>
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                    <text x="12" y="16" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">₹</text>
                 </svg>
                 Add Payment
             </button>
@@ -521,6 +590,43 @@
 {{-- ══════════════════════════════════════════════════════
      CONFIG INJECTION + JS
 ══════════════════════════════════════════════════════ --}}
+
+<div class="pp-overlay" id="pp-modal-production">
+    <div class="pp-modal-box pp-production-modal">
+        <div class="pp-mhd">
+            <div class="pp-production-head">
+                <div class="pp-production-icon">
+                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                        <path d="M3 7h18"/>
+                        <path d="M6 12h12"/>
+                        <path d="M9 17h6"/>
+                    </svg>
+                </div>
+                <div class="pp-production-title-wrap">
+                    <div class="pp-production-kicker">Production Move</div>
+                    <div class="pp-production-name" id="pp-production-name"></div>
+                </div>
+            </div>
+            <button type="button" class="pp-mclose"
+                    onclick="PP.ppHideModal('pp-modal-production')">✕</button>
+        </div>
+        <div class="pp-mbody">
+            <div class="pp-production-shell">
+                <div id="pp-production-body"></div>
+            </div>
+        </div>
+        <div class="pp-mfoot">
+            <div class="pp-production-footer">
+                <button type="button" id="pp-production-submit-btn" class="ppf-btn ppf-btn-primary"
+                        onclick="PP.ppSubmitProductionInitiation()">
+                    Submit to Production
+                </button>
+                <button type="button" class="ppf-btn ppf-btn-sec"
+                        onclick="PP.ppHideModal('pp-modal-production')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @push('scripts')
 <script>

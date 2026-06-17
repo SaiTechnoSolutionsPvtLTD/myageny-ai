@@ -336,6 +336,35 @@ class User extends Authenticatable
         ])->isNotEmpty();
     }
 
+    public function hasTlLikeRole(): bool
+    {
+        $keys = collect($this->roleKeys()->all());
+
+        if ($keys->intersect([
+            'tl',
+            'team_lead',
+            'team_leader',
+            'teamlead',
+            'project_manager',
+            'web_team_leader',
+            'mobile_app_team_leader',
+            'design_team_lead',
+            'team_lead_digital_marketing',
+            'software_team_leader',
+        ])->isNotEmpty()) {
+            return true;
+        }
+
+        return $keys->contains(fn ($key) => Str::contains($key, [
+            'tl',
+            'team_lead',
+            'teamleader',
+            'team_leader',
+            'manager',
+            'lead',
+        ]));
+    }
+
     public function hasAdminLikeRole(): bool
     {
         return collect($this->roleKeys()->all())->intersect([
@@ -343,7 +372,16 @@ class User extends Authenticatable
             'admin',
             'company_admin',
             'branch_admin',
+            'development_project_coordinator'
         ])->isNotEmpty();
+    }
+
+    public function canAccessProjectsModule(): bool
+    {
+        return $this->can('modules_menu.projects')
+            || $this->hasAdminLikeRole()
+            || $this->hasTlLikeRole()
+            || $this->hasExecutiveLikeRole();
     }
 
     public function isExecutiveHrmsUser(): bool

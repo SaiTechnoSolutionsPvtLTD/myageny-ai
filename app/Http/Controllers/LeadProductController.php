@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Lead;
+use App\Models\ProductionInitiation;
+use App\Models\ProductionWorkflowMapping;
+use App\Models\Role;
 use App\Models\LeadProduct;
 use App\Models\LeadStatus;
 use App\Models\Payment;
@@ -13,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class LeadProductController extends Controller
@@ -64,6 +68,8 @@ class LeadProductController extends Controller
     {
         abort_unless($this->visibility->canAccessProduct($product), 403);
 
+        $product->loadMissing('ovpFormFields');
+
         return response()->json([
             'data' => [
                 'id'          => $product->id,
@@ -84,6 +90,23 @@ class LeadProductController extends Controller
                     'value' => $av->value,
                     'unit'  => $av->attribute->unit,
                 ])->toArray(),
+                'ovp_form_schema' => $product->ovpFormFields
+                    ->where('is_active', true)
+                    ->where('use_in_production_initiation', true)
+                    ->values()
+                    ->map(fn ($field) => [
+                        'id' => $field->id,
+                        'label' => $field->label,
+                        'field_name' => $field->field_name,
+                        'field_type' => $field->field_type,
+                        'placeholder' => $field->placeholder,
+                        'help_text' => $field->help_text,
+                        'default_value' => $field->default_value,
+                        'is_required' => $field->is_required,
+                        'use_in_production_initiation' => $field->use_in_production_initiation,
+                        'options' => $field->options ?? [],
+                        'validation_rules' => $field->validation_rules ?? [],
+                    ])->all(),
             ],
         ]);
     }
@@ -105,7 +128,12 @@ class LeadProductController extends Controller
 
         $statusOptions = $this->statusOptionsForLead($lead);
 
-        $products = LeadProduct::with(['payments.recordedBy', 'leadStatus'])
+        $products = LeadProduct::with([
+                'payments.recordedBy',
+                'leadStatus',
+                'product.departments:id,name',
+                'latestProductionInitiation.department:id,name',
+            ])
             ->where('lead_id', $leadId)
             ->latest()
             ->get();
@@ -227,13 +255,14 @@ class LeadProductController extends Controller
 
     /**
      * PUT /api/lead-products/status
-     * Updates status for all products in a deal.
+     * Updates status for a single product or every product in a deal.
      */
     public function updateStatus(Request $request): JsonResponse
     {
         $v = Validator::make($request->all(), [
             'lead_id'         => ['required', 'exists:leads,id'],
-            'deal_name'       => ['required', 'string'],
+            'deal_name'       => ['nullable', 'string'],
+            'product_id'      => ['nullable', 'integer', 'exists:lead_products,id'],
             'lead_status_id'  => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'product_status'  => ['nullable', 'string'],
         ]);
@@ -246,18 +275,48 @@ class LeadProductController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
         $status = $this->resolveRequestedStatus($lead, $request);
 
+        if (! $request->filled('product_id') && ! $request->filled('deal_name')) {
+            return response()->json([
+                'errors' => ['product_id' => ['Please select a product or deal to update.']],
+            ], 422);
+        }
+
         if (! $status) {
             return response()->json([
                 'errors' => ['lead_status_id' => ['Please select a valid lead status.']],
             ], 422);
         }
 
-        LeadProduct::where('lead_id', $request->lead_id)
-            ->where('deal_name', $request->deal_name)
-            ->update([
-                'lead_status_id' => $status->id,
-                'product_status' => LeadProduct::statusKey($status->name),
-            ]);
+        $updatePayload = [
+            'lead_status_id' => $status->id,
+            'product_status' => LeadProduct::statusKey($status->name),
+        ];
+
+        if ($request->filled('product_id')) {
+            $product = LeadProduct::where('lead_id', $request->lead_id)
+                ->whereKey((int) $request->product_id)
+                ->firstOrFail();
+
+            if ($this->productStatusKey($product) === 'converted') {
+                return response()->json([
+                    'errors' => ['product_status' => ['Converted product status cannot be changed again.']],
+                ], 422);
+            }
+
+            $product->update($updatePayload);
+        } else {
+            $products = LeadProduct::where('lead_id', $request->lead_id)
+                ->where('deal_name', $request->deal_name)
+                ->get();
+
+            if ($products->contains(fn (LeadProduct $product) => $this->productStatusKey($product) === 'converted')) {
+                return response()->json([
+                    'errors' => ['product_status' => ['Converted product status cannot be changed again.']],
+                ], 422);
+            }
+
+            LeadProduct::whereIn('id', $products->pluck('id'))->update($updatePayload);
+        }
 
         return response()->json([
             'message' => 'Status updated.',
@@ -280,6 +339,311 @@ class LeadProductController extends Controller
         return response()->json(['message' => 'Product removed from deal.']);
     }
 
+    public function productionDetail(int $leadProductId): JsonResponse
+    {
+        $leadProduct = LeadProduct::with(['lead', 'product.departments:id,name'])
+            ->findOrFail($leadProductId);
+        abort_unless($leadProduct->lead && $this->visibility->canAccessLead($leadProduct->lead), 403);
+
+        if ($this->productStatusKey($leadProduct) !== 'converted') {
+            return response()->json([
+                'message' => 'Production can be initiated only after the product status is Converted.',
+            ], 422);
+        }
+
+        if ($leadProduct->payments()->count() < 1) {
+            return response()->json([
+                'message' => 'At least 1 received payment is required before moving this product to production.',
+            ], 422);
+        }
+
+        $product = $leadProduct->product;
+        $departments = $product?->departments ?? collect();
+        $workflowMappings = ProductionWorkflowMapping::query()
+            ->whereIn('department_id', $departments->pluck('id'))
+            ->get()
+            ->keyBy('department_id');
+        $roles = Role::query()->get();
+
+        $departmentPayload = $departments->map(function ($department) use ($workflowMappings, $roles) {
+            $mapping = $workflowMappings->get($department->id);
+            $workflow = $this->buildProductionWorkflowPreview(
+                $mapping?->workflow_data ?? [],
+                $roles
+            );
+
+            return [
+                'id' => $department->id,
+                'name' => $department->name,
+                'is_development' => str_contains(strtolower($department->name), 'development'),
+                'workflow_mapped' => ! empty($workflow['stages']),
+                'workflow' => $workflow,
+            ];
+        })->values();
+
+        return response()->json([
+            'product' => [
+                'lead_product_id' => $leadProduct->id,
+                'product_id' => $product?->id,
+                'name' => $product?->package_name ?: $leadProduct->product_name,
+            ],
+            'lead' => [
+                'contact_name' => $leadProduct->lead?->contact_name,
+                'mobile_number' => $leadProduct->lead?->mobile_number,
+                'email' => $leadProduct->lead?->email,
+                'company_name' => $leadProduct->lead?->company_name,
+            ],
+            'ovp_form_schema' => $product?->ovpFormFields()
+                ->where('is_active', true)
+                ->where('use_in_production_initiation', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get([
+                    'id',
+                    'label',
+                    'field_name',
+                    'field_type',
+                    'placeholder',
+                    'help_text',
+                    'default_value',
+                    'is_required',
+                    'use_in_production_initiation',
+                    'options',
+                    'validation_rules',
+                ]) ?? [],
+            'departments' => $departmentPayload,
+            'latest_initiation' => ProductionInitiation::query()
+                ->where('lead_product_id', $leadProduct->id)
+                ->latest()
+                ->first([
+                    'id',
+                    'department_id',
+                    'product_name',
+                    'total_working_days',
+                    'ui_available',
+                    'requirements',
+                    'attachment_name',
+                    'status',
+                    'custom_form_data',
+                    'created_at',
+                ]),
+        ]);
+    }
+
+    public function storeProductionInitiation(Request $request, int $leadProductId): JsonResponse
+    {
+        $leadProduct = LeadProduct::with(['lead', 'product.departments:id,name'])
+            ->findOrFail($leadProductId);
+        abort_unless($leadProduct->lead && $this->visibility->canAccessLead($leadProduct->lead), 403);
+
+        if ($this->productStatusKey($leadProduct) !== 'converted') {
+            return response()->json([
+                'errors' => ['product_status' => ['Production can be initiated only after the product status is Converted.']],
+            ], 422);
+        }
+
+        if ($leadProduct->payments()->count() < 1) {
+            return response()->json([
+                'errors' => ['payments' => ['At least 1 received payment is required before moving this product to production.']],
+            ], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'department_id' => ['required', 'integer', 'exists:departments,id'],
+            'product_name' => ['required', 'string', 'max:255'],
+            'total_working_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'ui_available' => ['nullable', 'boolean'],
+            'requirements' => ['nullable', 'string', 'max:5000'],
+            'attachment' => ['nullable', 'file', 'max:10240'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $departmentId = (int) $request->input('department_id');
+        $mappedDepartment = $leadProduct->product?->departments?->firstWhere('id', $departmentId);
+
+        if (! $mappedDepartment) {
+            return response()->json([
+                'errors' => ['department_id' => ['The selected department is not mapped to this product.']],
+            ], 422);
+        }
+
+        $workflowMapping = ProductionWorkflowMapping::query()
+            ->where('department_id', $mappedDepartment->id)
+            ->first();
+
+        if (! $workflowMapping) {
+            return response()->json([
+                'errors' => ['department_id' => ['No production workflow mapping is configured for the selected department.']],
+            ], 422);
+        }
+
+        $roles = Role::query()->get();
+        $workflowPreview = $this->buildProductionWorkflowPreview($workflowMapping->workflow_data ?? [], $roles);
+        $latestInitiation = ProductionInitiation::query()
+            ->where('lead_product_id', $leadProduct->id)
+            ->latest()
+            ->first();
+        $attachment = $request->file('attachment');
+        $attachmentPath = $attachment ? $attachment->store('production-initiations', 'public') : (string) ($latestInitiation?->attachment_path ?? '');
+        $customFormData = $this->prepareProductCustomizationData($request, $leadProduct->product);
+        $requirements = trim((string) $request->input('requirements', (string) ($latestInitiation?->requirements ?? '')));
+
+        if ($requirements === '') {
+            $requirements = 'Submitted via production customization form.';
+        }
+
+        $initiation = ProductionInitiation::create([
+            'company_id' => $leadProduct->company_id ?: $leadProduct->lead?->company_id ?: auth()->user()?->company_id,
+            'lead_id' => $leadProduct->lead_id,
+            'lead_product_id' => $leadProduct->id,
+            'product_id' => $leadProduct->product_id,
+            'department_id' => $mappedDepartment->id,
+            'product_name' => $request->input('product_name'),
+            'total_working_days' => (int) ($request->input('total_working_days') ?: ($latestInitiation?->total_working_days ?: 1)),
+            'ui_available' => $request->has('ui_available')
+                ? (bool) $request->boolean('ui_available')
+                : (bool) ($latestInitiation?->ui_available ?? false),
+            'requirements' => $requirements,
+            'attachment_path' => $attachmentPath,
+            'attachment_name' => $attachment
+                ? $attachment->getClientOriginalName()
+                : (string) ($latestInitiation?->attachment_name ?? ''),
+            'workflow_snapshot' => $workflowPreview,
+            'custom_form_data' => $customFormData,
+            'status' => 'ovp_pending',
+            'ovp_allocation_status' => 'allocation_pending',
+            'ovp_allocated_to' => null,
+            'ovp_allocated_by' => null,
+            'ovp_allocated_at' => null,
+            'initiated_by' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'message' => 'Production initiation submitted successfully.',
+            'initiation' => [
+                'id' => $initiation->id,
+                'department_name' => $mappedDepartment->name,
+                'product_name' => $initiation->product_name,
+                'total_working_days' => $initiation->total_working_days,
+                'ui_available' => $initiation->ui_available,
+                'requirements' => $initiation->requirements,
+                'attachment_name' => $initiation->attachment_name,
+                'custom_form_data' => $initiation->custom_form_data,
+                'status' => $initiation->status,
+            ],
+            'workflow' => $workflowPreview,
+        ], 201);
+    }
+
+    private function prepareProductCustomizationData(Request $request, ?Product $product): array
+    {
+        if (! $product) {
+            return [];
+        }
+
+        $fields = $product->ovpFormFields()
+            ->where('is_active', true)
+            ->where('use_in_production_initiation', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        if ($fields->isEmpty()) {
+            return [];
+        }
+
+        $rules = [];
+        foreach ($fields as $field) {
+            $fieldKey = 'custom_fields.' . $field->field_name;
+            $fileKey = 'custom_files.' . $field->field_name;
+            $baseRules = $field->is_required ? ['required'] : ['nullable'];
+
+            switch ($field->field_type) {
+                case 'number':
+                    $rules[$fieldKey] = array_merge($baseRules, ['numeric']);
+                    if (($field->validation_rules['min'] ?? null) !== null) {
+                        $rules[$fieldKey][] = 'min:' . $field->validation_rules['min'];
+                    }
+                    if (($field->validation_rules['max'] ?? null) !== null) {
+                        $rules[$fieldKey][] = 'max:' . $field->validation_rules['max'];
+                    }
+                    break;
+                case 'checkbox':
+                    $rules[$fieldKey] = array_merge($baseRules, ['array']);
+                    $rules[$fieldKey . '.*'] = ['string'];
+                    break;
+                case 'select':
+                case 'radio':
+                    $allowed = collect($field->options ?? [])->pluck('value')->filter()->all();
+                    $rules[$fieldKey] = array_merge($baseRules, ['string'], $allowed ? ['in:' . implode(',', $allowed)] : []);
+                    break;
+                case 'date':
+                    $rules[$fieldKey] = array_merge($baseRules, ['date']);
+                    break;
+                case 'file':
+                    $rules[$fileKey] = array_merge($baseRules, ['file', 'max:10240']);
+                    break;
+                default:
+                    $rules[$fieldKey] = array_merge($baseRules, ['string', 'max:5000']);
+                    break;
+            }
+        }
+
+        Validator::make($request->all(), $rules)->validate();
+
+        $customValues = (array) $request->input('custom_fields', []);
+        $stored = [];
+
+        foreach ($fields as $field) {
+            $fieldName = $field->field_name;
+
+            if ($field->field_type === 'file') {
+                $uploadedFile = $request->file('custom_files.' . $fieldName);
+                if (! $uploadedFile) {
+                    continue;
+                }
+
+                $path = $uploadedFile->store('production-initiations/custom-fields', 'public');
+                $stored[] = [
+                    'field_id' => $field->id,
+                    'field_name' => $fieldName,
+                    'label' => $field->label,
+                    'type' => $field->field_type,
+                    'value' => [
+                        'path' => $path,
+                        'name' => $uploadedFile->getClientOriginalName(),
+                        'url' => Storage::disk('public')->url($path),
+                    ],
+                ];
+
+                continue;
+            }
+
+            $value = $customValues[$fieldName] ?? null;
+
+            if (is_array($value)) {
+                $value = array_values(array_filter($value, fn ($item) => $item !== null && $item !== ''));
+            }
+
+            if ($value === null || $value === '' || $value === []) {
+                continue;
+            }
+
+            $stored[] = [
+                'field_id' => $field->id,
+                'field_name' => $fieldName,
+                'label' => $field->label,
+                'type' => $field->field_type,
+                'value' => $value,
+            ];
+        }
+
+        return $stored;
+    }
+
     // ══════════════════════════════════════════════════════════════════
     //  PAYMENTS
     // ══════════════════════════════════════════════════════════════════
@@ -290,7 +654,7 @@ class LeadProductController extends Controller
      */
     public function paymentHistory(int $leadProductId): JsonResponse
     {
-        $lp = LeadProduct::with(['lead', 'payments.recordedBy'])->findOrFail($leadProductId);
+        $lp = LeadProduct::with(['lead', 'payments.recordedBy', 'product.departments:id,name'])->findOrFail($leadProductId);
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         // Overall payments for the lead
@@ -315,6 +679,12 @@ class LeadProductController extends Controller
 
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+
+        if ($lp->product_status_key !== 'converted') {
+            return response()->json([
+                'errors' => ['product_status' => ['Payments can be added only after the product status is Converted.']],
+            ], 422);
+        }
 
         $balancePayment = $lp->total_price - $lp->amount_paid;
 
@@ -462,5 +832,118 @@ class LeadProductController extends Controller
         }
 
         return $user->hasAnyRole(['super_admin', 'Super Admin', 'admin']);
+    }
+
+    private function buildProductionWorkflowPreview(array $workflowData, $roles): array
+    {
+        $stageDefinitions = $this->productionWorkflowStageDefinitions();
+        $roleNames = $roles->mapWithKeys(fn (Role $role) => [
+            (int) $role->id => $role->display_name ?: str($role->name)->after('__')->replace('_', ' ')->title()->value(),
+        ]);
+
+        $stages = [];
+
+        foreach ($stageDefinitions as $stageKey => $stage) {
+            $payload = $workflowData[$stageKey] ?? [];
+            $groups = [];
+
+            foreach ($stage['role_fields'] as $fieldKey => $field) {
+                $names = collect($payload[$fieldKey] ?? [])
+                    ->map(fn ($roleId) => $roleNames[(int) $roleId] ?? null)
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                $groups[] = [
+                    'label' => $field['label'],
+                    'roles' => $names,
+                ];
+            }
+
+            $notes = [];
+
+            foreach ($stage['text_fields'] as $fieldKey => $field) {
+                $value = trim((string) ($payload[$fieldKey] ?? ''));
+
+                if ($value !== '') {
+                    $notes[] = [
+                        'label' => $field['label'],
+                        'value' => $value,
+                    ];
+                }
+            }
+
+            $stages[] = [
+                'key' => $stageKey,
+                'step' => $stage['step'],
+                'title' => $stage['title'],
+                'description' => $stage['description'],
+                'groups' => $groups,
+                'notes' => $notes,
+            ];
+        }
+
+        return ['stages' => $stages];
+    }
+
+    private function productionWorkflowStageDefinitions(): array
+    {
+        return [
+            'production_initiation' => [
+                'step' => 'Stage 1',
+                'title' => 'Production Initiation',
+                'description' => 'The entry point where the production request is initiated by the business or intake team.',
+                'role_fields' => [
+                    'initiation_roles' => ['label' => 'Initiation Roles'],
+                ],
+                'text_fields' => [
+                    'priority_template' => ['label' => 'Priority Template'],
+                ],
+            ],
+            'ovp_team_review' => [
+                'step' => 'Stage 2',
+                'title' => 'OVP Team Review',
+                'description' => 'The stage where the OVP team reviews and verifies the incoming request.',
+                'role_fields' => [
+                    'ovp_review_roles' => ['label' => 'OVP Review Roles'],
+                    'business_team_roles' => ['label' => 'Business Team Roles'],
+                ],
+                'text_fields' => [],
+            ],
+            'production_approval_team' => [
+                'step' => 'Stage 3',
+                'title' => 'Production Approval Team',
+                'description' => 'The stage for approval-side roles and checklist verification after OVP review.',
+                'role_fields' => [
+                    'approval_roles' => ['label' => 'Approval Roles'],
+                ],
+                'text_fields' => [
+                    'approval_checklist' => ['label' => 'Approval Checklist'],
+                ],
+            ],
+            'project_coordinator' => [
+                'step' => 'Stage 4',
+                'title' => 'Project Coordinator',
+                'description' => 'The stage where the approved request is received and the project scope and timeline are coordinated.',
+                'role_fields' => [
+                    'coordinator_roles' => ['label' => 'Project Coordinator Roles'],
+                ],
+                'text_fields' => [
+                    'timeline_template' => ['label' => 'Timeline Template'],
+                ],
+            ],
+            'allocation_multiple_tl_split' => [
+                'step' => 'Stage 5 & 6',
+                'title' => 'Allocation and Multiple TL Split',
+                'description' => 'Configure the required roles for the Project Coordinator to TL to Developer allocation flow.',
+                'role_fields' => [
+                    'tl_roles' => ['label' => 'TL Roles'],
+                    'developer_roles' => ['label' => 'Developer Roles'],
+                ],
+                'text_fields' => [
+                    'allocation_note' => ['label' => 'Allocation Note'],
+                ],
+            ],
+        ];
     }
 }

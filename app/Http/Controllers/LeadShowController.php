@@ -175,6 +175,10 @@ class LeadShowController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
         abort_if($product->lead_id !== $lead->id, 403);
 
+        if ($product->product_status_key !== 'converted') {
+            return back()->with('error', 'Payments can be added only after the product status is Converted.');
+        }
+
         $data = $request->validate([
             'amount'           => ['required', 'numeric', 'min:0.01'],
             'payment_mode'     => ['required', 'string', 'in:cash,bank_transfer,cheque,upi,card'],

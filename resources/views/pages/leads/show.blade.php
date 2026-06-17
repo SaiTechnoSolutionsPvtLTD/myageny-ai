@@ -145,11 +145,56 @@ tbody tr:last-child td { border-bottom: none; }
         color: #fff;
     }
 
-    .actions {
+.actions {
         margin-top: 12px;
         display: flex;
         gap: 10px;
     }
+.lsp-prod-update-shell{display:grid;gap:18px}
+.lsp-prod-update-toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.lsp-prod-update-copy{font-size:13px;line-height:1.6;color:#6b7280;max-width:720px}
+.lsp-prod-update-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lsp-prod-update-filter{display:flex;flex-direction:column;gap:6px}
+.lsp-prod-update-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#6b7280}
+.lsp-prod-update-input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;font-size:13px;color:#111827}
+.lsp-prod-update-list{display:grid;gap:14px}
+.lsp-prod-update-item{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px;display:grid;gap:12px}
+.lsp-prod-update-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.lsp-prod-update-product{font-size:16px;font-weight:800;color:#111827}
+.lsp-prod-update-meta{font-size:12px;line-height:1.6;color:#6b7280;text-align:right}
+.lsp-prod-update-type{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid transparent}
+.lsp-prod-update-title{margin-top:8px;font-size:13px;font-weight:700;color:#374151}
+.lsp-prod-update-content{font-size:13px;line-height:1.7;color:#1f2937}
+.lsp-prod-update-content p:last-child{margin-bottom:0}
+.lsp-prod-update-empty{padding:40px 18px;border:1px dashed #d1d5db;border-radius:16px;background:#fafafa;text-align:center;color:#6b7280;font-size:14px}
+.lsp-ah-stack{display:grid;gap:14px}
+.lsp-ah-accordion{border:1px solid #e5e7eb;border-radius:18px;background:#fff;overflow:hidden}
+.lsp-ah-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;cursor:pointer;background:linear-gradient(180deg,#fff,#fafafa)}
+.lsp-ah-head-left{min-width:0}
+.lsp-ah-product{font-size:15px;font-weight:800;color:#111827}
+.lsp-ah-sub{margin-top:4px;font-size:12px;color:#6b7280}
+.lsp-ah-head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lsp-ah-status{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;font-size:11px;font-weight:800}
+.lsp-ah-chevron{width:28px;height:28px;border-radius:999px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#6b7280;transition:transform .18s ease}
+.lsp-ah-accordion.open .lsp-ah-chevron{transform:rotate(180deg)}
+.lsp-ah-body{display:none;padding:0 18px 18px;border-top:1px solid #eef2f7}
+.lsp-ah-accordion.open .lsp-ah-body{display:block}
+.lsp-ah-timeline{display:grid;gap:14px;padding-top:18px}
+.lsp-ah-item{position:relative;padding:16px 16px 16px 18px;border:1px solid #eef2f7;border-radius:18px;background:#fff}
+.lsp-ah-item::before{content:'';position:absolute;left:0;top:16px;bottom:16px;width:4px;border-radius:999px;background:var(--timeline-color,#2563eb)}
+.lsp-ah-title{font-size:14px;font-weight:900;color:#111827}
+.lsp-ah-subline{margin-top:4px;font-size:12px;color:#6b7280}
+.lsp-ah-meta{margin-top:10px;font-size:13px;color:#334155;line-height:1.7}
+.lsp-ah-empty{padding:18px;border:1px dashed #d1d5db;border-radius:14px;background:#fafafa;color:#6b7280;font-size:13px}
+@media (max-width: 992px){
+    .lsp-prod-update-filters{grid-template-columns:1fr 1fr}
+}
+@media (max-width: 640px){
+    .lsp-prod-update-filters{grid-template-columns:1fr}
+    .lsp-prod-update-meta{text-align:left}
+    .lsp-ah-head{align-items:flex-start}
+    .lsp-ah-head-right{justify-content:flex-start}
+}
 </style>
 @section('content')
 @php
@@ -168,6 +213,34 @@ tbody tr:last-child td { border-bottom: none; }
     $customFieldValues = $lead->customFieldValues
         ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active)
         ->sortBy(fn ($fieldValue) => [$fieldValue->field->sort_order ?? 9999, strtolower($fieldValue->field->label ?? '')]);
+    $productionUpdateTypeMeta = [
+        'production_update' => ['label' => 'Production Update', 'title' => 'Execution Progress', 'bg' => '#eff6ff', 'border' => '#bfdbfe', 'text' => '#1d4ed8'],
+        'meeting_update' => ['label' => 'Meeting Update', 'title' => 'Discussion Notes', 'bg' => '#fff7ed', 'border' => '#fed7aa', 'text' => '#c2410c'],
+        'weekly_update' => ['label' => 'Weekly Update', 'title' => 'Weekly Summary', 'bg' => '#f0fdf4', 'border' => '#bbf7d0', 'text' => '#15803d'],
+    ];
+    $productionUpdates = $lead->products
+        ->flatMap(function ($product) {
+            $updates = $product->latestProductionInitiation?->projectUpdates ?? collect();
+
+            return $updates->map(function ($update) use ($product) {
+                $update->lead_product_name = $product->product_name;
+
+                return $update;
+            });
+        })
+        ->sortByDesc('created_at')
+        ->values();
+    $productionUpdateProductOptions = $productionUpdates
+        ->pluck('lead_product_name')
+        ->filter()
+        ->unique()
+        ->sort()
+        ->values();
+    $productionUpdateCount = $productionUpdates->count();
+    $approvalHistoryProducts = $lead->products
+        ->filter(fn ($product) => $product->latestProductionInitiation)
+        ->values();
+    $approvalHistoryCount = $approvalHistoryProducts->count();
 
     $totalValue    = $lead->products->sum('total_price');
     $totalPaid     = $lead->products->sum('amount_paid');
@@ -251,6 +324,16 @@ tbody tr:last-child td { border-bottom: none; }
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 Quotations
                 <span class="lsp-tab-count">{{ $qtCount }}</span>
+            </button>
+            <button class="lsp-tab" onclick="switchTab('production-updates', this)">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="m18 20-6-6-6 6"/><path d="M6 4h12"/></svg>
+                Production Update
+                <span class="lsp-tab-count">{{ $productionUpdateCount }}</span>
+            </button>
+            <button class="lsp-tab" onclick="switchTab('approval-history', this)">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                Approval History
+                <span class="lsp-tab-count">{{ $approvalHistoryCount }}</span>
             </button>
         </div>
     </div>
@@ -791,9 +874,181 @@ tbody tr:last-child td { border-bottom: none; }
          @include('pages.leads.partials._products_panel')
         </div>
 
+        <div class="lsp-panel" id="panel-production-updates">
+            <div class="lsp-card">
+                <div class="lsp-card-head">
+                    <div class="lsp-card-title">Production Updates</div>
+                </div>
+                <div class="lsp-card-body">
+                    <div class="lsp-prod-update-shell">
+
+
+                        <div class="lsp-prod-update-filters">
+                            <div class="lsp-prod-update-filter">
+                                <label class="lsp-prod-update-label" for="pu-product-filter">Product Wise</label>
+                                <select id="pu-product-filter" class="lsp-prod-update-input" onchange="filterProductionUpdates()">
+                                    <option value="">All Products</option>
+                                    @foreach($productionUpdateProductOptions as $productName)
+                                        <option value="{{ $productName }}">{{ $productName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="lsp-prod-update-filter">
+                                <label class="lsp-prod-update-label" for="pu-type-filter">Type Wise</label>
+                                <select id="pu-type-filter" class="lsp-prod-update-input" onchange="filterProductionUpdates()">
+                                    <option value="">All Types</option>
+                                    @foreach($productionUpdateTypeMeta as $typeKey => $typeMeta)
+                                        <option value="{{ $typeKey }}">{{ $typeMeta['label'] }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="lsp-prod-update-filter">
+                                <label class="lsp-prod-update-label" for="pu-date-filter">Date Wise</label>
+                                <input type="date" id="pu-date-filter" class="lsp-prod-update-input" onchange="filterProductionUpdates()">
+                            </div>
+                            <div class="lsp-prod-update-filter" style="justify-content:flex-end;">
+                                <label class="lsp-prod-update-label" style="visibility:hidden;">Reset</label>
+                                <button type="button" class="lsp-btn lsp-btn-outline" onclick="resetProductionUpdateFilters()">Reset Filter</button>
+                            </div>
+                        </div>
+
+                        @if($productionUpdates->isNotEmpty())
+                            <div class="lsp-prod-update-list" id="production-update-list">
+                                @foreach($productionUpdates as $update)
+                                    @php
+                                        $typeMeta = $productionUpdateTypeMeta[$update->type] ?? ['label' => ucwords(str_replace('_', ' ', (string) $update->type)), 'title' => 'Project Update', 'bg' => '#f3f4f6', 'border' => '#d1d5db', 'text' => '#374151'];
+                                    @endphp
+                                    <article
+                                        class="lsp-prod-update-item"
+                                        data-update-item
+                                        data-product="{{ strtolower($update->lead_product_name ?? '') }}"
+                                        data-type="{{ strtolower($update->type ?? '') }}"
+                                        data-date="{{ optional($update->created_at)->format('Y-m-d') }}"
+                                    >
+                                        <div class="lsp-prod-update-head">
+                                            <div>
+                                                <span class="lsp-prod-update-type" style="background:{{ $typeMeta['bg'] }};border-color:{{ $typeMeta['border'] }};color:{{ $typeMeta['text'] }};">
+                                                    {{ $typeMeta['label'] }}
+                                                </span>
+                                                <div class="lsp-prod-update-title">{{ $typeMeta['title'] }}</div>
+                                                <div class="lsp-prod-update-product">{{ $update->lead_product_name ?: 'Product' }}</div>
+                                            </div>
+                                            <div class="lsp-prod-update-meta">
+                                                Added By: {{ $update->createdBy?->name ?: 'Unknown user' }}<br>
+                                                Added On: {{ optional($update->created_at)->format('d M Y h:i A') }}
+                                            </div>
+                                        </div>
+                                        <div class="lsp-prod-update-content">{!! $update->content !!}</div>
+                                    </article>
+                                @endforeach
+                            </div>
+                            <div class="lsp-prod-update-empty" id="production-update-empty" style="display:none;">
+                                No production updates found for the selected filters.
+                            </div>
+                        @else
+                            <div class="lsp-prod-update-empty">
+                                No production updates have been added for this lead yet.
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {{-- ════════════════════════════════════════
              TAB 5 — QUOTATIONS
         ════════════════════════════════════════ --}}
+        <div class="lsp-panel" id="panel-approval-history">
+            <div class="lsp-card">
+                <div class="lsp-card-head">
+                    <div class="lsp-card-title">Approval History</div>
+                </div>
+                <div class="lsp-card-body">
+                    @if($approvalHistoryProducts->isNotEmpty())
+                        <div class="lsp-ah-stack">
+                            @foreach($approvalHistoryProducts as $product)
+                                @php
+                                    $history = $product->latestProductionInitiation;
+                                    $teamCount = collect(\Illuminate\Support\Arr::wrap($history?->project_allocated_employee_user_ids))->filter()->count();
+                                    $currentApprovalState = $history?->employee_allocation_status ?: $history?->project_allocation_status ?: $history?->production_approval_status ?: $history?->status ?: 'pending';
+                                @endphp
+                                <div class="lsp-ah-accordion">
+                                    <div class="lsp-ah-head" onclick="toggleApprovalHistory(this)">
+                                        <div class="lsp-ah-head-left">
+                                            <div class="lsp-ah-product">{{ $product->product_name }}</div>
+                                            <div class="lsp-ah-sub">
+                                                {{ $history?->department?->name ?: 'Production initiation available' }}
+                                                @if($history?->created_at)
+                                                    | Initiated {{ optional($history->created_at)->format('d M Y h:i A') }}
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="lsp-ah-head-right">
+                                            <span class="lsp-ah-status">{{ ucwords(str_replace('_', ' ', (string) $currentApprovalState)) }}</span>
+                                            <span class="lsp-ah-chevron">
+                                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="lsp-ah-body">
+                                        <div class="lsp-ah-timeline">
+                                            <div class="lsp-ah-item" style="--timeline-color:#2563eb;">
+                                                <div class="lsp-ah-title">Project Initiated</div>
+                                                <div class="lsp-ah-subline">Initial project request creation</div>
+                                                <div class="lsp-ah-meta">
+                                                    Initiated By: {{ $history?->initiatedBy?->name ?: 'Not available' }}<br>
+                                                    Initiated On: {{ optional($history?->created_at)->format('d M Y h:i A') ?: 'Not available' }}
+                                                </div>
+                                            </div>
+                                            <div class="lsp-ah-item" style="--timeline-color:#0f766e;">
+                                                <div class="lsp-ah-title">OVP Approval</div>
+                                                <div class="lsp-ah-subline">OVP review and confirmation</div>
+                                                <div class="lsp-ah-meta">
+                                                    OVP Approved By: {{ $history?->reviewedBy?->name ?: 'Not available' }}<br>
+                                                    OVP Approved On: {{ optional($history?->reviewed_at)->format('d M Y h:i A') ?: 'Not available' }}
+                                                </div>
+                                            </div>
+                                            <div class="lsp-ah-item" style="--timeline-color:#7c3aed;">
+                                                <div class="lsp-ah-title">Project Approval</div>
+                                                <div class="lsp-ah-subline">Production approval stage action</div>
+                                                <div class="lsp-ah-meta">
+                                                    Approved By: {{ $history?->productionApprovalReviewedBy?->name ?: 'Not available' }}<br>
+                                                    Approved On: {{ optional($history?->production_approval_reviewed_at)->format('d M Y h:i A') ?: 'Not available' }}
+                                                </div>
+                                            </div>
+                                            <div class="lsp-ah-item" style="--timeline-color:#166534;">
+                                                <div class="lsp-ah-title">TL Allocation</div>
+                                                <div class="lsp-ah-subline">Latest TL allocation ownership status</div>
+                                                <div class="lsp-ah-meta">
+                                                    Current Status: {{ ucwords(str_replace('_', ' ', (string) ($history?->project_allocation_status ?: 'pending'))) }}<br>
+                                                    Allocated By: {{ $history?->projectAllocatedBy?->name ?: 'Pending' }}<br>
+                                                    Allocated On: {{ optional($history?->project_allocated_at)->format('d M Y h:i A') ?: 'Pending' }}
+                                                </div>
+                                            </div>
+                                            <div class="lsp-ah-item" style="--timeline-color:#ea580c;">
+                                                <div class="lsp-ah-title">Employee Allocation</div>
+                                                <div class="lsp-ah-subline">Mapped employee assignment for execution</div>
+                                                <div class="lsp-ah-meta">
+                                                    Employee Allocation Status: {{ ucwords(str_replace('_', ' ', (string) ($history?->employee_allocation_status ?: 'pending'))) }}<br>
+                                                    Allocated By: {{ $history?->employeeAllocatedBy?->name ?: 'Pending' }}<br>
+                                                    Allocated On: {{ optional($history?->employee_allocated_at)->format('d M Y h:i A') ?: 'Pending' }}<br>
+                                                    Team Members: {{ $teamCount ? $teamCount . ' member(s) allocated' : 'Pending' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="lsp-ah-empty">
+                            No product approval history is available yet.
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
         <div class="lsp-panel" id="panel-quotations">
 
             <div class="page-header">
@@ -994,6 +1249,48 @@ function switchTab(name, btn) {
     document.querySelectorAll('.lsp-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-'+name).classList.add('active');
+}
+
+function toggleApprovalHistory(trigger) {
+    const card = trigger.closest('.lsp-ah-accordion');
+    if (!card) return;
+    card.classList.toggle('open');
+}
+
+function filterProductionUpdates() {
+    const product = (document.getElementById('pu-product-filter')?.value || '').toLowerCase();
+    const type = (document.getElementById('pu-type-filter')?.value || '').toLowerCase();
+    const date = document.getElementById('pu-date-filter')?.value || '';
+    const items = document.querySelectorAll('[data-update-item]');
+    let visibleCount = 0;
+
+    items.forEach(item => {
+        const matchesProduct = !product || item.dataset.product === product;
+        const matchesType = !type || item.dataset.type === type;
+        const matchesDate = !date || item.dataset.date === date;
+        const visible = matchesProduct && matchesType && matchesDate;
+
+        item.style.display = visible ? '' : 'none';
+
+        if (visible) {
+            visibleCount += 1;
+        }
+    });
+
+    const empty = document.getElementById('production-update-empty');
+    if (empty) empty.style.display = visibleCount ? 'none' : '';
+}
+
+function resetProductionUpdateFilters() {
+    const product = document.getElementById('pu-product-filter');
+    const type = document.getElementById('pu-type-filter');
+    const date = document.getElementById('pu-date-filter');
+
+    if (product) product.value = '';
+    if (type) type.value = '';
+    if (date) date.value = '';
+
+    filterProductionUpdates();
 }
 
 // ── Toggle quotation form ─────────────────────────────────────────

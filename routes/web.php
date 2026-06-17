@@ -27,14 +27,18 @@ use App\Http\Controllers\LeadSourceController;
 use App\Http\Controllers\LeadStatusController;
 use App\Http\Controllers\MastersController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OvpModuleController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\OutcomeSubCategoryController;
+use App\Http\Controllers\ProductionApprovalController;
 use App\Http\Controllers\PermissionRequestController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollSettingController;
 use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductOvpFormController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\QuotationSettingsController;
 use App\Http\Controllers\RecruitmentController;
@@ -118,6 +122,49 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:authentication.menuview')
         ->name('auth.index');
 
+    Route::get('/ovp-module', [OvpModuleController::class, 'index'])
+        ->middleware('can:ovp_module.menuview')
+        ->name('ovp-module.index');
+    Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
+        ->middleware('can:ovp_module.menuview')
+        ->name('ovp-module.allocate');
+    Route::post('/ovp-module/{productionInitiation}/review', [OvpModuleController::class, 'review'])
+        ->middleware('can:ovp_module.menuview')
+        ->name('ovp-module.review');
+
+    Route::get('/production-approvals', [ProductionApprovalController::class, 'index'])
+        ->middleware('can:production_approval_module.menuview')
+        ->name('production-approvals.index');
+    Route::post('/production-approvals/{productionInitiation}/review', [ProductionApprovalController::class, 'review'])
+        ->middleware('can:production_approval_module.menuview')
+        ->name('production-approvals.review');
+    Route::group(['middleware' => function ($request, $next) {
+        abort_unless(auth()->user()?->canAccessProjectsModule(), 403);
+
+        return $next($request);
+    }], function () {
+        Route::get('/projects/dashboard', [ProjectController::class, 'dashboard'])
+            ->name('projects.dashboard');
+        Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
+            ->name('projects.timesheets');
+        Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])
+            ->name('projects.timesheets.store');
+        Route::get('/projects-details', [ProjectController::class, 'index'])
+            ->name('projects.index');
+        Route::get('/projects-details/{productionInitiation}', [ProjectController::class, 'show'])
+            ->name('projects.show');
+        Route::post('/projects-details/{productionInitiation}/allocate', [ProjectController::class, 'allocate'])
+            ->name('projects.allocate');
+        Route::post('/projects-details/{productionInitiation}/employee-allocate', [ProjectController::class, 'allocateEmployees'])
+            ->name('projects.employee-allocate');
+        Route::post('/projects-details/{productionInitiation}/schedule', [ProjectController::class, 'updateSchedule'])
+            ->name('projects.schedule.update');
+        Route::post('/projects-details/{productionInitiation}/updates', [ProjectController::class, 'storeUpdate'])
+            ->name('projects.updates.store');
+        Route::post('/projects-details/updates/quick', [ProjectController::class, 'storeQuickUpdate'])
+            ->name('projects.updates.quick-store');
+    });
+
     Route::prefix('authentications')->name('auth.')->group(function () {
         Route::get('/roles', [RolePermissionController::class, 'rolesIndex'])->middleware('can:roles.view')->name('roles.index');
         Route::get('/roles/create', [RolePermissionController::class, 'rolesCreate'])->middleware('can:roles.manage')->name('roles.create');
@@ -138,6 +185,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/role-mappings', [AccessMappingController::class, 'roleIndex'])->middleware('can:roles.view')->name('role-mappings.index');
         Route::put('/role-mappings', [AccessMappingController::class, 'roleUpdate'])->middleware('can:roles.manage')->name('role-mappings.update');
         Route::get('/user-mappings', [AccessMappingController::class, 'userIndex'])->middleware('can:users.view')->name('user-mappings.index');
+        Route::get('/production-mappings', [AccessMappingController::class, 'productionIndex'])->middleware('can:users.view')->name('production-mappings.index');
+        Route::get('/production-mappings/{department}', [AccessMappingController::class, 'productionShow'])->middleware('can:users.view')->name('production-mappings.show');
+        Route::put('/production-mappings/{department}', [AccessMappingController::class, 'productionUpdate'])->middleware('can:users.manage')->name('production-mappings.update');
         Route::post('/user-mappings', [AccessMappingController::class, 'userUpdate'])->middleware('can:users.manage')->name('user-mappings.update');
         Route::delete('/user-mappings/{mapping}', [AccessMappingController::class, 'userDestroy'])->middleware('can:users.manage')->name('user-mappings.destroy');
 
@@ -304,6 +354,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/',              [ProductController::class, 'store'])->middleware('can:products.create')->name('store');
     Route::get('/{product}',      [ProductController::class, 'show'])->middleware('can:products.view')->name('show');
     Route::get('/{product}/edit', [ProductController::class, 'edit'])->middleware('can:products.edit')->name('edit');
+    Route::get('/{product}/ovp-form', [ProductOvpFormController::class, 'builder'])->middleware('can:products.edit')->name('ovp-form.builder');
     Route::put('/{product}',      [ProductController::class, 'update'])->middleware('can:products.edit')->name('update');
     Route::delete('/{product}',   [ProductController::class, 'destroy'])->middleware('can:products.delete')->name('destroy');
 

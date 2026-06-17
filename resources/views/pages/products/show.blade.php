@@ -31,6 +31,11 @@
                 </svg>
                 Edit
             </a>
+            @can('products.edit')
+                <a href="{{ route('products.ovp-form.builder', $product) }}" class="pm-btn pm-btn--primary">
+                    OVP Form
+                </a>
+            @endcan
             <form method="POST" action="{{ route('products.destroy', $product) }}"
                   class="pm-delete-form" data-name="{{ $product->package_name }}">
                 @csrf @method('DELETE')
@@ -225,6 +230,78 @@
                     </table>
                 </div>
                 @endif
+
+                <div class="pm-card pm-card--detail">
+                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:14px;">
+                        <h3 class="pm-detail-section-title" style="margin:0;">OVP Form Fields</h3>
+                        @can('products.edit')
+                            <a href="{{ route('products.ovp-form.builder', $product) }}" class="pm-btn pm-btn--outline pm-btn--sm">Manage Form</a>
+                        @endcan
+                    </div>
+
+                    @if($product->ovpFormFields->isEmpty())
+                        <p class="pm-muted pm-muted--italic">No OVP customization fields configured for this product.</p>
+                    @else
+                        <table class="pm-table pm-table--attrs">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Label</th>
+                                    <th>Type</th>
+                                    <th>Required</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($product->ovpFormFields as $field)
+                                    <tr>
+                                        <td class="pm-muted">{{ $loop->iteration }}</td>
+                                        <td>
+                                            <strong>{{ $field->label }}</strong>
+                                            @if($field->help_text)
+                                                <div class="pm-muted" style="margin-top:4px;">{{ $field->help_text }}</div>
+                                            @endif
+                                        </td>
+                                        <td>{{ ucfirst($field->field_type) }}</td>
+                                        <td>{{ $field->is_required ? 'Yes' : 'No' }}</td>
+                                        <td>{{ $field->is_active ? 'Active' : 'Inactive' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    @endif
+                </div>
+
+                <div class="pm-card pm-card--detail">
+                    <h3 class="pm-detail-section-title">Recent Production Customization Data</h3>
+                    @php
+                        $recentInitiations = $product->productionInitiations->take(5);
+                    @endphp
+
+                    @if($recentInitiations->isEmpty())
+                        <p class="pm-muted pm-muted--italic">No production initiation records for this product yet.</p>
+                    @else
+                        <div style="display:grid; gap:14px;">
+                            @foreach($recentInitiations as $initiation)
+                                <div style="border:1px solid #f0eef2; border-radius:14px; padding:16px; background:#fcfcfc;">
+                                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px;">
+                                        <div>
+                                            <div style="font-size:14px; font-weight:800; color:#121212;">
+                                                {{ $initiation->lead?->name ?? 'Lead #' . $initiation->lead_id }}
+                                            </div>
+                                            <div class="pm-muted" style="margin-top:4px;">
+                                                Department: {{ $initiation->department?->name ?? 'N/A' }} | {{ optional($initiation->created_at)->format('d M Y h:i A') }}
+                                            </div>
+                                        </div>
+                                        <span class="pm-category-chip">{{ str_replace('_', ' ', ucfirst((string) $initiation->status)) }}</span>
+                                    </div>
+
+                                    @include('pages.products.partials.ovp-submission-values', ['entries' => $initiation->custom_form_data])
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
 
                 {{-- System Info --}}
                 <div class="pm-card pm-card--detail pm-card--meta">

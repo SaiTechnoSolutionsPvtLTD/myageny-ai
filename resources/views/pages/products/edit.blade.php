@@ -74,6 +74,7 @@
                 @include('pages.products.partials.form', [
                     'product'        => $product,
                     'categories'     => $categories,
+                    'departments'    => $departments,
                     'existingValues' => $existingValues,
                     'users'          => $users,
                 ])

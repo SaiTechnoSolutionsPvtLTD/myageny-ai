@@ -10,6 +10,9 @@
     $isEdit        = isset($product) && $product->exists;
     $existing      = $existingValues ?? collect();
     $selCategoryId = old('product_category_id', $isEdit ? $product->product_category_id : null);
+    $selectedDepartmentIds = collect(old('department_ids', $isEdit ? $product->departments->pluck('id')->all() : []))
+        ->map(fn ($id) => (string) $id)
+        ->all();
 @endphp
 
 <div class="pm-form-grid">
@@ -77,6 +80,31 @@
                 @endforeach
             </select>
             @error('assigned_to')
+                <span class="pm-error">{{ $message }}</span>
+            @enderror
+        </div>
+        @endisset
+
+
+        @isset($departments)
+        <div class="pm-field">
+            <label class="pm-label" for="department_ids">Departments</label>
+            <select id="department_ids" name="department_ids[]"
+                    class="pm-select pm-select--departments js-pm-department-select @error('department_ids') is-invalid @enderror @error('department_ids.*') is-invalid @enderror"
+                    data-placeholder="Select departments"
+                    multiple>
+                @foreach($departments as $department)
+                    <option value="{{ $department->id }}"
+                            @selected(in_array((string) $department->id, $selectedDepartmentIds, true))>
+                        {{ $department->name }}
+                    </option>
+                @endforeach
+            </select>
+            <span class="pm-help">Search and choose one or more departments from masters.</span>
+            @error('department_ids')
+                <span class="pm-error">{{ $message }}</span>
+            @enderror
+            @error('department_ids.*')
                 <span class="pm-error">{{ $message }}</span>
             @enderror
         </div>
@@ -235,3 +263,38 @@ window.PM_ROUTES = {
 };
 window.PM_CSRF = "{{ csrf_token() }}";
 </script>
+
+@push('scripts')
+<script>
+window.addEventListener('load', function () {
+    if (!window.jQuery || !window.jQuery.fn.select2) {
+        return;
+    }
+
+    const $select = window.jQuery('#department_ids');
+
+    if (! $select.length) {
+        return;
+    }
+
+    const currentValues = $select.val() || [];
+
+    if ($select.hasClass('select2-hidden-accessible')) {
+        $select.select2('destroy');
+    }
+
+    $select.select2({
+        placeholder: $select.data('placeholder') || 'Select departments',
+        width: '100%',
+        closeOnSelect: false,
+        dropdownAutoWidth: true
+    });
+
+    if (currentValues.length) {
+        $select.val(currentValues).trigger('change');
+    }
+
+    $select.next('.select2-container').find('.select2-selection--multiple').addClass('pm-select2-selection');
+});
+</script>
+@endpush
