@@ -27,6 +27,10 @@ use App\Http\Controllers\App\HRMS\LeaveRequestApiController;
 use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
 use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
 use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
+use App\Http\Controllers\App\OvpModuleApiController;
+use App\Http\Controllers\App\ProductionApprovalApiController;
+use App\Http\Controllers\App\ProductionInitiationApiController;
+use App\Http\Controllers\App\ProjectApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -107,7 +111,10 @@ Route::prefix('mobile/auth')->group(function () {
         Route::post('logout', [MobileAuthController::class, 'logout']);
         Route::get('me',      [MobileAuthController::class, 'me']);
     });
+
+    
 });
+
 
 
 Route::get('/get-outcome-category', [OutcomeCategoryController::class, 'getOutcomeCategory']);
@@ -207,6 +214,56 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('check-out', [MobileDailyAttendanceController::class, 'attendanceCheckOut'])->name('check-out');
         Route::get('daily-list', [MobileDailyAttendanceController::class, 'dailyAttendanceList'])->name('daily-list');
     });
+
+    // ── OVP Module ───────────────────────────────────────────────────────────────
+Route::prefix('ovp')->name('ovp.')->group(function () {
+    Route::get('/',                                      [OvpModuleApiController::class, 'index'])->name('index');
+    Route::get('/executives',                            [OvpModuleApiController::class, 'executives'])->name('executives');
+    Route::post('/{productionInitiation}/allocate',      [OvpModuleApiController::class, 'allocate'])->name('allocate');
+    Route::post('/{productionInitiation}/review',        [OvpModuleApiController::class, 'review'])->name('review');
+});
+
+// ── Production Approvals ─────────────────────────────────────────────────────
+Route::prefix('production-approvals')->name('production-approvals.')->group(function () {
+    Route::get('/',                                          [ProductionApprovalApiController::class, 'index'])->name('index');
+    Route::post('/{productionInitiation}/review',            [ProductionApprovalApiController::class, 'review'])->name('review');
+});
+
+// ── Production Initiation ──────────────────────────────────────────────────────
+Route::prefix('production-initiation')->name('production-initiation.')->group(function () {
+    Route::get('/{leadProduct}/schema', [ProductionInitiationApiController::class, 'schema'])->name('schema');
+    Route::post('/{leadProduct}/store',  [ProductionInitiationApiController::class, 'store'])->name('store');
+});
+
+Route::prefix('projects')->name('projects.')->group(function () {
+
+    // Dashboard
+    Route::get('dashboard', [ProjectApiController::class, 'dashboard'])
+        ->name('dashboard');
+
+    // Timesheets (static before wildcard)
+    Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
+        ->name('timesheets.index');
+    Route::post('timesheets', [ProjectApiController::class, 'storeTimesheet'])
+        ->name('timesheets.store');
+
+    // Project list
+    Route::get('/', [ProjectApiController::class, 'index'])
+        ->name('index');
+
+    // Project detail + actions  (wildcard last)
+    Route::get('/{productionInitiation}',   [ProjectApiController::class, 'show'])
+        ->name('show');
+    Route::post('/{productionInitiation}/allocate',          [ProjectApiController::class, 'allocate'])
+        ->name('allocate');
+    Route::post('/{productionInitiation}/employee-allocate', [ProjectApiController::class, 'allocateEmployees'])
+        ->name('employee-allocate');
+    Route::post('/{productionInitiation}/schedule',          [ProjectApiController::class, 'updateSchedule'])
+        ->name('schedule.update');
+    Route::post('/{productionInitiation}/updates',           [ProjectApiController::class, 'storeUpdate'])
+        ->name('updates.store');
+});
+
 });
 
 /*

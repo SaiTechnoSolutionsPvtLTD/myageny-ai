@@ -32,12 +32,13 @@ protected static function booted()
 
     // ── Fillable ──────────────────────────────────────────────────────
     protected $fillable = [
-        'lead_id', 'product_id', 'deal_name',
-        'product_name', 'description',
-        'unit_price', 'quantity', 'discount_percent',
-        'remarks', 'product_status', 'lead_status_id',
-        'amount_paid', 'created_by', 'company_id',
-    ];
+    'lead_id', 'product_id', 'deal_name',
+    'product_name', 'description',
+    'unit_price', 'quantity', 'discount_percent',
+    'remarks', 'product_status', 'lead_status_id',
+    'amount_paid', 'created_by', 'company_id',
+    'payment_status',
+];
 
     protected $casts = [
         'unit_price'       => 'float',
@@ -121,9 +122,9 @@ protected static function booted()
     }
 
     public function payments()
-    {
-        return $this->hasMany(Payment::class, 'lead_product_id')->latest('payment_date');
-    }
+{
+    return $this->hasMany(LeadProductPayment::class, 'lead_product_id')->latest('payment_date');
+}
 
     public function productionInitiations()
     {
@@ -179,6 +180,11 @@ protected static function booted()
     {
         return $this->belongsTo(LeadStatus::class, 'lead_status_id');
     }
+
+//     public function leadStatus()
+// {
+//     return $this->belongsTo(\App\Models\LeadStatus::class);
+// }
 
     public function getStatusLabelAttribute(): string
     {
@@ -262,16 +268,19 @@ protected static function booted()
     }
 
     public function syncPaymentStatus(): void
-    {
-        $paid = $this->payments()->sum('amount');
-        if ($paid <= 0) {
-            $status = 'pending';
-        } elseif ($paid >= $this->total_price) {
-            $status = 'paid';
-        } else {
-            $status = 'partial';
-        }
-        $this->updateQuietly(['payment_status' => $status]);
+{
+    $paid = $this->payments()->sum('amount');
+    if ($paid <= 0) {
+        $status = 'pending';
+    } elseif ($paid >= $this->total_price) {
+        $status = 'paid';
+    } else {
+        $status = 'partial';
     }
+    $this->updateQuietly([
+        'amount_paid'    => $paid,
+        'payment_status' => $status,
+    ]);
+}
 
 }
