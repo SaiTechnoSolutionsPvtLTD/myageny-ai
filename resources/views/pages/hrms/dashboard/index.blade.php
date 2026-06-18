@@ -1145,6 +1145,11 @@
                         <div class="hrms-quick-title">Daily Attendance</div>
                         <div class="hrms-quick-copy">Monitor employee attendance records</div>
                     </a>
+                    <a href="{{ route('house-keeping.index') }}" class="hrms-quick-card">
+                        <div class="hrms-quick-kicker">Cleaning</div>
+                        <div class="hrms-quick-title">House Keeping</div>
+                        <div class="hrms-quick-copy">Manage cleaning categories, works, and monthly sheet view</div>
+                    </a>
                     <a href="{{ route('interns.index') }}" class="hrms-quick-card">
                         <div class="hrms-quick-kicker">Intern</div>
                         <div class="hrms-quick-title">Intern Management</div>

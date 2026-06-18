@@ -1,7 +1,7 @@
 <table border="1">
     <thead>
         <tr>
-            <th colspan="11">Attendance Export - {{ $selectedDate->format('d M Y') }}</th>
+            <th colspan="14">Attendance Export - {{ $selectedFromDate->format('d M Y') }} to {{ $selectedToDate->format('d M Y') }}</th>
         </tr>
         <tr>
             @foreach(array_keys($rows->first() ?? [
@@ -30,7 +30,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="11">No attendance records found for the selected filters.</td>
+                <td colspan="14">No attendance records found for the selected filters.</td>
             </tr>
         @endforelse
     </tbody>

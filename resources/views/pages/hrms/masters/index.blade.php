@@ -111,6 +111,7 @@
 .masters-card.leave-type::after { background: #0f766e; }
 .masters-card.facility-title::after { background: #f97316; }
 .masters-card.asset-category::after { background: #2563eb; }
+.masters-card.house-keeping::after { background: #0ea5a4; }
 .masters-card.payroll::after { background: #0f766e; }
 .masters-card.attendance-rule::after { background: #7c3aed; }
 .masters-card-icon {
@@ -147,6 +148,10 @@
 .masters-card-icon.asset-category {
     background: linear-gradient(135deg, #eff6ff, #dbeafe);
     color: #1d4ed8;
+}
+.masters-card-icon.house-keeping {
+    background: linear-gradient(135deg, #ecfeff, #cffafe);
+    color: #0f766e;
 }
 .masters-card-icon.payroll {
     background: linear-gradient(135deg, #ecfeff, #cffafe);
@@ -240,6 +245,15 @@
                     <path d="M8 13h5"/>
                 </svg>
                 Asset Categories
+            </div>
+            <div class="masters-glance-item">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 7h16"/>
+                    <path d="M7 7v12"/>
+                    <path d="M17 7v12"/>
+                    <path d="M4 12h16"/>
+                </svg>
+                Cleaning Sheet
             </div>
             <div class="masters-glance-item">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -350,6 +364,27 @@
             </span>
         </a>
         @endcan
+
+        <a href="{{ route('house-keeping.index') }}" class="masters-card house-keeping">
+            <div class="masters-card-icon house-keeping">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 7h16"/>
+                    <path d="M7 7v12"/>
+                    <path d="M17 7v12"/>
+                    <path d="M4 12h16"/>
+                    <path d="M10 16h4"/>
+                </svg>
+            </div>
+            <h4 class="masters-card-title">House Keeping</h4>
+            <p class="masters-card-text">Maintain cleaning categories, work lists, and review the monthly house keeping cleaning sheet.</p>
+            <span class="masters-card-link">
+                Open House Keeping
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
 
         @can('settings.manage')
         <a href="{{ route('settings.payroll.index') }}#leave-settings" class="masters-card attendance-rule">

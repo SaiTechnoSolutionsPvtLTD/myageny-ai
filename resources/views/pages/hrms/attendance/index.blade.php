@@ -59,6 +59,10 @@
 .att-table{width:100%;border-collapse:collapse;min-width:1000px}
 .att-table th,.att-table td{padding:14px 16px;border-bottom:1px solid #f0eef2;text-align:left;vertical-align:top}
 .att-table th{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#9e9e9e;background:#fafafa}
+.att-th-link{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:none}
+.att-th-link:hover{color:#fe5f04}
+.att-th-sort{font-size:11px;line-height:1;color:#b0b5bf}
+.att-th-sort.is-active{color:#fe5f04}
 .att-row-intern td{background:#fffaf5}
 .att-cell-title{font-weight:700;color:#121212;font-size:13px}
 .att-cell-sub{margin-top:2px;color:#9e9e9e;font-size:11px}
@@ -94,6 +98,7 @@
 <div class="att-page">
     @php($selfServiceMode = auth()->user()?->isHrmsAttendanceOnlyUser())
     @php($managerAttendanceView = $canViewAllAttendance ?? false)
+    @php($sortIcon = fn (string $column) => $sortBy === $column ? ($sortDir === 'asc' ? '↑' : '↓') : '↕')
     <div class="att-topbar">
         <div>
             <div class="att-title">{{ $managerAttendanceView ? 'Attendance' : 'My Attendance' }}</div>
@@ -186,17 +191,13 @@
 
     <div class="att-filter-wrap att-card">
         <div class="att-card-title">Filter Attendance</div>
-        <div class="att-card-sub">{{ $managerAttendanceView ? 'Filter by employee, employee ID, department, date, status, or login timing.' : 'Review your attendance by date, status, or login timing.' }}</div>
+        <div class="att-card-sub">{{ $managerAttendanceView ? 'Filter by employee, department, date range, status, or login timing.' : 'Review your attendance by date range, status, or login timing.' }}</div>
 
         <form method="GET" action="{{ route('attendance.index') }}" class="att-filter-form" style="margin-top:16px;">
             @if($managerAttendanceView)
             <div class="att-field">
                 <label class="att-label">Employee</label>
                 <input type="text" name="employee_name" class="att-input" value="{{ request('employee_name') }}" placeholder="Search employee name">
-            </div>
-            <div class="att-field">
-                <label class="att-label">Employee ID</label>
-                <input type="text" name="employee_id" class="att-input" value="{{ request('employee_id') }}" placeholder="Search employee ID">
             </div>
             <div class="att-field">
                 <label class="att-label">Department</label>
@@ -209,8 +210,12 @@
             </div>
             @endif
             <div class="att-field">
-                <label class="att-label">Date</label>
-                <input type="date" name="attendance_date" class="att-input" value="{{ request('attendance_date', $selectedDate->format('Y-m-d')) }}">
+                <label class="att-label">From Date</label>
+                <input type="date" name="from_date" class="att-input" value="{{ request('from_date', $selectedFromDate->format('Y-m-d')) }}">
+            </div>
+            <div class="att-field">
+                <label class="att-label">To Date</label>
+                <input type="date" name="to_date" class="att-input" value="{{ request('to_date', $selectedToDate->format('Y-m-d')) }}">
             </div>
             <div class="att-field">
                 <label class="att-label">Status</label>
@@ -244,7 +249,7 @@
                 @if($managerAttendanceView)
                     <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
                 @endif
-                @if(request()->hasAny(['employee_name', 'employee_id', 'department_id', 'attendance_date', 'status', 'login_timing', 'attendee_type']))
+                @if(request()->hasAny(['employee_name', 'department_id', 'from_date', 'to_date', 'status', 'login_timing', 'attendee_type']))
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
             </div>
@@ -257,7 +262,7 @@
                 <div class="att-card-title">{{ $managerAttendanceView ? 'Attendance Details' : 'Your Attendance Details' }}</div>
                 <div class="att-card-sub">{{ $attendances->total() }} record(s) matched your filters.</div>
             </div>
-            <div class="att-note">{{ $managerAttendanceView ? 'Default view shows the current day\'s attendance.' : 'Default view shows only your attendance for the current day.' }}</div>
+            <div class="att-note">{{ $managerAttendanceView ? 'Default view loads current date in both From Date and To Date.' : 'Default view loads your current date attendance automatically.' }}</div>
         </div>
 
         @if($attendances->isEmpty())
@@ -267,14 +272,15 @@
                 <table class="att-table">
                     <thead>
                         <tr>
-                            <th>Employee</th>
-                            <th>Date</th>
-                            <th>Status</th>
-                            <th>Login</th>
-                            <th>Logout</th>
-                            <th>Working Hours</th>
-                            <th>Location</th>
-                            <th>Attendance Captured Photo</th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'employee_name', 'sort_dir' => $sortBy === 'employee_name' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Employee <span class="att-th-sort {{ $sortBy === 'employee_name' ? 'is-active' : '' }}">{{ $sortIcon('employee_name') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'employee_id', 'sort_dir' => $sortBy === 'employee_id' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Employee ID <span class="att-th-sort {{ $sortBy === 'employee_id' ? 'is-active' : '' }}">{{ $sortIcon('employee_id') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'attendance_date', 'sort_dir' => $sortBy === 'attendance_date' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Date <span class="att-th-sort {{ $sortBy === 'attendance_date' ? 'is-active' : '' }}">{{ $sortIcon('attendance_date') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'attendance_status', 'sort_dir' => $sortBy === 'attendance_status' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Status <span class="att-th-sort {{ $sortBy === 'attendance_status' ? 'is-active' : '' }}">{{ $sortIcon('attendance_status') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'login_time', 'sort_dir' => $sortBy === 'login_time' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Login <span class="att-th-sort {{ $sortBy === 'login_time' ? 'is-active' : '' }}">{{ $sortIcon('login_time') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'logout_time', 'sort_dir' => $sortBy === 'logout_time' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Logout <span class="att-th-sort {{ $sortBy === 'logout_time' ? 'is-active' : '' }}">{{ $sortIcon('logout_time') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'overall_working_hours', 'sort_dir' => $sortBy === 'overall_working_hours' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Working Hours <span class="att-th-sort {{ $sortBy === 'overall_working_hours' ? 'is-active' : '' }}">{{ $sortIcon('overall_working_hours') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'login_location', 'sort_dir' => $sortBy === 'login_location' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Location <span class="att-th-sort {{ $sortBy === 'login_location' ? 'is-active' : '' }}">{{ $sortIcon('login_location') }}</span></a></th>
+                            <th><a href="{{ route('attendance.index', array_merge(request()->query(), ['sort_by' => 'attendance_photo', 'sort_dir' => $sortBy === 'attendance_photo' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="att-th-link">Attendance Captured Photo <span class="att-th-sort {{ $sortBy === 'attendance_photo' ? 'is-active' : '' }}">{{ $sortIcon('attendance_photo') }}</span></a></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -288,11 +294,13 @@
                                         <div>
                                             <div class="att-cell-title">{{ $attendance['employee_name'] }}</div>
                                             <div class="att-cell-sub">
-                                                ID: {{ $attendance['employee_id'] ?: 'N/A' }}
                                                 <span class="att-chip att-chip-{{ $attendance['attendee_type'] }}">{{ ucfirst($attendance['attendee_type']) }}</span>
                                             </div>
                                         </div>
                                     </div>
+                                </td>
+                                <td>
+                                    <div class="att-cell-title">{{ $attendance['employee_id'] ?: 'N/A' }}</div>
                                 </td>
                                 <td>
                                         <div class="att-cell-title">{{ \Carbon\Carbon::parse($attendance['attendance_date'])->format('d M Y') }}</div>

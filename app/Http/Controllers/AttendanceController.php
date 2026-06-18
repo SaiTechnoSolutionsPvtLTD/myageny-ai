@@ -8,6 +8,7 @@ use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -32,7 +33,10 @@ class AttendanceController extends Controller
 
         return view('pages.hrms.attendance.index', [
             'attendances' => $attendances,
-            'selectedDate' => Carbon::parse($attendanceData['selected_date']),
+            'selectedFromDate' => Carbon::parse($attendanceData['selected_from_date']),
+            'selectedToDate' => Carbon::parse($attendanceData['selected_to_date']),
+            'sortBy' => $attendanceData['sort_by'],
+            'sortDir' => $attendanceData['sort_dir'],
             'stats' => $attendanceData['stats'],
             'departments' => $this->attendanceDepartments(),
             'canViewAllAttendance' => $this->canViewAllAttendance(),
@@ -47,7 +51,8 @@ class AttendanceController extends Controller
     {
         $validated = $this->validateAttendanceFilters($request);
         $attendanceData = $this->buildAttendanceData($validated);
-        $selectedDate = Carbon::parse($attendanceData['selected_date']);
+        $selectedFromDate = Carbon::parse($attendanceData['selected_from_date']);
+        $selectedToDate = Carbon::parse($attendanceData['selected_to_date']);
 
         $rows = $attendanceData['records']->map(function (array $record) {
             return [
@@ -72,10 +77,11 @@ class AttendanceController extends Controller
 
         $html = view('pages.hrms.attendance.export', [
             'rows' => $rows,
-            'selectedDate' => $selectedDate,
+            'selectedFromDate' => $selectedFromDate,
+            'selectedToDate' => $selectedToDate,
         ])->render();
 
-        $fileName = 'attendance_' . $selectedDate->format('Y_m_d') . '.xls';
+        $fileName = 'attendance_' . $selectedFromDate->format('Y_m_d') . '_to_' . $selectedToDate->format('Y_m_d') . '.xls';
 
         return response($html, 200, [
             'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
@@ -214,7 +220,7 @@ class AttendanceController extends Controller
         ]));
 
         return redirect()
-            ->route('attendance.index', ['attendance_date' => $validated['attendance_date']])
+            ->route('attendance.index', ['from_date' => $validated['attendance_date'], 'to_date' => $validated['attendance_date']])
             ->with('success', $validated['attendance_status'] === 'leave'
                 ? 'Leave entry created successfully.'
                 : 'Attendance entry created successfully.');
@@ -271,7 +277,7 @@ class AttendanceController extends Controller
         ]);
 
         return redirect()
-            ->route('attendance.index', ['attendance_date' => $validated['attendance_date']])
+            ->route('attendance.index', ['from_date' => $validated['attendance_date'], 'to_date' => $validated['attendance_date']])
             ->with('success', 'Checkout time updated successfully.');
     }
 
@@ -313,18 +319,20 @@ class AttendanceController extends Controller
     {
         $rules = [
             'employee_name' => ['nullable', 'string', 'max:255'],
-            'employee_id' => ['nullable', 'string', 'max:255'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'attendance_date' => ['nullable', 'date'],
+            'from_date' => ['nullable', 'date'],
+            'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
             'status' => ['nullable', 'in:present,absent,leave'],
             'login_timing' => ['nullable', 'in:early,late'],
             'attendee_type' => ['nullable', 'in:employee,intern'],
+            'sort_by' => ['nullable', 'in:employee_name,employee_id,attendance_date,attendance_status,login_time,logout_time,overall_working_hours,login_location,attendance_photo'],
+            'sort_dir' => ['nullable', 'in:asc,desc'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
 
         if (! $this->canViewAllAttendance()) {
-            unset($rules['employee_name'], $rules['employee_id'], $rules['attendee_type']);
+            unset($rules['employee_name'], $rules['attendee_type']);
         }
 
         return $request->validate($rules);
@@ -332,19 +340,27 @@ class AttendanceController extends Controller
 
     private function buildAttendanceData(array $validated): array
     {
-        $selectedDate = $validated['attendance_date'] ?? now()->toDateString();
+        $selectedFromDate = $validated['from_date'] ?? now()->toDateString();
+        $selectedToDate = $validated['to_date'] ?? $selectedFromDate;
         $employeeNameFilter = trim((string) ($validated['employee_name'] ?? ''));
-        $employeeIdFilter = trim((string) ($validated['employee_id'] ?? ''));
         $departmentIdFilter = isset($validated['department_id']) ? (int) $validated['department_id'] : 0;
         $statusFilter = $validated['status'] ?? '';
         $loginTimingFilter = $validated['login_timing'] ?? '';
         $attendeeTypeFilter = $validated['attendee_type'] ?? '';
+        $sortBy = $validated['sort_by'] ?? 'attendance_date';
+        $sortDir = $validated['sort_dir'] ?? 'asc';
         $accessibleAttendees = $this->accessibleAttendees();
+        $selectedDates = collect(CarbonPeriod::create($selectedFromDate, $selectedToDate))
+            ->map(fn (Carbon $date) => $date->format('Y-m-d'))
+            ->values();
 
         if ($accessibleAttendees->isEmpty()) {
             return [
                 'records' => collect(),
-                'selected_date' => $selectedDate,
+                'selected_from_date' => $selectedFromDate,
+                'selected_to_date' => $selectedToDate,
+                'sort_by' => $sortBy,
+                'sort_dir' => $sortDir,
                 'stats' => [
                     'total_employees' => 0,
                     'present_count' => 0,
@@ -362,7 +378,8 @@ class AttendanceController extends Controller
 
         $attendanceCollection = DailyAttendance::query()
             ->with(['employee.department', 'intern.department'])
-            ->whereDate('attendance_date', $selectedDate)
+            ->whereDate('attendance_date', '>=', $selectedFromDate)
+            ->whereDate('attendance_date', '<=', $selectedToDate)
             ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
                 if ($accessibleEmployeeIds->isNotEmpty()) {
                     $query->orWhere(function ($employeeQuery) use ($accessibleEmployeeIds) {
@@ -378,6 +395,7 @@ class AttendanceController extends Controller
                     });
                 }
             })
+            ->orderBy('attendance_date')
             ->orderBy('login_time')
             ->get();
 
@@ -422,42 +440,54 @@ class AttendanceController extends Controller
         });
 
         $presentAttendeeKeys = $attendanceRecords
-            ->map(fn (array $record) => $record['attendee_type'] . ':' . $this->normalizeValue($record['employee_id']))
+            ->map(fn (array $record) => implode(':', [
+                $record['attendee_type'],
+                $this->normalizeValue($record['employee_id']),
+                $record['attendance_date'],
+            ]))
             ->filter()
             ->unique()
             ->values();
 
-        $absentRecords = $accessibleAttendees
-            ->reject(function (array $attendee) use ($presentAttendeeKeys) {
-                return $presentAttendeeKeys->contains($attendee['attendee_type'] . ':' . $this->normalizeValue($attendee['display_id']));
+        $absentRecords = $selectedDates
+            ->flatMap(function (string $attendanceDate) use ($accessibleAttendees, $presentAttendeeKeys) {
+                return $accessibleAttendees
+                    ->reject(function (array $attendee) use ($presentAttendeeKeys, $attendanceDate) {
+                        return $presentAttendeeKeys->contains(implode(':', [
+                            $attendee['attendee_type'],
+                            $this->normalizeValue($attendee['display_id']),
+                            $attendanceDate,
+                        ]));
+                    })
+                    ->map(function (array $attendee) use ($attendanceDate) {
+                    return [
+                        'employee_id' => $attendee['display_id'],
+                        'employee_name' => $attendee['name'],
+                        'attendee_type' => $attendee['attendee_type'],
+                        'department_id' => $attendee['department_id'],
+                        'department_name' => $attendee['department_name'],
+                        'attendance_date' => $attendanceDate,
+                        'attendance_status' => 'absent',
+                        'leave_category' => null,
+                        'leave_session' => null,
+                        'leave_category_label' => null,
+                        'leave_session_label' => null,
+                        'leave_label' => null,
+                        'login_time' => null,
+                        'logout_time' => null,
+                        'overall_working_hours' => null,
+                        'login_location' => null,
+                        'logout_location' => null,
+                        'remarks' => 'No check-in record found for the selected date.',
+                        'profile_photo_url' => $attendee['photo_url'],
+                        'attendance_photo_url' => $attendee['photo_url'],
+                        'logout_photo_url' => null,
+                        'login_timing' => null,
+                        'is_derived' => true,
+                    ];
+                });
             })
-            ->map(function (array $attendee) use ($selectedDate) {
-                return [
-                    'employee_id' => $attendee['display_id'],
-                    'employee_name' => $attendee['name'],
-                    'attendee_type' => $attendee['attendee_type'],
-                    'department_id' => $attendee['department_id'],
-                    'department_name' => $attendee['department_name'],
-                    'attendance_date' => $selectedDate,
-                    'attendance_status' => 'absent',
-                    'leave_category' => null,
-                    'leave_session' => null,
-                    'leave_category_label' => null,
-                    'leave_session_label' => null,
-                    'leave_label' => null,
-                    'login_time' => null,
-                    'logout_time' => null,
-                    'overall_working_hours' => null,
-                    'login_location' => null,
-                    'logout_location' => null,
-                    'remarks' => 'No check-in record found for the selected date.',
-                    'profile_photo_url' => $attendee['photo_url'],
-                    'attendance_photo_url' => $attendee['photo_url'],
-                    'logout_photo_url' => null,
-                    'login_timing' => null,
-                    'is_derived' => true,
-                ];
-            });
+            ->values();
 
         $stats = [
             'total_employees' => $accessibleAttendees->count(),
@@ -477,12 +507,8 @@ class AttendanceController extends Controller
         };
 
         $records = $records
-            ->filter(function (array $record) use ($employeeNameFilter, $employeeIdFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
+            ->filter(function (array $record) use ($employeeNameFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
                 if ($employeeNameFilter !== '' && ! str_contains($this->normalizeValue($record['employee_name']), $this->normalizeValue($employeeNameFilter))) {
-                    return false;
-                }
-
-                if ($employeeIdFilter !== '' && ! str_contains($this->normalizeValue($record['employee_id']), $this->normalizeValue($employeeIdFilter))) {
                     return false;
                 }
 
@@ -500,20 +526,37 @@ class AttendanceController extends Controller
 
                 return true;
             })
-            ->sortBy(fn (array $record) => sprintf(
-                '%s|%s|%s|%s',
-                $record['attendance_status'] === 'absent' ? '1' : '0',
-                $record['attendee_type'] === 'intern' ? '0' : '1',
-                $record['login_time'] ?? '23:59:59',
-                $this->normalizeValue($record['employee_name'])
-            ))
+            ->sortBy(
+                fn (array $record) => $this->attendanceSortValue($record, $sortBy),
+                options: SORT_NATURAL,
+                descending: $sortDir === 'desc'
+            )
             ->values();
 
         return [
             'records' => $records,
-            'selected_date' => $selectedDate,
+            'selected_from_date' => $selectedFromDate,
+            'selected_to_date' => $selectedToDate,
+            'sort_by' => $sortBy,
+            'sort_dir' => $sortDir,
             'stats' => $stats,
         ];
+    }
+
+    private function attendanceSortValue(array $record, string $sortBy): string
+    {
+        return match ($sortBy) {
+            'employee_name' => $this->normalizeValue($record['employee_name']) . '|' . $record['attendance_date'],
+            'employee_id' => $this->normalizeValue($record['employee_id']) . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'attendance_date' => ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'attendance_status' => ($record['attendance_status'] ?? '') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'login_time' => ($record['login_time'] ?? '99:99:99') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'logout_time' => ($record['logout_time'] ?? '99:99:99') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'overall_working_hours' => ($record['overall_working_hours'] ?? '99:99:99') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'login_location' => $this->normalizeValue($record['login_location']) . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            'attendance_photo' => (($record['attendance_photo_url'] ?? null) ? '0' : '1') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            default => ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+        };
     }
 
     private function resolveLoginTiming(?string $loginTime): ?string

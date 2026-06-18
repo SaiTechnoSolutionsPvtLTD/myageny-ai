@@ -15,6 +15,9 @@ use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\HolidayCalendarController;
+use App\Http\Controllers\HouseKeepingCategoryController;
+use App\Http\Controllers\HouseKeepingManagementController;
+use App\Http\Controllers\HouseKeepingWorkController;
 use App\Http\Controllers\HrmsAnnouncementController;
 use App\Http\Controllers\InternJoiningFormController;
 use App\Http\Controllers\LeadController;
@@ -228,6 +231,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/checkout', [AttendanceController::class, 'storeCheckout'])->name('attendance.checkout.store');
     Route::get('/attendance/lookup', [AttendanceController::class, 'lookupAttendance'])->name('attendance.lookup');
     Route::get('/attendance/export', [AttendanceController::class, 'export'])->name('attendance.export');
+    Route::get('/house-keeping-management', [HouseKeepingManagementController::class, 'index'])->name('house-keeping.index');
+    Route::post('/house-keeping-management/completions', [HouseKeepingManagementController::class, 'updateCompletion'])->name('house-keeping.completions.update');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
         ->name('leave-requests.approve');
@@ -397,6 +402,12 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
 
     Route::resource('asset-categories', AssetCategoryController::class)
          ->middleware('can:settings.manage')
+         ->except(['show']);
+
+    Route::resource('house-keeping-categories', HouseKeepingCategoryController::class)
+         ->except(['show']);
+
+    Route::resource('house-keeping-works', HouseKeepingWorkController::class)
          ->except(['show']);
 
     Route::resource('facility-titles', FacilityTitleController::class)

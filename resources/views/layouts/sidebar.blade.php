@@ -13,6 +13,7 @@
         || request()->routeIs('assets.*')
         || request()->routeIs('interns.*')
         || request()->routeIs('attendance.*')
+        || request()->routeIs('house-keeping.*')
         || request()->routeIs('payroll.*')
         || request()->routeIs('hrms-announcements.*')
         || request()->routeIs('leave-requests.*')
@@ -23,6 +24,8 @@
         || request()->routeIs('settings.departments.*')
         || request()->routeIs('settings.leave-types.*')
         || request()->routeIs('settings.asset-categories.*')
+        || request()->routeIs('settings.house-keeping-categories.*')
+        || request()->routeIs('settings.house-keeping-works.*')
         || request()->routeIs('settings.payroll.*')
         || request()->routeIs('settings.facility-titles.*')
         || request()->routeIs('settings.holiday-calendars.*');
@@ -217,6 +220,24 @@
                     </div>
                 </a>
                 @endcan
+
+                @if(! $hrmsSelfService)
+                <a href="{{ route('house-keeping.index') }}" class="nav-item {{ request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18"></path>
+                            <path d="M7 6v14"></path>
+                            <path d="M17 6v14"></path>
+                            <path d="M3 12h18"></path>
+                            <path d="M10 16h4"></path>
+                        </svg>
+                        <span>House Keeping</span>
+                    </div>
+                </a>
+                @endif
 
                 @if(! $hrmsSelfService)
                 @can('payroll.menuview')
