@@ -7,7 +7,10 @@ use App\Models\CampaignFieldMigration;
 use App\Models\CampaignFields;
 use App\Models\CampaignMaster;
 use App\Models\FbuserMaster;
+use App\Models\Lead;
 use App\Models\LeadFormField;
+use App\Models\LeadProduct;
+use App\Models\Product;
 use App\Models\User;
 use App\Services\FacebookLeadImporter;
 use Illuminate\Http\Request;
@@ -21,7 +24,11 @@ class FacebookIntegrationController extends Controller
 {
     public function index(Request $request)
     {
-        $campaignMasters = CampaignMaster::query()
+        $allowedSorts = ['id', 'campaign_name', 'campaign_id', 'assigned_users'];
+        $sortBy = in_array($request->get('sort_by'), $allowedSorts, true) ? $request->get('sort_by') : 'id';
+        $sortDir = $request->get('sort_dir') === 'asc' ? 'asc' : 'desc';
+
+        $campaignMastersQuery = CampaignMaster::query()
             ->with(['assignedUsers' => function ($query) {
                 $query->select('id', 'campaign_id', 'user_id', 'user_name')
                     ->orderBy('user_name');
@@ -41,8 +48,27 @@ class FacebookIntegrationController extends Controller
                 $query->whereHas('assignedUsers', function ($assignedQuery) use ($request) {
                     $assignedQuery->where('user_id', $request->assigned_user);
                 });
-            })
-            ->latest()
+            });
+
+        match ($sortBy) {
+            'campaign_name' => $campaignMastersQuery
+                ->orderByRaw('LOWER(campaign_name) ' . $sortDir)
+                ->orderByDesc('id'),
+            'campaign_id' => $campaignMastersQuery
+                ->orderByRaw("LOWER(COALESCE(NULLIF(camp_id, ''), NULLIF(ad_id, ''), '')) " . $sortDir)
+                ->orderByDesc('id'),
+            'assigned_users' => $campaignMastersQuery
+                ->orderBy(
+                    AssignedUser::query()
+                        ->selectRaw('MIN(user_name)')
+                        ->whereColumn('campaign_id', 'campaign_masters.id'),
+                    $sortDir
+                )
+                ->orderByRaw('LOWER(campaign_name) asc'),
+            default => $campaignMastersQuery->orderBy('id', $sortDir),
+        };
+
+        $campaignMasters = $campaignMastersQuery
             ->paginate(10)
             ->withQueryString();
 
@@ -53,7 +79,7 @@ class FacebookIntegrationController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        return view('pages.settings.facebook-integration.index', compact('campaignMasters', 'activeUsers'));
+        return view('pages.settings.facebook-integration.index', compact('campaignMasters', 'activeUsers', 'sortBy', 'sortDir'));
     }
 
     public function facebookIndex() {
@@ -271,14 +297,12 @@ class FacebookIntegrationController extends Controller
 
     public function fbassignleads( Request $request ) {
         try {
-
-            // $selectedUserIds = $request->assigned;
-            // $camid = $request->camid;
             $cams = $request->cams;
 
             foreach ( $cams as $cam ) {
                 $campaignId = $cam[ 'campaignId' ];
                 $campaignAssigned = $cam[ 'assigned' ];
+                $productId = !empty($cam['productId']) ? (int) $cam['productId'] : null;
 
                 $users = User::whereIn( 'id', $campaignAssigned )
                 ->where(function ($query) {
@@ -293,10 +317,16 @@ class FacebookIntegrationController extends Controller
                     return response()->json( [ 'error' => 'No active selected users found' ], 404 );
                 }
 
+                $product = $productId ? Product::query()->find($productId) : null;
+
+                if (! $product) {
+                    return response()->json(['error' => 'Please select a valid product for each campaign.'], 422);
+                }
+
                 AssignedUser::where('campaign_id', $campaignId)->delete();
 
                 foreach ( $users as $user ) {
-                    $assignedUser = AssignedUser::updateOrCreate(
+                    AssignedUser::updateOrCreate(
                         [
                             'user_id' => $user->id,
                             'campaign_id' => $campaignId,
@@ -306,9 +336,14 @@ class FacebookIntegrationController extends Controller
                         ]
                     );
                 }
+
+                CampaignMaster::where('id', $campaignId)->update([
+                    'product_id' => $product->id,
+                ]);
+
+                $this->syncExistingFacebookLeadProducts($campaignId, $product);
             }
 
-            // return response()->json( [ 'success' => 'Lead assigned successfully', 'lead' => $assignedUser ] );
             return response()->json( [
                 'view' => view( 'pages.settings.facebook-integration.lead-maping-success', compact( 'users', 'cams' ) )->render(),
             ] );
@@ -316,6 +351,51 @@ class FacebookIntegrationController extends Controller
         } catch ( \Exception $e ) {
             return response()->json( [ 'error' => 'Failed to assign lead: ' . $e->getMessage() ], 500 );
         }
+    }
+
+    protected function syncExistingFacebookLeadProducts(int $campaignId, Product $product): void
+    {
+        $campaign = CampaignMaster::query()->find($campaignId);
+
+        if (! $campaign) {
+            return;
+        }
+
+        $campaignIdentifiers = collect([$campaign->camp_id, $campaign->ad_id])
+            ->filter()
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($campaignIdentifiers->isEmpty()) {
+            return;
+        }
+
+        Lead::query()
+            ->whereIn('facebook_campaign_id', $campaignIdentifiers)
+            ->get()
+            ->each(function (Lead $lead) use ($product) {
+                LeadProduct::firstOrCreate(
+                    [
+                        'lead_id' => $lead->id,
+                        'product_id' => $product->id,
+                    ],
+                    [
+                        'deal_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                        'product_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                        'description' => $product->description,
+                        'unit_price' => (float) ($product->final_price ?? 0),
+                        'quantity' => 1,
+                        'discount_percent' => 0,
+                        'remarks' => 'Created automatically from Facebook campaign product mapping.',
+                        'product_status' => 'new',
+                        'amount_paid' => 0,
+                        'created_by' => $lead->assigned_to ?: $lead->created_by,
+                        'company_id' => $lead->company_id,
+                    ]
+                );
+            });
     }
 
     public function viewAssigned() {

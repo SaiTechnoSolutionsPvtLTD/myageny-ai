@@ -42,6 +42,31 @@
 .chosen-container .chosen-results li.highlighted {
     background:#fe5f04 !important;
 }
+.fb-map-field {
+    margin-top: 14px;
+}
+.fb-map-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #555;
+}
+.fb-map-select {
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 12px;
+    border: 1px solid #e1dee3;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 13px;
+    color: #121212;
+    outline: none;
+}
+.fb-map-select:focus {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254,95,4,.10);
+}
 @media (max-width: 900px) {
     .fb-map-grid { grid-template-columns:1fr; }
 }
@@ -69,6 +94,10 @@
                             @php
                                 $campaign = App\Models\CampaignMaster::where('id', $cam)->first();
                                 $users = App\Models\User::where('user_status', 'active')->get();
+                                $products = App\Models\Product::query()
+                                    ->where('status', 'active')
+                                    ->orderByRaw('COALESCE(NULLIF(package_name, \'\'), product_name) asc')
+                                    ->get();
                             @endphp
                             <div class="fb-map-panel">
                                 <h4 class="fb-map-panel-title">{{ $campaign->campaign_name }}</h4>
@@ -79,6 +108,18 @@
                                         <option value="{{ $user->id }}">{{ $user->name }}</option>
                                     @endforeach
                                 </select>
+
+                                <div class="fb-map-field">
+                                    <label class="fb-map-label" for="fbproduct-{{ $cam }}">Default Product</label>
+                                    <select class="fb-map-select fb-product-select" id="fbproduct-{{ $cam }}">
+                                        <option value="">Select Product</option>
+                                        @foreach ($products as $product)
+                                            <option value="{{ $product->id }}" @selected((int) $campaign?->product_id === (int) $product->id)>
+                                                {{ $product->package_name ?: $product->product_name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
 
                                 <input type="hidden" value="{{ $cam }}" name="camid" class="leadmappingcamid">
                             </div>

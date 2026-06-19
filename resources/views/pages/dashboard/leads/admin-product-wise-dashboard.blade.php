@@ -346,6 +346,8 @@
 'use strict';
 
 window._apiToken = @json($apiToken ?? '');
+const defaultFromDate = @json(now()->startOfMonth()->toDateString());
+const defaultToDate = @json(now()->endOfMonth()->toDateString());
 
 // ── Utilities ──────────────────────────────────────────────
 const fmt = n => '₹' + Number(n ?? 0).toLocaleString('en-IN', {maximumFractionDigits:2});
@@ -657,6 +659,8 @@ function renderBranchPayments(data) {
 
 // ── Event Listeners ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('f_from').value = defaultFromDate;
+    document.getElementById('f_to').value = defaultToDate;
 
     const btn = document.getElementById('applyBtn');
     console.log(btn); // check again
@@ -672,8 +676,8 @@ document.getElementById('resetBtn')?.addEventListener('click', () => {
     ['f_product','f_branch','f_user','f_source','f_status'].forEach(id => {
         document.getElementById(id).value = '';
     });
-    document.getElementById('f_from').value = '';
-    document.getElementById('f_to').value   = '';
+    document.getElementById('f_from').value = defaultFromDate;
+    document.getElementById('f_to').value   = defaultToDate;
     loadDashboard();
 });
 

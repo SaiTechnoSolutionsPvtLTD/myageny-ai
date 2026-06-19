@@ -466,7 +466,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-event ld-fi"></i>
                                     <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                                           value="{{ request('date_from', $today) }}" onchange="autoSubmit()">
+                                           value="{{ request('date_from', $defaultFromDate) }}" onchange="autoSubmit()">
                                 </div>
                             </div>
                             <span class="ld-date-sep">to</span>
@@ -475,7 +475,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-check ld-fi"></i>
                                     <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                                           value="{{ request('date_to', $today) }}" onchange="autoSubmit()">
+                                           value="{{ request('date_to', $defaultToDate) }}" onchange="autoSubmit()">
                                 </div>
                             </div>
                         </div>
@@ -485,7 +485,7 @@
                             <div class="ld-quick-dates">
                                 <button type="button" class="ld-qb" id="quickToday" onclick="setQ('today')">Today</button>
                                 <button type="button" class="ld-qb" onclick="setQ('week')">Week</button>
-                                <button type="button" class="ld-qb" onclick="setQ('month')">Month</button>
+                                <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
                             </div>
                         </div>
 
@@ -874,7 +874,9 @@ function setQ(p) {
 }
 document.addEventListener('DOMContentLoaded', updateFilters);
 
-const defaultDate = @json($today);
+const todayDate = @json(now()->toDateString());
+const defaultFromDate = @json($defaultFromDate);
+const defaultToDate = @json($defaultToDate);
 const ff = {
     f_search:    { label:'Search',   sel:'#f_search' },
     f_branch:    { label:'Branch',   sel:'#f_branch' },
@@ -890,7 +892,8 @@ const ff = {
 
 function isActiveFilter(id, value) {
     if (!value) return false;
-    if ((id === 'f_date_from' || id === 'f_date_to') && value === defaultDate) return false;
+    if (id === 'f_date_from' && value === defaultFromDate) return false;
+    if (id === 'f_date_to' && value === defaultToDate) return false;
     return true;
 }
 
@@ -921,13 +924,20 @@ function updateFilters() {
 
     const from = document.getElementById('f_date_from')?.value;
     const to = document.getElementById('f_date_to')?.value;
-    document.getElementById('quickToday')?.classList.toggle('active', from === defaultDate && to === defaultDate);
+    document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
+    document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
 }
 
 function clearF(id) {
     const el = document.querySelector(ff[id].sel);
     if (el) {
-        el.value = (id === 'f_date_from' || id === 'f_date_to') ? defaultDate : '';
+        if (id === 'f_date_from') {
+            el.value = defaultFromDate;
+        } else if (id === 'f_date_to') {
+            el.value = defaultToDate;
+        } else {
+            el.value = '';
+        }
     }
     updateFilters();
     document.getElementById('filterForm').submit();
@@ -945,7 +955,7 @@ function delaySubmit() {
 }
 
 function setQ(p) {
-    const parts = defaultDate.split('-').map(Number);
+    const parts = defaultToDate.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
     const fmt = d => {
         const y = d.getFullYear();
@@ -957,8 +967,8 @@ function setQ(p) {
     const t = document.getElementById('f_date_to');
 
     if (p === 'today') {
-        f.value = defaultDate;
-        t.value = defaultDate;
+        f.value = todayDate;
+        t.value = todayDate;
     } else if (p === 'week') {
         const mon = new Date(today);
         mon.setDate(today.getDate() - today.getDay() + 1);
@@ -967,8 +977,8 @@ function setQ(p) {
         f.value = fmt(mon);
         t.value = fmt(sun);
     } else if (p === 'month') {
-        f.value = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
-        t.value = fmt(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+        f.value = defaultFromDate;
+        t.value = defaultToDate;
     }
 
     updateFilters();

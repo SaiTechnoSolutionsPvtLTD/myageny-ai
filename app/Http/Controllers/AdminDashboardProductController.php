@@ -35,6 +35,11 @@ class AdminDashboardProductController extends Controller
             'from_date', 'to_date',
         ]);
 
+        if (empty($filters['from_date']) && empty($filters['to_date'])) {
+            $filters['from_date'] = now()->startOfMonth()->toDateString();
+            $filters['to_date'] = now()->endOfMonth()->toDateString();
+        }
+
         try {
             $data = $this->service->getDashboardData($filters);
 

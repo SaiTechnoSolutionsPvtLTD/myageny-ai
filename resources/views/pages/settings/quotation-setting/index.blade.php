@@ -591,6 +591,32 @@
                             <div class="form-hint">This color will be applied to the quotation header, dividers, and total row background.</div>
                         </div>
 
+                        <div class="form-group">
+                            <label class="form-label">Header Text Color</label>
+                            <div class="color-picker-row">
+                                <div class="color-swatch" id="colorSwatch3" style="background:{{ $data['header_text_color'] ?? '#ffffff' }}">
+                                    <input type="color" name="header_text_color" id="colorPicker3"
+                                           value="{{ $data['header_text_color'] ?? '#ffffff' }}"
+                                           oninput="syncColor3(this.value)">
+                                </div>
+                                <input type="text" class="form-input color-hex-input" id="colorHex3"
+                                       value="{{ $data['header_text_color'] ?? '#ffffff' }}"
+                                       placeholder="#ffffff" maxlength="7"
+                                       oninput="syncColorFromHex3(this.value)">
+                                <span style="font-size:13px;color:#9e9e9e;">Select or type hex value</span>
+                            </div>
+
+                            <div class="color-presets">
+                                @foreach(['#ffffff','#f8fafc','#fef3c7','#dbeafe','#dcfce7','#111827','#1f2937','#4b5563','#7f1d1d'] as $clr)
+                                <div class="preset-color"
+                                     style="background:{{ $clr }}"
+                                     onclick="syncColor3('{{ $clr }}')"
+                                     title="{{ $clr }}"></div>
+                                @endforeach
+                            </div>
+                            <div class="form-hint">This color will be used for the company details and quotation info inside the header area.</div>
+                        </div>
+
                         {{-- Watermark --}}
                         <div class="form-group">
                             <label class="form-label">Watermark Text <span style="font-size:11px;color:#9e9e9e;font-weight:400;">(optional)</span></label>
@@ -945,12 +971,23 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
         updatePreviewColor2(hex);
     }
 
+    function syncColor3(hex) {
+        document.getElementById('colorPicker3').value = hex;
+        document.getElementById('colorHex3').value    = hex;
+        document.getElementById('colorSwatch3').style.background = hex;
+        updatePreviewHeaderTextColor(hex);
+    }
+
     function syncColorFromHex(val) {
         if (/^#[0-9A-Fa-f]{6}$/.test(val)) syncColor(val);
     }
 
     function syncColorFromHex2(val) {
         if (/^#[0-9A-Fa-f]{6}$/.test(val)) syncColor2(val);
+    }
+
+    function syncColorFromHex3(val) {
+        if (/^#[0-9A-Fa-f]{6}$/.test(val)) syncColor3(val);
     }
 
     // ─── Number Preview ───────────────────────────────────────
@@ -1057,28 +1094,29 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
         const livePreview = document.getElementById('livePreview');
         if (!livePreview) return;
 
-        const color   = document.getElementById('colorHex').value || '#fe5f04';
-        const prefix  = document.getElementById('prefixInput').value || 'QUO-';
-        const padding = parseInt(document.getElementById('paddingInput').value) || 5;
-        const qNo     = prefix + String({{ $data['next_number'] ?? 1 }}).padStart(padding, '0');
-        const logoEl  = document.getElementById('logoImg');
-        const logoSrc = logoEl ? logoEl.src : '';
-        const sigEl   = document.getElementById('sigImg');
-        const sigSrc  = sigEl ? sigEl.src : '';
-        const company = document.querySelector('[name="company_name"]')?.value || 'Your Company';
-        const address = document.querySelector('[name="company_address"]')?.value || '';
+        const color           = document.getElementById('colorHex').value || '#fe5f04';
+        const headerTextColor = document.getElementById('colorHex3').value || '#ffffff';
+        const prefix          = document.getElementById('prefixInput').value || 'QUO-';
+        const padding         = parseInt(document.getElementById('paddingInput').value) || 5;
+        const qNo             = prefix + String({{ $data['next_number'] ?? 1 }}).padStart(padding, '0');
+        const logoEl          = document.getElementById('logoImg');
+        const logoSrc         = logoEl ? logoEl.src : '';
+        const sigEl           = document.getElementById('sigImg');
+        const sigSrc          = sigEl ? sigEl.src : '';
+        const company         = document.querySelector('[name="company_name"]')?.value || 'Your Company';
+        const address         = document.querySelector('[name="company_address"]')?.value || '';
 
         livePreview.innerHTML = `
-        <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 20px; margin-bottom: 20px;">
+        <div style="background:${color};padding:20px;border-radius:16px;margin-bottom:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div>
-                    ${logoSrc ? `<img src="${logoSrc}" style="height:48px;margin-bottom:10px;" alt="Logo">` : `<div style="font-size:20px;font-weight:800;color:${color};">${company}</div>`}
-                    <div style="font-size:12px;color:#9e9e9e;white-space:pre-line;">${address}</div>
+                    ${logoSrc ? `<img src="${logoSrc}" style="height:48px;margin-bottom:10px;" alt="Logo">` : `<div style="font-size:20px;font-weight:800;color:${headerTextColor};">${company}</div>`}
+                    <div style="font-size:12px;color:${headerTextColor};opacity:.9;white-space:pre-line;">${address}</div>
                 </div>
                 <div style="text-align:right;">
-                    <div style="font-size:28px;font-weight:800;color:${color};">QUOTATION</div>
-                    <div style="font-size:14px;color:#9e9e9e;">${qNo}</div>
-                    <div style="font-size:12px;color:#9e9e9e;">Date: ${new Date().toLocaleDateString('en-IN')}</div>
+                    <div style="font-size:28px;font-weight:800;color:${headerTextColor};">QUOTATION</div>
+                    <div style="font-size:14px;color:${headerTextColor};opacity:.9;">${qNo}</div>
+                    <div style="font-size:12px;color:${headerTextColor};opacity:.8;">Date: ${new Date().toLocaleDateString('en-IN')}</div>
                 </div>
             </div>
         </div>
@@ -1153,9 +1191,16 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
         </div>`;
     }
 
-    function updatePreviewColor(hex) { /* re-render if preview is open */ }
-    function updatePreviewColor2(hex) { /* re-render if preview is open */ }
-    function updatePreviewLogo(src)  { /* re-render if preview is open */ }
+    function refreshPreviewIfOpen() {
+        if (previewModal && previewModal.classList.contains('show')) {
+            buildPreview();
+        }
+    }
+
+    function updatePreviewColor(hex) { refreshPreviewIfOpen(); }
+    function updatePreviewColor2(hex) { refreshPreviewIfOpen(); }
+    function updatePreviewHeaderTextColor(hex) { refreshPreviewIfOpen(); }
+    function updatePreviewLogo(src)  { refreshPreviewIfOpen(); }
 
     // ─── Smooth scroll for nav items ─────────────────────────
     document.querySelectorAll('.settings-nav-item').forEach(link => {

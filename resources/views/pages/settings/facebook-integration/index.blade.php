@@ -53,6 +53,28 @@
     font-size: 13px;
 }
 
+.crm-th-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.crm-th-link:hover {
+    color: #fe5f04;
+}
+
+.crm-th-sort {
+    font-size: 11px;
+    line-height: 1;
+    color: #b0b5bf;
+}
+
+.crm-th-sort.is-active {
+    color: #fe5f04;
+}
+
 @media (max-width: 1100px) {
     .crm-filter-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -74,6 +96,7 @@
 
 @section('content')
 <main class="main-content">
+    @php($sortIcon = fn (string $column) => $sortBy === $column ? ($sortDir === 'asc' ? '↑' : '↓') : '↕')
     <div class="crm-page-body">
         <div class="crm-page-header">
             <div>
@@ -137,10 +160,30 @@
             <table class="crm-table">
                 <thead style="text-transform: uppercase">
                     <tr>
-                        <th>#</th>
-                        <th>Campaign Name</th>
-                        <th>Campaign ID</th>
-                        <th>Assigned Users</th>
+                        <th>
+                            <a href="{{ route('settings.facebook-integration', array_merge(request()->query(), ['sort_by' => 'id', 'sort_dir' => $sortBy === 'id' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="crm-th-link">
+                                #
+                                <span class="crm-th-sort {{ $sortBy === 'id' ? 'is-active' : '' }}">{{ $sortIcon('id') }}</span>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ route('settings.facebook-integration', array_merge(request()->query(), ['sort_by' => 'campaign_name', 'sort_dir' => $sortBy === 'campaign_name' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="crm-th-link">
+                                Campaign Name
+                                <span class="crm-th-sort {{ $sortBy === 'campaign_name' ? 'is-active' : '' }}">{{ $sortIcon('campaign_name') }}</span>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ route('settings.facebook-integration', array_merge(request()->query(), ['sort_by' => 'campaign_id', 'sort_dir' => $sortBy === 'campaign_id' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="crm-th-link">
+                                Campaign ID
+                                <span class="crm-th-sort {{ $sortBy === 'campaign_id' ? 'is-active' : '' }}">{{ $sortIcon('campaign_id') }}</span>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ route('settings.facebook-integration', array_merge(request()->query(), ['sort_by' => 'assigned_users', 'sort_dir' => $sortBy === 'assigned_users' && $sortDir === 'asc' ? 'desc' : 'asc', 'page' => 1])) }}" class="crm-th-link">
+                                Assigned Users
+                                <span class="crm-th-sort {{ $sortBy === 'assigned_users' ? 'is-active' : '' }}">{{ $sortIcon('assigned_users') }}</span>
+                            </a>
+                        </th>
                         <th class="text-right">Actions</th>
                     </tr>
                 </thead>

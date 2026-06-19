@@ -14,6 +14,8 @@ class QuotationSetting extends Model
     public static array $defaults = [
         'logo'              => null,
         'theme_color'       => '#fe5f04',
+        'secondary_color'   => '#fe5f04',
+        'header_text_color' => '#ffffff',
         'terms'             => '<p>1. This quotation is valid for 30 days from the date of issue.</p>
                                  <p>2. Payment terms: 50% advance, 50% on delivery.</p>
                                  <p>3. Prices are subject to change without prior notice.</p>',

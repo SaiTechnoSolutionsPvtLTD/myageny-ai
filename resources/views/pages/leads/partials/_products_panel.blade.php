@@ -87,7 +87,7 @@
 .pp-prod-name{font-size:14px;font-weight:700;color:#121212}
 .pp-prod-desc-sub{font-size:11px;color:#9e9e9e;margin-top:2px}
 
-.pp-amounts-row{display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:10px}
+.pp-amounts-row{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:10px}
 .pp-amt-item{padding:6px 10px 6px 0}
 .pp-amt-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9e9e9e;margin-bottom:3px}
 .pp-amt-value{font-size:15px;font-weight:800;color:#121212}
@@ -232,7 +232,7 @@
 .pp-dept-pill{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;background:#fff;color:#065f46;border:1px solid #a7f3d0;font-size:12px;font-weight:700}
 .pp-prod-empty{padding:18px;border:1px dashed #d1d5db;border-radius:12px;background:#fafafa;color:#6b7280;font-size:13px;line-height:1.5}
 .pp-prod-helper{margin-top:14px;padding:12px 14px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:12px;line-height:1.5}
-.pp-production-modal{max-width:760px;overflow:hidden}
+.pp-production-modal{max-width:760px;overflow:hidden;display:flex;flex-direction:column}
 .pp-production-head{display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1}
 .pp-production-icon{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#047857,#10b981);color:#fff;box-shadow:0 12px 30px rgba(4,120,87,.24);flex-shrink:0}
 .pp-production-title-wrap{min-width:0;flex:1}
@@ -278,6 +278,8 @@
 .pp-production-note-item{margin-top:8px;font-size:12px;line-height:1.5;color:#6b7280}
 .pp-production-status{padding:14px 16px;border-radius:14px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-size:13px;line-height:1.55}
 .pp-production-hidden{display:none!important}
+.pp-modal-production-body{flex:1;overflow-y:auto;min-height:0}
+.pp-modal-production-foot{flex-shrink:0}
 @media (max-width: 720px){
     .pp-production-grid{grid-template-columns:1fr}
     .pp-production-dynamic-grid{grid-template-columns:1fr}
@@ -447,7 +449,7 @@
                 </svg>
                 Create Deal
             </button>
-            {{--  <button type="button" id="pp-submit-price-request-btn" class="ppf-btn pp-btn-hist"
+            <button type="button" id="pp-submit-price-request-btn" class="ppf-btn pp-btn-hist"
                     style="justify-content:center"
                     onclick="PP.ppSubmitPriceRequest()">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -456,7 +458,7 @@
                     <path d="M5 21h14"></path>
                 </svg>
                 Send Price Request
-            </button>  --}}
+            </button>
             <button type="button" class="ppf-btn ppf-btn-sec"
                     onclick="PP.ppHideModal('pp-modal-add-product')">Cancel</button>
         </div>
@@ -610,12 +612,12 @@
             <button type="button" class="pp-mclose"
                     onclick="PP.ppHideModal('pp-modal-production')">✕</button>
         </div>
-        <div class="pp-mbody">
+        <div class="pp-mbody pp-modal-production-body">
             <div class="pp-production-shell">
                 <div id="pp-production-body"></div>
             </div>
         </div>
-        <div class="pp-mfoot">
+        <div class="pp-mfoot pp-modal-production-foot">
             <div class="pp-production-footer">
                 <button type="button" id="pp-production-submit-btn" class="ppf-btn ppf-btn-primary"
                         onclick="PP.ppSubmitProductionInitiation()">

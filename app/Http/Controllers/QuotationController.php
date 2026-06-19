@@ -600,6 +600,7 @@ class QuotationController extends Controller
             'logo' => $settings->where('key', 'logo')->first()?->value,
             'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
             'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
+            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
             'prefix' => $settings->where('key', 'prefix')->first()?->value,
             'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
             'terms' => $settings->where('key', 'terms')->first()?->value,

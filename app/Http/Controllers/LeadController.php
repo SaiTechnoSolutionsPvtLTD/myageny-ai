@@ -31,12 +31,13 @@ class LeadController extends Controller
      */
     public function index(Request $request)
     {
-        $today = now()->toDateString();
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate = now()->endOfMonth()->toDateString();
 
         if (!$request->filled('date_from') && !$request->filled('date_to')) {
             $request->merge([
-                'date_from' => $today,
-                'date_to' => $today,
+                'date_from' => $defaultFromDate,
+                'date_to' => $defaultToDate,
             ]);
         }
 
@@ -119,10 +120,10 @@ class LeadController extends Controller
             || $request->filled('priority')
             || $request->filled('assigned_to')
             || $request->filled('product_name')
-            || $request->input('date_from') !== $today
-            || $request->input('date_to') !== $today;
+            || $request->input('date_from') !== $defaultFromDate
+            || $request->input('date_to') !== $defaultToDate;
 
-        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'today', 'filterPanelOpen'));
+        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen'));
     }
 
     /**
@@ -130,12 +131,13 @@ class LeadController extends Controller
      */
     public function productsIndex(Request $request)
     {
-        $today = now()->toDateString();
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate = now()->endOfMonth()->toDateString();
 
         if (!$request->filled('date_from') && !$request->filled('date_to')) {
             $request->merge([
-                'date_from' => $today,
-                'date_to' => $today,
+                'date_from' => $defaultFromDate,
+                'date_to' => $defaultToDate,
             ]);
         }
 
@@ -222,8 +224,8 @@ class LeadController extends Controller
             || $request->filled('product_status')
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
-            || $request->input('date_from') !== $today
-            || $request->input('date_to') !== $today;
+            || $request->input('date_from') !== $defaultFromDate
+            || $request->input('date_to') !== $defaultToDate;
 
         return view('pages.leads.products.index', [
             'leadProducts' => $leadProducts,
@@ -231,7 +233,8 @@ class LeadController extends Controller
             'users' => $users,
             'products' => $products,
             'stats' => $stats,
-            'todayDate' => $today,
+            'defaultFromDate' => $defaultFromDate,
+            'defaultToDate' => $defaultToDate,
             'filterPanelOpen' => $filterPanelOpen,
         ]);
     }

@@ -256,20 +256,22 @@
         $('.fb-map-panel').each(function () {
             var campaignId = $(this).find('.leadmappingcamid').val();
             var assigned = $(this).find('.chosen-select').val() || [];
+            var productId = $(this).find('.fb-product-select').val() || '';
 
-            if (!assigned.length) {
+            if (!assigned.length || !productId) {
                 valid = false;
                 return false;
             }
 
             cams.push({
                 campaignId: campaignId,
-                assigned: assigned
+                assigned: assigned,
+                productId: productId
             });
         });
 
         if (!valid || !cams.length) {
-            window.alert('Please select at least one user for each campaign.');
+            window.alert('Please select at least one user and one product for each campaign.');
             return;
         }
 

@@ -489,8 +489,9 @@ var AV_COLORS = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b
 var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
 
 // State
-var state = { quick:'', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
+var state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
 var data  = null;
+document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.toggle('active', b.dataset.val === 'month'); });
 
 /* ═══════════════════════════════════════════════════════
    FILTER HELPERS
@@ -529,11 +530,11 @@ window.onDateChange = function() {
 };
 
 window.resetFilters = function() {
-    state = { quick:'', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
+    state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
     ['fBranch','fUser','fStage','fSource'].forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('fDateFrom').value = '';
     document.getElementById('fDateTo').value   = '';
-    document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.toggle('active', b.dataset.val === 'month'); });
     updateFilterStyles();
     renderChips();
     dashboardLoad();

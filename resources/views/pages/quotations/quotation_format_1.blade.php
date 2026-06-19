@@ -5,16 +5,15 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'DejaVu Sans', sans-serif; font-size: 11px; color: #0f1923; background: #fff; }
-    .header { background: {{ $quoteSetting['theme_color'] }}; color: #fff; padding: 20px 28px; overflow: hidden; }
+    .header { background: {{ $quoteSetting['theme_color'] }}; color: {{ $quoteSetting['header_text_color'] ?? '#ffffff' }}; padding: 20px 28px; overflow: hidden; }
     .header-left  { float: left; width: 60%; }
     .header-right { float: right; width: 38%; text-align: right; }
     .clearfix::after { content: ''; display: table; clear: both; }
-    .brand-sub { font-size: 9px; color: #fff; line-height: 1.6; }
-    .gstin-badge { display: inline-block; background: {
-      { $quoteSetting['secondary_color'] }}; color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 3px; margin-top: 5px; }
+    .brand-sub { font-size: 9px; color: {{ $quoteSetting['header_text_color'] ?? '#ffffff' }}; line-height: 1.6; }
+    .gstin-badge { display: inline-block; background: {{ $quoteSetting['secondary_color'] }}; color: {{ $quoteSetting['header_text_color'] ?? '#ffffff' }}; font-size: 9px; padding: 2px 6px; border-radius: 3px; margin-top: 5px; }
     .estimate-word { font-size: 30px; color: {{ $quoteSetting['secondary_color'] }}; font-weight: bold; }
-    .est-meta { font-size: 10px; color: rgba(255,255,255,.8); line-height: 1.8; margin-top: 6px; }
-    .est-meta strong { color: #fff; }
+    .est-meta { font-size: 10px; color: {{ $quoteSetting['header_text_color'] ?? '#ffffff' }}; line-height: 1.8; margin-top: 6px; }
+    .est-meta strong { color: {{ $quoteSetting['header_text_color'] ?? '#ffffff' }}; }
     .addr-row { overflow: hidden; border-bottom: 1px solid #d8dde5; }
     .addr-cell { float: left; width: 50%; padding: 14px 28px; }
     .addr-cell + .addr-cell { border-left: 1px solid #d8dde5; }

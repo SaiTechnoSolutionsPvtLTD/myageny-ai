@@ -572,8 +572,6 @@
                         '<div class="pp-amt-value" style="color:#16a34a">' + fmt(p.paid) + '</div></div>' +
                     '<div class="pp-amt-item"><div class="pp-amt-label" style="color:' + pendingClr + '">Pending</div>' +
                         '<div class="pp-amt-value" style="color:' + pendingClr + '">' + fmt(pending) + '</div></div>' +
-                    '<div class="pp-amt-item"><div class="pp-amt-label">Progress</div>' +
-                        '<div class="pp-amt-value" style="color:' + prgColor + '">' + progress + '%</div></div>' +
                 '</div>' +
                 '<div class="pp-progress-wrap">' +
                     '<div class="pp-progress-bar-outer"><div class="pp-progress-bar-inner" style="width:' + progress + '%;background:' + prgColor + '"></div></div>' +

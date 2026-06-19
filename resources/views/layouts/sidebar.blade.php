@@ -509,7 +509,7 @@
     </a>
     @endcan
 </div>
-        @can('quotations.menuview')
+                @can('quotations.menuview')
                 <a href="{{ url('/quotations') }}" class="nav-item {{ request()->is('quotations') || request()->is('/') ? 'active' : '' }}">
                     @if(request()->is('quotations') || request()->is('/'))
                         <div class="active-indicator"></div>
@@ -525,6 +525,21 @@
                     </div>
                 </a>
                 @endcan
+
+                <a href="{{ route('reports.crm.index') }}" class="nav-item {{ request()->routeIs('reports.crm.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('reports.crm.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19h16"></path>
+                            <path d="M7 16V10"></path>
+                            <path d="M12 16V5"></path>
+                            <path d="M17 16v-8"></path>
+                        </svg>
+                        <span>Reports</span>
+                    </div>
+                </a>
 
                 @can('price_requests.menuview')
                 @if(auth()->user()->hasAnyRole(['super_admin', 'Super Admin', 'admin']))
@@ -544,7 +559,7 @@
                 @endif
                 @endcan
 
-                @if($canAccessProjectsModule)
+                {{--  @if($canAccessProjectsModule)
                 <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.*') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.*'))
                         <div class="active-indicator"></div>
@@ -559,7 +574,7 @@
                         <span>Projects Dashboard</span>
                     </div>
                 </a>
-                @endif
+                @endif  --}}
 
                 @can('ovp_module.menuview')
                 <a href="{{ route('ovp-module.index') }}" class="nav-item {{ request()->routeIs('ovp-module.*') ? 'active' : '' }}">

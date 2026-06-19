@@ -450,6 +450,10 @@ class DashboardController extends Controller
             };
         }
 
+        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+            return [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()];
+        }
+
         return [$request->date_from ?: null, $request->date_to ?: null];
     }
 }

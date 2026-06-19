@@ -383,12 +383,15 @@ class FacebookLeadImporter
         }
 
         $mappedValues = $this->mapSubmissionValues($submission, $fieldMappings, $leadFields);
+        $mappedValues = $this->applyCampaignProductDefaults($campaign, $mappedValues);
 
         $existingLead = Lead::query()
             ->where('facebook_lead_id', $facebookLeadId)
             ->first();
 
         if ($existingLead) {
+            $this->createLeadProductIfPossible($existingLead, $mappedValues['core'], $this->resolveNextAssignedUser($campaignIdentifier, $assignedUsers));
+
             return $this->syncMappedValuesForExistingLead($existingLead, $mappedValues, $leadFields)
                 ? 'updated'
                 : 'skipped';
@@ -597,7 +600,7 @@ class FacebookLeadImporter
             'product_id' => $this->normalizeProductId($core['product_id'] ?? null),
             'priority' => $this->normalizePriority($core['priority'] ?? null),
             'deal_value' => $this->normalizeMoney($core['deal_value'] ?? null),
-            'remarks' => $this->buildRemarks($campaign, $submission, $core['remarks'] ?? null),
+            'remarks' => '',
             'assigned_to' => $assignedUser?->id,
             'created_by' => $assignedUser?->id,
             'company_id' => $assignedUser?->company_id,
@@ -605,6 +608,27 @@ class FacebookLeadImporter
             'facebook_campaign_id' => data_get($submission, 'campaign_id') ?: data_get($submission, 'ad_id') ?: $campaignIdentifier,
             'facebook_payload' => $submission,
         ];
+    }
+
+    protected function applyCampaignProductDefaults(CampaignMaster $campaign, array $mappedValues): array
+    {
+        $productId = $this->normalizeProductId($mappedValues['core']['product_id'] ?? null);
+
+        if ($productId || ! $campaign->product_id) {
+            return $mappedValues;
+        }
+
+        $campaign->loadMissing('product');
+
+        if (! $campaign->product) {
+            return $mappedValues;
+        }
+
+        $mappedValues['core']['product_id'] = $campaign->product->id;
+        $mappedValues['core']['product_name'] = $mappedValues['core']['product_name']
+            ?? ($campaign->product->package_name ?: $campaign->product->product_name);
+
+        return $mappedValues;
     }
 
     protected function createLeadProductIfPossible(Lead $lead, array $coreValues, ?User $assignedUser): void
@@ -639,20 +663,25 @@ class FacebookLeadImporter
             return;
         }
 
-        LeadProduct::create([
-            'lead_id' => $lead->id,
-            'product_id' => $product->id,
-            'product_name' => $productName ?: $product->product_name ?: 'Facebook Imported Product',
-            'description' => $product->description,
-            'unit_price' => (float) ($product->final_price ?? 0),
-            'quantity' => 1,
-            'discount_percent' => 0,
-            'remarks' => 'Created automatically from Facebook lead import.',
-            'product_status' => 'new',
-            'amount_paid' => 0,
-            'created_by' => $assignedUser?->id,
-            'company_id' => $lead->company_id,
-        ]);
+        LeadProduct::firstOrCreate(
+            [
+                'lead_id' => $lead->id,
+                'product_id' => $product->id,
+            ],
+            [
+                'deal_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                'product_name' => $productName ?: $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                'description' => $product->description,
+                'unit_price' => (float) ($product->final_price ?? 0),
+                'quantity' => 1,
+                'discount_percent' => 0,
+                'remarks' => 'Created automatically from Facebook lead import.',
+                'product_status' => 'new',
+                'amount_paid' => 0,
+                'created_by' => $assignedUser?->id ?: $lead->assigned_to ?: $lead->created_by,
+                'company_id' => $lead->company_id,
+            ]
+        );
     }
 
     protected function activeAssignedUsers(CampaignMaster $campaign): Collection

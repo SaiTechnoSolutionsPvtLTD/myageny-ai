@@ -13,6 +13,7 @@ use App\Http\Controllers\DynamicFormController;
 use App\Http\Controllers\EmployeeOnboardingController;
 use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CrmReportController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\HolidayCalendarController;
 use App\Http\Controllers\HouseKeepingCategoryController;
@@ -128,6 +129,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/ovp-module', [OvpModuleController::class, 'index'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.index');
+    Route::get('/reports/crm', [CrmReportController::class, 'index'])
+        ->name('reports.crm.index');
     Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.allocate');

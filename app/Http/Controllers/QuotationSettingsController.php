@@ -26,6 +26,8 @@ class QuotationSettingsController extends Controller
         $data = [
             'logo' => $settings->where('key', 'logo')->first()?->value,
             'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
+            'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
+            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
             'prefix' => $settings->where('key', 'prefix')->first()?->value,
             'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
             'terms' => $settings->where('key', 'terms')->first()?->value,
@@ -55,7 +57,8 @@ class QuotationSettingsController extends Controller
 
         $validated = $request->validate([
             'theme_color'      => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'secondary_color'      => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'secondary_color'  => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'header_text_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'prefix'           => ['nullable', 'string', 'max:10', 'alpha_dash'],
             'number_padding'   => ['nullable', 'integer', 'min:3', 'max:10'],
             'terms'            => ['nullable', 'string'],

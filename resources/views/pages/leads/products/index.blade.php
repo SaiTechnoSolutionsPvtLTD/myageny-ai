@@ -125,8 +125,8 @@
         || request()->filled('product_status')
         || request()->filled('branch_id')
         || request()->filled('assigned_to')
-        || request('date_from') !== $todayDate
-        || request('date_to') !== $todayDate;
+        || request('date_from') !== $defaultFromDate
+        || request('date_to') !== $defaultToDate;
 @endphp
 <div class="lpd-page">
     <div class="lpd-topbar">
@@ -288,12 +288,12 @@
 
                 <div class="lpd-field">
                     <label class="lpd-label" for="date_from">Created From</label>
-                    <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from') }}">
+                    <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from', $defaultFromDate) }}">
                 </div>
 
                 <div class="lpd-field">
                     <label class="lpd-label" for="date_to">Created To</label>
-                    <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to') }}">
+                    <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to', $defaultToDate) }}">
                 </div>
 
                 <div class="lpd-filter-actions">

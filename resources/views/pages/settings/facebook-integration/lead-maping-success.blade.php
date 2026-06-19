@@ -52,11 +52,17 @@
                     @php
                         $campaign = App\Models\CampaignMaster::where('id', $cam['campaignId'])->first();
                         $assignedUsers = App\Models\AssignedUser::where('campaign_id', $cam['campaignId'])->get();
+                        $selectedProduct = $campaign?->product;
                     @endphp
 
                     <div class="fb-success-panel">
                         <h4 class="fb-success-panel-title">{{ $campaign?->campaign_name ?? 'Campaign' }}</h4>
-                        <p class="fb-success-panel-sub">Assigned users who will receive leads from this Facebook campaign.</p>
+                        <p class="fb-success-panel-sub">
+                            Assigned users who will receive leads from this Facebook campaign.
+                            @if ($selectedProduct)
+                                <br>Default Product: {{ $selectedProduct->package_name ?: $selectedProduct->product_name }}
+                            @endif
+                        </p>
 
                         @if ($assignedUsers->count())
                             <div class="fb-success-users">
