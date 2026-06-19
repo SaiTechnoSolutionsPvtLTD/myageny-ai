@@ -62,8 +62,8 @@ class LeadController extends Controller
             'per_page'  => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name'])
-            ->latest('lead_date');
+        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products'])
+    ->latest('lead_date');
 
         $this->visibility->applyLeadVisibility($query, $request->user());
 

@@ -596,21 +596,22 @@ class ProjectApiController extends Controller
     }
 
     private function serializeTlAllocationSummaries(Collection $summaries): array
-    {
-        return $summaries->map(function ($s) {
-            return [
-                'tl_user_id'      => $s->tl_user_id,
-                'tl_name'         => $s->tl_user?->name ?? null,
-                'status'          => $s->status,
-                'allocated_at'    => $s->allocated_at?->toDateTimeString(),
-                'allocated_by'    => $s->allocated_by_name,
-                'employees'       => collect($s->employees)->map(fn ($e) => [
-                    'id'   => $e->id,
-                    'name' => $e->name,
-                ])->values(),
-            ];
-        })->values()->all();
-    }
+{
+    return $summaries->map(function ($s) {
+        return [
+            'tl_user_id'   => $s->tl_user_id,
+            'tl_name'      => $s->tl_user?->name ?? null,
+            'status'       => $s->status,
+            'allocated_at' => $s->allocated_at?->toDateTimeString(),
+            // ↓ resolve int ID → name, matching what web ProjectController does
+            'allocated_by' => $this->userNameFromId($s->allocated_by ?? null),
+            'employees'    => collect($s->employees)->map(fn ($e) => [
+                'id'   => $e->id,
+                'name' => $e->name,
+            ])->values(),
+        ];
+    })->values()->all();
+}
 
     // ─────────────────────────────────────────────────────────────────────────
     //  All private helpers copied verbatim from web ProjectController

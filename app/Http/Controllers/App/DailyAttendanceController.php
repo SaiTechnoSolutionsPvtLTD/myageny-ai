@@ -15,8 +15,8 @@ class DailyAttendanceController extends Controller
     public function attendanceCheckIn(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'employee_id'      => ['nullable', 'integer'],   // ← was required
-            'intern_id'        => ['nullable', 'integer'],   // ← ADD
+            'employee_id'      => ['nullable', 'integer'],
+            'intern_id'        => ['nullable', 'integer'],
             'employee_name'    => ['nullable', 'string', 'max:255'],
             'attendance_photo' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
             'login_latitude'   => ['required', 'numeric'],
@@ -33,7 +33,6 @@ class DailyAttendanceController extends Controller
             ], 422);
         }
 
-        // ── Must supply at least one of employee_id or intern_id ─────────────
         if (empty($request->employee_id) && empty($request->intern_id)) {
             return response()->json([
                 'status'  => false,
@@ -43,12 +42,11 @@ class DailyAttendanceController extends Controller
 
         $today = Carbon::today()->toDateString();
 
-        // ── Duplicate check — works for both employee and intern ──────────────
         $alreadyCheckedIn = DailyAttendance::query()
             ->when($request->filled('employee_id'), fn($q) =>
-            $q->where('employee_id', $request->employee_id))
+                $q->where('employee_id', $request->employee_id))
             ->when(!$request->filled('employee_id') && $request->filled('intern_id'), fn($q) =>
-            $q->where('intern_joining_form_id', $request->intern_id))
+                $q->where('intern_joining_form_id', $request->intern_id))
             ->whereDate('attendance_date', $today)
             ->exists();
 
@@ -62,23 +60,23 @@ class DailyAttendanceController extends Controller
         $now       = Carbon::now();
         $photoPath = $this->storeAttendancePhoto($request->file('attendance_photo'));
 
-        // ── Resolve display name ───────────────────────────────────────────────
         $resolvedName = $request->filled('employee_id')
             ? $this->resolveEmployeeName($request->employee_id, $request->input('employee_name'))
             : $this->resolveInternName($request->intern_id, $request->input('employee_name'));
 
         $attendance = DailyAttendance::create([
-            'employee_id'       => $request->filled('employee_id') ? $request->employee_id : null,
+            'employee_id'            => $request->filled('employee_id') ? $request->employee_id : null,
             'intern_joining_form_id' => $request->filled('intern_id')   ? $request->intern_id   : null,
-            'employee_name'     => $resolvedName,
-            'attendance_photo'  => $photoPath,
-            'login_location'    => $request->input('login_location'),
-            'login_latitude'    => $request->login_latitude,
-            'login_longitude'   => $request->login_longitude,
-            'login_time'        => $now->format('H:i:s'),
-            'attendance_date'   => $today,
-            'attendance_status' => 'present',
-            'remarks'           => $request->input('remarks'),
+            'attendee_type'          => $request->filled('employee_id') ? 'employee' : 'intern',
+            'employee_name'          => $resolvedName,
+            'attendance_photo'       => $photoPath,
+            'login_location'         => $request->input('login_location'),
+            'login_latitude'         => $request->login_latitude,
+            'login_longitude'        => $request->login_longitude,
+            'login_time'             => $now->format('H:i:s'),
+            'attendance_date'        => $today,
+            'attendance_status'      => 'present',
+            'remarks'                => $request->input('remarks'),
         ]);
 
         return response()->json([
@@ -91,8 +89,8 @@ class DailyAttendanceController extends Controller
     public function attendanceCheckOut(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'employee_id'      => ['nullable', 'integer'],   // ← was required
-            'intern_id'        => ['nullable', 'integer'],   // ← ADD
+            'employee_id'      => ['nullable', 'integer'],
+            'intern_id'        => ['nullable', 'integer'],
             'logout_latitude'  => ['required', 'numeric'],
             'logout_longitude' => ['required', 'numeric'],
             'logout_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
@@ -108,7 +106,6 @@ class DailyAttendanceController extends Controller
             ], 422);
         }
 
-        // ── Must supply at least one ──────────────────────────────────────────
         if (empty($request->employee_id) && empty($request->intern_id)) {
             return response()->json([
                 'status'  => false,
@@ -118,12 +115,11 @@ class DailyAttendanceController extends Controller
 
         $today = Carbon::today()->toDateString();
 
-        // ── Find today's check-in record ──────────────────────────────────────
         $attendance = DailyAttendance::query()
             ->when($request->filled('employee_id'), fn($q) =>
-            $q->where('employee_id', $request->employee_id))
+                $q->where('employee_id', $request->employee_id))
             ->when(!$request->filled('employee_id') && $request->filled('intern_id'), fn($q) =>
-            $q->where('intern_joining_form_id', $request->intern_id))
+                $q->where('intern_joining_form_id', $request->intern_id))
             ->whereDate('attendance_date', $today)
             ->first();
 
@@ -171,28 +167,22 @@ class DailyAttendanceController extends Controller
         ]);
     }
 
-    protected function resolveInternName(int $internId, ?string $fallback): string
-    {
-        $intern = \App\Models\InternJoiningForm::find($internId);
-        return $intern?->name ?? $fallback ?? 'Intern';
-    }
-
     public function dailyAttendanceList(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'employee_id' => ['nullable', 'integer'],
-            'intern_id'   => ['nullable', 'integer'],  // ← ADD
+            'employee_id'     => ['nullable', 'integer'],
+            'intern_id'       => ['nullable', 'integer'],
             'attendance_date' => ['nullable', 'date'],
-            'from_date' => ['nullable', 'date'],
-            'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'from_date'       => ['nullable', 'date'],
+            'to_date'         => ['nullable', 'date', 'after_or_equal:from_date'],
+            'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Validation failed.',
-                'errors' => $validator->errors(),
+                'errors'  => $validator->errors(),
             ], 422);
         }
 
@@ -202,7 +192,6 @@ class DailyAttendanceController extends Controller
             $query->where('employee_id', $request->employee_id);
         }
 
-        // ── ADD: filter by intern_id ──────────────────────────────────────────
         if ($request->filled('intern_id')) {
             $query->where('intern_joining_form_id', $request->intern_id);
         }
@@ -225,9 +214,9 @@ class DailyAttendanceController extends Controller
         );
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Daily attendance list fetched successfully.',
-            'data' => $attendances,
+            'data'    => $attendances,
         ]);
     }
 
@@ -235,7 +224,7 @@ class DailyAttendanceController extends Controller
     {
         $directory = public_path('uploads/attendance');
 
-        if (! File::exists($directory)) {
+        if (!File::exists($directory)) {
             File::makeDirectory($directory, 0755, true);
         }
 
@@ -263,10 +252,16 @@ class DailyAttendanceController extends Controller
         return $fallbackName;
     }
 
+    protected function resolveInternName(int $internId, ?string $fallback): string
+    {
+        $intern = \App\Models\InternJoiningForm::find($internId);
+        return $intern?->name ?? $fallback ?? 'Intern';
+    }
+
     private function formatSecondsAsTime(int $seconds): string
     {
-        $hours = floor($seconds / 3600);
-        $minutes = floor(($seconds % 3600) / 60);
+        $hours            = floor($seconds / 3600);
+        $minutes          = floor(($seconds % 3600) / 60);
         $remainingSeconds = $seconds % 60;
 
         return sprintf('%02d:%02d:%02d', $hours, $minutes, $remainingSeconds);
@@ -275,27 +270,33 @@ class DailyAttendanceController extends Controller
     private function formatAttendance(DailyAttendance $attendance): array
     {
         return [
-            'id' => $attendance->id,
-            'employee_id' => $attendance->employee_id,
-            'employee_name' => $attendance->employee_name,
-            'attendance_photo' => $attendance->attendance_photo,
-            'attendance_photo_url' => $attendance->attendance_photo ? asset($attendance->attendance_photo) : null,
-            'logout_photo' => $attendance->logout_photo,
-            'logout_photo_url' => $attendance->logout_photo ? asset($attendance->logout_photo) : null,
-            'login_location' => $attendance->login_location,
-            'login_latitude' => $attendance->login_latitude,
-            'login_longitude' => $attendance->login_longitude,
-            'login_time' => $attendance->login_time,
-            'logout_location' => $attendance->logout_location,
-            'logout_latitude' => $attendance->logout_latitude,
-            'logout_longitude' => $attendance->logout_longitude,
-            'logout_time' => $attendance->logout_time,
+            'id'                    => $attendance->id,
+            'attendee_type'         => $attendance->attendee_type,
+            'employee_id'           => $attendance->employee_id,
+            'intern_id'             => $attendance->intern_joining_form_id,
+            'employee_name'         => $attendance->employee_name,
+            'attendance_photo'      => $attendance->attendance_photo,
+            'attendance_photo_url'  => $attendance->attendance_photo
+                                            ? asset($attendance->attendance_photo)
+                                            : null,
+            'logout_photo'          => $attendance->logout_photo,
+            'logout_photo_url'      => $attendance->logout_photo
+                                            ? asset($attendance->logout_photo)
+                                            : null,
+            'login_location'        => $attendance->login_location,
+            'login_latitude'        => $attendance->login_latitude,
+            'login_longitude'       => $attendance->login_longitude,
+            'login_time'            => $attendance->login_time,
+            'logout_location'       => $attendance->logout_location,
+            'logout_latitude'       => $attendance->logout_latitude,
+            'logout_longitude'      => $attendance->logout_longitude,
+            'logout_time'           => $attendance->logout_time,
             'overall_working_hours' => $attendance->overall_working_hours,
-            'attendance_date' => optional($attendance->attendance_date)->format('Y-m-d'),
-            'attendance_status' => $attendance->attendance_status,
-            'remarks' => $attendance->remarks,
-            'created_at' => optional($attendance->created_at)->toDateTimeString(),
-            'updated_at' => optional($attendance->updated_at)->toDateTimeString(),
+            'attendance_date'       => optional($attendance->attendance_date)->format('Y-m-d'),
+            'attendance_status'     => $attendance->attendance_status,
+            'remarks'               => $attendance->remarks,
+            'created_at'            => optional($attendance->created_at)->toDateTimeString(),
+            'updated_at'            => optional($attendance->updated_at)->toDateTimeString(),
         ];
     }
 }
