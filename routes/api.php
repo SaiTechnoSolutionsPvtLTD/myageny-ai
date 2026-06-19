@@ -66,6 +66,7 @@ Route::patch('products/{product}/ovp-form-fields/{field}/toggle', [ProductOvpFor
 Route::delete('products/{product}/ovp-form-fields/{field}', [ProductOvpFormController::class, 'destroy']);
 
 // ── Lead Products (Deals) ──────────────────────────────────────
+Route::middleware(['web', 'auth'])->group(function () {
 Route::get('lead-products/{lead_id}', [LeadProductController::class, 'index']);
 Route::post('lead-products',           [LeadProductController::class, 'store']);
 Route::get('lead-products/{id}/production', [LeadProductController::class, 'productionDetail']);
@@ -78,6 +79,7 @@ Route::delete('lead-products/{id}',    [LeadProductController::class, 'destroy']
 Route::get('payments/{lead_product_id}', [LeadProductController::class, 'paymentHistory']);
 Route::post('payments',                   [LeadProductController::class, 'storePayment']);
 Route::delete('payments/{id}',              [LeadProductController::class, 'destroyPayment']);
+});
 
 /*
 |--------------------------------------------------------------------------

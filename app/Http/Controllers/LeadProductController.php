@@ -8,8 +8,8 @@ use App\Models\ProductionInitiation;
 use App\Models\ProductionWorkflowMapping;
 use App\Models\Role;
 use App\Models\LeadProduct;
+use App\Models\LeadProductPayment;
 use App\Models\LeadStatus;
-use App\Models\Payment;
 use App\Models\Product;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -658,7 +658,7 @@ class LeadProductController extends Controller
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         // Overall payments for the lead
-        $overall = Payment::with('leadProduct')
+        $overall = LeadProductPayment::with(['leadProduct', 'recordedBy'])
             ->where('lead_id', $lp->lead_id)
             ->latest('payment_date')
             ->get()
@@ -676,6 +676,12 @@ class LeadProductController extends Controller
      */
     public function storePayment(Request $request): JsonResponse
     {
+        $actorId = (int) ($request->user()?->id ?? auth()->id() ?? 0);
+        if ($actorId <= 0) {
+            return response()->json([
+                'message' => 'Authentication required to record payments.',
+            ], 401);
+        }
 
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
@@ -712,8 +718,8 @@ class LeadProductController extends Controller
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
-        $payment = DB::transaction(function () use ($request, $lp) {
-            $p = Payment::create([
+        $payment = DB::transaction(function () use ($request, $lp, $actorId) {
+            $p = LeadProductPayment::create([
                 'lead_product_id' => $lp->id,
                 'lead_id'         => $lp->lead_id,
                 'amount'          => $request->amount,
@@ -721,7 +727,7 @@ class LeadProductController extends Controller
                 'payment_date'    => $request->payment_date,
                 'reference_number'=> $request->reference_number,
                 'notes'           => $request->notes,
-                'recorded_by'     =>  auth()->id()
+                'recorded_by'     => $actorId,
             ]);
             $lp->recalcPaid();
             return $p;
@@ -742,7 +748,7 @@ class LeadProductController extends Controller
      */
     public function destroyPayment(int $id): JsonResponse
     {
-        $payment = Payment::findOrFail($id);
+        $payment = LeadProductPayment::findOrFail($id);
         $lp      = $payment->leadProduct()->with('lead')->first();
         abort_unless($lp && $lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
