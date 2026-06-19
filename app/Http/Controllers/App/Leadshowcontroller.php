@@ -355,23 +355,44 @@ class LeadShowController extends Controller
         ]
     )]
     public function updateProductStatus(Request $request, Lead $lead, LeadProduct $product): JsonResponse
-    {
-        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+{
+    abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+    abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
 
-        abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
+    $request->validate([
+        'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
+        'product_status' => ['nullable', 'string'],
+    ]);
 
-        $request->validate([
-            'product_status' => ['required', 'in:new,hot,warm,cold,converted'],
-        ]);
+    $companyId = $lead->company_id ?? $request->user()?->company_id;
+    $statuses = \App\Models\LeadStatus::query()
+        ->when(
+            $companyId,
+            fn ($q) => $q->where(fn ($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')),
+            fn ($q) => $q->whereNull('company_id')
+        )
+        ->orderBy('name')
+        ->get();
 
-        $product->update(['product_status' => $request->product_status]);
+    $status = $request->filled('lead_status_id')
+        ? $statuses->firstWhere('id', (int) $request->lead_status_id)
+        : $statuses->first(fn ($option) => LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status));
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Product status updated to ' . ucfirst($request->product_status) . '.',
-            'data'    => $this->formatProduct($product),
-        ]);
+    if (! $status) {
+        return response()->json(['status' => false, 'message' => 'Please select a valid status.'], 422);
     }
+
+    $product->update([
+        'lead_status_id' => $status->id,
+        'product_status' => LeadProduct::statusKey($status->name),
+    ]);
+
+    return response()->json([
+        'status'  => true,
+        'message' => "Product status updated to {$status->name}.",
+        'data'    => $this->formatProduct($product->fresh('leadStatus')),
+    ]);
+}
 
     #[OA\Put(
         path: "/api/mobile/leads/{lead}/products/{product}",
@@ -504,11 +525,15 @@ class LeadShowController extends Controller
             new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
         ]
     )]
-    public function storeProductPayment(Request $request, Lead $lead, LeadProduct $product): JsonResponse
+    public function storeProductPayment(Request $request, Lead $lead, \App\Models\LeadProduct $product): JsonResponse
     {
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
 
         abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
+
+        if ($product->product_status_key !== 'converted') {
+    return back()->with('error', 'Payments can be added only after the product status is Converted.');
+}
 
         $data = $request->validate([
             'amount'           => ['required', 'numeric', 'min:0.01'],
@@ -522,7 +547,7 @@ class LeadShowController extends Controller
         $data['lead_id']         = $lead->id;
         $data['recorded_by']     = auth()->id();
 
-        $payment = LeadProductPayment::create($data);
+        $payment = \App\Models\LeadProductPayment::create($data);
 
         // Sync payment status on product
         $product->syncPaymentStatus();
@@ -807,21 +832,23 @@ class LeadShowController extends Controller
     }
 
     private function formatProduct(LeadProduct $product): array
-    {
-        return [
-            'id'               => $product->id,
-            'product_name'     => $product->product_name,
-            'product_status'   => $product->product_status,
-            'description'      => $product->description,
-            'unit_price'       => (float) $product->unit_price,
-            'quantity'         => $product->quantity,
-            'discount_percent' => (float) $product->discount_percent,
-            'total_price'      => (float) $product->total_price,
-            'payment_status'   => $product->payment_status,
-            'amount_paid'      => (float) $product->amount_paid,
-            'amount_pending'   => (float) ($product->total_price - $product->amount_paid),
-        ];
-    }
+{
+    return [
+        'id'               => $product->id,
+        'product_name'     => $product->product_name,
+        'product_status'   => $product->product_status,
+        'lead_status_id'   => $product->lead_status_id,
+        'lead_status_name' => $product->leadStatus?->name,
+        'description'      => $product->description,
+        'unit_price'       => (float) $product->unit_price,
+        'quantity'         => $product->quantity,
+        'discount_percent' => (float) $product->discount_percent,
+        'total_price'      => (float) $product->total_price,
+        'payment_status'   => $product->payment_status,
+        'amount_paid'      => (float) $product->amount_paid,
+        'amount_pending'   => (float) ($product->total_price - $product->amount_paid),
+    ];
+}
 
     private function formatPayment(LeadProductPayment $payment): array
     {

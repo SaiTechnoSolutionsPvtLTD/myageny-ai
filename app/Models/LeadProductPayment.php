@@ -68,4 +68,20 @@ class LeadProductPayment extends Model
     {
         return $this->belongsTo(LeadProduct::class);
     }
+
+    public function toJsPayload(): array
+{
+    return [
+        'id'                 => $this->id,
+        'amount'             => (float) $this->amount,
+        'formatted_amount'   => '₹' . number_format((float) $this->amount, 2),
+        'payment_mode'       => $this->payment_mode,
+        'payment_mode_label' => \App\Models\LeadProduct::PAYMENT_MODES[$this->payment_mode] ?? ucfirst((string) $this->payment_mode),
+        'payment_date'       => $this->payment_date?->format('Y-m-d'),
+        'reference_number'   => $this->reference_number,
+        'notes'              => $this->notes,
+        'recorded_by'        => $this->recorded_by,
+        'created_at'         => $this->created_at?->format('d M Y h:i A'),
+    ];
+}
 }
