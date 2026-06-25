@@ -157,6 +157,8 @@
                                     <th>Project</th>
                                     <th>Delivery Date</th>
                                     <th>Status</th>
+                                    <th>Posters</th>
+                                    <th>Videos</th>
                                     <th>Day Closing Update</th>
                                     <th>Submitted</th>
                                 </tr>
@@ -176,6 +178,8 @@
                                         </td>
                                         <td>{{ optional($timesheet->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
                                         <td><span class="pts-status {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                        <td>{{ (int) $timesheet->poster_count }}</td>
+                                        <td>{{ (int) $timesheet->video_count }}</td>
                                         <td><div class="pts-update-text">{{ $timesheet->day_closing_update }}</div></td>
                                         <td>
                                             {{ optional($timesheet->created_at)->format('d M Y h:i A') ?: 'Not available' }}
@@ -243,6 +247,22 @@
                 <div>
                     <label class="pts-label">Project Delivery Date</label>
                     <input type="date" class="pts-input" data-project-delivery-date readonly>
+                </div>
+
+                <div>
+                    <label class="pts-label">Poster Completed Count</label>
+                    <input type="number" name="poster_count" value="{{ old('poster_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('poster_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                <div>
+                    <label class="pts-label">Video Completed Count</label>
+                    <input type="number" name="video_count" value="{{ old('video_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('video_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="pts-form-full">

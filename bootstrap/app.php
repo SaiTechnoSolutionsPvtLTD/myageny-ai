@@ -13,17 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-
-        // Custom middleware aliases
-        // $middleware->alias([
-        //     'check.active' => CheckActiveUser::class,
-        // ]);
-
         /*
          * Spatie Permission middleware aliases.
          * These are registered automatically if you use Laravel 10 Kernel style.
          * In Laravel 11, register them manually here.
          */
+        $middleware->web(append: [
+            CheckActiveUser::class,
+        ]);
+
         $middleware->alias([
             // 'role'              => \Spatie\Permission\Middleware\RoleMiddleware::class,
             // 'permission'        => \Spatie\Permission\Middleware\PermissionMiddleware::class,

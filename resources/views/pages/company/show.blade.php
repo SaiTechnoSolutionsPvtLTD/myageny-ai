@@ -88,6 +88,10 @@
                             <div class="cshow-side-value">{{ $company->number_of_accounts }}</div>
                         </div>
                         <div class="cshow-side-item">
+                            <div class="cshow-side-label">Expiry Date</div>
+                            <div class="cshow-side-value">{{ $company->expiry_date ? $company->expiry_date->format('d M Y') : 'N/A' }}</div>
+                        </div>
+                        <div class="cshow-side-item">
                             <div class="cshow-side-label">Created On</div>
                             <div class="cshow-side-value">{{ $company->created_at->format('d M Y') }}</div>
                         </div>
@@ -117,6 +121,14 @@
                         <div class="cshow-item">
                             <div class="cshow-label">Company Status</div>
                             <div class="cshow-value">{{ $company->status_label }}</div>
+                        </div>
+                        <div class="cshow-item">
+                            <div class="cshow-label">Expiry Date</div>
+                            <div class="cshow-value">{{ $company->expiry_date ? $company->expiry_date->format('d M Y') : 'N/A' }}</div>
+                        </div>
+                        <div class="cshow-item">
+                            <div class="cshow-label">Expiry Status</div>
+                            <div class="cshow-value" style="color:{{ $company->isExpired() ? '#dc2626' : '#16a34a' }}">{{ $company->expiry_status }}</div>
                         </div>
                         <div class="cshow-item full">
                             <div class="cshow-label">Address</div>

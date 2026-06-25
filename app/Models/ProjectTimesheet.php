@@ -17,12 +17,16 @@ class ProjectTimesheet extends Model
         'user_id',
         'timesheet_date',
         'project_delivery_date',
+        'poster_count',
+        'video_count',
         'day_closing_update',
     ];
 
     protected $casts = [
         'timesheet_date' => 'date',
         'project_delivery_date' => 'date',
+        'poster_count' => 'integer',
+        'video_count' => 'integer',
     ];
 
     public function project(): BelongsTo

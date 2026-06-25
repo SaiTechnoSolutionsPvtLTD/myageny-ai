@@ -14,7 +14,6 @@ use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
 use App\Models\LeadStatus;
-use App\Models\Payment;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -97,13 +96,13 @@ class SuperAdminDashboardController extends ApiController
         $leadIds = (clone $base())->pluck('id');
 
         $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
-        $totalPaid         = (float) Payment::whereIn('lead_id', $leadIds)->sum('amount');
+        $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
         $totalPending      = $totalProductValue - $totalPaid;
         $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->sum('total_price');
         $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $paymentByMode = Payment::whereIn('lead_id', $leadIds)
+        $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
             ->orderByDesc('total')
@@ -524,13 +523,13 @@ class SuperAdminDashboardController extends ApiController
         $leadIds = (clone $base())->pluck('id');
 
         $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
-        $totalPaid         = (float) Payment::whereIn('lead_id', $leadIds)->sum('amount');
+        $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
         $totalPending      = $totalProductValue - $totalPaid;
         $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->sum('total_price');
         $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $paymentByMode = Payment::whereIn('lead_id', $leadIds)
+        $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
             ->orderByDesc('total')

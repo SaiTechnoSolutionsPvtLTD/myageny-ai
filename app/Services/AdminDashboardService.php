@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Lead;
 use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
-use App\Models\Payment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -79,8 +78,8 @@ class AdminDashboardService
      */
     private function paymentBaseQuery(array $filters)
     {
-        $query = Payment::query()
-            ->join('lead_products', 'lead_products.id', '=', 'payments.lead_product_id')
+        $query = LeadProductPayment::query()
+            ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->join('products', 'products.id', '=', 'lead_products.product_id')
             ->join('users', 'users.id', '=', 'leads.assigned_to')
@@ -118,11 +117,11 @@ class AdminDashboardService
         }
 
         if (!empty($filters['from_date'])) {
-            $query->whereDate('payments.payment_date', '>=', Carbon::parse($filters['from_date'])->startOfDay());
+            $query->whereDate('lead_product_payments.payment_date', '>=', Carbon::parse($filters['from_date'])->startOfDay());
         }
 
         if (!empty($filters['to_date'])) {
-            $query->whereDate('payments.payment_date', '<=', Carbon::parse($filters['to_date'])->endOfDay());
+            $query->whereDate('lead_product_payments.payment_date', '<=', Carbon::parse($filters['to_date'])->endOfDay());
         }
 
         return $query;
@@ -167,7 +166,7 @@ class AdminDashboardService
             ->first();
 
         $receivedValue = $this->paymentBaseQuery($filters)
-            ->sum('payments.amount');
+            ->sum('lead_product_payments.amount');
 
         $totalValue = (float) ($productValues->total_products_value ?? 0);
         $received   = (float) ($receivedValue ?? 0);
@@ -230,8 +229,8 @@ class AdminDashboardService
         }
 
         $rows = $this->paymentBaseQuery($filtersForTrend)
-            ->selectRaw("DATE_FORMAT(payments.payment_date, '%Y-%m') as month, SUM(payments.amount) as total_value")
-            ->where('payments.payment_date', '>=', $sixMonthsAgo)
+            ->selectRaw("DATE_FORMAT(lead_product_payments.payment_date, '%Y-%m') as month, SUM(lead_product_payments.amount) as total_value")
+            ->where('lead_product_payments.payment_date', '>=', $sixMonthsAgo)
             ->groupBy('month')
             ->orderBy('month')
             ->get();
@@ -263,7 +262,7 @@ class AdminDashboardService
                 users.photo as user_photo,
                 branches.name as branch_name,
                 users.designation,
-                SUM(payments.amount) as total_collected_amount
+                SUM(lead_product_payments.amount) as total_collected_amount
             ")
             ->groupBy('users.id', 'users.name', 'users.photo', 'branches.name', 'users.designation')
             ->orderByDesc('total_collected_amount')
@@ -292,10 +291,10 @@ class AdminDashboardService
         $rows = $this->paymentBaseQuery($filters)
             ->selectRaw("
                 branches.name as branch_name,
-                DATE_FORMAT(payments.payment_date, '%Y-%m') as month,
-                SUM(payments.amount) as total_payment
+                DATE_FORMAT(lead_product_payments.payment_date, '%Y-%m') as month,
+                SUM(lead_product_payments.amount) as total_payment
             ")
-            ->where('payments.payment_date', '>=', $sixMonthsAgo)
+            ->where('lead_product_payments.payment_date', '>=', $sixMonthsAgo)
             ->groupBy('branches.id', 'branches.name', 'month')
             ->orderBy('branches.name')
             ->orderBy('month')
@@ -345,9 +344,9 @@ class AdminDashboardService
         $rows = $this->paymentBaseQuery($filters)
             ->selectRaw("
                 users.name as user_name,
-                SUM(payments.amount) as total_collection
+                SUM(lead_product_payments.amount) as total_collection
             ")
-            ->where('payments.payment_date', '>=', $sixMonthsAgo)
+            ->where('lead_product_payments.payment_date', '>=', $sixMonthsAgo)
             ->groupBy('users.id', 'users.name')
             ->orderByDesc('total_collection')
             ->get();

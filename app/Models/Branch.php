@@ -20,6 +20,8 @@ class Branch extends Model
         'state',
         'phone',
         'email',
+        'latitude',
+        'longitude',
         'manager_id',
         'is_default',
         'is_active',
@@ -30,6 +32,8 @@ class Branch extends Model
         return [
             'is_default' => 'boolean',
             'is_active' => 'boolean',
+            'latitude' => 'float',
+            'longitude' => 'float',
         ];
     }
 

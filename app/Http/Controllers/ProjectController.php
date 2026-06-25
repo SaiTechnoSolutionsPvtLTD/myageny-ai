@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\ProjectTimesheet;
 use App\Models\User;
@@ -74,8 +75,14 @@ class ProjectController extends Controller
             'balance_amount' => round($filteredProjects->sum('balance_amount'), 2),
         ];
 
+        // Count unallocated projects for project_coordinator and tl users
+        $allocationPendingProjects = ProductionInitiation::query()
+            ->whereNull('project_allocated_at')
+            ->count();
+
         return view('pages.projects.dashboard', [
             'stats' => $stats,
+            'allocationPendingCount' => $allocationPendingProjects,
             'dashboardFilters' => $dashboardFilters,
             'projectOptions' => $projects->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)->values(),
             'teamMemberOptions' => $this->dashboardTeamMembers($user, $projects),
@@ -147,6 +154,8 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
             'timesheet_date' => ['required', 'date'],
+            'poster_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'video_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'day_closing_update' => [
                 'required',
                 'string',
@@ -185,6 +194,8 @@ class ProjectController extends Controller
             'user_id' => $user->id,
             'timesheet_date' => $timesheetDate,
             'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
+            'poster_count' => (int) ($validated['poster_count'] ?? 0),
+            'video_count' => (int) ($validated['video_count'] ?? 0),
             'day_closing_update' => $validated['day_closing_update'],
         ]);
 
@@ -390,6 +401,7 @@ class ProjectController extends Controller
             'tl_employee_allocations' => $tlAllocations,
             ...$this->summarizeTlEmployeeAllocations($tlAllocations),
         ]);
+        $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
         return redirect()
             ->route('projects.show', $productionInitiation)
@@ -429,6 +441,7 @@ class ProjectController extends Controller
             'tl_employee_allocations' => $tlAllocations->all(),
             ...$allocationSummary,
         ]);
+        $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
         return redirect()
             ->route('projects.show', $productionInitiation)
@@ -942,6 +955,29 @@ class ProjectController extends Controller
             'employee_allocated_by' => $latestAllocation['allocated_by'] ?? null,
             'project_allocated_employee_user_ids' => $allEmployeeIds === [] ? null : $allEmployeeIds,
         ];
+    }
+
+    private function syncProductionCountReportAllocation(?ProductionInitiation $project, ?int $allocatedBy): void
+    {
+        if (! $project) {
+            return;
+        }
+
+        $countReport = ProductionCountReport::query()
+            ->where('production_initiation_id', $project->id)
+            ->first();
+
+        if (! $countReport) {
+            return;
+        }
+
+        $countReport->update([
+            'allocated_team_user_ids' => Arr::wrap($project->project_allocated_tl_user_ids) ?: null,
+            'allocated_user_ids' => Arr::wrap($project->project_allocated_employee_user_ids) ?: null,
+            'allocated_by' => $allocatedBy,
+            'allocated_at' => Carbon::now(),
+            'status' => $project->employee_allocation_status === 'allocated' ? 'employee_allocated' : 'team_allocated',
+        ]);
     }
 
     private function resolveBucketForUser(ProductionInitiation $productionInitiation, User $user): ?string

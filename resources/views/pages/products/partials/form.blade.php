@@ -85,6 +85,21 @@
         </div>
         @endisset
 
+        <div class="pm-field">
+            <input type="hidden" name="count_wise_report" value="0">
+            <label class="pm-check-row" for="count_wise_report">
+                <input type="checkbox" id="count_wise_report" name="count_wise_report" value="1"
+                       @checked((bool) old('count_wise_report', $isEdit ? $product->count_wise_report : false))>
+                <span>
+                    <span class="pm-check-title">Count Wise Report</span>
+                    <span class="pm-help">Enable this product for count-wise reporting.</span>
+                </span>
+            </label>
+            @error('count_wise_report')
+                <span class="pm-error">{{ $message }}</span>
+            @enderror
+        </div>
+
 
         @isset($departments)
         <div class="pm-field">

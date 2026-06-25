@@ -131,6 +131,22 @@ Route::middleware(['auth'])->group(function () {
         ->name('ovp-module.index');
     Route::get('/reports/crm', [CrmReportController::class, 'index'])
         ->name('reports.crm.index');
+    Route::get('/reports/crm/leads-summary', [CrmReportController::class, 'leadsSummary'])
+        ->name('reports.crm.leads-summary');
+    Route::get('/reports/crm/leads-summary/export', [CrmReportController::class, 'exportLeadsSummary'])
+        ->name('reports.crm.leads-summary.export');
+    Route::get('/reports/crm/product-wise', [CrmReportController::class, 'productWise'])
+        ->name('reports.crm.product-wise');
+    Route::get('/reports/crm/product-wise/export', [CrmReportController::class, 'exportProductWise'])
+        ->name('reports.crm.product-wise.export');
+    Route::get('/reports/crm/revenue-comparison', [CrmReportController::class, 'revenueComparison'])
+        ->name('reports.crm.revenue-comparison');
+    Route::get('/reports/crm/revenue-comparison/export', [CrmReportController::class, 'exportRevenueComparison'])
+        ->name('reports.crm.revenue-comparison.export');
+    Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
+        ->name('reports.crm.payment-collection');
+    Route::get('/reports/crm/payment-collection/export', [CrmReportController::class, 'exportPaymentCollection'])
+        ->name('reports.crm.payment-collection.export');
     Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.allocate');
@@ -322,6 +338,9 @@ Route::middleware(['auth'])->group(function () {
         // ── Products ───────────────────────────────────────────
         Route::post('/{lead}/products',
             [LeadShowController::class, 'storeProduct'])->middleware('can:leads.edit')->name('products.store');
+
+        Route::put('/{lead}/products/{product}',
+            [LeadShowController::class, 'updateProduct'])->middleware('can:leads.edit')->name('products.update');
 
         Route::patch('/{lead}/products/{product}/status',
             [LeadShowController::class, 'updateProductStatus'])->middleware('can:leads.edit')->name('products.update-status');

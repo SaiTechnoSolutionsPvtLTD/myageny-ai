@@ -235,6 +235,28 @@
 }
 .pm-error { font-size: 12px; color: #e53935; margin-top: 2px; }
 .pm-help { font-size: 12px; color: #8a8a8a; margin-top: 2px; }
+.pm-check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #ece8e4;
+    border-radius: 8px;
+    background: #fffaf7;
+    cursor: pointer;
+}
+.pm-check-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: #fe5f04;
+}
+.pm-check-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #2b211b;
+}
 
 .select2-container--default .select2-selection--multiple.pm-select2-selection {
     min-height: 44px;

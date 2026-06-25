@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateCompanyRequest;
 use App\Models\Company;
 use App\Models\Branch;
 use App\Models\Permission;
+use App\Models\RoleHierarchyMapping;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -63,24 +64,14 @@ class CompanyController extends Controller
                 'mobile_number' => $data['mobile_number'],
                 'address' => $data['address'],
                 'number_of_accounts' => $data['number_of_accounts'],
+                'expiry_date' => $data['expiry_date'],
                 'company_status' => $data['company_status'],
                 'facebook_client_id' => $data['facebook_client_id'],
                 'facebook_client_secret' => $data['facebook_client_secret'],
             ]);
 
-            $role = Role::withoutGlobalScopes()->firstOrCreate(
-                [
-                    'name' => Role::tenantRoleName('company_admin', $company->id),
-                    'guard_name' => 'web',
-                ],
-                [
-                    'display_name' => 'Company Admin',
-                    'description' => 'Full access inside the company workspace.',
-                    'company_id' => $company->id,
-                ]
-            );
-
-            $role->syncPermissions(Permission::ensureCrmPermissions($company->id));
+            $defaultRoles = $this->createDefaultCompanyRoles($company);
+            $companyAdminRole = $defaultRoles['company_admin'];
 
             $superAdmin = User::create([
                 'name' => $data['super_admin_name'],
@@ -90,7 +81,7 @@ class CompanyController extends Controller
                 'is_active' => true,
             ]);
 
-            $superAdmin->assignRole($role);
+            $superAdmin->assignRole($companyAdminRole);
 
             $company->update(['super_admin_user_id' => $superAdmin->id]);
 
@@ -107,6 +98,8 @@ class CompanyController extends Controller
 
             return $company;
         });
+
+        $company->syncExpiryState();
 
         return redirect()
             ->route('companies.index')
@@ -132,6 +125,7 @@ class CompanyController extends Controller
         $this->ensureMainSuperAdmin();
 
         $company->update($request->validated());
+        $company->syncExpiryState();
 
         return redirect()
             ->route('companies.show', $company)
@@ -160,5 +154,182 @@ class CompanyController extends Controller
     private function ensureMainSuperAdmin(): void
     {
         abort_unless(auth()->user()->isSystemAdmin(), 403);
+    }
+
+    /**
+     * Build the default company sales structure with starter permissions.
+     *
+     * @return array<string, \App\Models\Role>
+     */
+    private function createDefaultCompanyRoles(Company $company): array
+    {
+        $companyPermissions = Permission::ensureCrmPermissions($company->id);
+        $allPermissionNames = $companyPermissions->pluck('name')->values()->all();
+
+        $roleDefinitions = [
+            'company_admin' => [
+                'display_name' => 'Company Admin',
+                'description' => 'Full access inside the company workspace.',
+                'permissions' => $allPermissionNames,
+                'parent' => null,
+            ],
+            'sales_manager' => [
+                'display_name' => 'Sales Manager',
+                'description' => 'Manages sales performance, approvals, and customer follow-up.',
+                'permissions' => $this->tenantPermissionNames($company->id, [
+                    'dashboard.menuview',
+                    'dashboard.view',
+                    'masters.menuview',
+                    'masters.view',
+                    'products.menuview',
+                    'products.view',
+                    'products.create',
+                    'products.edit',
+                    'products.delete',
+                    'leads.menuview',
+                    'leads.view',
+                    'leads.create',
+                    'leads.edit',
+                    'leads.delete',
+                    'leads.update',
+                    'call_updates.menuview',
+                    'call_updates.view',
+                    'call_updates.create',
+                    'call_updates.delete',
+                    'quotations.menuview',
+                    'quotations.view',
+                    'quotations.create',
+                    'quotations.delete',
+                    'price_requests.menuview',
+                    'price_requests.view',
+                    'price_requests.create',
+                    'price_requests.approve',
+                    'price_requests.reject',
+                    'projects.menuview',
+                    'ovp_module.menuview',
+                    'production_approval_module.menuview',
+                ]),
+                'parent' => 'company_admin',
+            ],
+            'sales_tl' => [
+                'display_name' => 'Sales TL',
+                'description' => 'Leads a sales team and manages day-to-day CRM work.',
+                'permissions' => $this->tenantPermissionNames($company->id, [
+                    'dashboard.menuview',
+                    'dashboard.view',
+                    'masters.menuview',
+                    'masters.view',
+                    'products.menuview',
+                    'products.view',
+                    'leads.menuview',
+                    'leads.view',
+                    'leads.create',
+                    'leads.edit',
+                    'leads.update',
+                    'call_updates.menuview',
+                    'call_updates.view',
+                    'call_updates.create',
+                    'call_updates.delete',
+                    'quotations.menuview',
+                    'quotations.view',
+                    'quotations.create',
+                    'projects.menuview',
+                    'ovp_module.menuview',
+                ]),
+                'parent' => 'sales_manager',
+            ],
+            'sales_executive' => [
+                'display_name' => 'Sales Executive',
+                'description' => 'Handles lead follow-up, calls, and quotation preparation.',
+                'permissions' => $this->tenantPermissionNames($company->id, [
+                    'dashboard.menuview',
+                    'dashboard.view',
+                    'products.menuview',
+                    'products.view',
+                    'leads.menuview',
+                    'leads.view',
+                    'leads.create',
+                    'leads.edit',
+                    'leads.update',
+                    'call_updates.menuview',
+                    'call_updates.view',
+                    'call_updates.create',
+                    'quotations.menuview',
+                    'quotations.view',
+                    'quotations.create',
+                ]),
+                'parent' => 'sales_tl',
+            ],
+            'sales_intern' => [
+                'display_name' => 'Sales Intern',
+                'description' => 'Supports lead capture and follow-up work with limited access.',
+                'permissions' => $this->tenantPermissionNames($company->id, [
+                    'dashboard.menuview',
+                    'dashboard.view',
+                    'products.menuview',
+                    'products.view',
+                    'leads.menuview',
+                    'leads.view',
+                    'leads.create',
+                    'call_updates.menuview',
+                    'call_updates.view',
+                    'call_updates.create',
+                ]),
+                'parent' => 'sales_executive',
+            ],
+        ];
+
+        $createdRoles = [];
+        $roleLookup = [];
+
+        foreach ($roleDefinitions as $roleKey => $definition) {
+            $role = Role::withoutGlobalScopes()->firstOrCreate(
+                [
+                    'name' => Role::tenantRoleName($roleKey, $company->id),
+                    'guard_name' => 'web',
+                ],
+                [
+                    'display_name' => $definition['display_name'],
+                    'description' => $definition['description'],
+                    'company_id' => $company->id,
+                ]
+            );
+
+            $role->syncPermissions($definition['permissions']);
+
+            $createdRoles[$roleKey] = $role;
+            $roleLookup[$roleKey] = $role;
+        }
+
+        foreach ($roleDefinitions as $roleKey => $definition) {
+            if (! $definition['parent']) {
+                continue;
+            }
+
+            RoleHierarchyMapping::firstOrCreate(
+                [
+                    'company_id' => $company->id,
+                    'child_role_id' => $createdRoles[$roleKey]->id,
+                ],
+                [
+                    'parent_role_id' => $createdRoles[$definition['parent']]->id,
+                ]
+            );
+        }
+
+        return $roleLookup;
+    }
+
+    /**
+     * Convert plain module.action keys into tenant-scoped permission names.
+     *
+     * @return array<int, string>
+     */
+    private function tenantPermissionNames(int $companyId, array $permissions): array
+    {
+        return collect($permissions)
+            ->map(fn (string $permission) => Permission::tenantPermissionKey($permission, $companyId))
+            ->values()
+            ->all();
     }
 }

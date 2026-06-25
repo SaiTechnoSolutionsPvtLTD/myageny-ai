@@ -11,6 +11,7 @@ use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadStatus;
 use App\Models\Product;
+use App\Models\ProductionCountReport;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -141,7 +142,8 @@ class LeadProductController extends Controller
         // Group into deals (accordion)
         $deals = $products->groupBy('deal_name')->map(function ($items, $dealName) use ($statusOptions) {
             $totalValue   = $items->sum('total_price');
-            $totalPaid    = $items->sum('amount_paid');
+            // Calculate total paid from payments for each product
+            $totalPaid    = $items->sum(fn($p) => $p->amount_paid);
             $totalPending = $totalValue - $totalPaid;
             $status       = $this->resolveStatusPayload($items->first(), $statusOptions);
 
@@ -160,7 +162,7 @@ class LeadProductController extends Controller
         // Overall summary
         $summary = [
             'total_value'   => round($products->sum('total_price'), 2),
-            'total_paid'    => round($products->sum('total_paid'), 2),
+            'total_paid'    => round($products->sum(fn($p) => $p->amount_paid), 2),
             'total_pending' => round($products->sum(fn($p) => $p->amount_pending), 2),
             'product_count' => $products->count(),
             'converted'     => $products->filter(fn ($p) => $this->productStatusKey($p) === 'converted')->count(),
@@ -324,6 +326,68 @@ class LeadProductController extends Controller
                 'id'   => $status->id,
                 'name' => $status->name,
             ],
+        ]);
+    }
+
+    /**
+     * PUT /api/lead-products/{id}
+     * Updates a single product inside a lead deal.
+     */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $user = auth()->user();
+
+        $v = Validator::make($request->all(), [
+            'deal_name'        => ['required', 'string', 'max:255'],
+            'product_id'       => ['required', 'integer', 'exists:products,id'],
+            'unit_price'       => ['required', 'numeric', 'min:0'],
+            'quantity'         => ['required', 'integer', 'min:1'],
+            'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'remarks'          => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $leadProduct = LeadProduct::with(['lead', 'product'])->findOrFail($id);
+        abort_unless($leadProduct->lead && $this->visibility->canAccessLead($leadProduct->lead), 403);
+
+        if ($leadProduct->product) {
+            abort_unless($this->visibility->canAccessProduct($leadProduct->product), 403);
+        }
+
+        $catalogProduct = Product::with('category')->findOrFail((int) $request->product_id);
+        abort_unless($this->visibility->canAccessProduct($catalogProduct), 403);
+
+        $requestedPrice = round((float) $request->unit_price, 2);
+        $currentPrice = round((float) $leadProduct->unit_price, 2);
+        $baselinePrice = (int) $leadProduct->product_id === (int) $catalogProduct->id
+            ? $currentPrice
+            : round((float) $catalogProduct->final_price, 2);
+
+        if (!$this->isAdmin($user) && $requestedPrice !== $baselinePrice) {
+            return response()->json([
+                'message' => 'Price was changed. Please send a price change request for admin approval.',
+            ], 422);
+        }
+
+        $leadProduct->update([
+            'deal_name'        => $request->deal_name,
+            'product_id'       => $catalogProduct->id,
+            'product_name'     => $catalogProduct->product_name
+                ?: trim(($catalogProduct->category?->name ? $catalogProduct->category->name . ' | ' : '') . $catalogProduct->package_name),
+            'unit_price'       => $requestedPrice,
+            'quantity'         => (int) $request->quantity,
+            'discount_percent' => (float) ($request->discount_percent ?? 0),
+            'remarks'          => $request->remarks,
+        ]);
+
+        $leadProduct->load(['payments.recordedBy', 'leadStatus', 'product.departments:id,name', 'latestProductionInitiation.department:id,name']);
+
+        return response()->json([
+            'message' => 'Product updated successfully.',
+            'product' => $leadProduct->toJsPayload(),
         ]);
     }
 
@@ -495,31 +559,47 @@ class LeadProductController extends Controller
             $requirements = 'Submitted via production customization form.';
         }
 
-        $initiation = ProductionInitiation::create([
-            'company_id' => $leadProduct->company_id ?: $leadProduct->lead?->company_id ?: auth()->user()?->company_id,
-            'lead_id' => $leadProduct->lead_id,
-            'lead_product_id' => $leadProduct->id,
-            'product_id' => $leadProduct->product_id,
-            'department_id' => $mappedDepartment->id,
-            'product_name' => $request->input('product_name'),
-            'total_working_days' => (int) ($request->input('total_working_days') ?: ($latestInitiation?->total_working_days ?: 1)),
-            'ui_available' => $request->has('ui_available')
-                ? (bool) $request->boolean('ui_available')
-                : (bool) ($latestInitiation?->ui_available ?? false),
-            'requirements' => $requirements,
-            'attachment_path' => $attachmentPath,
-            'attachment_name' => $attachment
-                ? $attachment->getClientOriginalName()
-                : (string) ($latestInitiation?->attachment_name ?? ''),
-            'workflow_snapshot' => $workflowPreview,
-            'custom_form_data' => $customFormData,
-            'status' => 'ovp_pending',
-            'ovp_allocation_status' => 'allocation_pending',
-            'ovp_allocated_to' => null,
-            'ovp_allocated_by' => null,
-            'ovp_allocated_at' => null,
-            'initiated_by' => auth()->id(),
-        ]);
+        $initiation = DB::transaction(function () use (
+            $attachment,
+            $attachmentPath,
+            $customFormData,
+            $leadProduct,
+            $latestInitiation,
+            $mappedDepartment,
+            $request,
+            $requirements,
+            $workflowPreview
+        ) {
+            $initiation = ProductionInitiation::create([
+                'company_id' => $leadProduct->company_id ?: $leadProduct->lead?->company_id ?: auth()->user()?->company_id,
+                'lead_id' => $leadProduct->lead_id,
+                'lead_product_id' => $leadProduct->id,
+                'product_id' => $leadProduct->product_id,
+                'department_id' => $mappedDepartment->id,
+                'product_name' => $request->input('product_name'),
+                'total_working_days' => (int) ($request->input('total_working_days') ?: ($latestInitiation?->total_working_days ?: 1)),
+                'ui_available' => $request->has('ui_available')
+                    ? (bool) $request->boolean('ui_available')
+                    : (bool) ($latestInitiation?->ui_available ?? false),
+                'requirements' => $requirements,
+                'attachment_path' => $attachmentPath,
+                'attachment_name' => $attachment
+                    ? $attachment->getClientOriginalName()
+                    : (string) ($latestInitiation?->attachment_name ?? ''),
+                'workflow_snapshot' => $workflowPreview,
+                'custom_form_data' => $customFormData,
+                'status' => 'ovp_pending',
+                'ovp_allocation_status' => 'allocation_pending',
+                'ovp_allocated_to' => null,
+                'ovp_allocated_by' => null,
+                'ovp_allocated_at' => null,
+                'initiated_by' => auth()->id(),
+            ]);
+
+            $this->storeCountWiseReportForInitiation($initiation, $leadProduct, $mappedDepartment->id);
+
+            return $initiation;
+        });
 
         return response()->json([
             'message' => 'Production initiation submitted successfully.',
@@ -536,6 +616,60 @@ class LeadProductController extends Controller
             ],
             'workflow' => $workflowPreview,
         ], 201);
+    }
+
+    private function storeCountWiseReportForInitiation(
+        ProductionInitiation $initiation,
+        LeadProduct $leadProduct,
+        int $departmentId
+    ): void {
+        $product = $leadProduct->product;
+
+        if (! $product?->count_wise_report) {
+            return;
+        }
+
+        $counts = $this->countWiseProductCounts($product);
+
+        ProductionCountReport::updateOrCreate(
+            ['production_initiation_id' => $initiation->id],
+            [
+                'company_id' => $initiation->company_id,
+                'lead_id' => $leadProduct->lead_id,
+                'lead_product_id' => $leadProduct->id,
+                'product_id' => $leadProduct->product_id,
+                'department_id' => $departmentId,
+                'poster_count' => $counts['poster_count'],
+                'video_count' => $counts['video_count'],
+                'status' => 'initiated',
+            ]
+        );
+    }
+
+    private function countWiseProductCounts(Product $product): array
+    {
+        $product->loadMissing('attributeValues.attribute');
+
+        return [
+            'poster_count' => $this->firstAttributeCount($product, ['posters_count', 'poster_count']),
+            'video_count' => $this->firstAttributeCount($product, ['video_count', 'videos_count']),
+        ];
+    }
+
+    private function firstAttributeCount(Product $product, array $keys): int
+    {
+        foreach ($product->attributeValues as $attributeValue) {
+            $attributeKey = strtolower((string) ($attributeValue->attribute?->key ?? ''));
+            $attributeName = strtolower(preg_replace('/[^a-z0-9]+/i', '_', (string) ($attributeValue->attribute?->name ?? '')));
+
+            if (! in_array($attributeKey, $keys, true) && ! in_array(trim($attributeName, '_'), $keys, true)) {
+                continue;
+            }
+
+            return max(0, (int) $attributeValue->value);
+        }
+
+        return 0;
     }
 
     private function prepareProductCustomizationData(Request $request, ?Product $product): array
@@ -692,6 +826,7 @@ class LeadProductController extends Controller
             ], 422);
         }
 
+        // Calculate balance from payments table (dynamic)
         $balancePayment = $lp->total_price - $lp->amount_paid;
 
         if($balancePayment < $request->amount)
@@ -709,6 +844,7 @@ class LeadProductController extends Controller
             'payment_date'    => ['required', 'date'],
             'reference_number'=> ['nullable', 'string', 'max:100'],
             'notes'           => ['nullable', 'string', 'max:500'],
+            'attachment'      => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
         ]);
 
         if ($v->fails()) {
@@ -719,6 +855,7 @@ class LeadProductController extends Controller
         abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         $payment = DB::transaction(function () use ($request, $lp, $actorId) {
+            $attachment = $request->file('attachment');
             $p = LeadProductPayment::create([
                 'lead_product_id' => $lp->id,
                 'lead_id'         => $lp->lead_id,
@@ -727,9 +864,10 @@ class LeadProductController extends Controller
                 'payment_date'    => $request->payment_date,
                 'reference_number'=> $request->reference_number,
                 'notes'           => $request->notes,
+                'attachment_path' => $attachment ? $attachment->store('lead-product-payments', 'public') : null,
+                'attachment_name' => $attachment ? $attachment->getClientOriginalName() : null,
                 'recorded_by'     => $actorId,
             ]);
-            $lp->recalcPaid();
             return $p;
         });
 
@@ -753,6 +891,9 @@ class LeadProductController extends Controller
         abort_unless($lp && $lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         DB::transaction(function () use ($payment, $lp) {
+            if ($payment->attachment_path) {
+                Storage::disk('public')->delete($payment->attachment_path);
+            }
             $payment->delete();
             $lp->recalcPaid();
         });

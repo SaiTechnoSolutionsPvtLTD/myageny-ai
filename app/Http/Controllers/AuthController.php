@@ -74,6 +74,11 @@ class AuthController extends Controller
             return back()->with('error', 'Your account has been deactivated. Please contact your administrator.');
         }
 
+        if ($user->company_id && $user->company) {
+            $user->company->syncExpiryState();
+            $user->company->refresh();
+        }
+
         if ($user->company_id && $user->company && $user->company->company_status !== 'active') {
             Auth::logout();
             return back()->with('error', 'Your company account is inactive. Please contact the main administrator.');

@@ -73,6 +73,7 @@ Route::get('lead-products/{id}/production', [LeadProductController::class, 'prod
 Route::post('lead-products/{id}/production-initiations', [LeadProductController::class, 'storeProductionInitiation']);
 Route::post('lead-product-price-requests', [LeadProductPriceRequestController::class, 'store']);
 Route::put('lead-products/status',    [LeadProductController::class, 'updateStatus']);
+Route::put('lead-products/{id}',       [LeadProductController::class, 'update']);
 Route::delete('lead-products/{id}',    [LeadProductController::class, 'destroy']);
 
 // ── Payments ───────────────────────────────────────────────────

@@ -220,9 +220,8 @@ class OvpModuleApiController extends Controller
     private function isPendingOvpItem(ProductionInitiation $i): bool
     {
         $status     = strtolower(trim((string) $i->status));
-        $department = strtolower(trim((string) $i->department?->name));
-        return in_array($status, ['ovp_pending', 'initiated', 'pending'], true)
-            && $department === 'development';
+
+        return in_array($status, ['ovp_pending', 'initiated', 'pending'], true);
     }
 
     private function isTlScopedUser(?User $user): bool

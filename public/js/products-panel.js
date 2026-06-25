@@ -26,11 +26,15 @@
         activePayProdId : null,   // which lead_product is open in payment modal
         dealNameTouched : false,
         lastSuggestedDealName : '',
+        editingProductId : null,
         production  : {
             leadProductId: null,
             detail: null,
             selectedDepartmentId: null,
             lastSubmission: null,
+        },
+        statusConfirm: {
+            resolve: null,
         },
     };
 
@@ -106,7 +110,7 @@
     /* ─────────────────────────────────────────────────────────────
        MODAL HELPERS
     ───────────────────────────────────────────────────────────── */
-    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production'];
+    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production', 'pp-modal-status-confirm'];
 
     function ppShow(id) {
         var e = el(id);
@@ -118,8 +122,39 @@
         if (e) { e.classList.remove('pp-show'); document.body.style.overflow = ''; }
         if (id === 'pp-modal-payment') {
             handlePaymentModalClosed();
+        } else if (id === 'pp-modal-status-confirm') {
+            resolveStatusConfirm(false);
         }
     };
+
+    function showStatusConfirm(label) {
+        var labelEl = el('pp-status-confirm-label');
+        if (labelEl) {
+            labelEl.textContent = 'Change status to ' + label;
+        }
+
+        return new Promise(function (resolve) {
+            ppState.statusConfirm.resolve = resolve;
+            ppShow('pp-modal-status-confirm');
+        });
+    }
+
+    function resolveStatusConfirm(confirmed) {
+        var resolver = ppState.statusConfirm.resolve;
+        ppState.statusConfirm.resolve = null;
+
+        var modal = el('pp-modal-status-confirm');
+        if (modal) {
+            modal.classList.remove('pp-show');
+            document.body.style.overflow = '';
+        }
+
+        if (resolver) {
+            resolver(!!confirmed);
+        }
+    }
+
+    PP.ppResolveStatusConfirm = resolveStatusConfirm;
 
     /* Close on backdrop */
     MODALS.forEach(function (id) {
@@ -141,6 +176,7 @@
     /** Open modal and fetch catalogue if needed */
     PP.ppShowAddProduct = function () {
         resetAddModal();
+        setAddModalMode(false);
         ppShow('pp-modal-add-product');
         if (ppState.products.length === 0) {
             fetchProductCatalogue();
@@ -158,12 +194,68 @@
         ppState.selected = {};
         ppState.dealNameTouched = false;
         ppState.lastSuggestedDealName = '';
+        ppState.editingProductId = null;
         var multiSel = el('pp-product-multi-select');
         if (multiSel) {
+            multiSel.disabled = false;
             Array.from(multiSel.options).forEach(function (o) { o.selected = false; });
         }
         renderSelectedTable();
     }
+
+    function setAddModalMode(isEdit) {
+        setInner('pp-add-product-modal-title', isEdit ? 'Edit Product' : '📦 Add Product to Lead');
+
+        var submitBtn = el('pp-submit-deal-btn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+                '<polyline points="20 6 9 17 4 12"/></svg>' +
+                (isEdit ? 'Update Product' : 'Create Deal');
+        }
+
+        var priceRequestBtn = el('pp-submit-price-request-btn');
+        if (priceRequestBtn) {
+            priceRequestBtn.style.display = isEdit ? 'none' : '';
+        }
+
+        var multiSel = el('pp-product-multi-select');
+        if (multiSel) {
+            multiSel.disabled = false;
+        }
+    }
+
+    PP.ppShowEditProduct = function (prodId) {
+        var p = findProduct(prodId);
+        if (!p) { toast('Product not found. Try refreshing.', 'error'); return; }
+
+        resetAddModal();
+        setAddModalMode(true);
+        ppState.editingProductId = prodId;
+
+        var dealInp = el('pp-deal-name');
+        if (dealInp) dealInp.value = p.deal_name || '';
+
+        ppState.selected[p.product_id || p.id] = {
+            id           : p.product_id || p.id,
+            leadProductId: p.id,
+            name         : p.name,
+            description  : p.description || '',
+            price        : parseFloat(p.unit_price || 0),
+            originalPrice: parseFloat(p.unit_price || 0),
+            qty          : parseInt(p.quantity || 1, 10),
+            disc         : parseFloat(p.discount_percent || 0),
+            remarks      : p.remarks || '',
+        };
+
+        if (ppState.products.length === 0) {
+            fetchProductCatalogue();
+        } else {
+            syncEditProductSelect(p.product_id);
+        }
+
+        renderSelectedTable();
+        ppShow('pp-modal-add-product');
+    };
 
     function fetchProductCatalogue() {
         showLoader('pp-product-loading');
@@ -188,6 +280,64 @@
             opt.dataset.product = JSON.stringify(p);
             sel.appendChild(opt);
         });
+        if (ppState.editingProductId) {
+            var editing = findProduct(ppState.editingProductId);
+            syncEditProductSelect(editing && editing.product_id);
+        }
+    }
+
+    function syncEditProductSelect(productId) {
+        var sel = el('pp-product-multi-select');
+        if (!sel || !productId) return;
+        Array.from(sel.options).forEach(function (o) {
+            o.selected = parseInt(o.value, 10) === parseInt(productId, 10);
+        });
+    }
+
+    function selectedProductDraft() {
+        var ids = Object.keys(ppState.selected);
+        return ids.length ? ppState.selected[ids[0]] : null;
+    }
+
+    function buildSelectedProductState(product, current) {
+        current = current || {};
+        var basePrice = parseFloat(product.price || 0);
+
+        return {
+            id            : product.id,
+            leadProductId : current.leadProductId || null,
+            name          : product.name,
+            description   : product.description || '',
+            price         : current.price != null ? parseFloat(current.price) || 0 : basePrice,
+            originalPrice : current.originalPrice != null ? parseFloat(current.originalPrice) || 0 : basePrice,
+            qty           : current.qty != null ? parseInt(current.qty, 10) || 1 : 1,
+            disc          : current.disc != null ? parseFloat(current.disc) || 0 : parseFloat(product.discount_percent || 0),
+            remarks       : current.remarks || '',
+        };
+    }
+
+    function handleEditProductSelectionChange(sel) {
+        var selectedOpt = sel.selectedOptions[sel.selectedOptions.length - 1] || null;
+        var current = selectedProductDraft();
+
+        ppState.selected = {};
+
+        if (!selectedOpt) {
+            renderSelectedTable();
+            return;
+        }
+
+        Array.from(sel.options).forEach(function (opt) {
+            opt.selected = opt === selectedOpt;
+        });
+
+        var product = JSON.parse(selectedOpt.dataset.product);
+        ppState.selected[product.id] = buildSelectedProductState(product, {
+            leadProductId: current && current.leadProductId,
+            qty          : current && current.qty,
+            disc         : current && current.disc,
+            remarks      : current && current.remarks,
+        });
     }
 
     /** Called when multi-select changes */
@@ -195,21 +345,18 @@
         var sel = el('pp-product-multi-select');
         if (!sel) return;
 
+        if (ppState.editingProductId) {
+            handleEditProductSelectionChange(sel);
+            renderSelectedTable();
+            return;
+        }
+
         // Add newly selected
         Array.from(sel.selectedOptions).forEach(function (opt) {
             var pid = parseInt(opt.value);
             if (!ppState.selected[pid]) {
                 var p = JSON.parse(opt.dataset.product);
-                ppState.selected[pid] = {
-                    id         : p.id,
-                    name       : p.name,
-                    description: p.description || '',
-                    price      : p.price,
-                    originalPrice: p.price,
-                    qty        : 1,
-                    disc       : parseFloat(p.discount_percent || 0),
-                    remarks    : '',
-                };
+                ppState.selected[pid] = buildSelectedProductState(p);
             }
         });
 
@@ -330,6 +477,12 @@
 
         var products = Object.values(ppState.selected);
         if (products.length === 0) { toast('Select at least one product.', 'error'); return; }
+
+        if (ppState.editingProductId) {
+            submitProductEdit(dealName.trim(), products[0]);
+            return;
+        }
+
         if (!IS_ADMIN && hasPriceChange(products)) {
             toast('Price was changed. Please send a price change request for admin approval.', 'error');
             return;
@@ -364,6 +517,36 @@
             if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Create Deal'; }
         });
     };
+
+    function submitProductEdit(dealName, product) {
+        if (!product) { toast('Select a product to update.', 'error'); return; }
+
+        var btnEl = el('pp-submit-deal-btn');
+        if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Updating…'; }
+
+        api('PUT', '/lead-products/' + ppState.editingProductId, {
+            deal_name        : dealName,
+            product_id       : product.id,
+            unit_price       : product.price,
+            quantity         : product.qty,
+            discount_percent : product.disc,
+            remarks          : product.remarks,
+        })
+        .then(function () {
+            PP.ppHideModal('pp-modal-add-product');
+            toast('Product updated!');
+            ppProductCache = {};
+            loadDeals();
+        })
+        .catch(function (err) {
+            var msg = firstErrorMessage(err) || err.message || 'Failed to update product.';
+            toast(msg, 'error');
+        })
+        .finally(function () {
+            if (btnEl) { btnEl.disabled = false; }
+            setAddModalMode(false);
+        });
+    }
 
     PP.ppSubmitPriceRequest = function () {
         var dealName = (el('pp-deal-name') || {}).value || '';
@@ -592,6 +775,14 @@
                             '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><circle cx="12" cy="12" r="10"/></svg>' +
                             'History (' + p.payments.length + ')' +
                         '</button>' +
+                        '<button type="button" class="pp-act-btn pp-btn-edit" ' +
+                            (isConverted
+                                ? 'disabled style="opacity:.55;cursor:not-allowed" title="Converted products cannot be edited"'
+                                : 'onclick="PP.ppShowEditProduct(' + p.id + ')"') +
+                            '>' +
+                            '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>' +
+                            'Edit' +
+                        '</button>' +
                         (p.productionInitiation
                             ? '<a class="pp-act-btn pp-btn-prod" href="' + escAttr(p.productionInitiation.view_url || '#') + '" style="opacity:.9">' +
                                 '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
@@ -644,36 +835,59 @@
         var statusId = sel.value;
         var product = findProduct(parseInt(productId, 10));
         var currentStatusKey = statusKey(product && (product.status_label || product.status_value || ''));
+        var previousValue = product ? String(product.status_id || product.status_value || '') : '';
         var option   = getStatusOption(statusId);
         var label    = option ? option.name : statusId;
         var cfg      = getStatusConfig(statusId, label);
 
+        if (!product) {
+            sel.value = previousValue;
+            toast('Product not found. Try refreshing.', 'error');
+            return;
+        }
+
+        if (String(statusId) === previousValue) {
+            return;
+        }
+
         if (currentStatusKey === 'converted') {
+            sel.value = previousValue;
             toast('Converted product status cannot be changed again.', 'error');
             loadDeals();
             return;
         }
 
-        // Optimistic UI
-        sel.style.background   = cfg.bg;
-        sel.style.color        = cfg.text;
-        sel.style.borderColor  = cfg.border;
-        var caret = sel.parentNode.querySelector('.pp-status-caret');
-        if (caret) caret.style.color = cfg.text;
+        showStatusConfirm(label).then(function (confirmed) {
+            if (!confirmed) {
+                sel.value = previousValue;
+                return;
+            }
 
-        var payload = {
-            lead_id        : LEAD_ID,
-            product_id     : productId,
-        };
-        if (/^\d+$/.test(statusId)) {
-            payload.lead_status_id = statusId;
-        } else {
-            payload.product_status = statusId;
-        }
+            // Optimistic UI
+            sel.style.background   = cfg.bg;
+            sel.style.color        = cfg.text;
+            sel.style.borderColor  = cfg.border;
+            var caret = sel.parentNode.querySelector('.pp-status-caret');
+            if (caret) caret.style.color = cfg.text;
 
-        submitProductStatusChange(payload, label)
-        .then(function () { loadDeals(); })
-        .catch(function () { toast('Failed to update status', 'error'); loadDeals(); });
+            var payload = {
+                lead_id        : LEAD_ID,
+                product_id     : productId,
+            };
+            if (/^\d+$/.test(statusId)) {
+                payload.lead_status_id = statusId;
+            } else {
+                payload.product_status = statusId;
+            }
+
+            submitProductStatusChange(payload, label)
+            .then(function () { loadDeals(); })
+            .catch(function () {
+                sel.value = previousValue;
+                toast('Failed to update status', 'error');
+                loadDeals();
+            });
+        });
     };
 
     function submitProductStatusChange(payload, fallbackLabel) {
@@ -768,6 +982,15 @@
         var dateInp = el('pp-pay-date');
         if (dateInp) dateInp.value = todayStr();
 
+        var refInp = el('pp-pay-ref');
+        if (refInp) refInp.value = '';
+
+        var notesInp = el('pp-pay-notes');
+        if (notesInp) notesInp.value = '';
+
+        var fileInp = el('pp-pay-attachment');
+        if (fileInp) fileInp.value = '';
+
         ppShow('pp-modal-payment');
     };
 
@@ -778,6 +1001,8 @@
         var date   = (el('pp-pay-date')     || {}).value || todayStr();
         var ref    = (el('pp-pay-ref')      || {}).value || '';
         var notes  = (el('pp-pay-notes')    || {}).value || '';
+        var fileInp = el('pp-pay-attachment');
+        var file = fileInp && fileInp.files ? fileInp.files[0] : null;
 
         if (!pid)         { toast('No product selected.', 'error'); return; }
         if (amount <= 0)  { toast('Enter a valid amount.', 'error'); return; }
@@ -785,14 +1010,18 @@
         var btnEl = el('pp-submit-pay-btn');
         if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
 
-        api('POST', '/payments', {
-            lead_product_id  : pid,
-            amount           : amount,
-            payment_mode     : mode,
-            payment_date     : date,
-            reference_number : ref,
-            notes            : notes,
-        })
+        var formData = new FormData();
+        formData.append('lead_product_id', pid);
+        formData.append('amount', amount);
+        formData.append('payment_mode', mode);
+        formData.append('payment_date', date);
+        formData.append('reference_number', ref);
+        formData.append('notes', notes);
+        if (file) {
+            formData.append('attachment', file);
+        }
+
+        apiFormData('/payments', formData)
         .then(function () {
             return null;
         })
@@ -820,6 +1049,7 @@
 
         api('GET', '/payments/' + prodId)
         .then(function (res) {
+            console.log('PP.payments response:', res);
             var p = res.product;
             setInner('pp-hist-name', p.name);
             var canAddPayment = isConvertedProduct(p);
@@ -1326,6 +1556,23 @@
     }
 
     function renderHistItem(pmt, running, isOverall) {
+        var attUrl = (pmt.attachment && pmt.attachment.url) || pmt.attachment_url || null;
+        var attName = (pmt.attachment && pmt.attachment.name) || pmt.attachment_name || '';
+
+        var attHtml = '';
+        if (attUrl) {
+            attHtml = '<div class="pp-hist-ref">Attachment: ' +
+                '<a href="' + escAttr(attUrl) + '" target="_blank" rel="noopener">' + escHtml(attName || 'View') + '</a>' +
+                ' <a href="' + escAttr(attUrl) + '" download="' + escAttr(attName || '') + '" class="pp-hist-download" title="Download">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">' +
+                        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+                        '<polyline points="7 10 12 15 17 10"/>' +
+                        '<line x1="12" y1="15" x2="12" y2="3"/>' +
+                    '</svg>' +
+                '</a>' +
+            '</div>';
+        }
+
         return '<div class="pp-hist-item">' +
             '<div class="pp-hist-mode-wrap" style="background:' + pmt.modeColor + '20">' + pmt.modeIcon + '</div>' +
             '<div class="pp-hist-info">' +
@@ -1333,6 +1580,7 @@
                 '<div class="pp-hist-date">'  + pmt.date + ' · By ' + escHtml(pmt.by) + '</div>' +
                 (pmt.ref   ? '<div class="pp-hist-ref">Ref: ' + escHtml(pmt.ref)   + '</div>' : '') +
                 (pmt.notes ? '<div class="pp-hist-note">'     + escHtml(pmt.notes) + '</div>' : '') +
+                attHtml +
             '</div>' +
             '<div class="pp-hist-right">' +
                 '<div class="pp-hist-amt">' + fmt(pmt.amount) + '</div>' +

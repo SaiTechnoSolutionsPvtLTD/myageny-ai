@@ -1,8 +1,13 @@
 <?php
 
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+
+
+Schedule::command('app:facebook-lead-integration')
+    ->everyMinute();
+
+Schedule::command('app:expire-companies')
+    ->hourly();

@@ -20,7 +20,7 @@ class Product extends Model
         'product_category_id', 'package_name', 'sku',
         'base_price', 'tax_type', 'tax_value', 'discount_type', 'discount_value',
         'final_price', 'description', 'status', 'sort_order', 'product_name',
-        'company_id', 'created_by', 'assigned_to',
+        'company_id', 'created_by', 'assigned_to', 'count_wise_report',
     ];
 
     protected $casts = [
@@ -28,6 +28,7 @@ class Product extends Model
         'tax_value'      => 'float',
         'discount_value' => 'float',
         'final_price'    => 'float',
+        'count_wise_report' => 'boolean',
     ];
 
     // ── Boot ──────────────────────────────────────────────────────────

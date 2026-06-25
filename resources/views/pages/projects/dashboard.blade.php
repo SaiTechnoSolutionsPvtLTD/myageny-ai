@@ -23,7 +23,7 @@
 .pjd-filter-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .pjd-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:12px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:800; cursor:pointer; }
 .pjd-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
-.pjd-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.pjd-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:16px; }
 .pjd-stat { position:relative; overflow:hidden; background:#fff; border:1px solid #eee7df; border-radius:10px; padding:18px; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pjd-stat::before { content:''; position:absolute; inset:0 0 auto 0; height:4px; background:var(--stat-color,#fe5f04); }
 .pjd-stat-label { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7c7c7c; }
@@ -77,7 +77,7 @@
 .tox-tinymce { border-radius:16px !important; border-color:#dbe1e8 !important; }
 @media (max-width: 1200px) {
     .pjd-filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .pjd-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .pjd-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media (max-width: 768px) {
     .pjd-topbar { padding:18px 16px; flex-direction:column; }
@@ -191,9 +191,12 @@
                 <div class="pjd-stat-value">{{ $currency($stats['balance_amount']) }}</div>
                 <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
             </div>
+            <div class="pjd-stat" style="--stat-color:#ea580c;">
+                <div class="pjd-stat-label">Allocation Pending</div>
+                <div class="pjd-stat-value">{{ $allocationPendingCount ?? 0 }}</div>
+                <div class="pjd-stat-sub">Projects awaiting TL and coordinator assignment.</div>
+            </div>
         </section>
-
-        <section class="pjd-card">
             <div class="pjd-card-head">
                 <div>
                     <div class="pjd-card-title">Current Month Delivery Planned Projects</div>

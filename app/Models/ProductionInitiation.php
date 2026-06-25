@@ -135,4 +135,9 @@ class ProductionInitiation extends Model
     {
         return $this->hasMany(ProjectTimesheet::class);
     }
+
+    public function countReport()
+    {
+        return $this->hasOne(ProductionCountReport::class);
+    }
 }
