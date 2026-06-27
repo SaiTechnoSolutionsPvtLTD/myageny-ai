@@ -38,6 +38,7 @@ use App\Http\Controllers\ProductionApprovalController;
 use App\Http\Controllers\PermissionRequestController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollSettingController;
+use App\Http\Controllers\DesignSettingController;
 use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -167,6 +168,12 @@ Route::middleware(['auth'])->group(function () {
     }], function () {
         Route::get('/projects/dashboard', [ProjectController::class, 'dashboard'])
             ->name('projects.dashboard');
+        Route::get('/projects/my-accounts', [ProjectController::class, 'myAccounts'])
+            ->name('projects.my-accounts');
+        Route::get('/projects/my-accounts/{lead}', [ProjectController::class, 'showMyAccount'])
+            ->name('projects.my-accounts.show');
+        Route::post('/projects/dashboard/update-planned-task', [ProjectController::class, 'updatePlannedTask'])
+            ->name('projects.dashboard.update-planned-task');
         Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
             ->name('projects.timesheets');
         Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])
@@ -185,6 +192,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.updates.store');
         Route::post('/projects-details/updates/quick', [ProjectController::class, 'storeQuickUpdate'])
             ->name('projects.updates.quick-store');
+        Route::patch('/projects-details/{productionInitiation}/content-calendar-sheet', [ProjectController::class, 'updateContentCalendarSheet'])
+            ->name('projects.content-calendar-sheet.update');
+        Route::patch('/projects-details/{productionInitiation}/content-calendar-approve', [ProjectController::class, 'approveContentCalendar'])
+            ->name('projects.content-calendar.approve');
+        Route::get('/projects-details/{productionInitiation}/content-calendar-data', [ProjectController::class, 'fetchContentCalendarData'])
+            ->name('projects.content-calendar-data');
     });
 
     Route::prefix('authentications')->name('auth.')->group(function () {
@@ -489,6 +502,9 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->name('quotation');
     Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:settings.manage')->name('payroll.index');
     Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:settings.manage')->name('payroll.update');
+
+    Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:settings.manage')->name('design-settings.index');
+    Route::post('/design-settings', [DesignSettingController::class, 'store'])->middleware('can:settings.manage')->name('design-settings.store');
 
     Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:settings.manage')->name('quotation.update');
     Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:settings.manage')->name('quotation.file.delete');

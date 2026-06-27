@@ -56,6 +56,7 @@ class ProjectApiController extends Controller
             'team_member_id' => $this->shouldAllowDashboardUserFilter($user)
                 ? trim((string) $request->query('team_member_id', ''))
                 : '',
+            'allocation_status' => trim((string) $request->query('allocation_status', '')),
         ];
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
@@ -711,8 +712,9 @@ class ProjectApiController extends Controller
         $dateTo            = $this->parseFilterDate($filters['date_to'] ?? '')?->endOfDay();
         $selectedProjectId = (int) ($filters['project_id'] ?? 0);
         $selectedMemberId  = (int) ($filters['team_member_id'] ?? 0);
+        $selectedAllocationStatus = trim((string) ($filters['allocation_status'] ?? ''));
 
-        return $projects->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedMemberId, $user) {
+        return $projects->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedMemberId, $selectedAllocationStatus, $user) {
             if ($selectedProjectId > 0 && (int) $project->id !== $selectedProjectId) return false;
 
             if ($dateFrom || $dateTo) {
@@ -725,6 +727,12 @@ class ProjectApiController extends Controller
             if ($selectedMemberId > 0 && $this->shouldAllowDashboardUserFilter($user)) {
                 $empIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))->map(fn ($id) => (int) $id);
                 if (! $empIds->contains($selectedMemberId)) return false;
+            }
+
+            if ($selectedAllocationStatus !== '') {
+                if ($project->project_allocation_status !== $selectedAllocationStatus) {
+                    return false;
+                }
             }
 
             return true;

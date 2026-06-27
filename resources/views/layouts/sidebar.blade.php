@@ -5,7 +5,9 @@
         || request()->routeIs('projects.show')
         || request()->routeIs('projects.allocate')
         || request()->routeIs('projects.employee-allocate')
-        || request()->routeIs('projects.timesheets');
+        || request()->routeIs('projects.timesheets')
+        || request()->routeIs('projects.my-accounts')
+        || request()->routeIs('projects.my-accounts.show');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
         || request()->routeIs('hrms.masters.*')
         || request()->routeIs('employee-onboarding.*')
@@ -67,6 +69,23 @@
                         <span>Dashboard</span>
                     </div>
                 </a>
+
+                @if(auth()->user()?->belongsToDesigningDepartment() || auth()->user()?->belongsToDigitalMarketingDepartment())
+                <a href="{{ route('projects.my-accounts') }}" class="nav-item {{ request()->routeIs('projects.my-accounts') || request()->routeIs('projects.my-accounts.show') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.my-accounts') || request()->routeIs('projects.my-accounts.show'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <span>My Accounts</span>
+                    </div>
+                </a>
+                @endif
 
                 <a href="{{ route('projects.index') }}" class="nav-item {{ request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate'))

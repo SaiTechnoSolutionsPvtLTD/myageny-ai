@@ -53,6 +53,9 @@ class ProductionInitiation extends Model
         'project_execution_status',
         'project_allocated_employee_user_ids',
         'initiated_by',
+        'content_calendar_sheet_url',
+        'content_calendar_approved',
+        'content_calendar_remarks',
     ];
 
     protected $casts = [
@@ -69,6 +72,7 @@ class ProductionInitiation extends Model
         'tl_employee_allocations' => 'array',
         'employee_allocated_at' => 'datetime',
         'project_allocated_employee_user_ids' => 'array',
+        'content_calendar_approved' => 'boolean',
     ];
 
     public function lead(): BelongsTo

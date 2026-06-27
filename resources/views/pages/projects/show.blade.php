@@ -88,6 +88,7 @@
 .tox-tinymce { border-radius:16px !important; border-color:#dbe1e8 !important; }
 .ps-flash { padding:12px 14px; border-radius:14px; font-size:13px; font-weight:700; }
 .ps-flash.success { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.ps-flash.error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
 .ps-allocate-list { display:grid; gap:12px; margin-top:16px; }
 .ps-allocate-item { display:flex; align-items:flex-start; gap:12px; padding:14px; border:1px solid #e5e7eb; border-radius:16px; background:#fff; }
 .ps-allocate-item input { margin-top:3px; }
@@ -182,6 +183,46 @@
     .ps-update-filters { align-items:stretch; }
     .ps-filter-group { min-width:100%; }
 }
+/* ── Content Calendar ─────────────────────────────────── */
+.cc-header { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+.cc-title-group { display:grid; gap:4px; }
+.cc-title { font-size:17px; font-weight:900; color:#0f172a; }
+.cc-subtitle { font-size:12px; color:#64748b; }
+.cc-sheet-form { background:linear-gradient(135deg,#f0fdf4 0%,#eff6ff 100%); border:1px solid #d1fae5; border-radius:20px; padding:20px; margin-bottom:22px; }
+.cc-sheet-form-title { font-size:13px; font-weight:800; color:#065f46; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.cc-sheet-input-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.cc-sheet-input { flex:1; min-width:220px; border:1px solid #a7f3d0; border-radius:12px; padding:10px 14px; font-size:13px; color:#0f172a; background:#fff; }
+.cc-sheet-input:focus { outline:none; border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.14); }
+.cc-sheet-btn { padding:10px 18px; border-radius:12px; border:none; background:linear-gradient(135deg,#059669,#10b981); color:#fff; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap; }
+.cc-sheet-btn:hover { background:linear-gradient(135deg,#047857,#059669); }
+.cc-sheet-hint { font-size:11px; color:#6b7280; margin-top:10px; line-height:1.6; }
+.cc-sync-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.cc-sync-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:#f0fdf4; border:1px solid #a7f3d0; font-size:11px; font-weight:700; color:#065f46; }
+.cc-sync-dot { width:7px; height:7px; border-radius:50%; background:#10b981; animation:cc-pulse 1.8s ease-in-out infinite; }
+@keyframes cc-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(1.3)} }
+.cc-refresh-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; color:#334155; font-size:12px; font-weight:700; cursor:pointer; }
+.cc-refresh-btn:hover { background:#f8fafc; }
+.cc-table-wrap { overflow-x:auto; border-radius:16px; border:1px solid #e5e7eb; box-shadow:0 8px 22px rgba(15,23,42,.05); }
+.cc-table { width:100%; border-collapse:collapse; font-size:13px; min-width:520px; }
+.cc-table thead tr { background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%); }
+.cc-table thead th { padding:13px 14px; text-align:left; font-size:11px; font-weight:800; color:#e0f2fe; letter-spacing:.07em; text-transform:uppercase; white-space:nowrap; border-right:1px solid rgba(255,255,255,.08); }
+.cc-table thead th:last-child { border-right:none; }
+.cc-table tbody tr { border-bottom:1px solid #f1f5f9; transition:background .12s; }
+.cc-table tbody tr:hover { background:#f8faff; }
+.cc-table tbody tr:nth-child(even) { background:#f9fafb; }
+.cc-table tbody tr:nth-child(even):hover { background:#f0f4ff; }
+.cc-table td { padding:11px 14px; color:#1e293b; vertical-align:top; border-right:1px solid #f1f5f9; line-height:1.55; }
+.cc-table td:last-child { border-right:none; }
+.cc-empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:52px 24px; text-align:center; }
+.cc-empty-icon { font-size:44px; opacity:.35; }
+.cc-empty-title { font-size:15px; font-weight:800; color:#374151; }
+.cc-empty-sub { font-size:13px; color:#6b7280; max-width:340px; line-height:1.6; }
+.cc-loading { display:flex; align-items:center; gap:10px; padding:30px 16px; color:#64748b; font-size:13px; }
+.cc-spinner { width:18px; height:18px; border:2px solid #e5e7eb; border-top-color:#2563eb; border-radius:50%; animation:cc-spin .7s linear infinite; }
+@keyframes cc-spin { to{transform:rotate(360deg)} }
+.cc-error { padding:18px 16px; border:1px solid #fca5a5; border-radius:14px; background:#fff5f5; color:#b91c1c; font-size:13px; line-height:1.7; }
+.cc-cell-link { color:#2563eb; font-weight:700; text-decoration:none; border-bottom:1px dashed #bfdbfe; transition:color .12s,border-color .12s; }
+.cc-cell-link:hover { color:#1d4ed8; border-bottom-color:#1d4ed8; }
 </style>
 @endpush
 
@@ -253,6 +294,10 @@
     $activeTab = $hasUpdateErrors
         ? 'updates'
         : ($hasScheduleErrors ? 'overview' : request('tab', 'overview'));
+    // Content Calendar: show only for Designing / Digital Marketing departments
+    $deptName = strtolower(trim((string) ($projectItem->department?->name ?? '')));
+    $isContentCalendarDept = in_array($deptName, ['designing', 'digital marketing'], true);
+    $contentCalendarSheetUrl = (string) ($projectItem->content_calendar_sheet_url ?? '');
 @endphp
 <div class="ps-page">
     <div class="ps-topbar">
@@ -267,7 +312,10 @@
 
     <div class="ps-body">
         @if(session('success'))
-            <div class="ps-flash success">{{ session('success') }}</div>
+            <div class="ps-flash success" style="margin-bottom: 20px;">{{ session('success') }}</div>
+        @endif
+        @if(session('error'))
+            <div class="ps-flash error" style="margin-bottom: 20px;">{{ session('error') }}</div>
         @endif
 
         <div class="ps-tabbar" role="tablist" aria-label="Project details sections">
@@ -276,6 +324,11 @@
             <button type="button" class="ps-tab-btn {{ $activeTab === 'allocation' ? 'is-active' : '' }}" data-tab-target="allocation">{{ $isTlScopedView ? 'Team Allocation' : 'TL Allocation' }}</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'updates' ? 'is-active' : '' }}" data-tab-target="updates">Production Update</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'timeline' ? 'is-active' : '' }}" data-tab-target="timeline">Timeline</button>
+            @if($isContentCalendarDept)
+            <button type="button" class="ps-tab-btn {{ $activeTab === 'content_calendar' ? 'is-active' : '' }}" data-tab-target="content_calendar" id="cc-tab-btn">
+                <i class="bi bi-calendar2-week" style="margin-right:5px;"></i>Content Calendar
+            </button>
+            @endif
         </div>
 
         <section class="ps-tab-panel {{ $activeTab === 'overview' ? 'is-active' : '' }}" data-tab-panel="overview">
@@ -847,6 +900,121 @@
                 </div>
             </section>
         </section>
+
+        @if($isContentCalendarDept)
+        <section class="ps-tab-panel {{ $activeTab === 'content_calendar' ? 'is-active' : '' }}" data-tab-panel="content_calendar" id="content-calendar-panel">
+            <section class="ps-card">
+                <div class="ps-card-head" style="background:linear-gradient(135deg,#f0fdf4 0%,#eff6ff 100%);">
+                    <div>
+                        <div class="ps-card-title" style="display:flex;align-items:center;gap:8px;">
+                            <i class="bi bi-calendar2-week" style="color:#059669;font-size:18px;"></i>
+                            Content Calendar
+                        </div>
+                        <div class="ps-card-sub">Google Sheet integrate aana content calendar — real-time auto-refresh with live data sync.</div>
+                    </div>
+                    <div id="cc-sync-status" style="display:none;">
+                        <div class="cc-sync-badge">
+                            <span class="cc-sync-dot"></span>
+                            <span id="cc-sync-text">Live</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ps-card-body">
+                    {{-- Remarks Display / Approval status banner --}}
+                    @if($projectItem->content_calendar_approved)
+                        <div class="cc-approval-banner" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 12px;">
+                            <div style="background-color: #dcfce7; color: #166534; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <i class="bi bi-patch-check-fill" style="font-size: 20px;"></i>
+                            </div>
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight: 700; color: #166534; font-size: 15px; margin-bottom: 4px;">Content Calendar Approved</div>
+                                <div style="color: #1e293b; font-size: 14px; line-height: 1.5;">
+                                    <strong>Remarks:</strong> {{ $projectItem->content_calendar_remarks }}
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Approve Button (only for designing department) --}}
+                    @if(!$projectItem->content_calendar_approved && $contentCalendarSheetUrl && auth()->user()?->belongsToDesigningDepartment())
+                        <div style="margin-bottom: 20px; display: flex; justify-content: flex-end;">
+                            <button type="button" class="ps-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; font-weight: 600; padding: 10px 20px; border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;" id="cc-approve-btn">
+                                <i class="bi bi-patch-check"></i> Approve Content Calendar
+                            </button>
+                        </div>
+                    @endif
+
+                    {{-- Sheet URL Configure Form --}}
+                    <div class="cc-sheet-form">
+                        <div class="cc-sheet-form-title">
+                            <i class="bi bi-link-45deg" style="font-size:16px;"></i>
+                            Google Sheet URL Configure
+                        </div>
+                        <form method="POST" action="{{ route('projects.content-calendar-sheet.update', $projectItem) }}" class="" id="cc-sheet-url-form">
+                            @csrf
+                            @method('PATCH')
+                            <div class="cc-sheet-input-row">
+                                <input
+                                    type="url"
+                                    name="content_calendar_sheet_url"
+                                    id="cc-sheet-url-input"
+                                    class="cc-sheet-input"
+                                    placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit..."
+                                    value="{{ $contentCalendarSheetUrl }}"
+                                    @if($projectItem->content_calendar_approved) disabled @endif
+                                >
+                                @if(!$projectItem->content_calendar_approved)
+                                    <button type="submit" class="cc-sheet-btn">
+                                        <i class="bi bi-save"></i> Save URL
+                                    </button>
+                                @else
+                                    <button type="button" class="cc-sheet-btn disabled" style="background: #cbd5e1; cursor: not-allowed; border-color: #cbd5e1; color: #64748b;" disabled>
+                                        <i class="bi bi-lock-fill"></i> Locked
+                                    </button>
+                                @endif
+                                @if($contentCalendarSheetUrl)
+                                    <a href="{{ $contentCalendarSheetUrl }}" target="_blank" class="ps-btn" style="gap:6px;">
+                                        <i class="bi bi-box-arrow-up-right"></i> Open Sheet
+                                    </a>
+                                @endif
+                            </div>
+                            @error('content_calendar_sheet_url')
+                                <div class="ps-allocate-note" style="color:#b91c1c;margin-top:8px;">{{ $message }}</div>
+                            @enderror
+                        </form>
+
+                    </div>
+
+                    {{-- Content Calendar Table --}}
+                    @if($contentCalendarSheetUrl)
+                        <div class="cc-sync-bar">
+                            <div class="cc-sync-badge" id="cc-live-badge">
+                                <span class="cc-sync-dot"></span>
+                                <span id="cc-last-synced">Connecting...</span>
+                            </div>
+                            <button type="button" class="cc-refresh-btn" id="cc-manual-refresh" onclick="ccFetchSheet()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh Now
+                            </button>
+                        </div>
+                        <div id="cc-table-area">
+                            <div class="cc-loading" id="cc-loading">
+                                <div class="cc-spinner"></div>
+                                <span>Loading Content Calendar data from Google Sheet...</span>
+                            </div>
+                        </div>
+                    @else
+                        <div class="cc-empty-state">
+                            <div class="cc-empty-icon">📋</div>
+                            <div class="cc-empty-title">Content Calendar Not Configured</div>
+                            <div class="cc-empty-sub">Mela irukka form-la Google Sheet URL paste panni Save panunga. Sheet data automatically table-a display aagum.</div>
+                        </div>
+                    @endif
+
+                </div>
+            </section>
+        </section>
+        @endif
+
     </div>
 </div>
 
@@ -868,6 +1036,47 @@
             'showProjectSelector' => false,
         ])
     </div>
+</div>
+
+{{-- Content Calendar Approval Modal --}}
+<div class="ps-modal-overlay" id="cc-approve-modal-overlay"></div>
+<div class="ps-modal" id="cc-approve-modal" style="max-width: 500px;">
+    <div class="ps-modal-head">
+        <div>
+            <div class="ps-card-title" style="color: #059669; display: flex; align-items: center; gap: 8px;">
+                <i class="bi bi-patch-check-fill"></i> Approve Content Calendar
+            </div>
+            <div class="ps-card-sub">Please enter your mandatory remarks to approve this calendar.</div>
+        </div>
+        <button type="button" class="ps-modal-close" id="cc-close-approve-modal" aria-label="Close modal">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <form method="POST" action="{{ route('projects.content-calendar.approve', $projectItem) }}" id="cc-approve-form">
+        @csrf
+        @method('PATCH')
+        <div class="ps-modal-body">
+            <div class="ps-input-group" style="margin-bottom: 16px;">
+                <label for="cc-remarks-input" class="ps-label" style="font-weight: 600; margin-bottom: 6px; display: block; color: #1e293b;">
+                    Remarks <span style="color: #ef4444;">*</span>
+                </label>
+                <textarea
+                    name="remarks"
+                    id="cc-remarks-input"
+                    class="ps-textarea"
+                    rows="4"
+                    placeholder="Enter approval remarks (required)..."
+                    style="width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font-size: 14px; resize: vertical;"
+                    required
+                ></textarea>
+                <div id="cc-remarks-error" style="color: #ef4444; font-size: 13px; margin-top: 4px; display: none;">Remarks are required to approve.</div>
+            </div>
+        </div>
+        <div class="ps-modal-foot" style="display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #f1f5f9; background-color: #f8fafc; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+            <button type="button" class="ps-btn text" id="cc-cancel-approve-btn" style="border: 1px solid #cbd5e1; color: #475569; background: white;">Cancel</button>
+            <button type="submit" class="ps-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; font-weight: 600;">Confirm & Approve</button>
+        </div>
+    </form>
 </div>
 @endsection
 
@@ -973,6 +1182,255 @@ document.addEventListener('DOMContentLoaded', function () {
             setUpdateModalState(false);
         }
     });
+
+    // Content Calendar Approve Modal Logic
+    const ccApproveBtn = document.getElementById('cc-approve-btn');
+    const ccApproveModal = document.getElementById('cc-approve-modal');
+    const ccApproveOverlay = document.getElementById('cc-approve-modal-overlay');
+    const ccCancelBtn = document.getElementById('cc-cancel-approve-btn');
+    const ccCloseBtn = document.getElementById('cc-close-approve-modal');
+    const ccApproveForm = document.getElementById('cc-approve-form');
+    const ccRemarksInput = document.getElementById('cc-remarks-input');
+    const ccRemarksError = document.getElementById('cc-remarks-error');
+
+    function setCcApproveModalState(isOpen) {
+        if (!ccApproveModal || !ccApproveOverlay) return;
+        ccApproveModal.classList.toggle('is-open', isOpen);
+        ccApproveOverlay.classList.toggle('is-open', isOpen);
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+        if (isOpen) {
+            ccRemarksInput.value = '';
+            ccRemarksError.style.display = 'none';
+            ccRemarksInput.focus();
+        }
+    }
+
+    if (ccApproveBtn) {
+        ccApproveBtn.addEventListener('click', function () {
+            setCcApproveModalState(true);
+        });
+    }
+
+    if (ccCancelBtn) {
+        ccCancelBtn.addEventListener('click', function () {
+            setCcApproveModalState(false);
+        });
+    }
+
+    if (ccCloseBtn) {
+        ccCloseBtn.addEventListener('click', function () {
+            setCcApproveModalState(false);
+        });
+    }
+
+    if (ccApproveOverlay) {
+        ccApproveOverlay.addEventListener('click', function () {
+            setCcApproveModalState(false);
+        });
+    }
+
+    if (ccApproveForm) {
+        ccApproveForm.addEventListener('submit', function (e) {
+            if (!ccRemarksInput.value.trim()) {
+                e.preventDefault();
+                ccRemarksError.style.display = 'block';
+            } else {
+                ccRemarksError.style.display = 'none';
+            }
+        });
+    }
+
+    // Also close CC Approve modal on Escape
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            setCcApproveModalState(false);
+        }
+    });
 });
 </script>
+
+@if($isContentCalendarDept && $contentCalendarSheetUrl)
+<script>
+(function () {
+    'use strict';
+
+    // ── Config ──────────────────────────────────────────────────────
+    // Laravel endpoint — no CORS, no third-party proxy needed
+    var FETCH_URL    = @json(route('projects.content-calendar-data', $projectItem));
+    var REFRESH_SECS = 30;
+    var ccTimer      = null;
+    var ccCountdown  = REFRESH_SECS;
+
+    // ── DOM refs ─────────────────────────────────────────────────────
+    var tableArea  = document.getElementById('cc-table-area');
+    var lastSynced = document.getElementById('cc-last-synced');
+    var liveBadge  = document.getElementById('cc-live-badge');
+
+    if (!tableArea) { return; }
+
+    // ── CSV parser (handles quoted fields & embedded commas) ─────────
+    function parseCsv(text) {
+        var rows  = [];
+        var lines = text.split(/\r?\n/);
+        lines.forEach(function (line) {
+            if (line.trim() === '') { return; }
+            var row = [], inQuote = false, cell = '';
+            for (var i = 0; i < line.length; i++) {
+                var ch = line[i];
+                if (ch === '"') {
+                    if (inQuote && line[i + 1] === '"') { cell += '"'; i++; }
+                    else { inQuote = !inQuote; }
+                } else if (ch === ',' && !inQuote) {
+                    row.push(cell.trim()); cell = '';
+                } else {
+                    cell += ch;
+                }
+            }
+            row.push(cell.trim());
+            rows.push(row);
+        });
+        return rows;
+    }
+
+    // ── Render one cell: auto-hyperlink URLs ─────────────────────────
+    function renderCell(val) {
+        if (!val || val.trim() === '') {
+            return '<span style="color:#cbd5e1;">—</span>';
+        }
+        var str = String(val);
+        if (/^https?:\/\//i.test(str)) {
+            var display = str.length > 50 ? str.substring(0, 47) + '…' : str;
+            return '<a href="' + escAttr(str) + '" target="_blank" rel="noopener noreferrer" class="cc-cell-link">'
+                + escHtml(display) + '</a>';
+        }
+        return escHtml(str);
+    }
+
+    // ── Render parsed rows as a styled table ─────────────────────────
+    function renderTable(rows) {
+        if (!rows || rows.length === 0) {
+            tableArea.innerHTML = '<div class="cc-empty-state">'
+                + '<div class="cc-empty-icon">📭</div>'
+                + '<div class="cc-empty-title">Sheet is Empty</div>'
+                + '<div class="cc-empty-sub">Google Sheet-la data illai. Sheet-la data add pannunga — 30 seconds-la auto-refresh aagum.</div>'
+                + '</div>';
+            return;
+        }
+
+        var headerRow = rows[0];
+        var dataRows  = rows.slice(1).filter(function (r) {
+            return r.some(function (c) { return c && c.trim() !== ''; });
+        });
+
+        var countBadge = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+            + '<span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">📊 ' + headerRow.length + ' Columns</span>'
+            + '<span style="width:4px;height:4px;border-radius:50%;background:#d1d5db;display:inline-block;"></span>'
+            + '<span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">' + dataRows.length + ' Rows</span>'
+            + '</div>';
+
+        var html = countBadge + '<div class="cc-table-wrap"><table class="cc-table"><thead><tr>';
+        headerRow.forEach(function (h, i) {
+            html += '<th><span style="display:flex;align-items:center;gap:5px;">'
+                + '<span style="opacity:.4;font-size:10px;">' + (i + 1) + '</span>'
+                + escHtml(h || '–')
+                + '</span></th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        if (dataRows.length === 0) {
+            html += '<tr><td colspan="' + headerRow.length + '" style="text-align:center;color:#94a3b8;padding:32px;font-size:13px;">No data rows found</td></tr>';
+        } else {
+            dataRows.forEach(function (row) {
+                html += '<tr>';
+                headerRow.forEach(function (_, ci) {
+                    html += '<td>' + renderCell(row[ci] || '') + '</td>';
+                });
+                html += '</tr>';
+            });
+        }
+
+        html += '</tbody></table></div>';
+        tableArea.innerHTML = html;
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function escAttr(s) {
+        return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // ── Core fetch — calls our own Laravel endpoint (no CORS) ────────
+    function ccFetchSheet() {
+        if (lastSynced) { lastSynced.textContent = 'Syncing…'; }
+        if (liveBadge)  { liveBadge.style.borderColor = '#fde68a'; }
+
+        fetch(FETCH_URL, {
+            method:      'GET',
+            credentials: 'same-origin',
+            headers:     { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.error) { throw new Error(data.error); }
+            var rows = parseCsv(data.csv);
+            renderTable(rows);
+            var now = new Date();
+            ccCountdown = REFRESH_SECS;
+            if (lastSynced) {
+                lastSynced.textContent = 'Synced ' + now.toLocaleTimeString();
+            }
+            if (liveBadge) { liveBadge.style.borderColor = '#a7f3d0'; }
+            scheduleCountdown();
+        })
+        .catch(function (err) {
+            tableArea.innerHTML = '<div class="cc-error">'
+                + '<strong>⚠ ' + escHtml(err.message) + '</strong><br>'
+                + 'Sheet URL confirm pannunga — "Published to web" or "Anyone with link → Viewer" permission venum.<br><br>'
+                + '<button onclick="ccFetchSheet()" style="padding:7px 14px;border-radius:8px;border:1px solid #fca5a5;background:#fff;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;">↺ Retry</button>'
+                + '</div>';
+            if (lastSynced) { lastSynced.textContent = 'Sync failed'; }
+            if (liveBadge)  { liveBadge.style.borderColor = '#fca5a5'; }
+            if (ccTimer) { clearInterval(ccTimer); }
+            ccCountdown = REFRESH_SECS;
+            scheduleCountdown();
+        });
+    }
+
+    // ── Countdown ticker ─────────────────────────────────────────────
+    function scheduleCountdown() {
+        if (ccTimer) { clearInterval(ccTimer); }
+        ccTimer = setInterval(function () {
+            ccCountdown--;
+            if (lastSynced && lastSynced.textContent.indexOf('Synced') !== -1) {
+                lastSynced.textContent = lastSynced.textContent.replace(/ · Next.*/, '')
+                    + ' · Next in ' + ccCountdown + 's';
+            }
+            if (ccCountdown <= 0) {
+                clearInterval(ccTimer);
+                ccFetchSheet();
+            }
+        }, 1000);
+    }
+
+    // ── Tab activation wiring ─────────────────────────────────────────
+    var ccPanel  = document.getElementById('content-calendar-panel');
+    var ccTabBtn = document.getElementById('cc-tab-btn');
+
+    if (ccPanel && ccPanel.classList.contains('is-active')) {
+        ccFetchSheet();
+    }
+
+    if (ccTabBtn) {
+        ccTabBtn.addEventListener('click', function () {
+            if (ccTimer) { clearInterval(ccTimer); }
+            ccCountdown = REFRESH_SECS;
+            setTimeout(ccFetchSheet, 100);
+        });
+    }
+
+    window.ccFetchSheet = ccFetchSheet;
+})();
+</script>
+@endif
 @endpush
