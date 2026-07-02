@@ -174,6 +174,9 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.my-accounts.show');
         Route::post('/projects/dashboard/update-planned-task', [ProjectController::class, 'updatePlannedTask'])
             ->name('projects.dashboard.update-planned-task');
+        Route::post('/projects/dashboard/allocate-task', [ProjectController::class, 'allocateDailyTask'])
+            ->name('projects.dashboard.allocate-task');
+
         Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
             ->name('projects.timesheets');
         Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])

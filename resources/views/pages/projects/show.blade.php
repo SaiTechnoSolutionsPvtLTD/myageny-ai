@@ -1006,7 +1006,7 @@
                         <div class="cc-empty-state">
                             <div class="cc-empty-icon">📋</div>
                             <div class="cc-empty-title">Content Calendar Not Configured</div>
-                            <div class="cc-empty-sub">Mela irukka form-la Google Sheet URL paste panni Save panunga. Sheet data automatically table-a display aagum.</div>
+                            {{--  <div class="cc-empty-sub">Mela irukka form-la Google Sheet URL paste panni Save panunga. Sheet data automatically table-a display aagum.</div>  --}}
                         </div>
                     @endif
 

@@ -136,7 +136,8 @@
                 </div>
                 <div class="pjd-stat-footer">
                     Comp: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['completed_posters'] }}</span> | 
-                    Pend: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['pending_posters'] }}</span>
+                    Pend: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['pending_posters'] }}</span> |
+                    Overdue: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800; color: #fee2e2;">{{ $stats['overdue_posters'] }}</span>
                 </div>
             </div>
 
@@ -151,7 +152,8 @@
                 </div>
                 <div class="pjd-stat-footer">
                     Comp: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['completed_videos'] }}</span> | 
-                    Pend: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['pending_videos'] }}</span>
+                    Pend: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800;">{{ $stats['pending_videos'] }}</span> |
+                    Overdue: <span style="background: rgba(255, 255, 255, 0.22); padding: 2px 6px; border-radius: 4px; font-weight: 800; color: #fee2e2;">{{ $stats['overdue_videos'] }}</span>
                 </div>
             </div>
         </section>
