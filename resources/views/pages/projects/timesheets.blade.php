@@ -157,6 +157,12 @@
                                     <th>Project</th>
                                     <th>Delivery Date</th>
                                     <th>Status</th>
+                                    @if(auth()->user()?->belongsToDesigningDepartment())
+                                        <th>Committed P/V</th>
+                                        <th>Waiting P/V</th>
+                                    @endif
+                                    <th>Posters</th>
+                                    <th>Videos</th>
                                     <th>Day Closing Update</th>
                                     <th>Submitted</th>
                                 </tr>
@@ -176,6 +182,12 @@
                                         </td>
                                         <td>{{ optional($timesheet->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
                                         <td><span class="pts-status {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                        @if(auth()->user()?->belongsToDesigningDepartment())
+                                            <td style="font-weight:600;">P: {{ (int) $timesheet->committed_posters }} / V: {{ (int) $timesheet->committed_videos }}</td>
+                                            <td style="font-weight:600; color:#ea580c;">P: {{ (int) $timesheet->waiting_posters }} / V: {{ (int) $timesheet->waiting_videos }}</td>
+                                        @endif
+                                        <td>{{ (int) $timesheet->poster_count }}</td>
+                                        <td>{{ (int) $timesheet->video_count }}</td>
                                         <td><div class="pts-update-text">{{ $timesheet->day_closing_update }}</div></td>
                                         <td>
                                             {{ optional($timesheet->created_at)->format('d M Y h:i A') ?: 'Not available' }}
@@ -244,6 +256,56 @@
                     <label class="pts-label">Project Delivery Date</label>
                     <input type="date" class="pts-input" data-project-delivery-date readonly>
                 </div>
+
+                <div>
+                    <label class="pts-label">Poster Completed Count</label>
+                    <input type="number" name="poster_count" value="{{ old('poster_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('poster_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                <div>
+                    <label class="pts-label">Video Completed Count</label>
+                    <input type="number" name="video_count" value="{{ old('video_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('video_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                @if(auth()->user()?->belongsToDesigningDepartment())
+                    <div>
+                        <label class="pts-label">Committed Posters Today</label>
+                        <input type="number" name="committed_posters" value="{{ old('committed_posters', 0) }}" class="pts-input" min="0" step="1">
+                        @error('committed_posters')
+                            <div class="pts-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="pts-label">Committed Videos Today</label>
+                        <input type="number" name="committed_videos" value="{{ old('committed_videos', 0) }}" class="pts-input" min="0" step="1">
+                        @error('committed_videos')
+                            <div class="pts-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="pts-label">Waiting Approval Posters</label>
+                        <input type="number" name="waiting_posters" value="{{ old('waiting_posters', 0) }}" class="pts-input" min="0" step="1">
+                        @error('waiting_posters')
+                            <div class="pts-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="pts-label">Waiting Approval Videos</label>
+                        <input type="number" name="waiting_videos" value="{{ old('waiting_videos', 0) }}" class="pts-input" min="0" step="1">
+                        @error('waiting_videos')
+                            <div class="pts-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+                @endif
 
                 <div class="pts-form-full">
                     <label class="pts-label">Day Closing Update</label>

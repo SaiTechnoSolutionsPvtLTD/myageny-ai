@@ -13,6 +13,7 @@ use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
 use App\Models\LeadReminder;
 use App\Models\LeadStatus;
+use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Services\DataVisibilityService;
@@ -108,13 +109,12 @@ class LeadShowController extends Controller
 
      public function storeProduct(Request $request, Lead $lead)
     {
-        dd($request);
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
 
 
         $data = $request->validate([
-            'product_name'    => ['required', 'string', 'max:150'],
+            'product_id'      => ['required', 'integer', 'exists:products,id'],
             'product_status'  => ['required', 'in:new,hot,warm,cold,converted'],
             'description'     => ['nullable', 'string', 'max:500'],
             'unit_price'      => ['required', 'numeric', 'min:0'],
@@ -122,7 +122,9 @@ class LeadShowController extends Controller
             'discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        $catalogProduct = Product::with('category')->findOrFail($data['product_id']);
         $data['lead_id']          = $lead->id;
+        $data['product_name']     = $this->leadProductName($catalogProduct);
         $data['discount_percent'] = $data['discount_percent'] ?? 0;
         $data['payment_status']   = 'pending';
         $data['company_id']       = $lead->company_id;
@@ -230,15 +232,28 @@ class LeadShowController extends Controller
         abort_if($product->lead_id !== $lead->id, 403);
 
         $data = $request->validate([
-            'amount_paid'  => ['required', 'numeric', 'min:0'],
-            'payment_mode' => ['nullable', 'string'],
-            'payment_date' => ['nullable', 'date'],
-            'payment_notes'=> ['nullable', 'string', 'max:500'],
+            'product_id'        => ['required', 'integer', 'exists:products,id'],
+            'product_status'    => ['required', 'in:new,hot,warm,cold,converted'],
+            'description'       => ['nullable', 'string', 'max:500'],
+            'unit_price'        => ['required', 'numeric', 'min:0'],
+            'quantity'          => ['required', 'integer', 'min:1'],
+            'discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+
+        $catalogProduct = Product::with('category')->findOrFail($data['product_id']);
+        $data['product_name'] = $this->leadProductName($catalogProduct);
+        $data['discount_percent'] = $data['discount_percent'] ?? 0;
+        $data['lead_status_id'] = null;
 
         $product->update($data);
 
-        return back()->with('success', 'Payment updated.');
+        return back()->with('success', 'Product updated.');
+    }
+
+    private function leadProductName(Product $product): string
+    {
+        return $product->product_name
+            ?: trim(($product->category?->name ? $product->category->name . ' | ' : '') . $product->package_name);
     }
 
 

@@ -78,6 +78,12 @@
                         @error('number_of_accounts')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
+                    <div class="cform-group">
+                        <label class="cform-label">Expiry Date</label>
+                        <input type="date" name="expiry_date" class="cform-input" value="{{ old('expiry_date') }}" required>
+                        @error('expiry_date')<div class="cform-error">{{ $message }}</div>@enderror
+                    </div>
+
                     <div class="cform-group full" style="margin-top:8px;">
                         <label class="cform-label" style="font-size:14px;color:#121212;">Company Super Admin</label>
                         <div style="font-size:12px;color:#9e9e9e;">This user will manage users, roles, permissions, and CRM data only for this company.</div>

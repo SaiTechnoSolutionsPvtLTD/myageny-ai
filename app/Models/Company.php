@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class Company extends Model
 {
@@ -16,6 +17,7 @@ class Company extends Model
         'mobile_number',
         'address',
         'number_of_accounts',
+        'expiry_date',
         'company_status',
         'facebook_client_id',
         'facebook_client_secret',
@@ -26,6 +28,7 @@ class Company extends Model
     {
         return [
             'number_of_accounts' => 'integer',
+            'expiry_date' => 'date',
         ];
     }
 
@@ -52,5 +55,45 @@ class Company extends Model
     public function getUserLimitAttribute(): int
     {
         return (int) $this->number_of_accounts;
+    }
+
+    public function getExpiryStatusAttribute(): string
+    {
+        if (! $this->expiry_date) {
+            return 'No expiry date';
+        }
+
+        return $this->isExpired() ? 'Expired' : 'Active';
+    }
+
+    public function syncExpiryState(bool $force = false): bool
+    {
+        if (! $this->expiry_date) {
+            return false;
+        }
+
+        if (! $force && ! $this->expiry_date->endOfDay()->isPast()) {
+            return false;
+        }
+
+        DB::transaction(function () {
+            $this->forceFill(['company_status' => 'inactive'])->saveQuietly();
+
+            $now = now();
+
+            $this->users()
+                ->update([
+                    'is_active' => false,
+                    'user_status' => 'inactive',
+                    'updated_at' => $now,
+                ]);
+        });
+
+        return true;
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->expiry_date?->endOfDay()->isPast() ?? false;
     }
 }

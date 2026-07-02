@@ -212,10 +212,10 @@
                                         'pending' => 'pending',
                                         default => optional($item->created_at)->lt(now()->subDays(3)) ? 'overdue' : 'new',
                                     };
-                                    $isDevelopmentPending = in_array($selectedBucket, ['new', 'overdue', 'pending'], true)
-                                        && strtolower(trim((string) $item->department?->name)) === 'development';
-                                    $canAllocateItem = $isDevelopmentPending && ($isTlScopedView || auth()->user()?->hasAdminLikeRole());
-                                    $canReviewItem = $isDevelopmentPending
+                                    $isOvpPending = in_array($selectedBucket, ['new', 'overdue', 'pending'], true);
+
+                                    $canAllocateItem = $isOvpPending && ($isTlScopedView || auth()->user()?->hasAdminLikeRole());
+                                    $canReviewItem = $isOvpPending
                                         && (bool) $item->ovpAllocatedTo
                                         && (($isExecutiveScopedView && (int) $item->ovp_allocated_to === (int) auth()->id()) || $canAllocateItem);
                                     $statusDate = in_array($statusBucket, ['approved', 'reject'], true)
@@ -320,7 +320,7 @@
                                                 </div>
 
                                                 @if($canAllocateItem && $executiveUsers->isEmpty())
-                                                    <div class="ovp-inline-note">Mapped OVP executives available illa. User mapping-la TL keezha executive assign pannunga.</div>
+                                                    <div class="ovp-inline-note">Mapped OVP executives Not Available.</div>
                                                 @endif
                                             </div>
                                         @elseif($item->reviewedBy)

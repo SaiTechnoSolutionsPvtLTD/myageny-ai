@@ -67,6 +67,8 @@
 .pp-act-btn{display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;transition:all .15s;border:1px solid transparent}
 .pp-btn-pay{background:#fff0e6;color:#fe5f04;border-color:#fed7aa}
 .pp-btn-pay:hover{background:#fed7aa}
+.pp-btn-edit{background:#f0fdf4;color:#15803d;border-color:#bbf7d0}
+.pp-btn-edit:hover{background:#dcfce7}
 .pp-btn-hist{background:#eef2ff;color:#4f46e5;border-color:#c7d2fe}
 .pp-btn-hist:hover{background:#c7d2fe}
 .pp-btn-del{background:#fef2f2;color:#dc2626;border-color:#fecaca}
@@ -278,6 +280,12 @@
             </button>
 
             <button type="button"
+                    class="pp-act-btn pp-btn-edit"
+                    onclick="ppShowEditProduct({{ $prod->id }})">
+                Edit
+            </button>
+
+            <button type="button"
                     class="pp-act-btn pp-btn-hist"
                     onclick="ppShowHistory({{ $prod->id }})">
                 <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><circle cx="12" cy="12" r="10"/></svg>
@@ -317,7 +325,7 @@
                     <div class="ppf-rel">
                         <svg class="ppf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8"/></svg>
 
-                        <select class="form-select select2" name="product_name" id="pp-product-select">
+                        <select class="form-select select2" name="product_id" id="pp-product-select" required>
                             @php
                                 $allProducts = App\Models\Product::where('status', 'active')->get();
                             @endphp
@@ -405,6 +413,80 @@
 
 
 {{-- ═══════════════ MODAL 2: ADD PAYMENT ═══════════════ --}}
+<div class="pp-overlay" id="pp-modal-edit-product">
+    <div class="pp-modal-box">
+        <div class="pp-mhd">
+            <div class="pp-mtitle">Edit Product — <span id="pp-edit-name" style="color:#15803d"></span></div>
+            <button type="button" class="pp-mclose" onclick="ppHideModal('pp-modal-edit-product')">✕</button>
+        </div>
+        <form id="pp-edit-form" method="POST" action="">
+            @csrf
+            @method('PUT')
+            <div class="pp-mbody">
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Product Name <span class="ppf-req">*</span></label>
+                    <select class="form-select select2" name="product_id" id="pp-edit-product-select" required>
+                        <option value="">-- Choose Products --</option>
+                        @foreach($allProducts as $allProduct)
+                            @php
+                                $discountPercent = $allProduct->discount_type === 'percentage'
+                                    ? (float) $allProduct->discount_value
+                                    : ((float) $allProduct->base_price > 0
+                                        ? round(((float) $allProduct->discount_value / (float) $allProduct->base_price) * 100, 2)
+                                        : 0);
+                            @endphp
+                            <option
+                                value="{{ $allProduct->id }}"
+                                data-description="{{ $allProduct->description ?? '' }}"
+                                data-unit-price="{{ (float) ($allProduct->final_price ?? $allProduct->base_price ?? 0) }}"
+                                data-discount-percent="{{ $discountPercent }}"
+                            >{{ $allProduct->category?->name }} | {{ $allProduct->package_name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Description</label>
+                    <textarea name="description" id="pp-edit-description" class="ppf-ta" placeholder="Optional details…" rows="2"></textarea>
+                </div>
+
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Product Status <span class="ppf-req">*</span></label>
+                    <select name="product_status" id="pp-edit-status" class="ppf-inp" required>
+                        @foreach(\App\Models\LeadProduct::PRODUCT_STATUSES as $sk => $sl)
+                            <option value="{{ $sk }}">{{ $sl }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="ppf-r3" style="margin-bottom:14px">
+                    <div class="ppf-grp" style="margin-bottom:0">
+                        <label class="ppf-lbl">Unit Price ₹ <span class="ppf-req">*</span></label>
+                        <input type="number" name="unit_price" id="pp-edit-price" class="ppf-inp ni" step="0.01" min="0" required oninput="ppEditCalc()">
+                    </div>
+                    <div class="ppf-grp" style="margin-bottom:0">
+                        <label class="ppf-lbl">Quantity <span class="ppf-req">*</span></label>
+                        <input type="number" name="quantity" id="pp-edit-qty" class="ppf-inp ni" min="1" required oninput="ppEditCalc()">
+                    </div>
+                    <div class="ppf-grp" style="margin-bottom:0">
+                        <label class="ppf-lbl">Discount %</label>
+                        <input type="number" name="discount_percent" id="pp-edit-disc" class="ppf-inp ni" min="0" max="100" oninput="ppEditCalc()">
+                    </div>
+                </div>
+
+                <div class="ppf-total-box">
+                    <span class="ppf-total-lbl">Computed Total</span>
+                    <span class="ppf-total-val" id="pp-edit-total-preview">₹0.00</span>
+                </div>
+            </div>
+            <div class="pp-mfoot">
+                <button type="submit" class="ppf-btn ppf-btn-green">Save Changes</button>
+                <button type="button" class="ppf-btn ppf-btn-sec" onclick="ppHideModal('pp-modal-edit-product')">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="pp-overlay" id="pp-modal-payment">
     <div class="pp-modal-box">
         <div class="pp-mhd">
@@ -509,10 +591,17 @@
     ppData[{{ $prod->id }}] = {
         id       : {{ $prod->id }},
         name     : {!! json_encode($prod->product_name) !!},
+        productId: {{ (int) $prod->product_id }},
+        description: {!! json_encode($prod->description ?? '') !!},
+        unitPrice: {{ (float) $prod->unit_price }},
+        quantity : {{ (int) $prod->quantity }},
+        discountPercent: {{ (float) $prod->discount_percent }},
+        status   : {!! json_encode($prod->product_status) !!},
         total    : {{ (float) $prod->total_price }},
         paid     : {{ (float) $prod->total_paid }},
         pending  : {{ (float) $prod->amount_pending }},
         progress : {{ (int)   $prod->payment_progress }},
+        updateUrl: {!! json_encode(route('leads.products.update', [$lead, $prod])) !!},
         payUrl   : {!! json_encode(route('leads.products.payments.store', [$lead, $prod])) !!},
         payments : [
             @foreach($prod->payments as $pmt)
@@ -548,7 +637,7 @@
     }
 
     /* Close on backdrop click */
-    ['pp-modal-add-product','pp-modal-payment','pp-modal-history'].forEach(function (id) {
+    ['pp-modal-add-product','pp-modal-edit-product','pp-modal-payment','pp-modal-history'].forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
         el.addEventListener('click', function (e) { if (e.target === el) ppHideModal(id); });
@@ -557,7 +646,7 @@
     /* Close on Escape */
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            ['pp-modal-add-product','pp-modal-payment','pp-modal-history'].forEach(ppHideModal);
+            ['pp-modal-add-product','pp-modal-edit-product','pp-modal-payment','pp-modal-history'].forEach(ppHideModal);
         }
     });
 
@@ -593,6 +682,15 @@
     };
 
     /* ── 4. Payment mode tile picker ────────────────────────────── */
+    window.ppEditCalc = function () {
+        var price = parseFloat(document.getElementById('pp-edit-price').value)  || 0;
+        var qty   = parseFloat(document.getElementById('pp-edit-qty').value)    || 1;
+        var disc  = parseFloat(document.getElementById('pp-edit-disc').value)   || 0;
+        var total = price * qty * (1 - disc / 100);
+        var el    = document.getElementById('pp-edit-total-preview');
+        if (el) el.textContent = '₹' + total.toFixed(2);
+    };
+
     function ppApplySelectedProduct() {
         var select = document.getElementById('pp-product-select');
         if (!select) return;
@@ -627,6 +725,50 @@
     if (ppProductSelect) {
         ppProductSelect.addEventListener('change', ppApplySelectedProduct);
     }
+
+    function ppApplySelectedEditProduct() {
+        var select = document.getElementById('pp-edit-product-select');
+        if (!select) return;
+
+        var option = select.options[select.selectedIndex];
+        var priceInput = document.getElementById('pp-edit-price');
+        var discInput = document.getElementById('pp-edit-disc');
+        var descInput = document.getElementById('pp-edit-description');
+
+        if (!option || !option.value) return;
+
+        if (priceInput) priceInput.value = parseFloat(option.dataset.unitPrice || 0).toFixed(2);
+        if (discInput) discInput.value = parseFloat(option.dataset.discountPercent || 0).toFixed(2);
+        if (descInput) descInput.value = option.dataset.description || '';
+
+        window.ppEditCalc();
+    }
+
+    var ppEditProductSelect = document.getElementById('pp-edit-product-select');
+    if (ppEditProductSelect) {
+        ppEditProductSelect.addEventListener('change', ppApplySelectedEditProduct);
+    }
+
+    window.ppShowEditProduct = function (prodId) {
+        var d = ppData[prodId];
+        if (!d) { alert('Product data not found. Please refresh.'); return; }
+
+        document.getElementById('pp-edit-name').textContent = d.name;
+        document.getElementById('pp-edit-form').action = d.updateUrl;
+        document.getElementById('pp-edit-product-select').value = d.productId;
+        document.getElementById('pp-edit-description').value = d.description || '';
+        document.getElementById('pp-edit-status').value = d.status || 'new';
+        document.getElementById('pp-edit-price').value = Number(d.unitPrice || 0).toFixed(2);
+        document.getElementById('pp-edit-qty').value = d.quantity || 1;
+        document.getElementById('pp-edit-disc').value = Number(d.discountPercent || 0).toFixed(2);
+        window.ppEditCalc();
+
+        if (window.jQuery && jQuery.fn.select2) {
+            jQuery('#pp-edit-product-select').trigger('change.select2');
+        }
+
+        ppShow('pp-modal-edit-product');
+    };
 
     window.ppPickMode = function (tile) {
         document.querySelectorAll('.ppf-mode-tile').forEach(function (t) { t.classList.remove('pp-sel'); });

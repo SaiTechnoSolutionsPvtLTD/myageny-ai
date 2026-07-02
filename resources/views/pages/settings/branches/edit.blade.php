@@ -62,6 +62,14 @@
                         <label class="crm-label">Email</label>
                         <input type="email" name="email" class="crm-input" value="{{ old('email', $branch->email) }}">
                     </div>
+                    <div>
+                        <label class="crm-label">Latitude</label>
+                        <input type="number" name="latitude" class="crm-input" value="{{ old('latitude', $branch->latitude) }}" min="-90" max="90" step="0.0000001" placeholder="Ex: 13.0826800">
+                    </div>
+                    <div>
+                        <label class="crm-label">Longitude</label>
+                        <input type="number" name="longitude" class="crm-input" value="{{ old('longitude', $branch->longitude) }}" min="-180" max="180" step="0.0000001" placeholder="Ex: 80.2707200">
+                    </div>
                     <div class="crm-span-2">
                         <label class="crm-label">Address</label>
                         <textarea name="address" class="crm-textarea">{{ old('address', $branch->address) }}</textarea>

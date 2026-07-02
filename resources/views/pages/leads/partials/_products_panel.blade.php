@@ -107,6 +107,8 @@
 .pp-btn-hist:hover{background:#c7d2fe}
 .pp-btn-prod{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
 .pp-btn-prod:hover{background:#d1fae5}
+.pp-btn-edit{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
+.pp-btn-edit:hover{background:#dbeafe}
 .pp-btn-del{background:#fef2f2;color:#dc2626;border-color:#fecaca}
 .pp-btn-del:hover{background:#fecaca}
 .pp-remove-row{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:4px 7px;cursor:pointer;display:flex;align-items:center;transition:all .15s}
@@ -116,6 +118,12 @@
 .pp-loading-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;gap:12px;color:#9e9e9e}
 .pp-spinner{width:28px;height:28px;border:3px solid #f0eef2;border-top-color:#fe5f04;border-radius:50%;animation:ppSpin .7s linear infinite}
 @keyframes ppSpin{to{transform:rotate(360deg)}}
+
+/* ── Payment history download icon ───────────────────── */
+.pp-hist-ref a{color:#1f2937;text-decoration:underline}
+.pp-hist-download{display:inline-flex;align-items:center;justify-content:center;margin-left:8px;width:30px;height:30px;border-radius:6px;background:#f8fafc;border:1px solid #e6edf3;color:#0f172a;text-decoration:none}
+.pp-hist-download svg{width:14px;height:14px}
+.pp-hist-download:hover{background:#eef2ff}
 .pp-empty-state{background:#fff;border:1px solid #e1dee3;border-radius:14px;padding:50px 20px;text-align:center;color:#9e9e9e}
 .pp-empty-icon{font-size:40px;margin-bottom:10px}
 .pp-empty-title{font-size:15px;font-weight:700;color:#7c7c7c;margin-bottom:5px}
@@ -137,6 +145,16 @@
 .pp-mmeta-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#9e9e9e;margin-bottom:3px}
 .pp-mmeta-val{font-size:15px;font-weight:800}
 .pp-mfoot{display:flex;gap:10px;padding:14px 22px;border-top:1px solid #f0eef2;background:#fafafa;position:sticky;bottom:0}
+.pp-confirm-modal{max-width:460px;overflow:hidden}
+.pp-confirm-head{display:flex;align-items:center;gap:14px}
+.pp-confirm-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#fff0e6,#ffe2cf);color:#fe5f04;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(254,95,4,.08)}
+.pp-confirm-copy{display:flex;flex-direction:column;gap:4px}
+.pp-confirm-kicker{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#fe5f04}
+.pp-confirm-title{font-size:18px;font-weight:800;color:#121212;line-height:1.2}
+.pp-confirm-text{margin:16px 0 0;color:#6b7280;font-size:13px;line-height:1.6}
+.pp-confirm-status{display:inline-flex;align-items:center;margin-top:14px;padding:8px 12px;border-radius:999px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:12px;font-weight:800}
+.pp-confirm-actions{display:flex;gap:10px;width:100%}
+.pp-confirm-actions .ppf-btn{flex:1}
 
 /* ── Form elements ───────────────────────────────────── */
 .ppf-grp{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
@@ -389,7 +407,7 @@
 <div class="pp-overlay" id="pp-modal-add-product">
     <div class="pp-modal-box pp-modal-box--wide">
         <div class="pp-mhd">
-            <div class="pp-mtitle">📦 Add Product to Lead</div>
+            <div class="pp-mtitle" id="pp-add-product-modal-title">📦 Add Product to Lead</div>
             <button type="button" class="pp-mclose" onclick="PP.ppHideModal('pp-modal-add-product')">✕</button>
         </div>
         <div class="pp-mbody">
@@ -545,6 +563,14 @@
                           placeholder="Optional note…" rows="2"></textarea>
             </div>
 
+            <div class="ppf-grp" style="margin-top:12px">
+                <label class="ppf-lbl">Attachment</label>
+                <div class="ppf-rel">
+                    <input type="file" id="pp-pay-attachment" name="attachment" class="ppf-inp" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx">
+                </div>
+                <div style="font-size:12px;color:#9e9e9e;margin-top:6px">Accepted: PDF, images, Word, Excel. Max 10MB.</div>
+            </div>
+
         </div>
         <div class="pp-mfoot">
             <button type="button" id="pp-submit-pay-btn" class="ppf-btn ppf-btn-green"
@@ -592,6 +618,34 @@
 {{-- ══════════════════════════════════════════════════════
      CONFIG INJECTION + JS
 ══════════════════════════════════════════════════════ --}}
+
+<div class="pp-overlay" id="pp-modal-status-confirm">
+    <div class="pp-modal-box pp-confirm-modal">
+        <div class="pp-mbody">
+            <div class="pp-confirm-head">
+                <div class="pp-confirm-icon">
+                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path d="M12 9v4"/>
+                        <path d="M12 17h.01"/>
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    </svg>
+                </div>
+                <div class="pp-confirm-copy">
+                    <div class="pp-confirm-kicker">Confirm Status Change</div>
+                    <div class="pp-confirm-title">Are you sure?</div>
+                </div>
+            </div>
+            <p class="pp-confirm-text">This product status will be updated for the selected lead product.</p>
+            <div class="pp-confirm-status" id="pp-status-confirm-label"></div>
+        </div>
+        <div class="pp-mfoot">
+            <div class="pp-confirm-actions">
+                <button type="button" class="ppf-btn ppf-btn-sec" onclick="PP.ppResolveStatusConfirm(false)">No, Keep Current</button>
+                <button type="button" class="ppf-btn ppf-btn-primary" onclick="PP.ppResolveStatusConfirm(true)">Yes, Change Status</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="pp-overlay" id="pp-modal-production">
     <div class="pp-modal-box pp-production-modal">

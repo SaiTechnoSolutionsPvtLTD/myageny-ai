@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class LeadProductPayment extends Model
 {
@@ -17,6 +18,8 @@ class LeadProductPayment extends Model
         'payment_date',
         'reference_number',
         'notes',
+        'attachment_path',
+        'attachment_name',
     ];
 
     protected $casts = [
@@ -84,6 +87,8 @@ public function toJsPayload(): array
         'payment_date'       => $this->payment_date?->format('Y-m-d'),
         'reference_number'   => $this->reference_number,
         'notes'              => $this->notes,
+        'attachment_name'    => $this->attachment_name,
+        'attachment_url'     => $this->attachment_path ? Storage::disk('public')->url($this->attachment_path) : null,
         'recorded_by'        => $this->recorded_by,
         'created_at'         => $this->created_at?->format('d M Y h:i A'),
         'mode'               => $this->payment_mode,
@@ -93,6 +98,12 @@ public function toJsPayload(): array
         'date'               => $this->payment_date?->format('d M Y'),
         'ref'                => $this->reference_number ?? '',
         'by'                 => $this->recordedBy?->name ?? 'System',
+        'attachment'         => $this->attachment_path
+            ? [
+                'name' => $this->attachment_name ?: basename($this->attachment_path),
+                'url'  => Storage::disk('public')->url($this->attachment_path),
+            ]
+            : null,
     ];
 }
 }

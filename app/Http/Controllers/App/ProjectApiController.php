@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\ProjectTimesheet;
 use App\Models\ProjectUpdate;
@@ -55,6 +56,7 @@ class ProjectApiController extends Controller
             'team_member_id' => $this->shouldAllowDashboardUserFilter($user)
                 ? trim((string) $request->query('team_member_id', ''))
                 : '',
+            'allocation_status' => trim((string) $request->query('allocation_status', '')),
         ];
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
@@ -284,6 +286,7 @@ class ProjectApiController extends Controller
             'tl_employee_allocations'      => $tlAllocations,
             ...$this->summarizeTlEmployeeAllocations($tlAllocations),
         ]);
+        $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
         return response()->json(['success' => true, 'message' => 'Project allocated to TL successfully.']);
     }
@@ -326,6 +329,7 @@ class ProjectApiController extends Controller
             'tl_employee_allocations' => $tlAllocations->all(),
             ...$this->summarizeTlEmployeeAllocations($tlAllocations->all()),
         ]);
+        $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
         return response()->json(['success' => true, 'message' => 'Employees allocated successfully.']);
     }
@@ -454,6 +458,8 @@ class ProjectApiController extends Controller
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
             'timesheet_date'           => ['required', 'date'],
+            'poster_count'             => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'video_count'              => ['nullable', 'integer', 'min:0', 'max:100000'],
             'day_closing_update'       => [
                 'required', 'string',
                 function (string $attribute, mixed $value, \Closure $fail): void {
@@ -492,6 +498,8 @@ class ProjectApiController extends Controller
             'user_id'                  => $user->id,
             'timesheet_date'           => $timesheetDate,
             'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
+            'poster_count'             => (int) ($validated['poster_count'] ?? 0),
+            'video_count'              => (int) ($validated['video_count'] ?? 0),
             'day_closing_update'       => $validated['day_closing_update'],
         ]);
 
@@ -588,6 +596,8 @@ class ProjectApiController extends Controller
             'company_name'          => $ts->project?->company_name,
             'timesheet_date'        => $ts->timesheet_date?->toDateString(),
             'project_delivery_date' => $ts->project_delivery_date?->toDateString(),
+            'poster_count'          => (int) $ts->poster_count,
+            'video_count'           => (int) $ts->video_count,
             'day_closing_update'    => $ts->day_closing_update,
             'submitted_at'          => $ts->created_at?->toDateTimeString(),
             'is_completed'          => $ts->project_delivery_date
@@ -703,8 +713,9 @@ class ProjectApiController extends Controller
         $dateTo            = $this->parseFilterDate($filters['date_to'] ?? '')?->endOfDay();
         $selectedProjectId = (int) ($filters['project_id'] ?? 0);
         $selectedMemberId  = (int) ($filters['team_member_id'] ?? 0);
+        $selectedAllocationStatus = trim((string) ($filters['allocation_status'] ?? ''));
 
-        return $projects->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedMemberId, $user) {
+        return $projects->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedMemberId, $selectedAllocationStatus, $user) {
             if ($selectedProjectId > 0 && (int) $project->id !== $selectedProjectId) return false;
 
             if ($dateFrom || $dateTo) {
@@ -717,6 +728,12 @@ class ProjectApiController extends Controller
             if ($selectedMemberId > 0 && $this->shouldAllowDashboardUserFilter($user)) {
                 $empIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))->map(fn ($id) => (int) $id);
                 if (! $empIds->contains($selectedMemberId)) return false;
+            }
+
+            if ($selectedAllocationStatus !== '') {
+                if ($project->project_allocation_status !== $selectedAllocationStatus) {
+                    return false;
+                }
             }
 
             return true;
@@ -906,6 +923,29 @@ class ProjectApiController extends Controller
             'employee_allocated_by'               => $latestAlloc['allocated_by'] ?? null,
             'project_allocated_employee_user_ids' => $allEmpIds === [] ? null : $allEmpIds,
         ];
+    }
+
+    private function syncProductionCountReportAllocation(?ProductionInitiation $project, ?int $allocatedBy): void
+    {
+        if (! $project) {
+            return;
+        }
+
+        $countReport = ProductionCountReport::query()
+            ->where('production_initiation_id', $project->id)
+            ->first();
+
+        if (! $countReport) {
+            return;
+        }
+
+        $countReport->update([
+            'allocated_team_user_ids' => Arr::wrap($project->project_allocated_tl_user_ids) ?: null,
+            'allocated_user_ids' => Arr::wrap($project->project_allocated_employee_user_ids) ?: null,
+            'allocated_by' => $allocatedBy,
+            'allocated_at' => Carbon::now(),
+            'status' => $project->employee_allocation_status === 'allocated' ? 'employee_allocated' : 'team_allocated',
+        ]);
     }
 
     private function resolveBucketForUser(ProductionInitiation $p, User $user): ?string

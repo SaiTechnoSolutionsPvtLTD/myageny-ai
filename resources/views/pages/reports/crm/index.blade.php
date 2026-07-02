@@ -149,6 +149,16 @@
     background: #ffffff;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
 }
+.crm-report-card.is-link {
+    text-decoration: none;
+    color: inherit;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.crm-report-card.is-link:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+    border-color: #d6d3d1;
+}
 .crm-report-card::after {
     content: '';
     position: absolute;
@@ -355,8 +365,13 @@
         @foreach($reports as $report)
         @php
             $isReady = $report['status'] === 'Ready for setup';
+            $reportUrl = $isReady ? ($report['route'] ?? null) : null;
         @endphp
-        <div class="crm-report-card {{ $report['theme'] }}">
+        <{{ $reportUrl ? 'a' : 'div' }}
+            @if($reportUrl)
+                href="{{ $reportUrl }}"
+            @endif
+            class="crm-report-card {{ $report['theme'] }} {{ $reportUrl ? 'is-link' : '' }}">
             <div class="crm-report-card-head">
                 <div class="crm-report-card-icon {{ $report['theme'] }}">
                     @if($report['theme'] === 'lead')
@@ -417,7 +432,7 @@
                     <polyline points="12 5 19 12 12 19"/>
                 </svg>
             </span>
-        </div>
+        </{{ $reportUrl ? 'a' : 'div' }}>
         @endforeach
     </div>
     </div>

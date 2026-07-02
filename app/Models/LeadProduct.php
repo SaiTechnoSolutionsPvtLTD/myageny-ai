@@ -142,9 +142,14 @@ protected static function booted()
     }
 
     // ── Accessors ─────────────────────────────────────────────────────
+    public function getAmountPaidAttribute(): float
+    {
+        return max(0, (float) $this->payments()->sum('amount'));
+    }
+
     public function getAmountPendingAttribute(): float
     {
-        return max(0, $this->total_price - $this->amount_paid);
+        return max(0, $this->total_price - $this->getAmountPaidAttribute());
     }
 
     public function getPaymentProgressAttribute(): int
@@ -220,12 +225,12 @@ protected static function booted()
 
     // ── Methods ───────────────────────────────────────────────────────
     /**
-     * Recalculate total_paid from actual payment records.
+     * No longer needed - amount_paid is now calculated dynamically from payments.
+     * Kept for backwards compatibility but is a no-op.
      */
     public function recalcPaid(): void
     {
-        $this->amount_paid = $this->payments()->sum('amount');
-        $this->saveQuietly();
+        // Amounts are now computed dynamically from payments table
     }
 
     /**
@@ -241,7 +246,15 @@ protected static function booted()
 
         return [
             'id'       => $this->id,
+            'product_id' => $this->product_id,
+            'deal_name' => $this->deal_name,
             'name'     => $productName . ($product ? ' (Base Price : ' . number_format((float) $product->final_price, 2) . ')' : ''),
+            'description' => $this->description,
+            'unit_price' => (float) $this->unit_price,
+            'quantity' => (int) $this->quantity,
+            'discount_percent' => (float) $this->discount_percent,
+            'remarks' => $this->remarks,
+            'catalog_price' => $product ? (float) $product->final_price : (float) $this->unit_price,
             'status_id' => $this->lead_status_id,
             'status_value' => $this->lead_status_id ? (string) $this->lead_status_id : $this->product_status_key,
             'status_label' => $this->status_label,

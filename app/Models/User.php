@@ -313,6 +313,20 @@ class User extends Authenticatable
         ])->isNotEmpty();
     }
 
+    public function belongsToDesigningDepartment(): bool
+    {
+        return collect($this->departmentKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'design');
+        });
+    }
+
+    public function belongsToDigitalMarketingDepartment(): bool
+    {
+        return collect($this->departmentKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'digital') || str_contains($key, 'marketing') || str_contains($key, 'dm');
+        });
+    }
+
     public function belongsToSalesDepartment(): bool
     {
         return collect($this->departmentKeys()->all())->intersect([

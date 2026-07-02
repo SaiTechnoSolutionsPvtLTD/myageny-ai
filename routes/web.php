@@ -38,6 +38,7 @@ use App\Http\Controllers\ProductionApprovalController;
 use App\Http\Controllers\PermissionRequestController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollSettingController;
+use App\Http\Controllers\DesignSettingController;
 use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -131,6 +132,22 @@ Route::middleware(['auth'])->group(function () {
         ->name('ovp-module.index');
     Route::get('/reports/crm', [CrmReportController::class, 'index'])
         ->name('reports.crm.index');
+    Route::get('/reports/crm/leads-summary', [CrmReportController::class, 'leadsSummary'])
+        ->name('reports.crm.leads-summary');
+    Route::get('/reports/crm/leads-summary/export', [CrmReportController::class, 'exportLeadsSummary'])
+        ->name('reports.crm.leads-summary.export');
+    Route::get('/reports/crm/product-wise', [CrmReportController::class, 'productWise'])
+        ->name('reports.crm.product-wise');
+    Route::get('/reports/crm/product-wise/export', [CrmReportController::class, 'exportProductWise'])
+        ->name('reports.crm.product-wise.export');
+    Route::get('/reports/crm/revenue-comparison', [CrmReportController::class, 'revenueComparison'])
+        ->name('reports.crm.revenue-comparison');
+    Route::get('/reports/crm/revenue-comparison/export', [CrmReportController::class, 'exportRevenueComparison'])
+        ->name('reports.crm.revenue-comparison.export');
+    Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
+        ->name('reports.crm.payment-collection');
+    Route::get('/reports/crm/payment-collection/export', [CrmReportController::class, 'exportPaymentCollection'])
+        ->name('reports.crm.payment-collection.export');
     Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.allocate');
@@ -151,6 +168,12 @@ Route::middleware(['auth'])->group(function () {
     }], function () {
         Route::get('/projects/dashboard', [ProjectController::class, 'dashboard'])
             ->name('projects.dashboard');
+        Route::get('/projects/my-accounts', [ProjectController::class, 'myAccounts'])
+            ->name('projects.my-accounts');
+        Route::get('/projects/my-accounts/{lead}', [ProjectController::class, 'showMyAccount'])
+            ->name('projects.my-accounts.show');
+        Route::post('/projects/dashboard/update-planned-task', [ProjectController::class, 'updatePlannedTask'])
+            ->name('projects.dashboard.update-planned-task');
         Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
             ->name('projects.timesheets');
         Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])
@@ -169,6 +192,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.updates.store');
         Route::post('/projects-details/updates/quick', [ProjectController::class, 'storeQuickUpdate'])
             ->name('projects.updates.quick-store');
+        Route::patch('/projects-details/{productionInitiation}/content-calendar-sheet', [ProjectController::class, 'updateContentCalendarSheet'])
+            ->name('projects.content-calendar-sheet.update');
+        Route::patch('/projects-details/{productionInitiation}/content-calendar-approve', [ProjectController::class, 'approveContentCalendar'])
+            ->name('projects.content-calendar.approve');
+        Route::get('/projects-details/{productionInitiation}/content-calendar-data', [ProjectController::class, 'fetchContentCalendarData'])
+            ->name('projects.content-calendar-data');
     });
 
     Route::prefix('authentications')->name('auth.')->group(function () {
@@ -323,6 +352,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{lead}/products',
             [LeadShowController::class, 'storeProduct'])->middleware('can:leads.edit')->name('products.store');
 
+        Route::put('/{lead}/products/{product}',
+            [LeadShowController::class, 'updateProduct'])->middleware('can:leads.edit')->name('products.update');
+
         Route::patch('/{lead}/products/{product}/status',
             [LeadShowController::class, 'updateProductStatus'])->middleware('can:leads.edit')->name('products.update-status');
 
@@ -470,6 +502,9 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->name('quotation');
     Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:settings.manage')->name('payroll.index');
     Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:settings.manage')->name('payroll.update');
+
+    Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:settings.manage')->name('design-settings.index');
+    Route::post('/design-settings', [DesignSettingController::class, 'store'])->middleware('can:settings.manage')->name('design-settings.store');
 
     Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:settings.manage')->name('quotation.update');
     Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:settings.manage')->name('quotation.file.delete');

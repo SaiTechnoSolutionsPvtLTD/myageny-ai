@@ -82,6 +82,12 @@
                         @error('number_of_accounts')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
+                    <div class="cform-group">
+                        <label class="cform-label">Expiry Date</label>
+                        <input type="date" name="expiry_date" class="cform-input" value="{{ old('expiry_date', optional($company->expiry_date)->format('Y-m-d')) }}" required>
+                        @error('expiry_date')<div class="cform-error">{{ $message }}</div>@enderror
+                    </div>
+
                     <div class="cform-group full">
                         <label class="cform-label">Address</label>
                         <textarea name="address" class="cform-textarea" required>{{ old('address', $company->address) }}</textarea>

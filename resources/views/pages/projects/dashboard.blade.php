@@ -23,7 +23,7 @@
 .pjd-filter-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .pjd-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:12px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:800; cursor:pointer; }
 .pjd-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
-.pjd-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.pjd-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:16px; }
 .pjd-stat { position:relative; overflow:hidden; background:#fff; border:1px solid #eee7df; border-radius:10px; padding:18px; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pjd-stat::before { content:''; position:absolute; inset:0 0 auto 0; height:4px; background:var(--stat-color,#fe5f04); }
 .pjd-stat-label { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7c7c7c; }
@@ -77,7 +77,7 @@
 .tox-tinymce { border-radius:16px !important; border-color:#dbe1e8 !important; }
 @media (max-width: 1200px) {
     .pjd-filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .pjd-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .pjd-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media (max-width: 768px) {
     .pjd-topbar { padding:18px 16px; flex-direction:column; }
@@ -92,189 +92,601 @@
 @endpush
 
 @section('content')
-@php
-    $hasUpdateErrors = $errors->has('production_initiation_id') || $errors->has('type') || $errors->has('content');
-    $pageTitle = $isTlScopedView
-        ? 'TL Project Dashboard'
-        : ($isContributorScopedView ? 'Executive Project Dashboard' : 'Projects Dashboard');
-    $pageCrumb = $isTlScopedView
-        ? 'Modules > Projects > TL Dashboard'
-        : ($isContributorScopedView ? 'Modules > Projects > Executive Dashboard' : 'Modules > Projects Dashboard');
-    $workspaceLabel = $isTlScopedView
-        ? 'TL Allocation Overview'
-        : ($isContributorScopedView ? 'Executive Allocation Overview' : 'Project Allocation Overview');
-    $currency = fn ($value) => 'Rs ' . number_format((float) $value, 2);
-@endphp
-
-<div class="pjd-page">
-    <div class="pjd-topbar">
-        <div>
-            <div class="pjd-title">{{ $pageTitle }}</div>
-            <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
+@if($isDesigningDashboard ?? false)
+    @php
+        $pageTitle = 'Designing Projects Dashboard';
+        $pageCrumb = 'Modules > Projects > Designing Dashboard';
+    @endphp
+    <div class="pjd-page">
+        <div class="pjd-topbar">
+            <div>
+                <div class="pjd-title">{{ $pageTitle }}</div>
+                <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
+            </div>
+            <div class="pjd-chip" style="background:#f0fdf4; border-color:#bbf7d0; color:#166534;">Designing Team</div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
-                <button type="button" class="pjd-btn pjd-btn-primary" data-open-update-modal>Add Production Update</button>
-            @endif
-            <div class="pjd-chip">{{ $workspaceLabel }}</div>
-        </div>
-    </div>
 
-    <div class="pjd-body">
-        <section class="pjd-card">
-            <div class="pjd-card-head">
-                <div>
-                    <div class="pjd-card-title">Filters</div>
-                    <div class="pjd-card-sub">Use dates, project, and team allocation filters to narrow this dashboard.</div>
+        <div class="pjd-body">
+            {{-- Metrics Cards --}}
+            <div class="pjd-stats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                <div class="pjd-stat" style="--stat-color: #3b82f6;">
+                    <div class="pjd-stat-label">Daily Task Goal Count</div>
+                    <div class="pjd-stat-value">{{ $stats['daily_task_goal'] }}</div>
+                    <div class="pjd-stat-sub">Today's target posters/videos</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color: #ef4444;">
+                    <div class="pjd-stat-label">Overdue Count</div>
+                    <div class="pjd-stat-value">{{ $stats['overdue_count'] }}</div>
+                    <div class="pjd-stat-sub">Accounts past delivery date</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color: #10b981;">
+                    <div class="pjd-stat-label">Total Accounts Count</div>
+                    <div class="pjd-stat-value">{{ $stats['total_accounts'] }}</div>
+                    <div class="pjd-stat-sub">Allocated active accounts</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color: #8b5cf6;">
+                    <div class="pjd-stat-label">Total Posters Count</div>
+                    <div class="pjd-stat-value">{{ $stats['total_posters'] }}</div>
+                    <div class="pjd-stat-sub">Required across all projects</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color: #f59e0b;">
+                    <div class="pjd-stat-label">Pending Posters</div>
+                    <div class="pjd-stat-value">{{ $stats['pending_posters'] }}</div>
+                    <div class="pjd-stat-sub">Posters remaining to be done</div>
                 </div>
             </div>
-            <div class="pjd-card-body">
-                <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters">
-                    <div class="pjd-field">
-                        <label class="pjd-label">From Date</label>
-                        <input type="date" name="date_from" value="{{ $dashboardFilters['date_from'] ?? '' }}" class="pjd-input">
+
+            {{-- Filters Card --}}
+            <section class="pjd-card">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Filters</div>
+                        <div class="pjd-card-sub">Narrow down planned tasks by account, date, and status.</div>
                     </div>
-                    <div class="pjd-field">
-                        <label class="pjd-label">To Date</label>
-                        <input type="date" name="date_to" value="{{ $dashboardFilters['date_to'] ?? '' }}" class="pjd-input">
-                    </div>
-                    <div class="pjd-field">
-                        <label class="pjd-label">Project</label>
-                        <select name="project_id" class="pjd-select">
-                            <option value="">All Projects</option>
-                            @foreach($projectOptions as $project)
-                                <option value="{{ $project->id }}" @selected(($dashboardFilters['project_id'] ?? '') === (string) $project->id)>
-                                    {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    @if($teamMemberOptions->isNotEmpty())
+                </div>
+                <div class="pjd-card-body">
+                    <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
                         <div class="pjd-field">
-                            <label class="pjd-label">Allocated User</label>
-                            <select name="team_member_id" class="pjd-select">
-                                <option value="">All Users</option>
-                                @foreach($teamMemberOptions as $member)
-                                    <option value="{{ $member->id }}" @selected(($dashboardFilters['team_member_id'] ?? '') === (string) $member->id)>
-                                        {{ $member->name }} | {{ implode(', ', $member->role_names) }}
+                            <label class="pjd-label">Allocated Account</label>
+                            <select name="project_id" class="pjd-select">
+                                <option value="">All Accounts</option>
+                                @foreach($designProjects as $proj)
+                                    <option value="{{ $proj->id }}" @selected($filters['project_id'] == $proj->id)>
+                                        {{ $proj->product_name }}
                                     </option>
                                 @endforeach
                             </select>
                         </div>
-                    @endif
-                    <div class="pjd-filter-actions">
-                        <button type="submit" class="pjd-btn pjd-btn-primary">Apply Filter</button>
-                        <a href="{{ route('projects.dashboard') }}" class="pjd-btn">Reset</a>
-                    </div>
-                </form>
-            </div>
-        </section>
-
-        <section class="pjd-stats">
-            <div class="pjd-stat" style="--stat-color:#fe5f04;">
-                <div class="pjd-stat-label">Allocated Projects</div>
-                <div class="pjd-stat-value">{{ number_format($stats['allocated_projects']) }}</div>
-                <div class="pjd-stat-sub">Projects available in the current dashboard scope.</div>
-            </div>
-            <div class="pjd-stat" style="--stat-color:#2563eb;">
-                <div class="pjd-stat-label">Project Value</div>
-                <div class="pjd-stat-value">{{ $currency($stats['project_value']) }}</div>
-                <div class="pjd-stat-sub">Overall value of the filtered allocated projects.</div>
-            </div>
-            <div class="pjd-stat" style="--stat-color:#16a34a;">
-                <div class="pjd-stat-label">Received Amount</div>
-                <div class="pjd-stat-value">{{ $currency($stats['received_amount']) }}</div>
-                <div class="pjd-stat-sub">Payments already received for these projects.</div>
-            </div>
-            <div class="pjd-stat" style="--stat-color:#f97316;">
-                <div class="pjd-stat-label">Balance Amount</div>
-                <div class="pjd-stat-value">{{ $currency($stats['balance_amount']) }}</div>
-                <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
-            </div>
-        </section>
-
-        <section class="pjd-card">
-            <div class="pjd-card-head">
-                <div>
-                    <div class="pjd-card-title">Current Month Delivery Planned Projects</div>
-                    <div class="pjd-card-sub">Projects with planned delivery dates in the current month.</div>
+                        <div class="pjd-field">
+                            <label class="pjd-label">Date</label>
+                            <input type="date" name="date" value="{{ $filters['date'] }}" class="pjd-input">
+                        </div>
+                        <div class="pjd-field">
+                            <label class="pjd-label">Status</label>
+                            <select name="status" class="pjd-select">
+                                <option value="">All Statuses</option>
+                                <option value="waiting_approval" @selected($filters['status'] === 'waiting_approval')>Waiting for content approval</option>
+                                <option value="inprogress" @selected($filters['status'] === 'inprogress')>In Progress</option>
+                                <option value="waiting_review" @selected($filters['status'] === 'waiting_review')>Waiting for Review</option>
+                                <option value="completed" @selected($filters['status'] === 'completed')>Completed</option>
+                                <option value="overdue" @selected($filters['status'] === 'overdue')>Overdue</option>
+                            </select>
+                        </div>
+                        <div class="pjd-field pjd-filter-actions" style="margin-top: auto;">
+                            <button type="submit" class="pjd-btn pjd-btn-primary" style="flex-grow:1; height:40px;">Filter</button>
+                            <a href="{{ route('projects.dashboard') }}" class="pjd-btn" style="flex-grow:1; height:40px; text-align:center; line-height:22px;">Reset</a>
+                        </div>
+                    </form>
                 </div>
-                <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->count() }} Planned This Month</span>
-            </div>
-            <div class="pjd-card-body" style="padding:0;">
-                @if($currentMonthDeliveryProjects->isNotEmpty())
+            </section>
+
+            {{-- Planned Tasks Table --}}
+            <section class="pjd-card">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Today Planned Tasks</div>
+                        <div class="pjd-card-sub">Task commitments, approval states, and completion counts for {{ \Carbon\Carbon::parse($filters['date'])->format('d M Y') }}.</div>
+                    </div>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
                     <div class="pjd-table-wrap">
                         <table class="pjd-table">
                             <thead>
                                 <tr>
-                                    <th>Project Name</th>
-                                    <th>Delivery Date</th>
-                                    <th>Allocated Person</th>
-                                    <th>Total Project Value</th>
-                                    <th>Received Amount</th>
-                                    <th>Pending Amount</th>
-                                    <th>View</th>
+                                    <th>Account Name</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Tenure</th>
+                                    <th>Committed Poster</th>
+                                    <th>Committed Video</th>
+                                    <th>Waiting Poster</th>
+                                    <th>Waiting Video</th>
+                                    <th>Completed Poster</th>
+                                    <th>Completed Video</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($currentMonthDeliveryProjects as $project)
+                                @forelse($todayPlannedTasks as $task)
                                     <tr>
                                         <td>
-                                            <div class="pjd-product">{{ $project->product_name }}</div>
-                                            <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                            <a href="{{ route('projects.show', ['productionInitiation' => $task['project']->id]) }}" class="pjd-product" style="text-decoration:none; color:#ea580c;">
+                                                {{ $task['project']->product_name }}
+                                            </a>
+                                            <div class="pjd-meta">
+                                                {{ $task['project']->company_name ?: ($task['project']->lead?->company_name ?: 'No Company') }}
+                                            </div>
                                         </td>
-                                        <td>{{ optional($project->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
                                         <td>
-                                            {{ $project->allocated_person_label }}
-                                            <div class="pjd-meta">{{ $project->department?->name ?: 'No department' }}</div>
+                                            <span style="color:#475569;">{{ $task['start_date'] }}</span>
                                         </td>
-                                        <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
-                                        <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
-                                        <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
-                                        <td><a href="{{ route('projects.show', $project) }}" class="pjd-link">Open</a></td>
+                                        <td>
+                                            <span style="color:#475569;">{{ $task['end_date'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="color:#475569;">{{ $task['tenure'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#1e293b;">{{ $task['committed_posters'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#1e293b;">{{ $task['committed_videos'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#ea580c;">{{ $task['waiting_posters'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#ea580c;">{{ $task['waiting_videos'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#166534;">{{ $task['completed_posters'] }}</span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#166534;">{{ $task['completed_videos'] }}</span>
+                                        </td>
+                                        <td>
+                                            @php
+                                                $isPastDate = \Carbon\Carbon::parse($filters['date'])->lt(\Carbon\Carbon::today());
+                                            @endphp
+                                            <button type="button" 
+                                                class="pjd-btn" 
+                                                style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; @if($isPastDate) background:#cbd5e1; border-color:#cbd5e1; color:#64748b; cursor:not-allowed; @else background:#ea580c; border-color:#ea580c; color:#fff; @endif"
+                                                @disabled($isPastDate)
+                                                data-open-task-update-modal
+                                                data-project-id="{{ $task['project']->id }}"
+                                                data-project-name="{{ $task['project']->product_name }}"
+                                                data-committed-posters="{{ $task['committed_posters'] }}"
+                                                data-committed-videos="{{ $task['committed_videos'] }}"
+                                                data-waiting-posters="{{ $task['waiting_posters'] }}"
+                                                data-waiting-videos="{{ $task['waiting_videos'] }}"
+                                                data-completed-posters="{{ $task['completed_posters'] }}"
+                                                data-completed-videos="{{ $task['completed_videos'] }}"
+                                                data-day-closing-update="{{ $task['day_closing_update'] }}">
+                                                Update
+                                            </button>
+                                        </td>
                                     </tr>
-                                @endforeach
+                                @empty
+                                    <tr>
+                                        <td colspan="11" style="text-align:center; padding:30px; color:#64748b;">
+                                            No planned tasks found matching the criteria.
+                                        </td>
+                                    </tr>
+                                @endforelse
                             </tbody>
                         </table>
                     </div>
-                @else
-                    <div class="pjd-empty">No delivery planned projects found for the current month in this filtered view.</div>
-                @endif
-            </div>
-        </section>
-    </div>
-</div>
-
-@if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
-    <div class="pjd-update-modal-overlay {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal-overlay></div>
-    <div class="pjd-update-modal {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal>
-        <div class="pjd-update-modal-head">
-            <div>
-                <div class="pjd-card-title">Add Production Update</div>
-                <div class="pjd-card-sub">Select your allocated project and post the update directly from the dashboard.</div>
-            </div>
-            <button type="button" class="pjd-update-modal-close" data-close-update-modal aria-label="Close update modal">
-                <i class="bi bi-x-lg"></i>
-            </button>
+                </div>
+            </section>
         </div>
-        <div class="pjd-update-modal-body">
-            @if(($quickUpdateProjects ?? collect())->isNotEmpty())
-                @include('pages.projects.partials.update-form', [
-                    'updateFormAction' => route('projects.updates.quick-store'),
-                    'updateEditorId' => 'dashboardProjectUpdateEditor',
-                    'showProjectSelector' => true,
-                    'projectOptions' => $quickUpdateProjects,
-                    'updateReturnTarget' => 'projects.dashboard',
-                ])
-            @else
-                <div class="pjd-empty">No allocated development projects are available for posting a production update.</div>
+
+        {{-- Update Planned Task Modal --}}
+        <div class="pjd-update-modal-overlay" data-task-modal-overlay></div>
+        <div class="pjd-update-modal" data-task-modal>
+            <div class="pjd-update-modal-head">
+                <div>
+                    <div class="pjd-card-title">Update Planned Task Counts</div>
+                    <div class="pjd-card-sub" id="taskModalProjectName">Project Name</div>
+                </div>
+                <button type="button" class="pjd-update-modal-close" data-close-task-modal aria-label="Close modal">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="pjd-update-modal-body">
+                <form id="taskUpdateForm" method="POST" action="{{ route('projects.dashboard.update-planned-task') }}" class="ps-update-form">
+                    @csrf
+                    <input type="hidden" name="production_initiation_id" id="taskModalProjectId">
+                    <input type="hidden" name="timesheet_date" value="{{ $filters['date'] }}">
+
+                    <div class="ps-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div class="pjd-field">
+                            <label class="ps-label">Committed Posters</label>
+                            <input type="number" name="committed_posters" id="taskModalCommittedPosters" class="ps-input" min="0" required>
+                        </div>
+                        <div class="pjd-field">
+                            <label class="ps-label">Committed Videos</label>
+                            <input type="number" name="committed_videos" id="taskModalCommittedVideos" class="ps-input" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="ps-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div class="pjd-field">
+                            <label class="ps-label">Waiting for Approval Posters</label>
+                            <input type="number" name="waiting_posters" id="taskModalWaitingPosters" class="ps-input" min="0" required>
+                        </div>
+                        <div class="pjd-field">
+                            <label class="ps-label">Waiting for Approval Videos</label>
+                            <input type="number" name="waiting_videos" id="taskModalWaitingVideos" class="ps-input" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="ps-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div class="pjd-field">
+                            <label class="ps-label">Completed Posters</label>
+                            <input type="number" name="poster_count" id="taskModalCompletedPosters" class="ps-input" min="0" required>
+                        </div>
+                        <div class="pjd-field">
+                            <label class="ps-label">Completed Videos</label>
+                            <input type="number" name="video_count" id="taskModalCompletedVideos" class="ps-input" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="pjd-field">
+                        <label class="ps-label">Day Closing Update (Optional)</label>
+                        <textarea name="day_closing_update" id="taskModalDayClosingUpdate" class="ps-textarea" placeholder="Add details about your day closing update (optional)..." style="min-height: 120px;"></textarea>
+                        <small style="color: #64748b; font-size: 11px;">Note: Day closing updates require at least 5 lines of tasks to submit successfully.</small>
+                    </div>
+
+                    <div class="ps-actions">
+                        <button type="submit" class="ps-btn ps-btn-primary" style="background:#166534; border-color:#166534; color:#fff;">Save Changes</button>
+                        <button type="button" class="ps-btn" data-close-task-modal>Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@else
+    @php
+        $hasUpdateErrors = $errors->has('production_initiation_id') || $errors->has('type') || $errors->has('content');
+        $pageTitle = $isTlScopedView
+            ? 'TL Project Dashboard'
+            : ($isContributorScopedView ? 'Executive Project Dashboard' : 'Projects Dashboard');
+        $pageCrumb = $isTlScopedView
+            ? 'Modules > Projects > TL Dashboard'
+            : ($isContributorScopedView ? 'Modules > Projects > Executive Dashboard' : 'Modules > Projects Dashboard');
+        $workspaceLabel = $isTlScopedView
+            ? 'TL Allocation Overview'
+            : ($isContributorScopedView ? 'Executive Allocation Overview' : 'Project Allocation Overview');
+        $currency = fn ($value) => 'Rs ' . number_format((float) $value, 2);
+    @endphp
+
+    <div class="pjd-page">
+        <div class="pjd-topbar">
+            <div>
+                <div class="pjd-title">{{ $pageTitle }}</div>
+                <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
+                    <button type="button" class="pjd-btn pjd-btn-primary" data-open-update-modal>Add Production Update</button>
+                @endif
+                <div class="pjd-chip">{{ $workspaceLabel }}</div>
+            </div>
+        </div>
+
+        <div class="pjd-body">
+            <section class="pjd-card">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Filters</div>
+                        <div class="pjd-card-sub">Use dates, project, and team allocation filters to narrow this dashboard.</div>
+                    </div>
+                </div>
+                <div class="pjd-card-body">
+                    <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters">
+                        <div class="pjd-field">
+                            <label class="pjd-label">From Date</label>
+                            <input type="date" name="date_from" value="{{ $dashboardFilters['date_from'] ?? '' }}" class="pjd-input">
+                        </div>
+                        <div class="pjd-field">
+                            <label class="pjd-label">To Date</label>
+                            <input type="date" name="date_to" value="{{ $dashboardFilters['date_to'] ?? '' }}" class="pjd-input">
+                        </div>
+                        <div class="pjd-field">
+                            <label class="pjd-label">Project</label>
+                            <select name="project_id" class="pjd-select">
+                                <option value="">All Projects</option>
+                                @foreach($projectOptions as $project)
+                                    <option value="{{ $project->id }}" @selected(($dashboardFilters['project_id'] ?? '') === (string) $project->id)>
+                                        {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="pjd-field">
+                            <label class="pjd-label">Allocation Status</label>
+                            <select name="allocation_status" class="pjd-select">
+                                <option value="">All Allocations</option>
+                                <option value="allocation_pending" @selected(($dashboardFilters['allocation_status'] ?? '') === 'allocation_pending')>Allocation Pending</option>
+                                <option value="allocated" @selected(($dashboardFilters['allocation_status'] ?? '') === 'allocated')>Allocation Completed</option>
+                            </select>
+                        </div>
+                        @if($teamMemberOptions->isNotEmpty())
+                            <div class="pjd-field">
+                                <label class="pjd-label">Allocated User</label>
+                                <select name="team_member_id" class="pjd-select">
+                                    <option value="">All Users</option>
+                                    @foreach($teamMemberOptions as $member)
+                                        <option value="{{ $member->id }}" @selected(($dashboardFilters['team_member_id'] ?? '') === (string) $member->id)>
+                                            {{ $member->name }} | {{ implode(', ', $member->role_names) }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
+                        <div class="pjd-field pjd-filter-actions">
+                            <button type="submit" class="pjd-btn pjd-btn-primary">Apply Filter</button>
+                            <a href="{{ route('projects.dashboard') }}" class="pjd-btn">Reset</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="pjd-stats">
+                <div class="pjd-stat" style="--stat-color:#fe5f04;">
+                    <div class="pjd-stat-label">Allocated Projects</div>
+                    <div class="pjd-stat-value">{{ number_format($stats['allocated_projects']) }}</div>
+                    <div class="pjd-stat-sub">Projects available in the current dashboard scope.</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color:#2563eb;">
+                    <div class="pjd-stat-label">Project Value</div>
+                    <div class="pjd-stat-value">{{ $currency($stats['project_value']) }}</div>
+                    <div class="pjd-stat-sub">Overall value of the filtered allocated projects.</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color:#16a34a;">
+                    <div class="pjd-stat-label">Received Amount</div>
+                    <div class="pjd-stat-value">{{ $currency($stats['received_amount']) }}</div>
+                    <div class="pjd-stat-sub">Payments already received for these projects.</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color:#f97316;">
+                    <div class="pjd-stat-label">Balance Amount</div>
+                    <div class="pjd-stat-value">{{ $currency($stats['balance_amount']) }}</div>
+                    <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
+                </div>
+                <div class="pjd-stat" style="--stat-color:#ea580c;">
+                    <div class="pjd-stat-label">Allocation Pending</div>
+                    <div class="pjd-stat-value">{{ $allocationPendingCount ?? 0 }}</div>
+                    <div class="pjd-stat-sub">Projects awaiting TL and coordinator assignment.</div>
+                </div>
+            </section>
+
+            <section class="pjd-card">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Current Month Delivery Planned Projects</div>
+                        <div class="pjd-card-sub">Projects with planned delivery dates in the current month.</div>
+                    </div>
+                    <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->count() }} Planned This Month</span>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
+                    @if($currentMonthDeliveryProjects->isNotEmpty())
+                        <div class="pjd-table-wrap">
+                            <table class="pjd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Project Name</th>
+                                        <th>Delivery Date</th>
+                                        <th>Allocated Person</th>
+                                        <th>Total Project Value</th>
+                                        <th>Received Amount</th>
+                                        <th>Pending Amount</th>
+                                        <th>View</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($currentMonthDeliveryProjects as $project)
+                                        <tr>
+                                            <td>
+                                                <div class="pjd-product">{{ $project->product_name }}</div>
+                                                <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                            </td>
+                                            <td>{{ optional($project->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
+                                            <td>
+                                                {{ $project->allocated_person_label }}
+                                                <div class="pjd-meta">{{ $project->department?->name ?: 'No department' }}</div>
+                                            </td>
+                                            <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
+                                            <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
+                                            <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
+                                            <td><a href="{{ route('projects.show', $project) }}" class="pjd-link">Open</a></td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="pjd-empty">No delivery scheduled in the current month scope.</div>
+                    @endif
+                </div>
+            </section>
+
+            <div class="pjd-split">
+                <section class="pjd-card">
+                    <div class="pjd-card-head">
+                        <div>
+                            <div class="pjd-card-title">Recent Allocated Projects</div>
+                            <div class="pjd-card-sub">Active projects and their allocated teams.</div>
+                        </div>
+                    </div>
+                    <div class="pjd-card-body" style="padding:0;">
+                        @if($recentProjects->isNotEmpty())
+                            <div class="pjd-table-wrap">
+                                <table class="pjd-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Project</th>
+                                            <th>Allocated To</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($recentProjects as $project)
+                                            <tr>
+                                                <td>
+                                                    <div class="pjd-product">{{ $project->product_name }}</div>
+                                                    <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                </td>
+                                                <td>{{ $project->allocated_person_label }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <div class="pjd-empty">No active allocated projects.</div>
+                        @endif
+                    </div>
+                </section>
+
+                <section class="pjd-card">
+                    <div class="pjd-card-head">
+                        <div>
+                            <div class="pjd-card-title">Timesheet & Activity Summary</div>
+                            <div class="pjd-card-sub">Logs from daily timesheet entries.</div>
+                        </div>
+                    </div>
+                    <div class="pjd-card-body" style="padding:0;">
+                        @if(!empty($timesheetSummary))
+                            <div class="pjd-table-wrap">
+                                <table class="pjd-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Project Name</th>
+                                            <th>Submissions</th>
+                                            <th>Total Posters</th>
+                                            <th>Total Videos</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($timesheetSummary as $row)
+                                            <tr>
+                                                <td>
+                                                    <div class="pjd-product">{{ $row['project_name'] }}</div>
+                                                    <div class="pjd-meta">{{ $row['company_name'] }}</div>
+                                                </td>
+                                                <td>{{ $row['entries_count'] }} logs</td>
+                                                <td>{{ $row['total_posters'] }}</td>
+                                                <td>{{ $row['total_videos'] }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <div class="pjd-empty">No active timesheet submissions found.</div>
+                        @endif
+                    </div>
+                </section>
+            </div>
+
+            @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
+                <div class="pjd-update-modal-overlay {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal-overlay></div>
+                <div class="pjd-update-modal {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal>
+                    <div class="pjd-update-modal-head">
+                        <div>
+                            <div class="pjd-card-title">Add Production Update</div>
+                            <div class="pjd-card-sub">Post your work status or daily task update.</div>
+                        </div>
+                        <button type="button" class="pjd-update-modal-close" data-close-update-modal aria-label="Close modal">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="pjd-update-modal-body">
+                        @if(($quickUpdateProjects ?? collect())->isNotEmpty())
+                            @include('pages.projects.partials.update-form', [
+                                'updateFormAction' => route('projects.updates.quick-store'),
+                                'updateEditorId' => 'dashboardProjectUpdateEditor',
+                                'showProjectSelector' => true,
+                                'projectOptions' => $quickUpdateProjects,
+                                'updateReturnTarget' => 'projects.dashboard',
+                            ])
+                        @else
+                            <div class="pjd-empty">No allocated development projects are available for posting a production update.</div>
+                        @endif
+                    </div>
+                </div>
             @endif
         </div>
     </div>
 @endif
 @endsection
 
-@if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
+@if($isDesigningDashboard ?? false)
+    @push('scripts')
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const taskModal = document.querySelector('[data-task-modal]');
+        const taskModalOverlay = document.querySelector('[data-task-modal-overlay]');
+        const taskOpenButtons = document.querySelectorAll('[data-open-task-update-modal]');
+        const taskCloseButtons = document.querySelectorAll('[data-close-task-modal]');
+
+        function setTaskModalState(isOpen) {
+            if (!taskModal || !taskModalOverlay) {
+                return;
+            }
+            taskModal.classList.toggle('is-open', isOpen);
+            taskModalOverlay.classList.toggle('is-open', isOpen);
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
+
+        taskOpenButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                const projectId = this.getAttribute('data-project-id');
+                const projectName = this.getAttribute('data-project-name');
+                const committedPosters = this.getAttribute('data-committed-posters');
+                const committedVideos = this.getAttribute('data-committed-videos');
+                const waitingPosters = this.getAttribute('data-waiting-posters');
+                const waitingVideos = this.getAttribute('data-waiting-videos');
+                const completedPosters = this.getAttribute('data-completed-posters');
+                const completedVideos = this.getAttribute('data-completed-videos');
+                const dayClosingUpdate = this.getAttribute('data-day-closing-update');
+
+                document.getElementById('taskModalProjectId').value = projectId;
+                document.getElementById('taskModalProjectName').textContent = projectName;
+                document.getElementById('taskModalCommittedPosters').value = committedPosters;
+                document.getElementById('taskModalCommittedVideos').value = committedVideos;
+                document.getElementById('taskModalWaitingPosters').value = waitingPosters;
+                document.getElementById('taskModalWaitingVideos').value = waitingVideos;
+                document.getElementById('taskModalCompletedPosters').value = completedPosters;
+                document.getElementById('taskModalCompletedVideos').value = completedVideos;
+                document.getElementById('taskModalDayClosingUpdate').value = dayClosingUpdate || '';
+
+                setTaskModalState(true);
+            });
+        });
+
+        taskCloseButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                setTaskModalState(false);
+            });
+        });
+
+        if (taskModalOverlay) {
+            taskModalOverlay.addEventListener('click', function () {
+                setTaskModalState(false);
+            });
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                setTaskModalState(false);
+            }
+        });
+    });
+    </script>
+    @endpush
+@endif
+
+@if(($isContributorScopedView ?? false) && ($canQuickAddProductionUpdate ?? false))
     @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js" referrerpolicy="origin"></script>
     <script>

@@ -11,6 +11,25 @@ class CheckActiveUser
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (Auth::check()) {
+            $user = Auth::user();
+
+            if ($user?->company_id && $user->company) {
+                $company = $user->company;
+                $company->syncExpiryState();
+                $company->refresh();
+
+                if ($company->company_status !== 'active') {
+                    Auth::logout();
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+
+                    return redirect()->route('login')
+                        ->with('error', 'Your company subscription has expired. Please contact your administrator.');
+                }
+            }
+        }
+
         if (Auth::check() && ! Auth::user()->is_active) {
             Auth::logout();
             $request->session()->invalidate();

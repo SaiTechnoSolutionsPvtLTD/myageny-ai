@@ -20,6 +20,7 @@ class StoreCompanyRequest extends FormRequest
             'mobile_number'          => ['required', 'string', 'max:20'],
             'address'                => ['required', 'string', 'max:1000'],
             'number_of_accounts'     => ['required', 'integer', 'min:1'],
+            'expiry_date'            => ['required', 'date'],
             'company_status'         => ['required', Rule::in(['active', 'inactive'])],
             'facebook_client_id'     => ['required', 'string', 'max:255'],
             'facebook_client_secret' => ['required', 'string', 'max:255'],

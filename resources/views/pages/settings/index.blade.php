@@ -119,6 +119,7 @@
 .settings-card.department::after { background: #059669; }
 .settings-card.holiday::after { background: #ef4444; }
 .settings-card.payroll::after { background: #16a34a; }
+.settings-card.design::after  { background: #7c3aed; }
 .settings-card-icon {
     width: 54px;
     height: 54px;
@@ -185,6 +186,10 @@
 .settings-card-icon.payroll {
     background: linear-gradient(135deg, #ecfdf5, #dcfce7);
     color: #15803d;
+}
+.settings-card-icon.design {
+    background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    color: #7c3aed;
 }
 .settings-card-title {
     margin: 0 0 8px;
@@ -359,6 +364,26 @@
             <p class="settings-card-text">Set default PF and ESI percentages, salary limit rules, and monthly payroll calculation defaults.</p>
             <span class="settings-card-link">
                 Open Payroll Settings
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.design-settings.index') }}" class="settings-card design">
+            <div class="settings-card-icon design">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Design Settings</h4>
+            <p class="settings-card-text">Set per-user daily production targets for Designing department members. Configure targets for Posters, Videos, Logos, Flyers, and more.</p>
+            <span class="settings-card-link">
+                Open Design Settings
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

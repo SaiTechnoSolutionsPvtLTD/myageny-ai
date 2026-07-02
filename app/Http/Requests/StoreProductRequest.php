@@ -25,6 +25,7 @@ class StoreProductRequest extends FormRequest
             'status'                => ['required', 'in:active,inactive,draft'],
             'sort_order'            => ['nullable', 'integer', 'min:0'],
             'assigned_to'           => ['nullable', 'exists:users,id'],
+            'count_wise_report'     => ['boolean'],
             'department_ids'        => ['nullable', 'array'],
             'department_ids.*'      => ['integer', 'exists:departments,id'],
 
@@ -51,6 +52,7 @@ class StoreProductRequest extends FormRequest
             'tax_value'      => $this->tax_value ?? 0,
             'discount_value' => $this->discount_value ?? 0,
             'sort_order'     => $this->sort_order ?? 0,
+            'count_wise_report' => $this->boolean('count_wise_report'),
         ]);
     }
 }
