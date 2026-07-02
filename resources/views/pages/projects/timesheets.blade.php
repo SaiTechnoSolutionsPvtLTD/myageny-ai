@@ -27,7 +27,7 @@
 .pts-table td { padding:14px; border-bottom:1px solid #f1f5f9; font-size:13px; color:#111827; vertical-align:top; }
 .pts-meta { margin-top:4px; font-size:11px; color:#64748b; }
 .pts-project { font-weight:900; color:#0f172a; }
-.pts-update-text { white-space:pre-wrap; line-height:1.65; color:#334155; max-width:520px; }
+.pts-update-text { line-height:1.65; color:#334155; max-width:520px; }
 .pts-pill { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid #fed7aa; color:#c2410c; background:#fff7ed; }
 .pts-status { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid transparent; }
 .pts-status.completed { color:#c2410c; background:#fff7ed; border-color:#fed7aa; }
@@ -188,7 +188,23 @@
                                         @endif
                                         <td>{{ (int) $timesheet->poster_count }}</td>
                                         <td>{{ (int) $timesheet->video_count }}</td>
-                                        <td><div class="pts-update-text">{{ $timesheet->day_closing_update }}</div></td>
+                                        <td>
+                                            @if(strlen($timesheet->day_closing_update) > 15)
+                                                @php
+                                                    $previewText = str_replace(["\r\n", "\r", "\n"], ' ', $timesheet->day_closing_update);
+                                                    $previewText = preg_replace('/\s+/', ' ', $previewText);
+                                                @endphp
+                                                <div class="pts-update-text view-closing-update"
+                                                     style="display: inline-block; cursor: pointer; color: #ea580c; font-weight: 600; text-decoration: underline;"
+                                                     data-project-name="{{ $timesheet->project?->product_name ?: 'Project removed' }}"
+                                                     data-timesheet-date="{{ optional($timesheet->timesheet_date)->format('d M Y') }}">
+                                                    {{ \Illuminate\Support\Str::limit($previewText, 15, '...') }}
+                                                </div>
+                                                <div class="full-update-text" style="display: none;">{{ $timesheet->day_closing_update }}</div>
+                                            @else
+                                                <div class="pts-update-text">{{ $timesheet->day_closing_update }}</div>
+                                            @endif
+                                        </td>
                                         <td>
                                             {{ optional($timesheet->created_at)->format('d M Y h:i A') ?: 'Not available' }}
                                         </td>
@@ -324,6 +340,27 @@
         </form>
     </div>
 </div>
+
+{{-- Day Closing Update Full Text Modal --}}
+<div class="pts-modal-overlay" data-update-text-modal-overlay></div>
+<div class="pts-modal" data-update-text-modal style="max-width: 600px;">
+    <div class="pts-modal-head">
+        <div>
+            <div class="pts-card-title">Day Closing Update Details</div>
+            <div class="pts-card-sub" id="updateTextModalProjectDate">Project Name - Date</div>
+        </div>
+        <button type="button" class="pts-modal-close" data-close-update-text-modal aria-label="Close modal">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="pts-modal-body">
+        <div id="updateTextModalContent" style="white-space: pre-wrap; line-height: 1.65; color: #1e293b; font-size: 14px; background: #f8fafc; padding: 18px; border-radius: 10px; border: 1px solid #e2e8f0; max-height: 400px; overflow-y: auto;">
+        </div>
+        <div class="pts-actions" style="margin-top: 18px; justify-content: flex-end;">
+            <button type="button" class="pts-btn" data-close-update-text-modal>Close</button>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -414,9 +451,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.setTimeout(syncDeliveryDate, 0);
 
+    // Day Closing Update details modal logic
+    const updateTextModal = document.querySelector('[data-update-text-modal]');
+    const updateTextOverlay = document.querySelector('[data-update-text-modal-overlay]');
+    const viewButtons = document.querySelectorAll('.view-closing-update');
+    const closeTextButtons = document.querySelectorAll('[data-close-update-text-modal]');
+    const modalProjectDate = document.getElementById('updateTextModalProjectDate');
+    const modalContent = document.getElementById('updateTextModalContent');
+
+    function setUpdateTextModalState(isOpen) {
+        if (!updateTextModal || !updateTextOverlay) {
+            return;
+        }
+        updateTextModal.classList.toggle('is-open', isOpen);
+        updateTextOverlay.classList.toggle('is-open', isOpen);
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+    }
+
+    viewButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            const td = this.closest('td');
+            const hiddenDiv = td.querySelector('.full-update-text');
+            const fullText = hiddenDiv ? hiddenDiv.textContent : '';
+            const projectName = this.getAttribute('data-project-name');
+            const dateStr = this.getAttribute('data-timesheet-date');
+
+            modalProjectDate.textContent = projectName + ' - ' + dateStr;
+            modalContent.textContent = fullText;
+
+            setUpdateTextModalState(true);
+        });
+    });
+
+    closeTextButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            setUpdateTextModalState(false);
+        });
+    });
+
+    if (updateTextOverlay) {
+        updateTextOverlay.addEventListener('click', function () {
+            setUpdateTextModalState(false);
+        });
+    }
+
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
             setModalState(false);
+            setUpdateTextModalState(false);
         }
     });
 });

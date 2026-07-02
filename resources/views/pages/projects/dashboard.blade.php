@@ -23,12 +23,14 @@
 .pjd-filter-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .pjd-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:12px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:800; cursor:pointer; }
 .pjd-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
-.pjd-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:16px; }
-.pjd-stat { position:relative; overflow:hidden; background:#fff; border:1px solid #eee7df; border-radius:10px; padding:18px; box-shadow:0 14px 34px rgba(15,23,42,.05); }
-.pjd-stat::before { content:''; position:absolute; inset:0 0 auto 0; height:4px; background:var(--stat-color,#fe5f04); }
-.pjd-stat-label { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7c7c7c; }
-.pjd-stat-value { margin-top:10px; font-size:25px; font-weight:900; line-height:1; color:#111827; }
-.pjd-stat-sub { margin-top:10px; font-size:12px; color:#64748b; }
+.pjd-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+.pjd-stat { position:relative; overflow:hidden; background:var(--stat-gradient); border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
+.pjd-stat:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(0,0,0,0.15),0 10px 10px -5px rgba(0,0,0,0.08); }
+.pjd-stat-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.pjd-stat-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,0.2); color:#fff; font-size:16px; backdrop-filter:blur(4px); }
+.pjd-stat-label { font-size:11px; font-weight:800; color:rgba(255,255,255,0.95); text-transform:uppercase; letter-spacing:.06em; }
+.pjd-stat-value { font-size:22px; font-weight:900; color:#fff; line-height:1.2; margin-top:8px; display:flex; justify-content:space-between; align-items:center; }
+.pjd-stat-sub { margin-top:12px; font-size:12px; color:rgba(255,255,255,0.85); font-weight:500; }
 .pjd-table-wrap { overflow-x:auto; }
 .pjd-table { width:100%; border-collapse:collapse; min-width:880px; }
 .pjd-table th { padding:12px 14px; text-align:left; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#7c7c7c; background:#fafaf9; border-bottom:1px solid #f2ede8; }
@@ -77,12 +79,11 @@
 .tox-tinymce { border-radius:16px !important; border-color:#dbe1e8 !important; }
 @media (max-width: 1200px) {
     .pjd-filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .pjd-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media (max-width: 768px) {
     .pjd-topbar { padding:18px 16px; flex-direction:column; }
     .pjd-body { padding:18px 16px 24px; }
-    .pjd-filters, .pjd-stats, .pjd-kpis { grid-template-columns:1fr; }
+    .pjd-filters, .pjd-kpis { grid-template-columns:1fr; }
     .ps-form-grid { grid-template-columns:1fr; }
     .pjd-update-modal { width:min(100vw - 20px, 860px); max-height:calc(100vh - 20px); }
     .pjd-update-modal-head { padding:18px 16px; }
@@ -107,32 +108,105 @@
         </div>
 
         <div class="pjd-body">
+            @if(session('success'))
+                <div style="padding: 14px 20px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(22, 101, 52, 0.05);">
+                    <i class="bi bi-check-circle-fill" style="margin-right: 8px;"></i> {{ session('success') }}
+                </div>
+            @endif
+            @if(session('error'))
+                <div style="padding: 14px 20px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(153, 27, 27, 0.05);">
+                    <i class="bi bi-exclamation-triangle-fill" style="margin-right: 8px;"></i> {{ session('error') }}
+                </div>
+            @endif
+            @if($errors->any())
+                <div style="padding: 14px 20px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(153, 27, 27, 0.05);">
+                    <div style="margin-bottom: 6px;"><i class="bi bi-x-circle-fill" style="margin-right: 8px;"></i> Please fix the following errors:</div>
+                    <ul style="margin: 0; padding-left: 24px; font-weight: 500;">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
             {{-- Metrics Cards --}}
-            <div class="pjd-stats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-                <div class="pjd-stat" style="--stat-color: #3b82f6;">
-                    <div class="pjd-stat-label">Daily Task Goal Count</div>
-                    <div class="pjd-stat-value">{{ $stats['daily_task_goal'] }}</div>
+            <div class="pjd-stats" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                {{-- Daily Task Goal Card --}}
+                {{--  <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Daily Task Goal</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-bullseye"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>P: {{ $stats['daily_target_posters'] }}</span>
+                        <span>V: {{ $stats['daily_target_videos'] }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Today's target posters/videos</div>
-                </div>
-                <div class="pjd-stat" style="--stat-color: #ef4444;">
-                    <div class="pjd-stat-label">Overdue Count</div>
-                    <div class="pjd-stat-value">{{ $stats['overdue_count'] }}</div>
-                    <div class="pjd-stat-sub">Accounts past delivery date</div>
-                </div>
-                <div class="pjd-stat" style="--stat-color: #10b981;">
-                    <div class="pjd-stat-label">Total Accounts Count</div>
-                    <div class="pjd-stat-value">{{ $stats['total_accounts'] }}</div>
+                </div>  --}}
+
+
+
+                {{-- Total Accounts Card --}}
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Total Accounts</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-briefcase-fill"></i></span>
+                    </div>
+                    <div class="pjd-stat-value" style="font-size: 28px;">
+                        <span>{{ $stats['total_accounts'] }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Allocated active accounts</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color: #8b5cf6;">
-                    <div class="pjd-stat-label">Total Posters Count</div>
-                    <div class="pjd-stat-value">{{ $stats['total_posters'] }}</div>
+
+                {{-- Total Count Card --}}
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #581c87 0%, #8b5cf6 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Total Count</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-archive-fill"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>P: {{ $stats['total_posters'] }}</span>
+                        <span>V: {{ $stats['total_videos'] }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Required across all projects</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color: #f59e0b;">
-                    <div class="pjd-stat-label">Pending Posters</div>
-                    <div class="pjd-stat-value">{{ $stats['pending_posters'] }}</div>
-                    <div class="pjd-stat-sub">Posters remaining to be done</div>
+
+                {{-- Completed Count Card --}}
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #14532d 0%, #22c55e 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Completed Count</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-patch-check-fill"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>P: {{ $stats['completed_posters'] }}</span>
+                        <span>V: {{ $stats['completed_videos'] }}</span>
+                    </div>
+                    <div class="pjd-stat-sub">Completed across all projects</div>
+                </div>
+
+                {{-- Pending Count Card --}}
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7c2d12 0%, #f97316 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Pending Count</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-hourglass-split"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>P: {{ $stats['pending_posters'] }}</span>
+                        <span>V: {{ $stats['pending_videos'] }}</span>
+                    </div>
+                    <div class="pjd-stat-sub">Remaining (excluding overdue)</div>
+                </div>
+
+                {{-- Overdue Count Card --}}
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Overdue Count</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-clock-history"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>P: {{ $stats['overdue_posters'] }}</span>
+                        <span>V: {{ $stats['overdue_videos'] }}</span>
+                    </div>
+                    <div class="pjd-stat-sub">Pending assets past delivery date</div>
                 </div>
             </div>
 
@@ -187,6 +261,9 @@
                         <div class="pjd-card-title">Today Planned Tasks</div>
                         <div class="pjd-card-sub">Task commitments, approval states, and completion counts for {{ \Carbon\Carbon::parse($filters['date'])->format('d M Y') }}.</div>
                     </div>
+                    <button type="button" class="pjd-btn pjd-btn-primary" style="min-height:38px; padding:8px 14px; font-size:13px; border-radius:10px;" data-open-allocate-modal>
+                        <i class="bi bi-plus-lg" style="margin-right:5px;"></i> Add Task
+                    </button>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
                     <div class="pjd-table-wrap">
@@ -248,22 +325,35 @@
                                             @php
                                                 $isPastDate = \Carbon\Carbon::parse($filters['date'])->lt(\Carbon\Carbon::today());
                                             @endphp
-                                            <button type="button" 
-                                                class="pjd-btn" 
-                                                style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; @if($isPastDate) background:#cbd5e1; border-color:#cbd5e1; color:#64748b; cursor:not-allowed; @else background:#ea580c; border-color:#ea580c; color:#fff; @endif"
-                                                @disabled($isPastDate)
-                                                data-open-task-update-modal
-                                                data-project-id="{{ $task['project']->id }}"
-                                                data-project-name="{{ $task['project']->product_name }}"
-                                                data-committed-posters="{{ $task['committed_posters'] }}"
-                                                data-committed-videos="{{ $task['committed_videos'] }}"
-                                                data-waiting-posters="{{ $task['waiting_posters'] }}"
-                                                data-waiting-videos="{{ $task['waiting_videos'] }}"
-                                                data-completed-posters="{{ $task['completed_posters'] }}"
-                                                data-completed-videos="{{ $task['completed_videos'] }}"
-                                                data-day-closing-update="{{ $task['day_closing_update'] }}">
-                                                Update
-                                            </button>
+                                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                                <button type="button"
+                                                    class="pjd-btn"
+                                                    style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; @if($isPastDate) background:#cbd5e1; border-color:#cbd5e1; color:#64748b; cursor:not-allowed; @else background:#ea580c; border-color:#ea580c; color:#fff; @endif"
+                                                    @disabled($isPastDate)
+                                                    data-open-task-update-modal
+                                                    data-project-id="{{ $task['project']->id }}"
+                                                    data-project-name="{{ $task['project']->product_name }}"
+                                                    data-committed-posters="{{ $task['committed_posters'] }}"
+                                                    data-committed-videos="{{ $task['committed_videos'] }}"
+                                                    data-waiting-posters="{{ $task['waiting_posters'] }}"
+                                                    data-waiting-videos="{{ $task['waiting_videos'] }}"
+                                                    data-completed-posters="{{ $task['completed_posters'] }}"
+                                                    data-completed-videos="{{ $task['completed_videos'] }}"
+                                                    data-day-closing-update="{{ $task['day_closing_update'] }}">
+                                                    Update
+                                                </button>
+                                                @if($isTl ?? false)
+                                                    <button type="button"
+                                                        class="pjd-btn"
+                                                        style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; background:#3b82f6; border-color:#3b82f6; color:#fff;"
+                                                        data-open-allocate-modal
+                                                        data-prefill-project-id="{{ $task['project']->id }}"
+                                                        data-prefill-committed-posters="{{ $task['per_day_posters'] }}"
+                                                        data-prefill-committed-videos="{{ $task['per_day_videos'] }}">
+                                                        Reallocate
+                                                    </button>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
@@ -276,6 +366,110 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </section>
+
+            {{-- Overdue Projects Section --}}
+            <section class="pjd-card" style="border-color:#fca5a5;">
+                <div class="pjd-card-head" style="background:linear-gradient(135deg,#fef2f2 0%,#fff5f5 100%); border-bottom-color:#fca5a5;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:10px; background:#fecaca; color:#b91c1c; font-size:15px;">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </span>
+                        <div>
+                            <div class="pjd-card-title" style="color:#b91c1c;">Overdue Projects</div>
+                            <div class="pjd-card-sub" style="color:#ef4444;">Projects past their end date with pending deliverables.</div>
+                        </div>
+                    </div>
+                    <span class="pjd-highlight" style="background:#fef2f2; border-color:#fca5a5; color:#b91c1c;">
+                        {{ $overdueTasksList->count() }} Overdue
+                    </span>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
+                    @if($overdueTasksList->isNotEmpty())
+                        <div class="pjd-table-wrap">
+                            <table class="pjd-table">
+                                <thead>
+                                    <tr style="background:#fef2f2;">
+                                        <th>Account Name</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th>Tenure</th>
+                                        <th>Pending Poster</th>
+                                        <th>Pending Video</th>
+                                        <th>Committed Poster</th>
+                                        <th>Committed Video</th>
+                                        <th>Waiting Poster</th>
+                                        <th>Waiting Video</th>
+                                        <th>Completed Poster</th>
+                                        <th>Completed Video</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($overdueTasksList as $task)
+                                        <tr style="background:#fffafa;">
+                                            <td>
+                                                <a href="{{ route('projects.show', ['productionInitiation' => $task['project']->id]) }}" style="text-decoration:none; color:#b91c1c; font-weight:800;">
+                                                    {{ $task['project']->product_name }}
+                                                </a>
+                                                <div class="pjd-meta">{{ $task['project']->company_name ?: ($task['project']->lead?->company_name ?: 'No Company') }}</div>
+                                                <span style="display:inline-block; margin-top:4px; padding:2px 8px; border-radius:999px; background:#fecaca; color:#b91c1c; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em;">OVERDUE</span>
+                                            </td>
+                                            <td><span style="color:#475569;">{{ $task['start_date'] }}</span></td>
+                                            <td><span style="color:#b91c1c; font-weight:700;">{{ $task['end_date'] }}</span></td>
+                                            <td><span style="color:#475569;">{{ $task['tenure'] }}</span></td>
+                                            <td><span style="font-weight:700; color:#b91c1c;">{{ $task['pending_posters'] }}</span></td>
+                                            <td><span style="font-weight:700; color:#b91c1c;">{{ $task['pending_videos'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#1e293b;">{{ $task['committed_posters'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#1e293b;">{{ $task['committed_videos'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#ea580c;">{{ $task['waiting_posters'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#ea580c;">{{ $task['waiting_videos'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#166534;">{{ $task['completed_posters'] }}</span></td>
+                                            <td><span style="font-weight:600; color:#166534;">{{ $task['completed_videos'] }}</span></td>
+                                            <td>
+                                                @php $isPastDate = \Carbon\Carbon::parse($filters['date'])->lt(\Carbon\Carbon::today()); @endphp
+                                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                                    <button type="button"
+                                                        class="pjd-btn"
+                                                        style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; @if($isPastDate) background:#cbd5e1; border-color:#cbd5e1; color:#64748b; cursor:not-allowed; @else background:#b91c1c; border-color:#b91c1c; color:#fff; @endif"
+                                                        @disabled($isPastDate)
+                                                        data-open-task-update-modal
+                                                        data-project-id="{{ $task['project']->id }}"
+                                                        data-project-name="{{ $task['project']->product_name }}"
+                                                        data-committed-posters="{{ $task['committed_posters'] }}"
+                                                        data-committed-videos="{{ $task['committed_videos'] }}"
+                                                        data-waiting-posters="{{ $task['waiting_posters'] }}"
+                                                        data-waiting-videos="{{ $task['waiting_videos'] }}"
+                                                        data-completed-posters="{{ $task['completed_posters'] }}"
+                                                        data-completed-videos="{{ $task['completed_videos'] }}"
+                                                        data-day-closing-update="{{ $task['day_closing_update'] }}">
+                                                        Update
+                                                    </button>
+                                                    @if($isTl ?? false)
+                                                        <button type="button"
+                                                            class="pjd-btn"
+                                                            style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; background:#3b82f6; border-color:#3b82f6; color:#fff;"
+                                                            data-open-allocate-modal
+                                                            data-prefill-project-id="{{ $task['project']->id }}"
+                                                            data-prefill-committed-posters="{{ $task['per_day_posters'] }}"
+                                                            data-prefill-committed-videos="{{ $task['per_day_videos'] }}">
+                                                            Reallocate
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div style="display:flex; align-items:center; justify-content:center; gap:10px; padding:28px 20px; color:#16a34a; font-size:14px; font-weight:600;">
+                            <i class="bi bi-check-circle-fill" style="font-size:20px;"></i>
+                            No Overdue — All accounts are on track!
+                        </div>
+                    @endif
                 </div>
             </section>
         </div>
@@ -301,11 +495,11 @@
                     <div class="ps-form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
                         <div class="pjd-field">
                             <label class="ps-label">Committed Posters</label>
-                            <input type="number" name="committed_posters" id="taskModalCommittedPosters" class="ps-input" min="0" required>
+                            <input type="number" name="committed_posters" id="taskModalCommittedPosters" class="ps-input" min="0" required readonly style="background-color: #f1f5f9; cursor: not-allowed;">
                         </div>
                         <div class="pjd-field">
                             <label class="ps-label">Committed Videos</label>
-                            <input type="number" name="committed_videos" id="taskModalCommittedVideos" class="ps-input" min="0" required>
+                            <input type="number" name="committed_videos" id="taskModalCommittedVideos" class="ps-input" min="0" required readonly style="background-color: #f1f5f9; cursor: not-allowed;">
                         </div>
                     </div>
 
@@ -340,6 +534,88 @@
                     <div class="ps-actions">
                         <button type="submit" class="ps-btn ps-btn-primary" style="background:#166534; border-color:#166534; color:#fff;">Save Changes</button>
                         <button type="button" class="ps-btn" data-close-task-modal>Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {{-- Allocation Modal --}}
+        <div class="pjd-update-modal-overlay" data-allocate-modal-overlay></div>
+        <div class="pjd-update-modal" data-allocate-modal>
+            <div class="pjd-update-modal-head">
+                <div>
+                    <div class="pjd-card-title">Allocate / Reallocate Daily Task</div>
+                    <div class="pjd-card-sub">Assign today's committed poster &amp; video count.</div>
+                </div>
+                <button type="button" class="pjd-update-modal-close" data-close-allocate-modal aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="pjd-update-modal-body">
+                <form id="allocateTaskForm" method="POST" action="{{ route('projects.dashboard.allocate-task') }}" class="ps-update-form">
+                    @csrf
+                    <input type="hidden" name="timesheet_date" value="{{ $filters['date'] }}">
+
+                    {{-- Team member selector --}}
+                    <div class="pjd-field">
+                        <label class="ps-label">Assign To (Team Member)</label>
+                        @if($isTl ?? false)
+                            <select name="assigned_user_id" id="allocateUserSelect" class="ps-input" required>
+                                <option value="">— Select a team member —</option>
+                                @foreach($teamMembers as $member)
+                                    <option value="{{ $member->id }}">{{ $member->name }} — {{ implode(', ', $member->role_names) }}</option>
+                                @endforeach
+                            </select>
+                        @else
+                            <select id="allocateUserSelectDisplay" class="ps-input" disabled style="background-color: #f1f5f9; cursor: not-allowed;">
+                                <option value="{{ auth()->id() }}" selected>{{ auth()->user()->name }}</option>
+                            </select>
+                            <input type="hidden" name="assigned_user_id" id="allocateUserSelect" value="{{ auth()->id() }}">
+                        @endif
+                    </div>
+
+                    {{-- Multiple Projects selector & counts grid --}}
+                    <div class="pjd-field">
+                        <label class="ps-label">Select Accounts &amp; Enter Committed Counts</label>
+                        <div style="max-height: 250px; overflow-y: auto; border: 1px solid #dbe1e8; border-radius: 14px; padding: 12px; display: grid; gap: 12px; background: #fafafa;">
+                            @foreach($designProjects as $index => $proj)
+                                @php
+                                    $projPend = $todayPlannedTasks->firstWhere('project.id', $proj->id) ?? $overdueTasksList->firstWhere('project.id', $proj->id);
+                                    $pdp = $projPend['per_day_posters'] ?? 0;
+                                    $pdv = $projPend['per_day_videos'] ?? 0;
+                                    $pendingP = $projPend['pending_posters'] ?? 0;
+                                    $pendingV = $projPend['pending_videos'] ?? 0;
+                                    $remDays = $projPend['remaining_days'] ?? 1;
+                                @endphp
+                                <div class="project-allocation-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                                    <div style="display: flex; align-items: flex-start; gap: 10px; flex: 1;">
+                                        <input type="checkbox" name="allocations[{{ $index }}][selected]" value="1" class="allocate-project-checkbox" style="margin-top: 4px; width: 18px; height: 18px; accent-color: #3b82f6;" data-index="{{ $index }}">
+                                        <input type="hidden" name="allocations[{{ $index }}][production_initiation_id]" value="{{ $proj->id }}">
+                                        <div>
+                                            <span style="font-weight: 700; color: #1e293b; font-size: 13px;">{{ $proj->product_name }}</span>
+                                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                                                Pending: {{ $pendingP }} P / {{ $pendingV }} V &nbsp;•&nbsp; Days left: {{ $remDays }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                                            <label style="font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Posters</label>
+                                            <input type="number" name="allocations[{{ $index }}][committed_posters]" class="ps-input allocate-posters-input" min="0" value="0" disabled style="width: 80px; min-height: 36px; padding: 6px; font-size: 13px;" data-pdp="{{ $pdp }}">
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                                            <label style="font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Videos</label>
+                                            <input type="number" name="allocations[{{ $index }}][committed_videos]" class="ps-input allocate-videos-input" min="0" value="0" disabled style="width: 80px; min-height: 36px; padding: 6px; font-size: 13px;" data-pdv="{{ $pdv }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="ps-actions">
+                        <button type="submit" class="ps-btn ps-btn-primary" style="background:#3b82f6; border-color:#3b82f6; color:#fff;">Allocate Task</button>
+                        <button type="button" class="ps-btn" data-close-allocate-modal>Cancel</button>
                     </div>
                 </form>
             </div>
@@ -623,6 +899,7 @@
 @if($isDesigningDashboard ?? false)
     @push('scripts')
     <script>
+    window.userTargetsMap = @json($userTargetsMap);
     document.addEventListener('DOMContentLoaded', function () {
         const taskModal = document.querySelector('[data-task-modal]');
         const taskModalOverlay = document.querySelector('[data-task-modal-overlay]');
@@ -660,9 +937,72 @@
                 document.getElementById('taskModalCompletedVideos').value = completedVideos;
                 document.getElementById('taskModalDayClosingUpdate').value = dayClosingUpdate || '';
 
+                // Run initial validation check
+                validatePostersAndVideos();
+
                 setTaskModalState(true);
             });
         });
+
+        // Validation logic
+        const taskUpdateForm = document.getElementById('taskUpdateForm');
+        const committedPostersInput = document.getElementById('taskModalCommittedPosters');
+        const committedVideosInput = document.getElementById('taskModalCommittedVideos');
+        const waitingPostersInput = document.getElementById('taskModalWaitingPosters');
+        const waitingVideosInput = document.getElementById('taskModalWaitingVideos');
+        const completedPostersInput = document.getElementById('taskModalCompletedPosters');
+        const completedVideosInput = document.getElementById('taskModalCompletedVideos');
+
+        function validatePostersAndVideos() {
+            const committedPosters = parseInt(committedPostersInput.value) || 0;
+            const committedVideos = parseInt(committedVideosInput.value) || 0;
+            const waitingPosters = parseInt(waitingPostersInput.value) || 0;
+            const waitingVideos = parseInt(waitingVideosInput.value) || 0;
+            const completedPosters = parseInt(completedPostersInput.value) || 0;
+            const completedVideos = parseInt(completedVideosInput.value) || 0;
+
+            let isValid = true;
+
+            // Clear previous validity
+            completedPostersInput.setCustomValidity('');
+            waitingPostersInput.setCustomValidity('');
+            completedVideosInput.setCustomValidity('');
+            waitingVideosInput.setCustomValidity('');
+
+            if (completedPosters + waitingPosters > committedPosters) {
+                const msg = 'Completed + Waiting posters (' + (completedPosters + waitingPosters) + ') cannot exceed Committed posters (' + committedPosters + ').';
+                completedPostersInput.setCustomValidity(msg);
+                waitingPostersInput.setCustomValidity(msg);
+                isValid = false;
+            }
+
+            if (completedVideos + waitingVideos > committedVideos) {
+                const msg = 'Completed + Waiting videos (' + (completedVideos + waitingVideos) + ') cannot exceed Committed videos (' + committedVideos + ').';
+                completedVideosInput.setCustomValidity(msg);
+                waitingVideosInput.setCustomValidity(msg);
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        [completedPostersInput, waitingPostersInput, completedVideosInput, waitingVideosInput].forEach(function (input) {
+            input.addEventListener('input', validatePostersAndVideos);
+        });
+
+        if (taskUpdateForm) {
+            taskUpdateForm.addEventListener('submit', function (e) {
+                if (!validatePostersAndVideos()) {
+                    e.preventDefault();
+                    // Focus on the first invalid field and report validation
+                    const invalidInput = taskUpdateForm.querySelector(':invalid');
+                    if (invalidInput) {
+                        invalidInput.focus();
+                        invalidInput.reportValidity();
+                    }
+                }
+            });
+        }
 
         taskCloseButtons.forEach(function (button) {
             button.addEventListener('click', function () {
@@ -681,6 +1021,172 @@
                 setTaskModalState(false);
             }
         });
+
+        // ── Allocation Modal (Multi-Select) ──────────────────────────────────────
+        const allocateModal        = document.querySelector('[data-allocate-modal]');
+        const allocateModalOverlay = document.querySelector('[data-allocate-modal-overlay]');
+        const allocateOpenButtons  = document.querySelectorAll('[data-open-allocate-modal]');
+        const allocateCloseButtons = document.querySelectorAll('[data-close-allocate-modal]');
+        const allocateTaskForm     = document.getElementById('allocateTaskForm');
+        const allocateUserSelectVal = document.getElementById('allocateUserSelect');
+
+        function setAllocateModalState(isOpen) {
+            if (!allocateModal || !allocateModalOverlay) return;
+            allocateModal.classList.toggle('is-open', isOpen);
+            allocateModalOverlay.classList.toggle('is-open', isOpen);
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
+
+        // Enable/disable and auto-fill row inputs when checkbox is toggled
+        document.querySelectorAll('.allocate-project-checkbox').forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                const idx = this.getAttribute('data-index');
+                const postInput = document.querySelector(`input[name="allocations[${idx}][committed_posters]"]`);
+                const vidInput  = document.querySelector(`input[name="allocations[${idx}][committed_videos]"]`);
+                if (postInput && vidInput) {
+                    postInput.disabled = !this.checked;
+                    vidInput.disabled  = !this.checked;
+                    if (this.checked) {
+                        // Pre-populate with suggested per-day rate
+                        postInput.value = postInput.getAttribute('data-pdp') || '0';
+                        vidInput.value  = vidInput.getAttribute('data-pdv') || '0';
+                    } else {
+                        postInput.value = '0';
+                        vidInput.value  = '0';
+                    }
+                }
+                validateDailyTargets();
+            });
+        });
+
+        // Add input listeners for real-time validation on all committed inputs
+        document.querySelectorAll('.allocate-posters-input, .allocate-videos-input').forEach(function (input) {
+            input.addEventListener('input', validateDailyTargets);
+        });
+
+        allocateOpenButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                const prefillProjectId = this.getAttribute('data-prefill-project-id');
+                const prefillPosters   = this.getAttribute('data-prefill-committed-posters');
+                const prefillVideos    = this.getAttribute('data-prefill-committed-videos');
+
+                // Reset all rows
+                document.querySelectorAll('.allocate-project-checkbox').forEach(function (cb) {
+                    cb.checked = false;
+                    const idx = cb.getAttribute('data-index');
+                    const postInput = document.querySelector(`input[name="allocations[${idx}][committed_posters]"]`);
+                    const vidInput  = document.querySelector(`input[name="allocations[${idx}][committed_videos]"]`);
+                    if (postInput) { postInput.disabled = true; postInput.value = 0; }
+                    if (vidInput)  { vidInput.disabled = true;  vidInput.value = 0; }
+                });
+
+                // If coming from Reallocate button, select and prefill that row
+                if (prefillProjectId) {
+                    const hiddenInput = document.querySelector(`input[value="${prefillProjectId}"][name$="[production_initiation_id]"]`);
+                    if (hiddenInput) {
+                        const row = hiddenInput.closest('.project-allocation-row');
+                        const cb = row.querySelector('.allocate-project-checkbox');
+                        if (cb) {
+                            cb.checked = true;
+                            const idx = cb.getAttribute('data-index');
+                            const postInput = document.querySelector(`input[name="allocations[${idx}][committed_posters]"]`);
+                            const vidInput  = document.querySelector(`input[name="allocations[${idx}][committed_videos]"]`);
+                            if (postInput) {
+                                postInput.disabled = false;
+                                postInput.value = prefillPosters || 0;
+                            }
+                            if (vidInput) {
+                                vidInput.disabled = false;
+                                vidInput.value = prefillVideos || 0;
+                            }
+                        }
+                    }
+                }
+
+                setAllocateModalState(true);
+            });
+        });
+
+        allocateCloseButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                setAllocateModalState(false);
+            });
+        });
+
+        if (allocateModalOverlay) {
+            allocateModalOverlay.addEventListener('click', function () {
+                setAllocateModalState(false);
+            });
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                setAllocateModalState(false);
+            }
+        });
+
+        // Target daily commitment validation
+        function validateDailyTargets() {
+            if (!window.userTargetsMap) return true;
+            const userId = allocateUserSelectVal ? parseInt(allocateUserSelectVal.value) : 0;
+            if (!userId) return true;
+
+            const targets = window.userTargetsMap[userId] || { poster: 0, video: 0 };
+            let isValid = true;
+
+            document.querySelectorAll('.allocate-project-checkbox').forEach(function (cb) {
+                if (!cb.checked) return;
+                const idx = cb.getAttribute('data-index');
+                const postInput = document.querySelector(`input[name="allocations[${idx}][committed_posters]"]`);
+                const vidInput  = document.querySelector(`input[name="allocations[${idx}][committed_videos]"]`);
+
+                if (postInput) postInput.setCustomValidity('');
+                if (vidInput)  vidInput.setCustomValidity('');
+
+                if (postInput) {
+                    const val = parseInt(postInput.value) || 0;
+                    if (val > 0 && val < targets.poster) {
+                        postInput.setCustomValidity('Committed posters cannot be less than daily target (' + targets.poster + ').');
+                        isValid = false;
+                    }
+                }
+
+                if (vidInput) {
+                    const val = parseInt(vidInput.value) || 0;
+                    if (val > 0 && val < targets.video) {
+                        vidInput.setCustomValidity('Committed videos cannot be less than daily target (' + targets.video + ').');
+                        isValid = false;
+                    }
+                }
+            });
+
+            return isValid;
+        }
+
+        if (allocateUserSelectVal) {
+            allocateUserSelectVal.addEventListener('change', validateDailyTargets);
+        }
+
+        if (allocateTaskForm) {
+            allocateTaskForm.addEventListener('submit', function (e) {
+                // Ensure at least one project checkbox is checked
+                const checkedCount = document.querySelectorAll('.allocate-project-checkbox:checked').length;
+                if (checkedCount === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one account/project.');
+                    return;
+                }
+
+                if (!validateDailyTargets()) {
+                    e.preventDefault();
+                    const invalidInput = allocateTaskForm.querySelector(':invalid');
+                    if (invalidInput) {
+                        invalidInput.focus();
+                        invalidInput.reportValidity();
+                    }
+                }
+            });
+        }
     });
     </script>
     @endpush

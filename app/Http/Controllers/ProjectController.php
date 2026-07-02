@@ -49,35 +49,97 @@ class ProjectController extends Controller
                 ->where('department_id', $designDeptId)
                 ->get();
 
-            // Daily task Goal count
-            $dailyTaskGoal = (int) DesignSettingTarget::where('user_id', $user->id)
+            // Load timesheets to avoid N+1 query
+            $designProjects->load('timesheets');
+
+            $totalPosters = 0;
+            $totalVideos = 0;
+            $completedPosters = 0;
+            $completedVideos = 0;
+            $pendingPosters = 0;
+            $pendingVideos = 0;
+            $overduePosters = 0;
+            $overdueVideos = 0;
+
+            foreach ($designProjects as $project) {
+                // Parse custom form data for count targets
+                $posterCountCustom = 0;
+                $videoCountCustom = 0;
+                $endDateCustom = null;
+
+                if (is_array($project->custom_form_data)) {
+                    foreach ($project->custom_form_data as $field) {
+                        $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
+                        $value = trim((string) ($field['value'] ?? ''));
+
+                        if ($label === 'number of posters' || $label === 'number of poster') {
+                            $posterCountCustom = (int) $value;
+                        } elseif ($label === 'number of videos' || $label === 'number of video') {
+                            $videoCountCustom = (int) $value;
+                        } elseif ($label === 'end date') {
+                            $endDateCustom = $value;
+                        }
+                    }
+                }
+
+                $projectPostersDelivered = (int) $project->timesheets->sum('poster_count');
+                $projectVideosDelivered = (int) $project->timesheets->sum('video_count');
+
+                $projectPostersPending = max(0, $posterCountCustom - $projectPostersDelivered);
+                $projectVideosPending = max(0, $videoCountCustom - $projectVideosDelivered);
+
+                $totalPosters += $posterCountCustom;
+                $totalVideos += $videoCountCustom;
+                $completedPosters += $projectPostersDelivered;
+                $completedVideos += $projectVideosDelivered;
+                $pendingPosters += $projectPostersPending;
+                $pendingVideos += $projectVideosPending;
+
+                // Check if project is overdue
+                $end = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : $this->projectDeliveryDate($project);
+                $isOverdue = $end && $end->isPast() && ($projectPostersPending > 0 || $projectVideosPending > 0);
+
+                if ($isOverdue) {
+                    $overduePosters += $projectPostersPending;
+                    $overdueVideos += $projectVideosPending;
+                }
+            }
+
+            // Daily task Goal count for User (and Team if TL)
+            $userIds = [$user->id];
+            if ($this->shouldLimitToAssignedProjects($user)) {
+                $teamMemberIds = $designProjects
+                    ->flatMap(fn ($project) => Arr::wrap($project->project_allocated_employee_user_ids))
+                    ->map(fn ($id) => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->toArray();
+                $userIds = array_merge($userIds, $teamMemberIds);
+            }
+
+            $userPosterTarget = (int) DesignSettingTarget::whereIn('user_id', $userIds)
+                ->whereRaw('LOWER(product_type) = ?', ['poster'])
+                ->where('is_active', true)
+                ->sum('daily_target');
+            $userVideoTarget = (int) DesignSettingTarget::whereIn('user_id', $userIds)
+                ->whereRaw('LOWER(product_type) = ?', ['video'])
                 ->where('is_active', true)
                 ->sum('daily_target');
 
-            // Overdue Count
-            $overdueCount = $designProjects->filter(function($project) {
-                $deliveryDate = $this->projectDeliveryDate($project);
-                return $deliveryDate && $deliveryDate->isPast() && $project->project_execution_status !== 'delivered';
-            })->count();
-
-            // Total Accounts count
-            $totalAccountsCount = $designProjects->count();
-
-            // Total Posters count
-            $projectIds = $designProjects->pluck('id')->toArray();
-            $totalPostersCount = (int) ProductionCountReport::whereIn('production_initiation_id', $projectIds)->sum('poster_count');
-
-            // Pending Posters
-            $completedPostersCount = (int) ProjectTimesheet::whereIn('production_initiation_id', $projectIds)->sum('poster_count');
-            $pendingPosters = max(0, $totalPostersCount - $completedPostersCount);
-
             // Stats array for card rendering
             $stats = [
-                'daily_task_goal' => $dailyTaskGoal,
-                'overdue_count' => $overdueCount,
-                'total_accounts' => $totalAccountsCount,
-                'total_posters' => $totalPostersCount,
-                'pending_posters' => $pendingPosters,
+                'daily_target_posters' => $userPosterTarget,
+                'daily_target_videos' => $userVideoTarget,
+                'overdue_posters' => $overduePosters,
+                'overdue_videos' => $overdueVideos,
+                'total_accounts' => $designProjects->count(),
+                'total_posters' => $totalPosters,
+                'total_videos' => $totalVideos,
+                'completed_posters' => $completedPosters,
+                'completed_videos' => $completedVideos,
+                'pending_posters' => max(0, $pendingPosters - $overduePosters),
+                'pending_videos' => max(0, $pendingVideos - $overdueVideos),
             ];
 
             // Filters
@@ -108,21 +170,25 @@ class ProjectController extends Controller
                 });
             }
 
-            $userPosterTarget = (int) DesignSettingTarget::where('user_id', $user->id)
-                ->whereRaw('LOWER(product_type) = ?', ['poster'])
-                ->where('is_active', true)
-                ->value('daily_target');
-            $userVideoTarget = (int) DesignSettingTarget::where('user_id', $user->id)
-                ->whereRaw('LOWER(product_type) = ?', ['video'])
-                ->where('is_active', true)
-                ->value('daily_target');
 
-            $todayPlannedTasks = $filteredProjects->map(function ($project) use ($filterDate, $userPosterTarget, $userVideoTarget) {
-                $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
-                    ->whereDate('timesheet_date', $filterDate)
-                    ->first();
+            // TL flag and team members for Add Task feature
+            $isTl = $this->shouldLimitToAssignedProjects($user);
+            $teamMembers = $isTl ? $this->availableTeamMembers($user) : collect();
 
-                // Parse custom form data for custom date bounds and targets
+            $today = Carbon::today()->startOfDay();
+
+            $todayPlannedTasks = $filteredProjects->map(function ($project) use ($filterDate, $today, $user) {
+                // Scope timesheet query by user_id if non-TL employee
+                $timesheetQuery = ProjectTimesheet::where('production_initiation_id', $project->id)
+                    ->whereDate('timesheet_date', $filterDate);
+
+                if ($this->shouldLimitToEmployeeProjects($user)) {
+                    $timesheetQuery->where('user_id', $user->id);
+                }
+
+                $timesheet = $timesheetQuery->first();
+
+                // Parse custom form data for date bounds and counts
                 $startDateCustom = null;
                 $endDateCustom = null;
                 $tenureCustom = null;
@@ -148,7 +214,6 @@ class ProjectController extends Controller
                     }
                 }
 
-                // Compute start date, end date and tenure
                 $start = $startDateCustom ? Carbon::parse($startDateCustom)->startOfDay() : ($project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at));
                 $start = $start ? Carbon::parse($start)->startOfDay() : null;
 
@@ -157,77 +222,101 @@ class ProjectController extends Controller
 
                 $targetDate = Carbon::parse($filterDate)->startOfDay();
 
-                $allocatedPosters = 0;
-                $allocatedVideos = 0;
+                // Compute pending counts from delivered timesheets
+                $deliveredPosters = (int) $project->timesheets->sum('poster_count');
+                $deliveredVideos  = (int) $project->timesheets->sum('video_count');
+                $remainingPosters = max(0, $posterCountCustom - $deliveredPosters);
+                $remainingVideos  = max(0, $videoCountCustom - $deliveredVideos);
 
-                if ($start && $end && $targetDate->gte($start) && $targetDate->lte($end)) {
-                    $totalDays = $start->diffInDays($end) + 1;
-                    $dayIndex = $start->diffInDays($targetDate) + 1;
-                    $tenureLower = strtolower($tenureCustom ?: 'daily');
+                // Remaining days from today (or targetDate if in future) to end
+                $referenceDate = $end && $end->gte($today) ? $today : $targetDate;
+                $remainingDays = $end ? max(1, (int) $referenceDate->diffInDays($end) + 1) : 1;
 
-                    if ($tenureLower === 'weekly') {
-                        $totalWeeks = (int) ceil($totalDays / 7);
-                        $weekIndex = (int) min($totalWeeks, ceil($dayIndex / 7));
+                // Per-day rate: how many needed per day to finish on time
+                $perDayPosters = (int) ceil($remainingPosters / $remainingDays);
+                $perDayVideos  = (int) ceil($remainingVideos  / $remainingDays);
 
-                        if ($totalWeeks > 0 && $weekIndex > 0) {
-                            $allocatedPosters = (int) (round(($posterCountCustom * $weekIndex) / $totalWeeks) - round(($posterCountCustom * ($weekIndex - 1)) / $totalWeeks));
-                            $allocatedVideos = (int) (round(($videoCountCustom * $weekIndex) / $totalWeeks) - round(($videoCountCustom * ($weekIndex - 1)) / $totalWeeks));
-                        }
-                    } elseif ($tenureLower === 'monthly') {
-                        $totalMonths = (int) ceil($totalDays / 30);
-                        $monthIndex = (int) min($totalMonths, ceil($dayIndex / 30));
+                // Default committed counts to 0 (default blank) unless a timesheet already exists
+                $committedPosters = $timesheet ? (int) $timesheet->committed_posters : 0;
+                $committedVideos  = $timesheet ? (int) $timesheet->committed_videos  : 0;
 
-                        if ($totalMonths > 0 && $monthIndex > 0) {
-                            $allocatedPosters = (int) (round(($posterCountCustom * $monthIndex) / $totalMonths) - round(($posterCountCustom * ($monthIndex - 1)) / $totalMonths));
-                            $allocatedVideos = (int) (round(($videoCountCustom * $monthIndex) / $totalMonths) - round(($videoCountCustom * ($monthIndex - 1)) / $totalMonths));
-                        }
-                    } else {
-                        // Default to Daily
-                        if ($totalDays > 0 && $dayIndex > 0) {
-                            $allocatedPosters = (int) (round(($posterCountCustom * $dayIndex) / $totalDays) - round(($posterCountCustom * ($dayIndex - 1)) / $totalDays));
-                            $allocatedVideos = (int) (round(($videoCountCustom * $dayIndex) / $totalDays) - round(($videoCountCustom * ($dayIndex - 1)) / $totalDays));
-                        }
-                    }
-                }
-
-                $committedPosters = $timesheet ? $timesheet->committed_posters : $allocatedPosters;
-                $committedVideos = $timesheet ? $timesheet->committed_videos : $allocatedVideos;
-
-                $waitingPosters = $timesheet ? $timesheet->waiting_posters : 0;
-                $waitingVideos = $timesheet ? $timesheet->waiting_videos : 0;
-
-                $completedPosters = $timesheet ? $timesheet->poster_count : 0;
-                $completedVideos = $timesheet ? $timesheet->video_count : 0;
+                $waitingPosters  = $timesheet ? (int) $timesheet->waiting_posters : 0;
+                $waitingVideos   = $timesheet ? (int) $timesheet->waiting_videos  : 0;
+                $completedPosters = $timesheet ? (int) $timesheet->poster_count   : 0;
+                $completedVideos  = $timesheet ? (int) $timesheet->video_count    : 0;
 
                 $startDate = $start ? $start->format('d M Y') : '—';
-                $endDate = $end ? $end->format('d M Y') : '—';
-                $tenure = ucfirst($tenureCustom ?: 'daily');
+                $endDate   = $end   ? $end->format('d M Y')   : '—';
+                $tenure    = ucfirst($tenureCustom ?: 'daily');
+
+                $isOverdue = $end && $end->lt($today) && ($remainingPosters > 0 || $remainingVideos > 0);
 
                 return [
-                    'project' => $project,
-                    'account_name' => $project->product_name . ' (' . ($project->company_name ?: ($project->lead?->company_name ?: 'No Company')) . ')',
-                    'committed_posters' => $committedPosters,
-                    'committed_videos' => $committedVideos,
-                    'waiting_posters' => $waitingPosters,
-                    'waiting_videos' => $waitingVideos,
-                    'completed_posters' => $completedPosters,
-                    'completed_videos' => $completedVideos,
-                    'start_date' => $startDate,
-                    'end_date' => $endDate,
-                    'tenure' => $tenure,
+                    'project'           => $project,
+                    'account_name'      => $project->product_name . ' (' . ($project->company_name ?: ($project->lead?->company_name ?: 'No Company')) . ')',
+                    'committed_posters'  => $committedPosters,
+                    'committed_videos'   => $committedVideos,
+                    'waiting_posters'   => $waitingPosters,
+                    'waiting_videos'    => $waitingVideos,
+                    'completed_posters'  => $completedPosters,
+                    'completed_videos'   => $completedVideos,
+                    'start_date'        => $startDate,
+                    'end_date'          => $endDate,
+                    'tenure'            => $tenure,
                     'day_closing_update' => $timesheet ? $timesheet->day_closing_update : '',
+                    'pending_posters'   => $remainingPosters,
+                    'pending_videos'    => $remainingVideos,
+                    'remaining_days'    => $remainingDays,
+                    'per_day_posters'   => $perDayPosters,
+                    'per_day_videos'    => $perDayVideos,
+                    'is_overdue'        => $isOverdue,
                 ];
-            })->values();
+            })
+            // Only show accounts that have pending work (committed >= 1)
+            ->filter(fn ($task) => ((int) $task['committed_posters'] > 0 || (int) $task['committed_videos'] > 0))
+            ->values();
+
+            // Split into regular (on-time) and overdue lists
+            $overdueTasksList  = $todayPlannedTasks->filter(fn ($t) => $t['is_overdue'])->values();
+            $todayPlannedTasks = $todayPlannedTasks->filter(fn ($t) => ! $t['is_overdue'])->values();
+
+            // Fetch target mapping of all active design department users
+            $allDesigningUsers = User::query()
+                ->where('is_active', true)
+                ->whereHas('roles.department', function ($q) {
+                    $q->whereRaw('LOWER(name) LIKE ?', ['%design%']);
+                })
+                ->get();
+
+            $userTargetsMap = [];
+            foreach ($allDesigningUsers as $u) {
+                $pTarget = DesignSettingTarget::where('user_id', $u->id)
+                    ->whereRaw('LOWER(product_type) = ?', ['poster'])
+                    ->where('is_active', true)
+                    ->value('daily_target') ?? 0;
+                $vTarget = DesignSettingTarget::where('user_id', $u->id)
+                    ->whereRaw('LOWER(product_type) = ?', ['video'])
+                    ->where('is_active', true)
+                    ->value('daily_target') ?? 0;
+                $userTargetsMap[$u->id] = [
+                    'poster' => $pTarget,
+                    'video'  => $vTarget
+                ];
+            }
 
             return view('pages.projects.dashboard', [
                 'isDesigningDashboard' => true,
-                'stats' => $stats,
-                'designProjects' => $designProjects,
-                'todayPlannedTasks' => $todayPlannedTasks,
-                'filters' => [
+                'stats'               => $stats,
+                'designProjects'      => $designProjects,
+                'todayPlannedTasks'   => $todayPlannedTasks,
+                'overdueTasksList'    => $overdueTasksList,
+                'isTl'                => $isTl,
+                'teamMembers'         => $teamMembers,
+                'userTargetsMap'      => $userTargetsMap,
+                'filters'             => [
                     'project_id' => $filterAccountId,
-                    'date' => $filterDate,
-                    'status' => $filterStatus,
+                    'date'       => $filterDate,
+                    'status'     => $filterStatus,
                 ],
             ]);
         }
@@ -428,6 +517,18 @@ class ProjectController extends Controller
             'day_closing_update' => ['nullable', 'string'],
         ]);
 
+        if (($validated['poster_count'] + $validated['waiting_posters']) > $validated['committed_posters']) {
+            return back()->withErrors([
+                'poster_count' => 'The sum of Completed Posters (' . $validated['poster_count'] . ') and Waiting Posters (' . $validated['waiting_posters'] . ') cannot exceed Committed Posters (' . $validated['committed_posters'] . ').'
+            ])->withInput();
+        }
+
+        if (($validated['video_count'] + $validated['waiting_videos']) > $validated['committed_videos']) {
+            return back()->withErrors([
+                'video_count' => 'The sum of Completed Videos (' . $validated['video_count'] . ') and Waiting Videos (' . $validated['waiting_videos'] . ') cannot exceed Committed Videos (' . $validated['committed_videos'] . ').'
+            ])->withInput();
+        }
+
         $project = $this->visibleProjectsQuery($user)
             ->whereKey($validated['production_initiation_id'])
             ->firstOrFail();
@@ -458,7 +559,7 @@ class ProjectController extends Controller
 
             ];
             while (count($paddedLines) < 5) {
-                $paddedLines[] = array_shift($filler) ?: 'Task updated';
+                $paddedLines[] = array_shift($filler) ?: '';
             }
             $dayClosingUpdate = implode("\n", $paddedLines);
         }
@@ -491,6 +592,108 @@ class ProjectController extends Controller
         }
 
         return back()->with('success', 'Planned task details updated successfully.');
+    }
+
+    public function allocateDailyTask(Request $request): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_unless($user->belongsToDesigningDepartment(), 403);
+
+        $validated = $request->validate([
+            'assigned_user_id' => ['required', 'integer', 'exists:users,id'],
+            'timesheet_date'   => ['required', 'date'],
+            'allocations'      => ['required', 'array'],
+            'allocations.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
+            'allocations.*.committed_posters'        => ['required', 'integer', 'min:0', 'max:100000'],
+            'allocations.*.committed_videos'         => ['required', 'integer', 'min:0', 'max:100000'],
+            'allocations.*.selected'                 => ['nullable', 'string', 'in:1'],
+        ]);
+
+        $isTl = $this->shouldLimitToAssignedProjects($user);
+        $assignedUserId = (int) $validated['assigned_user_id'];
+
+        if (!$isTl) {
+            // Normal employee can only allocate tasks to themselves
+            if ($assignedUserId !== $user->id) {
+                return back()->with('error', 'You can only allocate tasks to yourself.')->withInput();
+            }
+        }
+
+        // Filter only selected allocations
+        $allocations = collect($validated['allocations'])->filter(fn($a) => isset($a['selected']) && $a['selected'] === '1');
+
+        if ($allocations->isEmpty()) {
+            return back()->with('error', 'Please select at least one account/project to allocate tasks.')->withInput();
+        }
+
+        // Daily target commitment validation: committed counts must not be less than daily targets if > 0
+        $posterTarget = (int) DesignSettingTarget::where('user_id', $assignedUserId)
+            ->whereRaw('LOWER(product_type) = ?', ['poster'])
+            ->where('is_active', true)
+            ->value('daily_target');
+
+        $videoTarget = (int) DesignSettingTarget::where('user_id', $assignedUserId)
+            ->whereRaw('LOWER(product_type) = ?', ['video'])
+            ->where('is_active', true)
+            ->value('daily_target');
+
+        foreach ($allocations as $alloc) {
+            $committedPosters = (int) $alloc['committed_posters'];
+            $committedVideos  = (int) $alloc['committed_videos'];
+
+            if ($committedPosters > 0 && $committedPosters < $posterTarget) {
+                return back()->withErrors([
+                    'allocations' => "Committed posters cannot be less than your daily target of {$posterTarget}."
+                ])->withInput();
+            }
+
+            if ($committedVideos > 0 && $committedVideos < $videoTarget) {
+                return back()->withErrors([
+                    'allocations' => "Committed videos cannot be less than your daily target of {$videoTarget}."
+                ])->withInput();
+            }
+        }
+
+        $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
+
+        foreach ($allocations as $alloc) {
+            $projId = (int) $alloc['production_initiation_id'];
+            $committedPosters = (int) $alloc['committed_posters'];
+            $committedVideos  = (int) $alloc['committed_videos'];
+
+            $project = $this->visibleProjectsQuery($user)
+                ->whereKey($projId)
+                ->firstOrFail();
+
+            $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
+                ->where('user_id', $assignedUserId)
+                ->whereDate('timesheet_date', $timesheetDate)
+                ->first();
+
+            if ($timesheet) {
+                $timesheet->update([
+                    'committed_posters' => $committedPosters,
+                    'committed_videos'  => $committedVideos,
+                ]);
+            } else {
+                ProjectTimesheet::create([
+                    'company_id'               => $project->company_id,
+                    'production_initiation_id' => $project->id,
+                    'user_id'                  => $assignedUserId,
+                    'timesheet_date'           => $timesheetDate,
+                    'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
+                    'committed_posters'        => $committedPosters,
+                    'committed_videos'         => $committedVideos,
+                    'waiting_posters'          => 0,
+                    'waiting_videos'           => 0,
+                    'poster_count'             => 0,
+                    'video_count'              => 0,
+                    'day_closing_update'       => '',
+                ]);
+            }
+        }
+
+        return back()->with('success', 'Daily task allocated successfully.');
     }
 
     public function index(Request $request): View
@@ -1783,13 +1986,31 @@ class ProjectController extends Controller
             ->with(['department', 'timesheets', 'leadProduct.product'])
             ->get()
             ->map(function ($project) {
-                $project->project_delivery_date = $this->projectDeliveryDate($project);
+                // Parse custom form data for custom date bounds
+                $startDateCustom = null;
+                $endDateCustom = null;
+
+                if (is_array($project->custom_form_data)) {
+                    foreach ($project->custom_form_data as $field) {
+                        $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
+                        $value = trim((string) ($field['value'] ?? ''));
+
+                        if ($label === 'start date') {
+                            $startDateCustom = $value;
+                        } elseif ($label === 'end date') {
+                            $endDateCustom = $value;
+                        }
+                    }
+                }
+
+                $start = $startDateCustom ? Carbon::parse($startDateCustom)->startOfDay() : ($project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at));
+                $project->start_date = $start ? Carbon::parse($start)->startOfDay() : null;
+
+                $end = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : $this->projectDeliveryDate($project);
+                $project->project_delivery_date = $end ? Carbon::parse($end)->startOfDay() : null;
 
                 $deliveryDate = $project->project_delivery_date;
                 $project->is_overdue = $deliveryDate && $deliveryDate->isPast() && $project->project_execution_status !== 'delivered';
-
-                $startDateVal = $project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at);
-                $project->start_date = $startDateVal ? Carbon::parse($startDateVal) : null;
 
                 $project->onboarded_posters = 0;
                 $project->onboarded_videos = 0;
@@ -1839,10 +2060,12 @@ class ProjectController extends Controller
         $totalPosters = $projects->sum('onboarded_posters');
         $completedPosters = $projects->sum('delivered_posters');
         $pendingPosters = max(0, $totalPosters - $completedPosters);
+        $overduePosters = $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_posters - $p->delivered_posters));
 
         $totalVideos = $projects->sum('onboarded_videos');
         $completedVideos = $projects->sum('delivered_videos');
         $pendingVideos = max(0, $totalVideos - $completedVideos);
+        $overdueVideos = $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_videos - $p->delivered_videos));
 
         $totalRenewals = $renewals->count();
 
@@ -1850,9 +2073,11 @@ class ProjectController extends Controller
             'total_posters' => $totalPosters,
             'completed_posters' => $completedPosters,
             'pending_posters' => $pendingPosters,
+            'overdue_posters' => $overduePosters,
             'total_videos' => $totalVideos,
             'completed_videos' => $completedVideos,
             'pending_videos' => $pendingVideos,
+            'overdue_videos' => $overdueVideos,
             'total_renewals' => $totalRenewals,
         ];
 
