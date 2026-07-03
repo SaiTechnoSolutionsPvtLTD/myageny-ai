@@ -345,9 +345,12 @@ class ProjectController extends Controller
             ->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
+        $defaultDateFrom = Carbon::now()->startOfMonth()->toDateString();
+        $defaultDateTo = Carbon::now()->endOfMonth()->toDateString();
+
         $dashboardFilters = [
-            'date_from' => trim((string) $request->query('date_from', '')),
-            'date_to' => trim((string) $request->query('date_to', '')),
+            'date_from' => $request->has('date_from') ? trim((string) $request->query('date_from', '')) : $defaultDateFrom,
+            'date_to' => $request->has('date_to') ? trim((string) $request->query('date_to', '')) : $defaultDateTo,
             'project_id' => trim((string) $request->query('project_id', '')),
             'team_member_id' => $this->shouldAllowDashboardUserFilter($user)
                 ? trim((string) $request->query('team_member_id', ''))
@@ -368,19 +371,84 @@ class ProjectController extends Controller
             ->whereNull('project_allocated_at')
             ->count();
 
+        $deliverySectionTitle = 'Delivery Planned Projects';
+        $deliverySectionBadge = 'Planned';
+
+        $df = $this->parseFilterDate($dashboardFilters['date_from']);
+        $dt = $this->parseFilterDate($dashboardFilters['date_to']);
+
+        if ($df && $dt) {
+            if ($df->format('Y-m') === $dt->format('Y-m')) {
+                $monthName = $df->format('F Y');
+                $deliverySectionTitle = "{$monthName} Delivery Planned Projects";
+                $deliverySectionBadge = "Planned in {$df->format('M Y')}";
+            } else {
+                $deliverySectionTitle = "Delivery Planned Projects ({$df->format('d M Y')} - {$dt->format('d M Y')})";
+                $deliverySectionBadge = "Planned in Range";
+            }
+        }
+
+        $developmentProductWiseStats = $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters)
+            ->filter(fn ($p) => $this->isDevelopmentProject($p))
+            ->groupBy('product_name')
+            ->map(function ($group) {
+                return [
+                    'delivered' => $group->where('project_execution_status', 'delivered')->count(),
+                    'ongoing' => $group->whereIn('project_execution_status', ['ontrack', 'hold'])->count(),
+                ];
+            });
+
+        $paymentStats = [
+            'received' => round((float) $filteredProjects->sum('received_amount'), 2),
+            'pending' => round((float) $filteredProjects->sum('balance_amount'), 2),
+        ];
+
+        $visibleLeadProductIds = $projects->pluck('lead_product_id')->filter()->unique()->all();
+        $lastSixMonths = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $monthKey = now()->subMonths($i)->format('Y-m');
+            $monthName = now()->subMonths($i)->format('F Y');
+            $lastSixMonths[$monthKey] = [
+                'month_name' => $monthName,
+                'revenue' => 0.0,
+            ];
+        }
+
+        if (!empty($visibleLeadProductIds)) {
+            $sixMonthsAgo = now()->startOfMonth()->subMonths(5);
+            $sixMonthsPayments = \DB::table('lead_product_payments')
+                ->whereIn('lead_product_id', $visibleLeadProductIds)
+                ->where('payment_date', '>=', $sixMonthsAgo->toDateString())
+                ->selectRaw('DATE_FORMAT(payment_date, "%Y-%m") as month, SUM(amount) as total_amount')
+                ->groupBy('month')
+                ->get();
+
+            foreach ($sixMonthsPayments as $payment) {
+                if (isset($lastSixMonths[$payment->month])) {
+                    $lastSixMonths[$payment->month]['revenue'] = round((float) $payment->total_amount, 2);
+                }
+            }
+        }
+        $sixMonthsRevenue = array_values($lastSixMonths);
+
         return view('pages.projects.dashboard', [
             'stats' => $stats,
             'allocationPendingCount' => $allocationPendingProjects,
             'dashboardFilters' => $dashboardFilters,
             'projectOptions' => $projects->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)->values(),
             'teamMemberOptions' => $this->dashboardTeamMembers($user, $projects),
-            'currentMonthDeliveryProjects' => $this->currentMonthDeliveryProjects($filteredProjects),
+            'currentMonthDeliveryProjects' => $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters),
+            'deliverySectionTitle' => $deliverySectionTitle,
+            'deliverySectionBadge' => $deliverySectionBadge,
             'recentProjects' => $filteredProjects->take(10),
             'timesheetSummary' => $this->dashboardTimesheetSummary($user, $filteredProjects, $dashboardFilters),
             'isTlScopedView' => $this->shouldLimitToAssignedProjects($user),
             'isContributorScopedView' => $this->shouldLimitToEmployeeProjects($user),
             'canQuickAddProductionUpdate' => $canQuickAddProductionUpdate,
             'quickUpdateProjects' => $quickUpdateProjects,
+            'developmentProductWiseStats' => $developmentProductWiseStats,
+            'paymentStats' => $paymentStats,
+            'sixMonthsRevenue' => $sixMonthsRevenue,
         ]);
     }
 
@@ -396,6 +464,7 @@ class ProjectController extends Controller
             });
         $timesheetFilters = [
             'filter_date' => trim((string) $request->query('filter_date', '')),
+            'filter_lead_id' => trim((string) $request->query('filter_lead_id', '')),
             'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
             'filter_status' => trim((string) $request->query('filter_status', '')),
         ];
@@ -409,19 +478,16 @@ class ProjectController extends Controller
                     // Ignore invalid filter dates from query string.
                 }
             })
+            ->when($timesheetFilters['filter_lead_id'] !== '', function ($query) use ($timesheetFilters) {
+                $query->whereHas('project', function ($q) use ($timesheetFilters) {
+                    $q->where('lead_id', (int) $timesheetFilters['filter_lead_id']);
+                });
+            })
             ->when($timesheetFilters['filter_project_id'] !== '', function ($query) use ($timesheetFilters) {
                 $query->where('production_initiation_id', (int) $timesheetFilters['filter_project_id']);
             })
-            ->when($timesheetFilters['filter_status'] === 'completed', function ($query) {
-                $query->whereNotNull('project_delivery_date')
-                    ->whereDate('project_delivery_date', '<=', Carbon::today()->toDateString());
-            })
-            ->when($timesheetFilters['filter_status'] === 'pending', function ($query) {
-                $query->where(function ($statusQuery) {
-                    $statusQuery
-                        ->whereNull('project_delivery_date')
-                        ->orWhereDate('project_delivery_date', '>', Carbon::today()->toDateString());
-                });
+            ->when($timesheetFilters['filter_status'] !== '', function ($query) use ($timesheetFilters) {
+                $query->where('status', $timesheetFilters['filter_status']);
             })
             ->latest('created_at')
             ->latest('timesheet_date')
@@ -442,6 +508,8 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
             'timesheet_date' => ['required', 'date'],
+            'status' => ['required', 'string', 'in:pending,completed'],
+            'project_type' => ['nullable', 'string', 'in:recurring,onetime'],
             'poster_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'video_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'committed_posters' => ['nullable', 'integer', 'min:0', 'max:100000'],
@@ -449,15 +517,35 @@ class ProjectController extends Controller
             'waiting_posters' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_videos' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'day_closing_update' => [
-                'required',
+                'nullable',
                 'string',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    $lines = collect(preg_split('/\R/', (string) $value))
-                        ->map(fn (string $line) => trim($line))
-                        ->filter();
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    $projectType = $request->input('project_type');
+                    $isRecurring = $projectType === 'recurring';
 
-                    if ($lines->count() < 5) {
-                        $fail('Please add at least 5 task lines in the day closing update.');
+                    $projectId = $request->input('production_initiation_id');
+                    $project = \App\Models\ProductionInitiation::with('department')->find($projectId);
+                    $isDesignOrDm = false;
+                    if ($project) {
+                        $deptName = $project->department ? strtolower($project->department->name) : '';
+                        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
+                    }
+
+                    $isRequired = !$isDesignOrDm || !$isRecurring;
+
+                    if ($isRequired && empty(trim((string) $value))) {
+                        $fail('The day closing update is required.');
+                        return;
+                    }
+
+                    if (filled($value)) {
+                        $lines = collect(preg_split('/\R/', (string) $value))
+                            ->map(fn (string $line) => trim($line))
+                            ->filter();
+
+                        if ($lines->count() < 5) {
+                            $fail('Please add at least 5 task lines in the day closing update.');
+                        }
                     }
                 },
             ],
@@ -468,36 +556,118 @@ class ProjectController extends Controller
             ->firstOrFail();
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
 
-        $alreadyExists = ProjectTimesheet::query()
-            ->where('production_initiation_id', $project->id)
+        $isOnetime = ($validated['project_type'] ?? '') === 'onetime';
+
+        $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
             ->where('user_id', $user->id)
             ->whereDate('timesheet_date', $timesheetDate)
-            ->exists();
+            ->first();
 
-        if ($alreadyExists) {
-            return back()
-                ->withErrors(['production_initiation_id' => 'Timesheet already exists for this project on the selected date.'])
-                ->withInput();
+        if ($timesheet) {
+            $timesheet->update([
+                'status' => $validated['status'],
+                'project_type' => $validated['project_type'] ?? null,
+                'poster_count' => $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0),
+                'video_count' => $isOnetime ? 0 : (int) ($validated['video_count'] ?? 0),
+                'committed_posters' => $isOnetime ? 0 : (int) ($validated['committed_posters'] ?? 0),
+                'committed_videos' => $isOnetime ? 0 : (int) ($validated['committed_videos'] ?? 0),
+                'waiting_posters' => $isOnetime ? 0 : (int) ($validated['waiting_posters'] ?? 0),
+                'waiting_videos' => $isOnetime ? 0 : (int) ($validated['waiting_videos'] ?? 0),
+                'day_closing_update' => $validated['day_closing_update'] ?? '',
+            ]);
+        } else {
+            ProjectTimesheet::create([
+                'company_id' => $project->company_id,
+                'production_initiation_id' => $project->id,
+                'user_id' => $user->id,
+                'timesheet_date' => $timesheetDate,
+                'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
+                'status' => $validated['status'],
+                'project_type' => $validated['project_type'] ?? null,
+                'poster_count' => $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0),
+                'video_count' => $isOnetime ? 0 : (int) ($validated['video_count'] ?? 0),
+                'committed_posters' => $isOnetime ? 0 : (int) ($validated['committed_posters'] ?? 0),
+                'committed_videos' => $isOnetime ? 0 : (int) ($validated['committed_videos'] ?? 0),
+                'waiting_posters' => $isOnetime ? 0 : (int) ($validated['waiting_posters'] ?? 0),
+                'waiting_videos' => $isOnetime ? 0 : (int) ($validated['waiting_videos'] ?? 0),
+                'day_closing_update' => $validated['day_closing_update'] ?? '',
+            ]);
         }
 
-        ProjectTimesheet::create([
-            'company_id' => $project->company_id,
+        \App\Models\ProjectUpdate::create([
             'production_initiation_id' => $project->id,
-            'user_id' => $user->id,
-            'timesheet_date' => $timesheetDate,
-            'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
-            'poster_count' => (int) ($validated['poster_count'] ?? 0),
-            'video_count' => (int) ($validated['video_count'] ?? 0),
-            'committed_posters' => (int) ($validated['committed_posters'] ?? 0),
-            'committed_videos' => (int) ($validated['committed_videos'] ?? 0),
-            'waiting_posters' => (int) ($validated['waiting_posters'] ?? 0),
-            'waiting_videos' => (int) ($validated['waiting_videos'] ?? 0),
-            'day_closing_update' => $validated['day_closing_update'],
+            'type' => 'timesheet',
+            'content' => "Timesheet Date: " . Carbon::parse($timesheetDate)->format('d M Y') . "\nUpdate:\n" . $validated['day_closing_update'],
+            'created_by' => $user->id,
         ]);
 
         return redirect()
             ->route('projects.timesheets')
             ->with('success', 'Timesheet saved successfully.');
+    }
+
+    public function getTimesheetData(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = auth()->user();
+        $projectId = (int) $request->query('production_initiation_id');
+        $date = trim((string) $request->query('timesheet_date'));
+
+        if (!$projectId || !$date) {
+            return response()->json(['success' => false, 'message' => 'Invalid parameters.']);
+        }
+
+        try {
+            $timesheetDate = \Carbon\Carbon::parse($date)->toDateString();
+        } catch (\Throwable) {
+            return response()->json(['success' => false, 'message' => 'Invalid date.']);
+        }
+
+        $timesheet = ProjectTimesheet::where('production_initiation_id', $projectId)
+            ->where('user_id', $user->id)
+            ->whereDate('timesheet_date', $timesheetDate)
+            ->first();
+
+        if ($timesheet) {
+            return response()->json([
+                'success' => true,
+                'exists' => true,
+                'data' => [
+                    'status' => $timesheet->status,
+                    'project_type' => $timesheet->project_type ?: 'recurring',
+                    'committed_posters' => (int) $timesheet->committed_posters,
+                    'committed_videos' => (int) $timesheet->committed_videos,
+                    'waiting_posters' => (int) $timesheet->waiting_posters,
+                    'waiting_videos' => (int) $timesheet->waiting_videos,
+                    'poster_count' => (int) $timesheet->poster_count,
+                    'video_count' => (int) $timesheet->video_count,
+                    'day_closing_update' => $timesheet->day_closing_update ?: '',
+                ]
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'exists' => false,
+            'data' => null
+        ]);
+    }
+
+    public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): RedirectResponse
+    {
+        $user = auth()->user();
+        if ($timesheet->user_id !== $user->id && !$user->hasRole('super admin')) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:pending,completed'],
+        ]);
+
+        $timesheet->update([
+            'status' => $validated['status'],
+        ]);
+
+        return back()->with('success', 'Timesheet status updated successfully.');
     }
 
     public function updatePlannedTask(Request $request): RedirectResponse
@@ -806,7 +976,7 @@ class ProjectController extends Controller
         $selectedUpdateType = (string) $request->query('update_type', '');
         $selectedUpdateDate = (string) $request->query('update_date', '');
 
-        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update'], true)) {
+        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
             $projectUpdatesQuery->where('type', $selectedUpdateType);
         } else {
             $selectedUpdateType = '';
@@ -1231,17 +1401,17 @@ class ProjectController extends Controller
                 }
 
                 if ($dateFrom || $dateTo) {
-                    $dashboardDate = $project->dashboard_date;
+                    $deliveryDate = $project->project_delivery_date;
 
-                    if (! $dashboardDate) {
+                    if (! $deliveryDate) {
                         return false;
                     }
 
-                    if ($dateFrom && $dashboardDate->lt($dateFrom)) {
+                    if ($dateFrom && $deliveryDate->lt($dateFrom)) {
                         return false;
                     }
 
-                    if ($dateTo && $dashboardDate->gt($dateTo)) {
+                    if ($dateTo && $deliveryDate->gt($dateTo)) {
                         return false;
                     }
                 }
@@ -1405,10 +1575,14 @@ class ProjectController extends Controller
         })->values()->all();
     }
 
-    private function currentMonthDeliveryProjects(Collection $projects): Collection
+
+    private function currentMonthDeliveryProjects(Collection $projects, array $filters = []): Collection
     {
-        $monthStart = Carbon::today()->startOfMonth();
-        $monthEnd = Carbon::today()->endOfMonth();
+        $dateFrom = $this->parseFilterDate($filters['date_from'] ?? '');
+        $dateTo = $this->parseFilterDate($filters['date_to'] ?? '');
+
+        $monthStart = $dateFrom ?: Carbon::today()->startOfMonth();
+        $monthEnd = $dateTo ?: Carbon::today()->endOfMonth();
 
         return $projects
             ->filter(function (ProductionInitiation $project) use ($monthStart, $monthEnd) {

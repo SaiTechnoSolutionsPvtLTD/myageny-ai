@@ -20,6 +20,7 @@ class StoreLeadFormFieldRequest extends FormRequest
             'default_value'        => ['nullable', 'string'],
             'is_required'          => ['boolean'],
             'is_active'            => ['boolean'],
+            'show_on_lead_create'  => ['boolean'],
             'sort_order'           => ['integer', 'min:0'],
             'branch_id'            => ['nullable', 'integer'],
 

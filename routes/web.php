@@ -404,8 +404,7 @@ Route::middleware(['auth'])->group(function () {
 
 });
 
-Route::get('/forms/{token}', [DynamicFormController::class, 'publicShow'])->name('dynamic-forms.public.show');
-Route::post('/forms/{token}', [DynamicFormController::class, 'publicSubmit'])->name('dynamic-forms.public.submit');
+
 
 Route::resource('facility-management', FacilityManagementController::class)
          ->except(['show']);
@@ -429,7 +428,7 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->except(['show']);
 
     Route::resource('branches', BranchController::class)
-         ->middleware('can:settings.manage')
+         ->middleware('can:branches.manage')
          ->except(['show']);
 
 
@@ -464,7 +463,7 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->middleware('can:settings.manage')
          ->except(['create', 'show']);
 
-    Route::get('/facebook-integration',       [FacebookIntegrationController::class, 'index'])->name('facebook-integration');
+    Route::get('/facebook-integration',       [FacebookIntegrationController::class, 'index'])->middleware('can:facebook_integration.menuview')->name('facebook-integration');
 
     Route::get('/auth/redirect', function () {
     return Socialite::driver('facebook')->redirect();
@@ -472,9 +471,9 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
 
 Route::get('/api_integrations',[FacebookIntegrationController::class,'index']);
 Route::get('/facebook_integration',[FacebookIntegrationController::class,'facebookIndex'])->name('facebook_integration'); // FACEBOOK INTEGRATION INDEX PAGE
-Route::post('/connectfb',[FacebookIntegrationController::class,'connectfb'])->middleware('can:settings.manage');
-Route::post('/mapfields',[FacebookIntegrationController::class,'mapfields'])->middleware('can:settings.manage');
-Route::post('/fbassignleads',[FacebookIntegrationController::class,'fbassignleads'])->middleware('can:settings.manage');
+Route::post('/connectfb',[FacebookIntegrationController::class,'connectfb'])->middleware('can:facebook_integration.manage');
+Route::post('/mapfields',[FacebookIntegrationController::class,'mapfields'])->middleware('can:facebook_integration.manage');
+Route::post('/fbassignleads',[FacebookIntegrationController::class,'fbassignleads'])->middleware('can:facebook_integration.manage');
 
     Route::get('/authenticate/redirect/{social}',[FacebookIntegrationController::class,'socialiteRedirect'])->name('socialite-redirect');
 Route::get('/authenticate/callback/{social}',[FacebookIntegrationController::class,'socialiteCallback'])->name('socialite-callback');
@@ -482,35 +481,35 @@ Route::get('/authenticate/callback/{social}',[FacebookIntegrationController::cla
 Route::get('/auth/facebook',[FacebookIntegrationController::class,'socialiteRedirect']);
 Route::get('/auth/facebook/callback',[FacebookIntegrationController::class,'socialiteCallback'])->name('facebook_callback');
 
-Route::post('/multiple_campaigns',[FacebookIntegrationController::class,'multipleCampaigns'])->middleware('can:settings.manage')->name('multiple_campaigns');
-Route::post('/choose_camps',[FacebookIntegrationController::class,'chooseCampaigns'])->middleware('can:settings.manage');
+Route::post('/multiple_campaigns',[FacebookIntegrationController::class,'multipleCampaigns'])->middleware('can:facebook_integration.manage')->name('multiple_campaigns');
+Route::post('/choose_camps',[FacebookIntegrationController::class,'chooseCampaigns'])->middleware('can:facebook_integration.manage');
 
 Route::get('/viewassigned', [FacebookIntegrationController::class, 'viewAssigned']);
-Route::post('/assignUsers', [FacebookIntegrationController::class, 'assignUsers'])->middleware('can:settings.manage');
+Route::post('/assignUsers', [FacebookIntegrationController::class, 'assignUsers'])->middleware('can:facebook_integration.manage');
 
 Route::get('/fb_multiple_campaigns/{adid}', [FacebookIntegrationController::class, 'fbMultipleCampaigns'])->name('fb_multiple_campaigns');
 Route::get('/fb_multiple_accounts/{adid}', [FacebookIntegrationController::class, 'fbMultipleAdAccs'])->name('fb_multiple_accounts');
 Route::get('/fb_ac_error', [FacebookIntegrationController::class, 'fberrorLogin'])->name('fb_ac_error');
 
-Route::post('/choose_ad_accouts',[FacebookIntegrationController::class,'chooseadaccs'])->middleware('can:settings.manage');
-Route::post('/fbassignleads',[FacebookIntegrationController::class,'fbassignleads'])->middleware('can:settings.manage')->name('fbassignleads');
+Route::post('/choose_ad_accouts',[FacebookIntegrationController::class,'chooseadaccs'])->middleware('can:facebook_integration.manage');
+Route::post('/fbassignleads',[FacebookIntegrationController::class,'fbassignleads'])->middleware('can:facebook_integration.manage')->name('fbassignleads');
 
-Route::post('/deleteintegration',[FacebookIntegrationController::class,'deleteintegration'])->middleware('can:settings.manage')->name('deleteintegration');
-Route::post('/editfieldmaps',[FacebookIntegrationController::class,'editfieldmaps'])->middleware('can:settings.manage')->name('editfieldmaps');
+Route::post('/deleteintegration',[FacebookIntegrationController::class,'deleteintegration'])->middleware('can:facebook_integration.manage')->name('deleteintegration');
+Route::post('/editfieldmaps',[FacebookIntegrationController::class,'editfieldmaps'])->middleware('can:facebook_integration.manage')->name('editfieldmaps');
 Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationController::class, 'syncCampaign'])
-    ->middleware('can:settings.manage')
+    ->middleware('can:facebook_integration.manage')
     ->name('facebook-integration.sync');
 
 
-    Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->name('quotation');
-    Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:settings.manage')->name('payroll.index');
-    Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:settings.manage')->name('payroll.update');
+    Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->middleware('can:quotation_settings.menuview')->name('quotation');
+    Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:payroll_settings.menuview')->name('payroll.index');
+    Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:payroll_settings.manage')->name('payroll.update');
 
-    Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:settings.manage')->name('design-settings.index');
-    Route::post('/design-settings', [DesignSettingController::class, 'store'])->middleware('can:settings.manage')->name('design-settings.store');
+    Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:design_settings.menuview')->name('design-settings.index');
+    Route::post('/design-settings', [DesignSettingController::class, 'store'])->middleware('can:design_settings.manage')->name('design-settings.store');
 
-    Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:settings.manage')->name('quotation.update');
-    Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:settings.manage')->name('quotation.file.delete');
+    Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:quotation_settings.manage')->name('quotation.update');
+    Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:quotation_settings.manage')->name('quotation.file.delete');
 
     // Lead Source
     Route::resource('lead-sources', LeadSourceController::class)
@@ -556,3 +555,6 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
 // });
 
 });
+
+Route::get('/forms/{token}', [DynamicFormController::class, 'publicShow'])->name('dynamic-forms.public.show');
+Route::post('/forms/{token}', [DynamicFormController::class, 'publicSubmit'])->name('dynamic-forms.public.submit');

@@ -164,7 +164,18 @@ class CompanyController extends Controller
     private function createDefaultCompanyRoles(Company $company): array
     {
         $companyPermissions = Permission::ensureCrmPermissions($company->id);
-        $allPermissionNames = $companyPermissions->pluck('name')->values()->all();
+
+        $excludedModules = [
+            'ovp_module',
+            'production_approval_module',
+            'facebook_integration',
+            'payroll_settings',
+            'design_settings'
+        ];
+
+        $allPermissionNames = $companyPermissions->filter(function ($permission) use ($excludedModules) {
+            return !in_array($permission->module, $excludedModules, true);
+        })->pluck('name')->values()->all();
 
         $roleDefinitions = [
             'company_admin' => [
@@ -206,8 +217,6 @@ class CompanyController extends Controller
                     'price_requests.approve',
                     'price_requests.reject',
                     'projects.menuview',
-                    'ovp_module.menuview',
-                    'production_approval_module.menuview',
                 ]),
                 'parent' => 'company_admin',
             ],
@@ -234,7 +243,6 @@ class CompanyController extends Controller
                     'quotations.view',
                     'quotations.create',
                     'projects.menuview',
-                    'ovp_module.menuview',
                 ]),
                 'parent' => 'sales_manager',
             ],

@@ -42,6 +42,20 @@
                         <a href="{{ $shareUrl }}" target="_blank" class="eob-btn eob-btn-primary">Open Form</a>
                         <button type="button" class="eob-btn eob-btn-ghost" onclick="navigator.clipboard.writeText('{{ $shareUrl }}')">Copy Link</button>
                     </div>
+
+                    <!-- Dynamic QR Code Generator block -->
+                    <div style="margin-top:28px; padding-top:20px; border-top:1px dashed #e1dee3; display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+                        <div style="padding:12px; border:1px solid #e1dee3; border-radius:14px; background:#fff; box-shadow: 0 4px 12px rgba(18,18,18,0.03);">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ urlencode($shareUrl) }}" alt="Form QR Code" style="width:130px; height:130px; display:block;">
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="font-weight:800; font-size:15px; color:#121212;">Form QR Code</div>
+                            <div style="font-size:12px; color:#7c7c7c; margin-top:4px; line-height: 1.5;">Scan this QR code with a mobile device to open and fill the form instantly. You can also print this QR code to collect offline feedback.</div>
+                            <div style="margin-top:12px; display:flex; gap:10px;">
+                                <a href="https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={{ urlencode($shareUrl) }}" target="_blank" download="qr-code-{{ $form->slug }}.png" class="eob-btn eob-btn-ghost" style="padding:8px 14px; font-size:12px;">Download QR Code</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

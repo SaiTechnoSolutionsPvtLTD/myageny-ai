@@ -167,7 +167,7 @@
                             <select name="branch_id" class="lf-sel {{ $errors->has('branch_id') ? 'err' : '' }}" required>
                                 <option value="">— No Branch —</option>
                                 @foreach($branches as $branch)
-                                <option value="{{ $branch->id }}" {{ $old('branch_id') == $branch->id ? 'selected' : '' }}>
+                                <option value="{{ $branch->id }}" {{ $old('branch_id', auth()->user()->branch_id) == $branch->id ? 'selected' : '' }}>
                                     {{ $branch->name }}
                                 </option>
                                 @endforeach

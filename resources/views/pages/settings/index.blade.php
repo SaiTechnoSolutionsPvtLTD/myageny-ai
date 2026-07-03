@@ -329,7 +329,7 @@
         </a>
         @endcan
 
-        @can('settings.manage')
+        @can('branches.menuview')
         <a href="{{ route('settings.branches.index') }}" class="settings-card branch">
             <div class="settings-card-icon branch">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -351,7 +351,7 @@
         </a>
         @endcan
 
-        @can('settings.manage')
+        @can('payroll_settings.menuview')
         <a href="{{ route('settings.payroll.index') }}" class="settings-card payroll">
             <div class="settings-card-icon payroll">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -372,7 +372,7 @@
         </a>
         @endcan
 
-        @can('settings.manage')
+        @can('design_settings.menuview')
         <a href="{{ route('settings.design-settings.index') }}" class="settings-card design">
             <div class="settings-card-icon design">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

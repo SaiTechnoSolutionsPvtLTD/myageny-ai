@@ -42,6 +42,17 @@ class Permission extends SpatiePermission
         'facility_management' => ['menuview'],
         'assets' => ['menuview'],
         'holiday_calendar' => ['menuview'],
+        'lead_status' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'lead_source' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'outcome_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'outcome_sub_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'product_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'product_attributes' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'quotation_settings' => ['menuview', 'manage'],
+        'branches' => ['menuview', 'manage'],
+        'payroll_settings' => ['menuview', 'manage'],
+        'design_settings' => ['menuview', 'manage'],
+        'facebook_integration' => ['menuview', 'manage'],
     ];
 
     protected $fillable = [

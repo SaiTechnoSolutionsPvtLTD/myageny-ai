@@ -115,6 +115,7 @@ class StoreLeadRequest extends FormRequest
 
         return LeadFormField::query()
             ->where('is_active', true)
+            ->where('show_on_lead_create', true)
             ->when($branchId, function ($query) use ($branchId) {
                 $query->where(function ($branchQuery) use ($branchId) {
                     $branchQuery->whereNull('branch_id')

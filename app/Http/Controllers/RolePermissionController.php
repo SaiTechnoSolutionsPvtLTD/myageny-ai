@@ -61,7 +61,26 @@ class RolePermissionController extends Controller
             'description'  => ['nullable', 'string', 'max:500'],
             'department_id'=> ['nullable', 'exists:departments,id'],
             'permissions'  => ['nullable', 'array'],
-            'permissions.*'=> ['exists:permissions,name'],
+            'permissions.*'=> [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) use ($companyId) {
+                    $exists = Permission::withoutGlobalScopes()
+                        ->where('name', $value)
+                        ->where(function ($query) use ($companyId) {
+                            if ($companyId !== null) {
+                                $query->where('company_id', $companyId);
+                            } else {
+                                $query->whereNull('company_id');
+                            }
+                        })
+                        ->exists();
+
+                    if (!$exists) {
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         $roleName = Role::tenantRoleName($data['name'], $companyId);
@@ -121,6 +140,8 @@ class RolePermissionController extends Controller
 
     public function rolesPermissionsEdit(Role $role)
     {
+        Permission::ensureCrmPermissions($role->company_id);
+
         $permissions = Permission::orderBy('module')
             ->orderByRaw('COALESCE(display_name, name)')
             ->get()
@@ -132,9 +153,32 @@ class RolePermissionController extends Controller
 
     public function rolesPermissionsUpdate(Request $request, Role $role)
     {
+        Permission::ensureCrmPermissions($role->company_id);
+
+        $companyId = auth()->user()?->company_id;
+
         $data = $request->validate([
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['exists:permissions,name'],
+            'permissions.*' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) use ($companyId) {
+                    $exists = Permission::withoutGlobalScopes()
+                        ->where('name', $value)
+                        ->where(function ($query) use ($companyId) {
+                            if ($companyId !== null) {
+                                $query->where('company_id', $companyId);
+                            } else {
+                                $query->whereNull('company_id');
+                            }
+                        })
+                        ->exists();
+
+                    if (!$exists) {
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         $role->syncPermissions($data['permissions'] ?? []);
@@ -335,7 +379,26 @@ class RolePermissionController extends Controller
             'roles'       => ['nullable', 'array'],
             'roles.*'     => ['exists:roles,name'],
             'permissions' => ['nullable', 'array'],
-            'permissions.*'=> ['exists:permissions,name'],
+            'permissions.*'=> [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) use ($companyId) {
+                    $exists = Permission::withoutGlobalScopes()
+                        ->where('name', $value)
+                        ->where(function ($query) use ($companyId) {
+                            if ($companyId !== null) {
+                                $query->where('company_id', $companyId);
+                            } else {
+                                $query->whereNull('company_id');
+                            }
+                        })
+                        ->exists();
+
+                    if (!$exists) {
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         if ($companyId !== null) {

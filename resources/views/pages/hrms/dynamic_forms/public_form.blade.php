@@ -5,69 +5,333 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $form->title }}</title>
+    <!-- Premium Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <style>
         :root {
-            --font-family: 'Inter', sans-serif;
-            --text-primary: #121212;
-            --text-secondary: #7c7c7c;
-            --border-color: #e1dee3;
+            --font-family: 'Outfit', sans-serif;
             --primary-orange: #fe5f04;
+            --primary-gradient: linear-gradient(135deg, #fe5f04, #ff7c30);
+            --bg-light: #f8fafc;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --glass-bg: rgba(255, 255, 255, 0.85);
         }
-        * { box-sizing: border-box; }
+        
+        * {
+            box-sizing: border-box;
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        
         body {
             margin: 0;
+            padding: 0;
             font-family: var(--font-family);
-            background: linear-gradient(180deg, #fff7f1 0%, #f7f3ef 40%, #f4f5f7 100%);
-            color: var(--text-primary);
+            background: var(--bg-light);
+            color: var(--text-dark);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
         }
-        .eob-alert { padding: 12px 16px; border-radius: 12px; font-size: 13px; border: 1px solid transparent; margin-bottom: 18px; }
-        .eob-alert-success { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
-        .eob-alert-error { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
-        .eob-form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
-        .eob-group { display:flex; flex-direction:column; gap:6px; }
-        .eob-group.full { grid-column:1 / -1; }
-        .eob-label { font-size:13px; font-weight:700; color:#444; }
-        .eob-label-required { color:#dc2626; margin-left:4px; font-weight:800; }
-        .eob-input, .eob-select, .eob-textarea {
-            width:100%;
-            padding:11px 12px;
-            border:1px solid #e1dee3;
-            border-radius:10px;
-            font-size:14px;
-            font-family:inherit;
-            outline:none;
-            background:#fff;
-            color:#121212;
+
+        /* Animated floating gradients - Light, pastel, subtle */
+        .bg-animated {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
         }
-        .eob-textarea { min-height:110px; resize:vertical; }
-        .eob-input:focus, .eob-select:focus, .eob-textarea:focus { border-color:#fe5f04; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
-        .eob-error { font-size:12px; color:#dc2626; }
-        .eob-btn {
-            display:inline-flex; align-items:center; justify-content:center; gap:6px;
-            padding:10px 18px; border-radius:10px; font-size:14px; font-weight:700;
-            border:1px solid transparent; text-decoration:none; cursor:pointer; font-family:inherit;
-            background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff;
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.25;
+            animation: float 25s infinite ease-in-out;
         }
-        .df-help { font-size: 12px; color: #8a8a8a; }
-        .check-row { display:flex; align-items:center; gap:8px; cursor:pointer; }
-        .check-row input[type=checkbox], .check-row input[type=radio] { width:16px; height:16px; accent-color:#fe5f04; }
-        .df-shell { display:flex; flex-direction:column; gap:10px; }
-        .df-public-wrap { min-height: 100vh; padding: 28px 16px; }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 50vw;
+            height: 50vw;
+            background: radial-gradient(circle, #fed7aa 0%, rgba(254,215,170,0) 70%);
+            animation-duration: 22s;
+        }
+
+        .blob-2 {
+            bottom: -15%;
+            right: -10%;
+            width: 60vw;
+            height: 60vw;
+            background: radial-gradient(circle, #e0e7ff 0%, rgba(224,231,255,0) 70%);
+            animation-duration: 28s;
+            animation-delay: -5s;
+        }
+
+        .blob-3 {
+            top: 40%;
+            left: 30%;
+            width: 35vw;
+            height: 35vw;
+            background: radial-gradient(circle, #fce7f3 0%, rgba(252,231,243,0) 70%);
+            animation-duration: 18s;
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+            33% { transform: translate(40px, -60px) scale(1.08) rotate(120deg); }
+            66% { transform: translate(-20px, 30px) scale(0.95) rotate(240deg); }
+            100% { transform: translate(0, 0) scale(1) rotate(360deg); }
+        }
+
+        .df-public-wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
         .df-public-card {
-            width: 100%; max-width: 880px; margin: 0 auto; background: rgba(255,255,255,.95);
-            border: 1px solid #e1dee3; border-radius: 24px; box-shadow: 0 18px 45px rgba(18,18,18,.06); overflow: hidden;
+            width: 100%;
+            max-width: 800px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.02);
+            overflow: hidden;
         }
-        .df-public-head { padding: 24px 28px 18px; border-bottom: 1px solid #f0eef2; }
-        .df-public-title { font-size: 26px; font-weight: 800; color: #121212; }
-        .df-public-sub { margin-top: 8px; color: #7c7c7c; line-height: 1.6; }
-        .df-public-body { padding: 24px 28px 28px; }
+
+        .df-public-head {
+            padding: 40px 40px 30px;
+            border-bottom: 1px solid #f1f5f9;
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .df-public-title {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .df-public-sub {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .df-public-body {
+            padding: 40px;
+        }
+
+        .eob-alert {
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid transparent;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .eob-alert-success {
+            background: rgba(22, 163, 74, 0.08);
+            border-color: rgba(22, 163, 74, 0.2);
+            color: #166534;
+        }
+
+        .eob-alert-error {
+            background: rgba(220, 38, 38, 0.08);
+            border-color: rgba(220, 38, 38, 0.2);
+            color: #991b1b;
+        }
+
+        .eob-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 24px;
+        }
+
+        .eob-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .eob-group.full {
+            grid-column: 1 / -1;
+        }
+
+        .eob-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .eob-label-required {
+            color: #ef4444;
+            margin-left: 4px;
+        }
+
+        .eob-input, .eob-select, .eob-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            background: #ffffff;
+            color: var(--text-dark);
+        }
+
+        .eob-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .eob-input:focus, .eob-select:focus, .eob-textarea:focus {
+            border-color: var(--primary-orange);
+            box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.15);
+            background: #ffffff;
+        }
+
+        .eob-error {
+            font-size: 13px;
+            color: #ef4444;
+            margin-top: 4px;
+        }
+
+        .eob-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            border: none;
+            text-decoration: none;
+            cursor: pointer;
+            font-family: inherit;
+            background: var(--primary-gradient);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(254, 95, 4, 0.3);
+            transform: translateY(0);
+            transition: all 0.2s ease;
+        }
+
+        .eob-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(254, 95, 4, 0.4);
+        }
+
+        .eob-btn:active {
+            transform: translateY(0);
+        }
+
+        .df-help {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .check-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            padding: 6px 0;
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            user-select: none;
+        }
+
+        .check-row:hover {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+        }
+
+        .check-row input[type=checkbox], .check-row input[type=radio] {
+            margin: 0;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-orange);
+            cursor: pointer;
+        }
+
+        .check-row span {
+            font-size: 14px;
+            color: #334155;
+        }
+
+        /* Mobile Optimization */
         @media (max-width: 768px) {
-            .eob-form-grid { grid-template-columns: 1fr; }
-            .df-public-head, .df-public-body { padding: 20px; }
+            .df-public-wrap {
+                padding: 16px 12px;
+            }
+
+            .df-public-card {
+                border-radius: 16px;
+            }
+
+            .df-public-head {
+                padding: 24px 20px 20px;
+            }
+
+            .df-public-title {
+                font-size: 24px;
+            }
+
+            .df-public-body {
+                padding: 24px 20px 20px;
+            }
+
+            .eob-form-grid {
+                grid-template-columns: 1fr;
+                gap: 18px;
+            }
+
+            .check-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Floating background animation -->
+    <div class="bg-animated">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
     <div class="df-public-wrap">
         <div class="df-public-card">
             <div class="df-public-head">
@@ -76,12 +340,24 @@
                     <div class="df-public-sub">{{ $form->description }}</div>
                 @endif
             </div>
+            
             <div class="df-public-body">
                 @if(session('success'))
-                    <div class="eob-alert eob-alert-success">{{ session('success') }}</div>
+                    <div class="eob-alert eob-alert-success">
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{{ session('success') }}</span>
+                    </div>
                 @endif
-                @if($errors->any())
-                    <div class="eob-alert eob-alert-error">Please review the highlighted fields and try again.</div>
+                
+                @if(isset($errors) && $errors->any())
+                    <div class="eob-alert eob-alert-error">
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Please review the highlighted fields and try again.</span>
+                    </div>
                 @endif
 
                 <form method="POST" action="{{ route('dynamic-forms.public.submit', $form->public_token) }}" enctype="multipart/form-data">
@@ -89,19 +365,26 @@
                     <div class="eob-form-grid">
                         @foreach($form->fields as $field)
                             <div class="eob-group {{ $field->field_type === 'textarea' ? 'full' : '' }}">
-                                <label class="eob-label">{{ $field->label }} @if($field->is_required)<span class="eob-label-required">*</span>@endif</label>
+                                <label class="eob-label">
+                                    {{ $field->label }}
+                                    @if($field->is_required)
+                                        <span class="eob-label-required">*</span>
+                                    @endif
+                                </label>
 
                                 @if($field->field_type === 'textarea')
                                     <textarea name="field_{{ $field->id }}" class="eob-textarea" placeholder="{{ $field->placeholder }}">{{ old('field_' . $field->id) }}</textarea>
+                                
                                 @elseif($field->field_type === 'select')
                                     <select name="field_{{ $field->id }}" class="eob-select">
-                                        <option value="">Select</option>
+                                        <option value="" style="background-color: #ffffff;">Select</option>
                                         @foreach($field->options ?? [] as $option)
-                                            <option value="{{ $option }}" @selected(old('field_' . $field->id) === $option)>{{ $option }}</option>
+                                            <option value="{{ $option }}" @selected(old('field_' . $field->id) === $option) style="background-color: #ffffff;">{{ $option }}</option>
                                         @endforeach
                                     </select>
+                                
                                 @elseif($field->field_type === 'radio')
-                                    <div class="df-shell">
+                                    <div class="check-grid">
                                         @foreach($field->options ?? [] as $option)
                                             <label class="check-row">
                                                 <input type="radio" name="field_{{ $field->id }}" value="{{ $option }}" @checked(old('field_' . $field->id) === $option)>
@@ -109,8 +392,9 @@
                                             </label>
                                         @endforeach
                                     </div>
+                                
                                 @elseif($field->field_type === 'checkbox')
-                                    <div class="df-shell">
+                                    <div class="check-grid">
                                         @foreach($field->options ?? [] as $option)
                                             <label class="check-row">
                                                 <input type="checkbox" name="field_{{ $field->id }}[]" value="{{ $option }}" @checked(in_array($option, old('field_' . $field->id, []), true))>
@@ -118,8 +402,10 @@
                                             </label>
                                         @endforeach
                                     </div>
+                                
                                 @elseif($field->field_type === 'file')
-                                    <input type="file" name="field_{{ $field->id }}" class="eob-input">
+                                    <input type="file" name="field_{{ $field->id }}" class="eob-input" style="padding: 9px 12px;">
+                                
                                 @else
                                     <input type="{{ $field->field_type === 'number' ? 'number' : 'text' }}" name="field_{{ $field->id }}" class="eob-input" value="{{ old('field_' . $field->id) }}" placeholder="{{ $field->placeholder }}">
                                 @endif
@@ -127,13 +413,21 @@
                                 @if($field->help_text)
                                     <div class="df-help">{{ $field->help_text }}</div>
                                 @endif
-                                @error('field_' . $field->id)<div class="eob-error">{{ $message }}</div>@enderror
+                                
+                                @error('field_' . $field->id)
+                                    <div class="eob-error">{{ $message }}</div>
+                                @enderror
                             </div>
                         @endforeach
                     </div>
 
-                    <div style="margin-top:20px;">
-                        <button type="submit" class="eob-btn">Submit Response</button>
+                    <div style="margin-top: 32px; display: flex; justify-content: flex-end;">
+                        <button type="submit" class="eob-btn">
+                            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            Submit Response
+                        </button>
                     </div>
                 </form>
             </div>

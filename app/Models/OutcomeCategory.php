@@ -3,12 +3,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class OutcomeCategory extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToCompany;
 
     protected $fillable = ['name', 'company_id'];
 
@@ -18,10 +19,5 @@ class OutcomeCategory extends Model
     public function subCategories()
     {
         return $this->hasMany(OutcomeSubCategory::class, 'category_id');
-    }
-
-    public function scopeForCompany($query)
-    {
-        return $query->where('company_id', auth()->user()->company_id);
     }
 }
