@@ -88,7 +88,7 @@ Route::delete('payments/{id}',              [LeadProductController::class, 'dest
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('lead-form-fields')->group(function () {
+Route::middleware(['web', 'auth'])->prefix('lead-form-fields')->group(function () {
 
     // ── Meta / Utility ───────────────────────────────────────────────
     Route::get('field-types',  [LeadFormFieldController::class, 'fieldTypes']);   // GET  /api/lead-form-fields/field-types

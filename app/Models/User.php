@@ -63,6 +63,20 @@ class User extends Authenticatable
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->where($builder->getModel()->getTable() . '.branch_id', $user->branch_id);
+            }
+        });
+    }
+
     public function setPhoneAttribute($value): void
     {
         $this->attributes['designation'] = $value;
@@ -196,6 +210,15 @@ class User extends Authenticatable
         return $this->hasExactRoleName(Role::tenantRoleName('company_admin', $this->company_id));
     }
 
+    public function isBranchAdmin(): bool
+    {
+        if ($this->company_id === null) {
+            return false;
+        }
+
+        return $this->hasExactRoleName(Role::tenantRoleName('branch_admin', $this->company_id));
+    }
+
     private function hasExactRoleName(string $roleName): bool
     {
         if ($this->relationLoaded('roles')) {
@@ -212,17 +235,7 @@ class User extends Authenticatable
 
     public function hasCrmPermission(string $permission): bool
     {
-        $allPermissions = $this->getAllPermissions();
-
-        if ($allPermissions->contains('name', $permission)) {
-            return true;
-        }
-
-        if ($this->company_id === null) {
-            return false;
-        }
-
-        return $allPermissions->contains('name', Permission::tenantPermissionKey($permission, $this->company_id));
+        return $this->getAllPermissions()->contains('name', $permission);
     }
 
     private function hasSystemRole(): bool
@@ -338,6 +351,19 @@ class User extends Authenticatable
         ])->isNotEmpty();
     }
 
+    public function hasSalesLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->intersect([
+            'sales_manager',
+            'sales_executive',
+            'sales_tl',
+            'sales_intern',
+            'bde',
+            'business_development_executive',
+            'telecaller',
+        ])->isNotEmpty();
+    }
+
     public function hasExecutiveLikeRole(): bool
     {
         return collect($this->roleKeys()->all())->intersect([
@@ -401,6 +427,8 @@ class User extends Authenticatable
     public function isExecutiveHrmsUser(): bool
     {
         return $this->hasExecutiveLikeRole()
+            && ! $this->hasSalesLikeRole()
+            && ! $this->belongsToSalesDepartment()
             && ! $this->belongsToHrDepartment()
             && ! $this->hasAdminLikeRole()
             && ! $this->isCompanyAdmin()
@@ -410,6 +438,8 @@ class User extends Authenticatable
     public function isHrmsAttendanceOnlyUser(): bool
     {
         return $this->hasExecutiveLikeRole()
+            && ! $this->hasSalesLikeRole()
+            && ! $this->belongsToSalesDepartment()
             && ! $this->belongsToHrDepartment()
             && ! $this->hasAdminLikeRole()
             && ! $this->isCompanyAdmin()

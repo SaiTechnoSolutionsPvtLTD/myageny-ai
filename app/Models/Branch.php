@@ -11,6 +11,20 @@ class Branch extends Model
 {
     use SoftDeletes, BelongsToCompany;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->where($builder->getModel()->getTable() . '.id', $user->branch_id);
+            }
+        });
+    }
+
     protected $fillable = [
         'company_id',
         'name',

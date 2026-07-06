@@ -184,6 +184,12 @@ class CompanyController extends Controller
                 'permissions' => $allPermissionNames,
                 'parent' => null,
             ],
+            'branch_admin' => [
+                'display_name' => 'Branch Admin',
+                'description' => 'Manages branch operations, team workflows, and HRMS records.',
+                'permissions' => $allPermissionNames,
+                'parent' => 'company_admin',
+            ],
             'sales_manager' => [
                 'display_name' => 'Sales Manager',
                 'description' => 'Manages sales performance, approvals, and customer follow-up.',

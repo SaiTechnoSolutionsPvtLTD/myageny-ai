@@ -14,7 +14,12 @@ class StoreLeadFormFieldRequest extends FormRequest
     {
         return [
             'label'                => ['required', 'string', 'max:255'],
-            'field_name'           => ['required', 'string', 'max:255', Rule::unique('lead_form_fields', 'field_name')],
+            'field_name'           => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('lead_form_fields', 'field_name')->where('company_id', auth()->user()?->company_id)
+            ],
             'field_type'           => ['required', Rule::in(['text','number','select','radio','textarea','date','email','phone'])],
             'placeholder'          => ['nullable', 'string', 'max:255'],
             'default_value'        => ['nullable', 'string'],

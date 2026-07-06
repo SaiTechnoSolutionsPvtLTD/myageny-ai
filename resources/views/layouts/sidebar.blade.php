@@ -294,7 +294,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('leaverequest.menuview')
+                @can('leave_requests.menuview')
                 <a href="{{ route('leave-requests.index') }}" class="nav-item {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('leave-requests.*'))
                         <div class="active-indicator"></div>
@@ -314,7 +314,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('permissionrequest.menuview')
+                @can('permission_requests.menuview')
                 <a href="{{ route('permission-requests.index') }}" class="nav-item {{ request()->routeIs('permission-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('permission-requests.*'))
                         <div class="active-indicator"></div>
@@ -331,7 +331,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('visitormanagement.menuview')
+                @can('visitor_management.menuview')
                 <a href="{{ route('visitor-management.index') }}" class="nav-item {{ request()->routeIs('visitor-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('visitor-management.*'))
                         <div class="active-indicator"></div>
@@ -350,7 +350,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('formbuilder.menuview')
+                @can('dynamic_forms.menuview')
                 <a href="{{ route('dynamic-forms.index') }}" class="nav-item {{ request()->routeIs('dynamic-forms.*') ? 'active' : '' }}">
                     @if(request()->routeIs('dynamic-forms.*'))
                         <div class="active-indicator"></div>
@@ -371,7 +371,7 @@
                 @endif
 
                 @if(! $hrmsSelfService)
-                @can('facilitymanagement.menuview')
+                @can('facility_management.menuview')
                 <a href="{{ route('facility-management.index') }}" class="nav-item {{ request()->routeIs('facility-management.*') ? 'active' : '' }}">
                     @if(request()->routeIs('facility-management.*'))
                         <div class="active-indicator"></div>

@@ -85,7 +85,7 @@ class DataVisibilityService
             ->filter()
             ->map(fn (string $name) => $this->roleKey($name));
 
-        if ($keys->intersect(['super_admin', 'admin', 'company_admin'])->isNotEmpty()) {
+        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin'])->isNotEmpty()) {
             return RoleMapping::ACCESS_COMPANY;
         }
 
@@ -380,7 +380,7 @@ class DataVisibilityService
 
     private function isCompanyWideUser(User $user): bool
     {
-        if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
+        if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
             return true;
         }
 
@@ -392,8 +392,8 @@ class DataVisibilityService
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin'], true);
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin'], true);
         });
     }
 
