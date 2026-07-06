@@ -164,15 +164,20 @@
                         <label class="lf-label">Branch <span class="lf-req">*</span></label>
                         <div class="lf-iw">
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                            <select name="branch_id" class="lf-sel {{ $errors->has('branch_id') ? 'err' : '' }}" required>
+                            <select name="branch_id" 
+                                    class="lf-sel {{ $errors->has('branch_id') ? 'err' : '' }}" 
+                                    required
+                                    @if(!$isEdit) style="pointer-events: none; background-color: #f3f4f6; color: #6b7280; opacity: 0.8;" tabindex="-1" @endif>
                                 <option value="">— No Branch —</option>
                                 @foreach($branches as $branch)
-                                <option value="{{ $branch->id }}" {{ $old('branch_id') == $branch->id ? 'selected' : '' }}>
+                                <option value="{{ $branch->id }}" 
+                                        data-company-id="{{ $branch->company_id }}" 
+                                        {{ $old('branch_id', auth()->user()->branch_id) == $branch->id ? 'selected' : '' }}>
                                     {{ $branch->name }}
                                 </option>
                                 @endforeach
                             </select>
-                            <svg class="lf-sel-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            <svg class="lf-sel-caret" @if(!$isEdit) style="opacity: 0.5;" @endif fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
                         @error('branch_id')<div class="lf-err">{{ $message }}</div>@enderror
                     </div>
@@ -298,6 +303,7 @@
                         <div class="lf-group {{ $isWideField ? 'span2' : '' }} custom-field-wrap"
                              data-custom-field
                              data-branch-id="{{ $branchId ?? '' }}"
+                             data-company-id="{{ $field->company_id ?? '' }}"
                              @if($branchId && old('branch_id', $isEdit ? $lead->branch_id : '') != $branchId) style="display:none;" @endif>
                             <label class="lf-label">{{ $field->label }} @if($field->is_required)<span class="lf-req">*</span>@endif</label>
 

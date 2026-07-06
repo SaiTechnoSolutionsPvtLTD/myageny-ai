@@ -170,6 +170,17 @@ class Lead extends Model
 
     protected static function booted(): void
     {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->where($builder->getModel()->getTable() . '.branch_id', $user->branch_id);
+            }
+        });
+
         static::creating(function (Lead $lead) {
             if (!$lead->created_by && auth()->check()) {
                 $lead->created_by = auth()->id();

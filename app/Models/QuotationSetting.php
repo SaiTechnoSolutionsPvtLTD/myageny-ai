@@ -10,6 +10,20 @@ class QuotationSetting extends Model
 {
     protected $fillable = ['branch_id', 'key', 'value', 'type', 'label', 'group', 'description'];
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->where($builder->getModel()->getTable() . '.branch_id', $user->branch_id);
+            }
+        });
+    }
+
     // ─── Default values if no setting found ──────────────────
     public static array $defaults = [
         'logo'              => null,

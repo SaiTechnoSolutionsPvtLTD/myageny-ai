@@ -5,7 +5,7 @@
             'title' => 'CRM',
             'description' => 'Leads, quotations, products, settings, and customer workflows.',
             'icon' => 'bi-briefcase-fill',
-            'permission' => 'dashboard.view',
+            'permission' => 'modules_menu.crm',
             'url' => route('dashboard'),
         ],
         [
@@ -13,7 +13,7 @@
             'title' => 'HRMS',
             'description' => 'Employees, attendance, payroll, and team workflows.',
             'icon' => 'bi-people-fill',
-            'permission' => 'dashboard.view',
+            'permission' => 'modules_menu.hrms',
             'url' => route('hrms.dashboard'),
         ],
         [
@@ -21,7 +21,7 @@
             'title' => 'Projects',
             'description' => 'Projects, tasks, time tracking, and project workflows.',
             'icon' => 'bi-diagram-3-fill',
-            'accessor' => 'canAccessProjectsModule',
+            'permission' => 'modules_menu.projects',
             'url' => route('projects.dashboard'),
         ],
     ];
@@ -75,14 +75,6 @@
                     <div class="module-card__title">{{ $module['title'] }}</div>
                     <div class="module-card__desc">{{ $module['description'] }}</div>
                 </a>
-            @else
-                <button type="button" class="module-card module-card--button module-card--{{ $module['key'] }}" disabled aria-disabled="true">
-                    <span class="module-card__icon" aria-hidden="true">
-                        <i class="bi {{ $module['icon'] }}"></i>
-                    </span>
-                    <div class="module-card__title">{{ $module['title'] }}</div>
-                    <div class="module-card__desc">{{ $module['description'] }}</div>
-                </button>
             @endif
         @endforeach
     </div>

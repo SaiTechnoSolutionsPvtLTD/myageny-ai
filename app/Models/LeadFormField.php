@@ -2,15 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LeadFormField extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, BelongsToCompany;
 
     protected $fillable = [
+        'company_id',
         'label',
         'field_name',
         'field_type',
@@ -18,6 +20,7 @@ class LeadFormField extends Model
         'default_value',
         'is_required',
         'is_active',
+        'show_on_lead_create',
         'sort_order',
         'is_calculation',
         'calculation_formula',
@@ -30,6 +33,7 @@ class LeadFormField extends Model
     protected $casts = [
         'is_required'          => 'boolean',
         'is_active'            => 'boolean',
+        'show_on_lead_create'  => 'boolean',
         'is_calculation'       => 'boolean',
         'options'              => 'array',
         'validation_rules'     => 'array',

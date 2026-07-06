@@ -168,7 +168,7 @@
                 </div>
                 <div class="crm-summary-stat-label">Received Cost</div>
                 <div class="crm-summary-stat-value">Rs {{ number_format($summary['received_cost'], 2) }}</div>
-                <div class="crm-summary-stat-note">Clients kitte receive pannina amount snapshot.</div>
+                <div class="crm-summary-stat-note">Snapshot of amount received from clients.</div>
             </div>
             <div class="crm-summary-stat" style="--stat-accent:#dc2626;--stat-soft:#fee2e2;">
                 <div class="crm-summary-stat-top">

@@ -11,6 +11,26 @@ class DailyAttendance extends Model
 {
     use HasFactory, BelongsToCompany;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->where(function ($query) use ($user) {
+                    $query->whereHas('employee.portalUser', function ($q) use ($user) {
+                        $q->where('branch_id', $user->branch_id);
+                    })->orWhereHas('intern.portalUser', function ($q) use ($user) {
+                        $q->where('branch_id', $user->branch_id);
+                    });
+                });
+            }
+        });
+    }
+
     protected $fillable = [
         'company_id',
         'employee_id',

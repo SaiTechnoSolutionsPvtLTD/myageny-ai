@@ -14,6 +14,22 @@ class InternJoiningForm extends Model
 {
     use HasFactory, BelongsToCompany;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->whereHas('portalUser', function ($query) use ($user) {
+                    $query->where('branch_id', $user->branch_id);
+                });
+            }
+        });
+    }
+
     public const INTERN_ID_PREFIX = 'STSINT';
     public const STATUS_ACTIVE = 'active';
     public const STATUS_RESIGNED = 'resigned';

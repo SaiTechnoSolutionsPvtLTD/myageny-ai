@@ -55,7 +55,7 @@
 .ps-textarea { min-height:240px; padding:14px; resize:vertical; }
 .ps-input:focus, .ps-textarea:focus { outline:none; border-color:#fdba74; box-shadow:0 0 0 4px rgba(254,95,4,.12); }
 .ps-update-list { display:grid; gap:14px; }
-.ps-update-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+.ps-update-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
 .ps-update-overview-card { position:relative; overflow:hidden; border:1px solid #e5e7eb; border-radius:20px; background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%); padding:18px; box-shadow:0 12px 28px rgba(15,23,42,.05); }
 .ps-update-overview-card::after { content:''; position:absolute; inset:auto 16px 0 16px; height:4px; border-radius:999px; background:var(--update-accent,#2563eb); }
 .ps-update-overview-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b; }
@@ -276,6 +276,15 @@
             'soft_bg' => '#fff7ed',
             'soft_border' => '#fed7aa',
             'soft_text' => '#c2410c',
+        ],
+        'timesheet' => [
+            'label' => 'Timesheet',
+            'title' => '',
+            'description' => '',
+            'accent' => '#10b981',
+            'soft_bg' => '#f0fdf4',
+            'soft_border' => '#bbf7d0',
+            'soft_text' => '#15803d',
         ],
     ];
     $allocationStatusTone = $isTlScopedView
@@ -787,6 +796,7 @@
                                     <option value="production_update" @selected($selectedUpdateType === 'production_update')>Production Update</option>
                                     <option value="meeting_update" @selected($selectedUpdateType === 'meeting_update')>Meeting Update</option>
                                     <option value="weekly_update" @selected($selectedUpdateType === 'weekly_update')>Weekly Update</option>
+                                    <option value="timesheet" @selected($selectedUpdateType === 'timesheet')>Timesheet</option>
                                 </select>
                             </div>
                             <div class="ps-filter-group">
@@ -1006,7 +1016,7 @@
                         <div class="cc-empty-state">
                             <div class="cc-empty-icon">📋</div>
                             <div class="cc-empty-title">Content Calendar Not Configured</div>
-                            {{--  <div class="cc-empty-sub">Mela irukka form-la Google Sheet URL paste panni Save panunga. Sheet data automatically table-a display aagum.</div>  --}}
+                            {{--  <div class="cc-empty-sub">Enter your Google Sheet URL above and click Save. The spreadsheet data will automatically display here.</div>  --}}
                         </div>
                     @endif
 

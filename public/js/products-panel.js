@@ -259,7 +259,7 @@
 
     function fetchProductCatalogue() {
         showLoader('pp-product-loading');
-        api('GET', '/products').then(function (res) {
+        api('GET', '/products?lead_id=' + LEAD_ID).then(function (res) {
             ppState.products = res.data || [];
             renderProductMultiSelect();
         }).catch(function () {

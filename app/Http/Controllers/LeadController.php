@@ -394,6 +394,7 @@ class LeadController extends Controller
     {
         return LeadFormField::query()
             ->where('is_active', true)
+            ->where('show_on_lead_create', true)
             ->orderBy('sort_order')
             ->orderBy('label')
             ->get();
@@ -403,6 +404,7 @@ class LeadController extends Controller
     {
         $fields = LeadFormField::query()
             ->where('is_active', true)
+            ->where('show_on_lead_create', true)
             ->where(function ($query) use ($lead) {
                 $query->whereNull('branch_id')
                     ->orWhere('branch_id', $lead->branch_id);

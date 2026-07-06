@@ -278,6 +278,7 @@ select.form-control { appearance:none; cursor:pointer; }
                         <th>Type</th>
                         <th>Options</th>
                         <th>Required</th>
+                        <th>Show on Lead Create</th>
                         <th>Calculation</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -344,7 +345,7 @@ select.form-control { appearance:none; cursor:pointer; }
                     <label class="form-label">Sort Order</label>
                     <input id="fSortOrder" type="number" class="form-control" value="0" min="0">
                 </div>
-                <div class="form-group" style="justify-content:flex-end; flex-direction:row; align-items:center; gap:20px; padding-top:22px;">
+                <div class="form-group" style="justify-content:flex-end; flex-direction:row; align-items:center; gap:20px; padding-top:22px; flex-wrap:wrap;">
                     <label class="check-row">
                         <input type="checkbox" id="fRequired">
                         <label for="fRequired">Required</label>
@@ -352,6 +353,10 @@ select.form-control { appearance:none; cursor:pointer; }
                     <label class="check-row">
                         <input type="checkbox" id="fActive" checked>
                         <label for="fActive">Active</label>
+                    </label>
+                    <label class="check-row">
+                        <input type="checkbox" id="fShowOnLeadCreate" checked>
+                        <label for="fShowOnLeadCreate">Show on Lead Create</label>
                     </label>
                 </div>
             </div>
@@ -492,6 +497,7 @@ function renderTable() {
             <td>${typeBadge(f.field_type)}</td>
             <td>${optionsPreview(f)}</td>
             <td>${f.is_required ? '<i class="bi bi-check-circle-fill" style="color:#469d89"></i>' : '<i class="bi bi-dash-circle" style="color:#ddd"></i>'}</td>
+            <td>${f.show_on_lead_create ? '<i class="bi bi-check-circle-fill" style="color:#60308c"></i>' : '<i class="bi bi-dash-circle" style="color:#ddd"></i>'}</td>
             <td>${f.is_calculation ? '<span style="font-size:11px;color:#b45309;background:#fffbf0;border:1px solid #ffe4a0;padding:2px 8px;border-radius:20px;"><i class="bi bi-calculator"></i> Yes</span>' : '<span style="color:#ccc;font-size:12px;">—</span>'}</td>
             <td>
                 <label class="toggle-switch" title="${f.is_active ? 'Active' : 'Inactive'}">
@@ -568,6 +574,7 @@ function resetForm() {
     document.getElementById('fSortOrder').value = 0;
     document.getElementById('fRequired').checked = false;
     document.getElementById('fActive').checked   = true;
+    document.getElementById('fShowOnLeadCreate').checked = true;
     document.getElementById('fIsCalc').checked   = false;
     const fMin = document.getElementById('fMin');
     const fMax = document.getElementById('fMax');
@@ -595,6 +602,7 @@ function openEditModal(id) {
     document.getElementById('fSortOrder').value   = f.sort_order;
     document.getElementById('fRequired').checked  = f.is_required;
     document.getElementById('fActive').checked    = f.is_active;
+    document.getElementById('fShowOnLeadCreate').checked = !!f.show_on_lead_create;
     document.getElementById('fIsCalc').checked    = f.is_calculation;
     document.getElementById('fFormula').value     = f.calculation_formula ?? '';
     document.getElementById('fCalcLabel').value   = f.calculation_label ?? '';
@@ -691,6 +699,7 @@ async function saveField() {
         default_value:  document.getElementById('fDefault').value.trim() || null,
         is_required:    document.getElementById('fRequired').checked,
         is_active:      document.getElementById('fActive').checked,
+        show_on_lead_create: document.getElementById('fShowOnLeadCreate').checked,
         sort_order:     parseInt(document.getElementById('fSortOrder').value) || 0,
         is_calculation: isCalc,
     };

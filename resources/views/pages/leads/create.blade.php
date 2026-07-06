@@ -58,11 +58,19 @@ document.querySelectorAll('.lf-status-opt').forEach(el => {
 });
 
 function toggleCustomFieldsByBranch() {
-    const branchValue = document.querySelector('[name="branch_id"]')?.value || '';
+    const branchSelect = document.querySelector('[name="branch_id"]');
+    const selectedOption = branchSelect?.options[branchSelect.selectedIndex];
+    const branchValue = branchSelect?.value || '';
+    const companyValue = selectedOption?.dataset.companyId || '';
 
     document.querySelectorAll('[data-custom-field]').forEach(field => {
         const fieldBranchId = field.dataset.branchId || '';
-        const shouldShow = !fieldBranchId || (branchValue && fieldBranchId === branchValue);
+        const fieldCompanyId = field.dataset.companyId || '';
+        
+        const matchCompany = !fieldCompanyId || (companyValue && String(fieldCompanyId) === String(companyValue));
+        const matchBranch = !fieldBranchId || (branchValue && String(fieldBranchId) === String(branchValue));
+        
+        const shouldShow = matchCompany && matchBranch;
 
         field.style.display = shouldShow ? '' : 'none';
 

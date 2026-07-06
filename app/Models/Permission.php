@@ -9,8 +9,6 @@ use Spatie\Permission\Models\Permission as SpatiePermission;
 
 class Permission extends SpatiePermission
 {
-    use BelongsToCompany;
-
     private const CRM_PERMISSION_MAP = [
         'dashboard' => ['menuview', 'view'],
         'masters' => ['menuview', 'view'],
@@ -42,6 +40,17 @@ class Permission extends SpatiePermission
         'facility_management' => ['menuview'],
         'assets' => ['menuview'],
         'holiday_calendar' => ['menuview'],
+        'lead_status' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'lead_source' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'outcome_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'outcome_sub_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'product_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'product_attributes' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'quotation_settings' => ['menuview', 'manage'],
+        'branches' => ['menuview', 'manage'],
+        'payroll_settings' => ['menuview', 'manage'],
+        'design_settings' => ['menuview', 'manage'],
+        'facebook_integration' => ['menuview', 'manage'],
     ];
 
     protected $fillable = [
@@ -55,22 +64,12 @@ class Permission extends SpatiePermission
 
     public static function tenantPermissionName(string $module, string $action, ?int $companyId): string
     {
-        $permission = $module . '.' . $action;
-
-        if (! $companyId) {
-            return $permission;
-        }
-
-        return 'company_' . $companyId . '__' . $permission;
+        return $module . '.' . $action;
     }
 
     public static function tenantPermissionKey(string $permission, ?int $companyId): string
     {
-        if (! $companyId || str_contains($permission, '__')) {
-            return $permission;
-        }
-
-        return 'company_' . $companyId . '__' . $permission;
+        return $permission;
     }
 
     public static function ensureCrmPermissions(?int $companyId = null): Collection
@@ -84,14 +83,14 @@ class Permission extends SpatiePermission
                 $permissions->push(
                     static::withoutGlobalScopes()->firstOrCreate(
                         [
-                            'name' => static::tenantPermissionName($module, $action, $companyId),
+                            'name' => static::tenantPermissionName($module, $action, null),
                             'guard_name' => 'web',
                         ],
                         [
                             'display_name' => Str::title(str_replace('_', ' ', $action)) . ' ' . $moduleLabel,
                             'module' => $module,
                             'description' => 'Allows users to ' . str_replace('_', ' ', $action) . ' ' . strtolower($moduleLabel) . '.',
-                            'company_id' => $companyId,
+                            'company_id' => null,
                         ]
                     )
                 );

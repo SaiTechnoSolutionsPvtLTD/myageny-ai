@@ -17,6 +17,8 @@ class ProjectTimesheet extends Model
         'user_id',
         'timesheet_date',
         'project_delivery_date',
+        'status',
+        'project_type',
         'poster_count',
         'video_count',
         'committed_posters',

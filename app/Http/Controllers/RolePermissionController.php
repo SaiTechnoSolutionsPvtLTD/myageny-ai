@@ -44,8 +44,17 @@ class RolePermissionController extends Controller
     public function rolesCreate()
     {
         $departments = Department::orderBy('name')->get();
+        $companyId = auth()->user()?->company_id;
 
-        return view('pages.auth_menu.roles.create', compact('departments'));
+        Permission::ensureCrmPermissions($companyId);
+
+        $permissions = Permission::whereNull('company_id')
+            ->orderBy('module')
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get()
+            ->groupBy(fn (Permission $permission) => $permission->module ?: 'general');
+
+        return view('pages.auth_menu.roles.create', compact('departments', 'permissions'));
     }
 
     /**
@@ -55,18 +64,37 @@ class RolePermissionController extends Controller
     {
         $companyId = auth()->user()?->company_id;
 
+        \Illuminate\Support\Facades\Log::info('RolePermissionController@rolesStore request data', [
+            'all' => $request->all(),
+            'companyId' => $companyId,
+        ]);
+
         $data = $request->validate([
             'name'         => ['required', 'string', 'max:100'],
             'display_name' => ['required', 'string', 'max:150'],
             'description'  => ['nullable', 'string', 'max:500'],
             'department_id'=> ['nullable', 'exists:departments,id'],
             'permissions'  => ['nullable', 'array'],
-            'permissions.*'=> ['exists:permissions,name'],
+            'permissions.*'=> [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) use ($companyId) {
+                    $exists = Permission::where('name', $value)
+                        ->whereNull('company_id')
+                        ->exists();
+
+                    if (!$exists) {
+                        \Illuminate\Support\Facades\Log::warning('Permission validation failed for value', ['value' => $value, 'companyId' => $companyId]);
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         $roleName = Role::tenantRoleName($data['name'], $companyId);
 
         if (Role::withoutGlobalScopes()->where('name', $roleName)->exists()) {
+            \Illuminate\Support\Facades\Log::warning('Role creation failed: name already exists', ['name' => $roleName]);
             return back()
                 ->withErrors(['name' => 'A role with this key already exists for this company.'])
                 ->withInput();
@@ -81,8 +109,12 @@ class RolePermissionController extends Controller
             'company_id'   => $companyId,
         ]);
 
+        \Illuminate\Support\Facades\Log::info('Role created', ['id' => $role->id, 'name' => $role->name]);
+
         if (! empty($data['permissions'])) {
+            \Illuminate\Support\Facades\Log::info('Syncing permissions for role', ['permissions' => $data['permissions']]);
             $role->syncPermissions($data['permissions']);
+            \Illuminate\Support\Facades\Log::info('Permissions synced successfully', ['count' => $role->permissions()->count()]);
         }
 
         return redirect()->route('auth.roles.index')
@@ -121,7 +153,12 @@ class RolePermissionController extends Controller
 
     public function rolesPermissionsEdit(Role $role)
     {
-        $permissions = Permission::orderBy('module')
+        Permission::ensureCrmPermissions($role->company_id);
+
+        $roleCompanyId = $role->company_id;
+
+        $permissions = Permission::whereNull('company_id')
+            ->orderBy('module')
             ->orderByRaw('COALESCE(display_name, name)')
             ->get()
             ->groupBy(fn (Permission $permission) => $permission->module ?: 'general');
@@ -132,9 +169,25 @@ class RolePermissionController extends Controller
 
     public function rolesPermissionsUpdate(Request $request, Role $role)
     {
+        Permission::ensureCrmPermissions($role->company_id);
+
+        $roleCompanyId = $role->company_id;
+
         $data = $request->validate([
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['exists:permissions,name'],
+            'permissions.*' => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) use ($roleCompanyId) {
+                    $exists = Permission::where('name', $value)
+                        ->whereNull('company_id')
+                        ->exists();
+
+                    if (!$exists) {
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         $role->syncPermissions($data['permissions'] ?? []);
@@ -330,12 +383,25 @@ class RolePermissionController extends Controller
     public function assignUserRole(Request $request, User $user)
     {
         $companyId = auth()->user()?->company_id;
+        $userCompanyId = $user->company_id;
 
         $data = $request->validate([
             'roles'       => ['nullable', 'array'],
             'roles.*'     => ['exists:roles,name'],
             'permissions' => ['nullable', 'array'],
-            'permissions.*'=> ['exists:permissions,name'],
+            'permissions.*'=> [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    $exists = Permission::where('name', $value)
+                        ->whereNull('company_id')
+                        ->exists();
+
+                    if (!$exists) {
+                        $fail("The selected permission {$value} is invalid.");
+                    }
+                }
+            ],
         ]);
 
         if ($companyId !== null) {
@@ -346,11 +412,8 @@ class RolePermissionController extends Controller
                 })
                 ->exists();
 
-            $invalidPermission = Permission::withoutGlobalScopes()
-                ->whereIn('name', $data['permissions'] ?? [])
-                ->where(function ($query) use ($companyId) {
-                    $query->whereNull('company_id')->orWhere('company_id', '!=', $companyId);
-                })
+            $invalidPermission = Permission::whereIn('name', $data['permissions'] ?? [])
+                ->whereNotNull('company_id')
                 ->exists();
 
             abort_if($invalidRole || $invalidPermission, 403);

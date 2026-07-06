@@ -24,7 +24,7 @@
 .pjd-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:12px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:800; cursor:pointer; }
 .pjd-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
 .pjd-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
-.pjd-stat { position:relative; overflow:hidden; background:var(--stat-gradient); border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
+.pjd-stat { position:relative; overflow:hidden; background:var(--stat-gradient, linear-gradient(135deg, var(--stat-color, #ea580c) 0%, var(--stat-color, #f97316) 100%)); border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
 .pjd-stat:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(0,0,0,0.15),0 10px 10px -5px rgba(0,0,0,0.08); }
 .pjd-stat-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .pjd-stat-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,0.2); color:#fff; font-size:16px; backdrop-filter:blur(4px); }
@@ -261,9 +261,6 @@
                         <div class="pjd-card-title">Today Planned Tasks</div>
                         <div class="pjd-card-sub">Task commitments, approval states, and completion counts for {{ \Carbon\Carbon::parse($filters['date'])->format('d M Y') }}.</div>
                     </div>
-                    <button type="button" class="pjd-btn pjd-btn-primary" style="min-height:38px; padding:8px 14px; font-size:13px; border-radius:10px;" data-open-allocate-modal>
-                        <i class="bi bi-plus-lg" style="margin-right:5px;"></i> Add Task
-                    </button>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
                     <div class="pjd-table-wrap">
@@ -709,40 +706,65 @@
             </section>
 
             <section class="pjd-stats">
-                <div class="pjd-stat" style="--stat-color:#fe5f04;">
-                    <div class="pjd-stat-label">Allocated Projects</div>
-                    <div class="pjd-stat-value">{{ number_format($stats['allocated_projects']) }}</div>
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Allocated Projects</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-folder-fill"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>{{ number_format($stats['allocated_projects']) }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Projects available in the current dashboard scope.</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color:#2563eb;">
-                    <div class="pjd-stat-label">Project Value</div>
-                    <div class="pjd-stat-value">{{ $currency($stats['project_value']) }}</div>
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Project Value</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-currency-rupee"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>{{ $currency($stats['project_value']) }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Overall value of the filtered allocated projects.</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color:#16a34a;">
-                    <div class="pjd-stat-label">Received Amount</div>
-                    <div class="pjd-stat-value">{{ $currency($stats['received_amount']) }}</div>
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #14532d 0%, #22c55e 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Received Amount</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-wallet2"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>{{ $currency($stats['received_amount']) }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Payments already received for these projects.</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color:#f97316;">
-                    <div class="pjd-stat-label">Balance Amount</div>
-                    <div class="pjd-stat-value">{{ $currency($stats['balance_amount']) }}</div>
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7c2d12 0%, #f97316 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Balance Amount</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-hourglass-split"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>{{ $currency($stats['balance_amount']) }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
                 </div>
-                <div class="pjd-stat" style="--stat-color:#ea580c;">
-                    <div class="pjd-stat-label">Allocation Pending</div>
-                    <div class="pjd-stat-value">{{ $allocationPendingCount ?? 0 }}</div>
+                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Allocation Pending</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-person-fill-exclamation"></i></span>
+                    </div>
+                    <div class="pjd-stat-value">
+                        <span>{{ $allocationPendingCount ?? 0 }}</span>
+                    </div>
                     <div class="pjd-stat-sub">Projects awaiting TL and coordinator assignment.</div>
                 </div>
             </section>
 
             <section class="pjd-card">
                 <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Current Month Delivery Planned Projects</div>
-                        <div class="pjd-card-sub">Projects with planned delivery dates in the current month.</div>
-                    </div>
-                    <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->count() }} Planned This Month</span>
+                     <div>
+                         <div class="pjd-card-title">{{ $deliverySectionTitle ?? 'Delivery Planned Projects' }}</div>
+                         <div class="pjd-card-sub">Projects with planned delivery dates in this period.</div>
+                     </div>
+                     <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->count() }} {{ $deliverySectionBadge ?? 'Planned' }}</span>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
                     @if($currentMonthDeliveryProjects->isNotEmpty())
@@ -785,6 +807,62 @@
                     @endif
                 </div>
             </section>
+
+            <!-- Charts Section -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 18px;">
+                <!-- Chart 1: Development Product Delivery & Ongoing Status -->
+                <div class="pjd-card" style="display: flex; flex-direction: column;">
+                    <div class="pjd-card-head">
+                        <div>
+                            <div class="pjd-card-title">Development Product Delivery Status</div>
+                            <div class="pjd-card-sub">Delivered vs Ongoing projects for the selected period.</div>
+                        </div>
+                    </div>
+                    <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative;">
+                        @if($developmentProductWiseStats->isEmpty())
+                            <div class="pjd-empty" style="padding-top: 80px;">No development projects scheduled for delivery in this period.</div>
+                        @else
+                            <div id="devProductChart"></div>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- Chart 2: Payment Status -->
+                <div class="pjd-card" style="display: flex; flex-direction: column;">
+                    <div class="pjd-card-head">
+                        <div>
+                            <div class="pjd-card-title">Payment Status</div>
+                            <div class="pjd-card-sub">Overview of received collections and outstanding balance.</div>
+                        </div>
+                    </div>
+                    <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative; display: flex; justify-content: center; align-items: center;">
+                        @if($paymentStats['received'] == 0 && $paymentStats['pending'] == 0)
+                            <div class="pjd-empty">No payment data recorded in this period.</div>
+                        @else
+                            <div style="width: 100%; height: 100%; max-height: 240px; display: flex; justify-content: center; align-items: center;">
+                                <div id="paymentChart" style="width: 100%;"></div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart 3: Last 6 Months Revenue (Full Width) -->
+            <div class="pjd-card" style="margin-top: 18px; display: flex; flex-direction: column;">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Last 6 Months Revenue</div>
+                        <div class="pjd-card-sub">Monthly trend of payment collections received.</div>
+                    </div>
+                </div>
+                <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative;">
+                    @if(collect($sixMonthsRevenue)->sum('revenue') == 0)
+                        <div class="pjd-empty" style="padding-top: 80px;">No revenue recorded over the last six months.</div>
+                    @else
+                        <div id="revenueChart"></div>
+                    @endif
+                </div>
+            </div>
 
             <div class="pjd-split">
                 <section class="pjd-card">
@@ -1186,6 +1264,140 @@
                     }
                 }
             });
+        }
+    });
+    </script>
+    @endpush
+@endif
+
+@if(!($isDesigningDashboard ?? false))
+    @push('scripts')
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const devProductStats = @json($developmentProductWiseStats);
+        const paymentStats = @json($paymentStats);
+        const sixMonthsRevenue = @json($sixMonthsRevenue);
+
+        // 1. Development Product Chart
+        const devCanvas = document.getElementById('devProductChart');
+        if (devCanvas && typeof ApexCharts !== 'undefined') {
+            const devLabels = Object.keys(devProductStats);
+            const devDeliveredData = devLabels.map(k => devProductStats[k].delivered);
+            const devOngoingData = devLabels.map(k => devProductStats[k].ongoing);
+
+            const options = {
+                series: [{
+                    name: 'Delivered',
+                    data: devDeliveredData
+                }, {
+                    name: 'Ongoing',
+                    data: devOngoingData
+                }],
+                chart: {
+                    type: 'bar',
+                    height: 280,
+                    stacked: true,
+                    toolbar: { show: false }
+                },
+                colors: ['#10b981', '#f59e0b'],
+                plotOptions: {
+                    bar: {
+                        horizontal: false,
+                        borderRadius: 6
+                    },
+                },
+                xaxis: {
+                    categories: devLabels,
+                },
+                legend: {
+                    position: 'bottom'
+                },
+                fill: {
+                    opacity: 1
+                }
+            };
+
+            const chart = new ApexCharts(devCanvas, options);
+            chart.render();
+        }
+
+        // 2. Payment Chart
+        const paymentCanvas = document.getElementById('paymentChart');
+        if (paymentCanvas && typeof ApexCharts !== 'undefined') {
+            const options = {
+                series: [paymentStats.received, paymentStats.pending],
+                labels: ['Received', 'Pending'],
+                colors: ['#10b981', '#ef4444'],
+                chart: {
+                    type: 'donut',
+                    height: 280
+                },
+                legend: {
+                    position: 'bottom'
+                },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '70%'
+                        }
+                    }
+                },
+                dataLabels: {
+                    enabled: false
+                }
+            };
+
+            const chart = new ApexCharts(paymentCanvas, options);
+            chart.render();
+        }
+
+        // 3. Last 6 Months Revenue Chart
+        const revCanvas = document.getElementById('revenueChart');
+        if (revCanvas && typeof ApexCharts !== 'undefined') {
+            const revLabels = sixMonthsRevenue.map(item => item.month_name);
+            const revData = sixMonthsRevenue.map(item => item.revenue);
+
+            const options = {
+                series: [{
+                    name: 'Revenue Billed',
+                    data: revData
+                }],
+                colors: ['#ea580c'],
+                chart: {
+                    type: 'area',
+                    height: 280,
+                    toolbar: { show: false }
+                },
+                stroke: {
+                    curve: 'smooth',
+                    width: 3
+                },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.4,
+                        opacityTo: 0.05,
+                        stops: [0, 90, 100]
+                    }
+                },
+                xaxis: {
+                    categories: revLabels,
+                },
+                yaxis: {
+                    labels: {
+                        formatter: function (value) {
+                            return 'Rs ' + value.toLocaleString();
+                        }
+                    }
+                },
+                dataLabels: {
+                    enabled: false
+                }
+            };
+
+            const chart = new ApexCharts(revCanvas, options);
+            chart.render();
         }
     });
     </script>

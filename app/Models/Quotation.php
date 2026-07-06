@@ -12,6 +12,22 @@ class Quotation extends Model
 {
     use HasFactory, BelongsToCompany;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            if (! auth()->hasUser()) {
+                return;
+            }
+
+            $user = auth()->user();
+            if ($user && $user->isBranchAdmin() && $user->branch_id) {
+                $builder->whereHas('lead', function ($query) use ($user) {
+                    $query->where('branch_id', $user->branch_id);
+                });
+            }
+        });
+    }
+
     public const CUSTOMER_RESPONSE_PENDING = 'pending';
     public const CUSTOMER_RESPONSE_AGREE = 'agree';
     public const CUSTOMER_RESPONSE_DISAGREE = 'disagree';

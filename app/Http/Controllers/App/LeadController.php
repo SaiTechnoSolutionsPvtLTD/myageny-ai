@@ -164,6 +164,7 @@ class LeadController extends Controller
             $leadData = collect($validated)->except('reminder')->toArray();
             $leadData['created_by'] = $request->user()->id;
             $leadData['assigned_to'] = $leadData['assigned_to'] ?? $request->user()->id;
+            $leadData['branch_id'] = $leadData['branch_id'] ?? $request->user()->branch_id;
 
             abort_unless($this->visibility->canAssignTo($leadData['assigned_to'], $request->user()), 403);
 
@@ -628,6 +629,7 @@ class LeadController extends Controller
     {
         $fields = LeadFormField::query()
             ->where('is_active', true)
+            ->where('show_on_lead_create', true)
             ->where(function ($query) use ($lead) {
                 $query->whereNull('branch_id')
                     ->orWhere('branch_id', $lead->branch_id);
@@ -676,6 +678,7 @@ class LeadController extends Controller
     public function customFields(): JsonResponse
     {
         $fields = LeadFormField::where('is_active', true)
+            ->where('show_on_lead_create', true)
             ->orderBy('sort_order')
             ->orderBy('label')
             ->get();

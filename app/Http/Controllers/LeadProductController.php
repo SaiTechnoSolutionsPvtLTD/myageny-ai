@@ -32,13 +32,23 @@ class LeadProductController extends Controller
      * GET /api/products
      * Returns all active products for the multi-select dropdown.
      */
-    public function productList(): JsonResponse
+    public function productList(Request $request): JsonResponse
     {
         $query = Product::with('category')
             ->where('status', 'active')
             ->orderBy('sort_order');
 
-        $this->visibility->applyProductVisibility($query);
+        if ($request->filled('lead_id')) {
+            $lead = Lead::find($request->lead_id);
+            if ($lead && $lead->company_id) {
+                $query->withoutGlobalScope('company')
+                    ->where('company_id', $lead->company_id);
+            } else {
+                $this->visibility->applyProductVisibility($query);
+            }
+        } else {
+            $this->visibility->applyProductVisibility($query);
+        }
 
         $products = $query
             ->get()

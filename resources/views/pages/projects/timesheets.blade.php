@@ -30,22 +30,46 @@
 .pts-update-text { line-height:1.65; color:#334155; max-width:520px; }
 .pts-pill { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid #fed7aa; color:#c2410c; background:#fff7ed; }
 .pts-status { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid transparent; }
-.pts-status.completed { color:#c2410c; background:#fff7ed; border-color:#fed7aa; }
+.pts-status.completed { color:#15803d; background:#f0fdf4; border-color:#bbf7d0; }
 .pts-status.pending { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
+.pts-status-select {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid transparent;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 10px;
+    padding-right: 24px;
+}
+.pts-status-select.completed { color:#15803d; background-color:#f0fdf4; border-color:#bbf7d0; }
+.pts-status-select.pending { color:#b45309; background-color:#fff7ed; border-color:#fed7aa; }
 .pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; padding:16px; box-shadow:0 10px 28px rgba(15,23,42,.04); }
-.pts-filter-form { display:grid; grid-template-columns:190px 1fr 190px auto; gap:12px; align-items:end; }
+.pts-filter-form { display:grid; grid-template-columns: repeat(4, 1fr) auto; gap:16px; align-items:end; }
 .pts-filter-group { display:grid; gap:7px; }
 .pts-filter-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .pts-reset-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:13px; font-weight:800; text-decoration:none; }
 .pts-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.42); z-index:1200; display:none; }
 .pts-modal-overlay.is-open { display:block; }
-.pts-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(840px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 24px 60px rgba(15,23,42,.22); z-index:1210; display:none; }
+.pts-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(1000px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 24px 60px rgba(15,23,42,.22); z-index:1210; display:none; }
 .pts-modal.is-open { display:block; }
 .pts-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
 .pts-modal-close { width:40px; height:40px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:16px; cursor:pointer; }
 .pts-modal-body { padding:20px; }
-.pts-form-grid { display:grid; grid-template-columns:1fr 190px 190px; gap:14px; align-items:start; }
-.pts-form-full { grid-column:1/-1; }
+.pts-form-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:16px; align-items:start; }
+.pts-grid-col-12 { grid-column: span 12; }
+.pts-grid-col-6 { grid-column: span 6; }
+.pts-grid-col-4 { grid-column: span 4; }
+.pts-grid-col-3 { grid-column: span 3; }
 .pts-label { display:block; margin-bottom:8px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b; }
 .pts-input, .pts-select, .pts-textarea { width:100%; border:1px solid #dbe2ea; border-radius:10px; background:#fff; font-size:14px; color:#111827; }
 .pts-input, .pts-select { min-height:44px; padding:10px 12px; }
@@ -66,7 +90,7 @@
 .select2-container--default .select2-results__option--highlighted.select2-results__option--selectable { background:#ea580c; color:#fff; }
 .select2-container--open { z-index:1220; }
 @media (max-width: 900px) {
-    .pts-form-grid { grid-template-columns:1fr; }
+    .pts-form-grid > div { grid-column: span 12 !important; }
     .pts-filter-form { grid-template-columns:1fr 1fr; }
 }
 @media (max-width: 768px) {
@@ -83,6 +107,21 @@
 @php
     $hasTimesheetErrors = $errors->any();
     $selectedProjectId = (int) old('production_initiation_id', 0);
+    $selectedLeadId = 0;
+    if ($selectedProjectId > 0) {
+        $selectedProj = $assignedProjects->firstWhere('id', $selectedProjectId);
+        if ($selectedProj) {
+            $selectedLeadId = (int) $selectedProj->lead_id;
+        }
+    }
+
+    $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
+        $firstProj = $projects->first();
+        return [
+            'lead_id' => $firstProj->lead_id,
+            'company_name' => $firstProj->company_name ?: ($firstProj->lead?->company_name ?: 'No Company')
+        ];
+    })->values();
 @endphp
 <div class="pts-page">
     <div class="pts-topbar">
@@ -109,6 +148,18 @@
                 <div class="pts-filter-group">
                     <label class="pts-label">Date</label>
                     <input type="date" name="filter_date" value="{{ $timesheetFilters['filter_date'] ?? '' }}" class="pts-input">
+                </div>
+
+                <div class="pts-filter-group">
+                    <label class="pts-label">Lead (Client)</label>
+                    <select name="filter_lead_id" class="pts-select select2 pts-filter-lead-select" data-placeholder="All Leads">
+                        <option value="">All Leads</option>
+                        @foreach($uniqueLeads as $lead)
+                            <option value="{{ $lead['lead_id'] }}" @selected(($timesheetFilters['filter_lead_id'] ?? '') === (string) $lead['lead_id'])>
+                                LD-{{ str_pad($lead['lead_id'], 4, '0', STR_PAD_LEFT) }} | {{ $lead['company_name'] }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <div class="pts-filter-group">
@@ -170,9 +221,9 @@
                             <tbody>
                                 @foreach($timesheets as $timesheet)
                                     @php
-                                        $isCompleted = $timesheet->project_delivery_date && $timesheet->project_delivery_date->lte(\Illuminate\Support\Carbon::today());
-                                        $statusClass = $isCompleted ? 'completed' : 'pending';
-                                        $statusLabel = $isCompleted ? 'Completed' : 'Pending';
+                                        $statusVal = strtolower($timesheet->status ?? 'pending');
+                                        $statusClass = $statusVal === 'completed' ? 'completed' : 'pending';
+                                        $statusLabel = ucfirst($statusVal);
                                     @endphp
                                     <tr>
                                         <td>{{ optional($timesheet->timesheet_date)->format('d M Y') ?: 'No date' }}</td>
@@ -181,13 +232,26 @@
                                             <div class="pts-meta">{{ $timesheet->project?->company_name ?: ($timesheet->project?->lead?->company_name ?: 'No company') }}</div>
                                         </td>
                                         <td>{{ optional($timesheet->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
-                                        <td><span class="pts-status {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                         <td>
+                                             <form method="POST" action="{{ route('projects.timesheets.update-status', $timesheet->id) }}" style="display:inline;">
+                                                 @csrf
+                                                 @method('PATCH')
+                                                 <select name="status" onchange="this.form.submit()" class="pts-status-select {{ $statusClass }}">
+                                                     <option value="pending" @selected($statusVal === 'pending')>Pending</option>
+                                                     <option value="completed" @selected($statusVal === 'completed')>Completed</option>
+                                                 </select>
+                                             </form>
+                                         </td>
                                         @if(auth()->user()?->belongsToDesigningDepartment())
                                             <td style="font-weight:600;">P: {{ (int) $timesheet->committed_posters }} / V: {{ (int) $timesheet->committed_videos }}</td>
                                             <td style="font-weight:600; color:#ea580c;">P: {{ (int) $timesheet->waiting_posters }} / V: {{ (int) $timesheet->waiting_videos }}</td>
                                         @endif
-                                        <td>{{ (int) $timesheet->poster_count }}</td>
-                                        <td>{{ (int) $timesheet->video_count }}</td>
+                                        @php
+                                            $deptName = $timesheet->project?->department?->name ? strtolower($timesheet->project->department->name) : '';
+                                            $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
+                                        @endphp
+                                        <td>{{ $isDesignOrDm ? (int) $timesheet->poster_count : '—' }}</td>
+                                        <td>{{ $isDesignOrDm ? (int) $timesheet->video_count : '—' }}</td>
                                         <td>
                                             @if(strlen($timesheet->day_closing_update) > 15)
                                                 @php
@@ -236,61 +300,76 @@
         <form method="POST" action="{{ route('projects.timesheets.store') }}">
             @csrf
             <div class="pts-form-grid">
-                <div>
-                    <label class="pts-label">Allocated Project</label>
-                    <select name="production_initiation_id" class="pts-select select2 pts-project-select" data-placeholder="Search allocated project" required>
-                        <option value="">Select project</option>
-                        @foreach($assignedProjects as $project)
-                            <option
-                                value="{{ $project->id }}"
-                                data-delivery-date="{{ $project->timesheet_delivery_date }}"
-                                @selected($selectedProjectId === (int) $project->id)
-                            >
-                                {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
+                <!-- Lead Dropdown -->
+                <div class="pts-grid-col-6">
+                    <label class="pts-label">Lead (Client)</label>
+                    <select id="leadSelect" class="pts-select select2" data-placeholder="Select Lead" required>
+                        <option value="">Select Lead</option>
+                        @foreach($uniqueLeads as $lead)
+                            <option value="{{ $lead['lead_id'] }}" @selected($selectedLeadId === (int) $lead['lead_id'])>
+                                LD-{{ str_pad($lead['lead_id'], 4, '0', STR_PAD_LEFT) }} | {{ $lead['company_name'] }}
                             </option>
                         @endforeach
+                    </select>
+                </div>
+
+                <!-- Project Dropdown -->
+                <div class="pts-grid-col-6">
+                    <label class="pts-label">Allocated Project</label>
+                    <select name="production_initiation_id" id="projectSelect" class="pts-select select2 pts-project-select" data-placeholder="Select project" required disabled>
+                        <option value="">Select project</option>
                     </select>
                     @if($assignedProjects->isEmpty())
                         <div class="pts-help">No allocated projects are available for your account right now.</div>
                     @else
-                        <div class="pts-help">Only projects allocated to you are shown here. One project can be submitted once per date.</div>
+                        <div class="pts-help">Select a lead first to see its allocated projects.</div>
                     @endif
                     @error('production_initiation_id')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
                 </div>
 
-                <div>
+                <!-- Date -->
+                <div class="pts-grid-col-4">
                     <label class="pts-label">Date</label>
-                    <input type="date" name="timesheet_date" value="{{ old('timesheet_date', $today) }}" class="pts-input" required>
+                    <input type="date" name="timesheet_date" id="timesheetDateInput" value="{{ old('timesheet_date', $today) }}" class="pts-input" required>
                     @error('timesheet_date')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
                 </div>
 
-                <div>
+                <!-- Project Delivery Date -->
+                <div class="pts-grid-col-4">
                     <label class="pts-label">Project Delivery Date</label>
                     <input type="date" class="pts-input" data-project-delivery-date readonly>
                 </div>
 
-                <div>
-                    <label class="pts-label">Poster Completed Count</label>
-                    <input type="number" name="poster_count" value="{{ old('poster_count', 0) }}" class="pts-input" min="0" step="1">
-                    @error('poster_count')
+                <!-- Status -->
+                <div class="pts-grid-col-4">
+                    <label class="pts-label">Status</label>
+                    <select name="status" class="pts-select" required>
+                        <option value="pending" @selected(old('status') === 'pending')>Pending</option>
+                        <option value="completed" @selected(old('status') === 'completed')>Completed</option>
+                    </select>
+                    @error('status')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
                 </div>
 
-                <div>
-                    <label class="pts-label">Video Completed Count</label>
-                    <input type="number" name="video_count" value="{{ old('video_count', 0) }}" class="pts-input" min="0" step="1">
-                    @error('video_count')
+                <!-- Project Type (Design/DM only) -->
+                <div class="pts-grid-col-12 design-dm-only" id="projectTypeContainer" style="display: none;">
+                    <label class="pts-label">Project Type</label>
+                    <select name="project_type" id="projectTypeSelect" class="pts-select">
+                        <option value="recurring" @selected(old('project_type', 'recurring') === 'recurring')>Recurring</option>
+                        <option value="onetime" @selected(old('project_type') === 'onetime')>Onetime</option>
+                    </select>
+                    @error('project_type')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
                 </div>
 
                 @if(auth()->user()?->belongsToDesigningDepartment())
-                    <div>
+                    <div class="pts-grid-col-3 project-counts-fields" style="display: none;">
                         <label class="pts-label">Committed Posters Today</label>
                         <input type="number" name="committed_posters" value="{{ old('committed_posters', 0) }}" class="pts-input" min="0" step="1">
                         @error('committed_posters')
@@ -298,7 +377,7 @@
                         @enderror
                     </div>
 
-                    <div>
+                    <div class="pts-grid-col-3 project-counts-fields" style="display: none;">
                         <label class="pts-label">Committed Videos Today</label>
                         <input type="number" name="committed_videos" value="{{ old('committed_videos', 0) }}" class="pts-input" min="0" step="1">
                         @error('committed_videos')
@@ -306,7 +385,7 @@
                         @enderror
                     </div>
 
-                    <div>
+                    <div class="pts-grid-col-3 project-counts-fields" style="display: none;">
                         <label class="pts-label">Waiting Approval Posters</label>
                         <input type="number" name="waiting_posters" value="{{ old('waiting_posters', 0) }}" class="pts-input" min="0" step="1">
                         @error('waiting_posters')
@@ -314,7 +393,7 @@
                         @enderror
                     </div>
 
-                    <div>
+                    <div class="pts-grid-col-3 project-counts-fields" style="display: none;">
                         <label class="pts-label">Waiting Approval Videos</label>
                         <input type="number" name="waiting_videos" value="{{ old('waiting_videos', 0) }}" class="pts-input" min="0" step="1">
                         @error('waiting_videos')
@@ -322,10 +401,29 @@
                         @enderror
                     </div>
                 @endif
+                <!-- Poster count (Design/DM only) -->
+                <div class="pts-grid-col-6 design-dm-only project-counts-fields" style="display: none;">
+                    <label class="pts-label">Poster Completed Count</label>
+                    <input type="number" name="poster_count" value="{{ old('poster_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('poster_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
 
-                <div class="pts-form-full">
+                <!-- Video count (Design/DM only) -->
+                <div class="pts-grid-col-6 design-dm-only project-counts-fields" style="display: none;">
+                    <label class="pts-label">Video Completed Count</label>
+                    <input type="number" name="video_count" value="{{ old('video_count', 0) }}" class="pts-input" min="0" step="1">
+                    @error('video_count')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
+
+
+
+                <div class="pts-grid-col-12" id="dayClosingUpdateContainer">
                     <label class="pts-label">Day Closing Update</label>
-                    <textarea name="day_closing_update" class="pts-textarea" rows="7" required placeholder="Task 1&#10;Task 2&#10;Task 3&#10;Task 4&#10;Task 5">{{ old('day_closing_update') }}</textarea>
+                    <textarea name="day_closing_update" id="dayClosingUpdateTextarea" class="pts-textarea" rows="7" required placeholder="Task 1&#10;Task 2&#10;Task 3&#10;Task 4&#10;Task 5">{{ old('day_closing_update') }}</textarea>
                     <div class="pts-help">Add at least 5 task lines before saving.</div>
                     @error('day_closing_update')
                         <div class="pts-error">{{ $message }}</div>
@@ -370,9 +468,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const overlay = document.querySelector('[data-timesheet-modal-overlay]');
     const openButtons = document.querySelectorAll('[data-open-timesheet-modal]');
     const closeButtons = document.querySelectorAll('[data-close-timesheet-modal]');
-    const projectSelect = document.querySelector('.pts-project-select');
+    const leadSelect = document.getElementById('leadSelect');
+    const projectSelect = document.getElementById('projectSelect');
     const filterProjectSelect = document.querySelector('.pts-filter-project-select');
     const deliveryDateInput = document.querySelector('[data-project-delivery-date]');
+    const assignedProjects = @json($assignedProjects);
+    const selectedProjectId = @json($selectedProjectId);
 
     function setModalState(isOpen) {
         if (!modal || !overlay) {
@@ -391,6 +492,157 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const selectedOption = projectSelect.options[projectSelect.selectedIndex];
         deliveryDateInput.value = selectedOption ? (selectedOption.dataset.deliveryDate || '') : '';
+    }
+
+    function toggleDesignDmInputs() {
+        if (!projectSelect) return;
+        const selectedProjId = projectSelect.value;
+        const selectedProject = assignedProjects.find(p => p.id == selectedProjId);
+
+        if (selectedProject) {
+            const deptName = selectedProject.department ? selectedProject.department.name.toLowerCase() : '';
+            const isDesignOrDm = deptName.includes('design') || deptName.includes('dm') || deptName.includes('digital marketing');
+
+            // Show or hide project type container
+            const typeContainer = document.getElementById('projectTypeContainer');
+            if (typeContainer) {
+                typeContainer.style.display = isDesignOrDm ? '' : 'none';
+            }
+
+            // Determine if counts should be shown
+            const typeSelect = document.getElementById('projectTypeSelect');
+            const isRecurring = typeSelect ? (typeSelect.value === 'recurring') : true;
+
+            // Show counts fields ONLY if it's Design/DM AND Recurring type
+            const showCounts = isDesignOrDm && isRecurring;
+
+            document.querySelectorAll('.project-counts-fields').forEach(el => {
+                el.style.display = showCounts ? '' : 'none';
+            });
+
+            // Show or hide Day Closing Update text area
+            const dayClosingContainer = document.getElementById('dayClosingUpdateContainer');
+            const dayClosingTextarea = document.getElementById('dayClosingUpdateTextarea');
+            if (dayClosingContainer && dayClosingTextarea) {
+                const showDayClosing = !isDesignOrDm || !isRecurring;
+                dayClosingContainer.style.display = showDayClosing ? '' : 'none';
+                if (showDayClosing) {
+                    dayClosingTextarea.setAttribute('required', 'required');
+                } else {
+                    dayClosingTextarea.removeAttribute('required');
+                }
+            }
+        } else {
+            // Hide both type selector and counts if no project is selected
+            const typeContainer = document.getElementById('projectTypeContainer');
+            if (typeContainer) {
+                typeContainer.style.display = 'none';
+            }
+            document.querySelectorAll('.project-counts-fields').forEach(el => {
+                el.style.display = 'none';
+            });
+            const dayClosingContainer = document.getElementById('dayClosingUpdateContainer');
+            const dayClosingTextarea = document.getElementById('dayClosingUpdateTextarea');
+            if (dayClosingContainer && dayClosingTextarea) {
+                dayClosingContainer.style.display = '';
+                dayClosingTextarea.setAttribute('required', 'required');
+            }
+        }
+    }
+
+    function fetchTimesheetData() {
+        if (!projectSelect) return;
+        const projectId = projectSelect.value;
+        const dateInput = document.getElementById('timesheetDateInput');
+        const dateVal = dateInput ? dateInput.value : '';
+
+        if (!projectId || !dateVal) {
+            return;
+        }
+
+        fetch(`/projects/timesheets/get-data?production_initiation_id=${projectId}&timesheet_date=${dateVal}`)
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    const statusSelect = document.querySelector('select[name="status"]');
+                    const typeSelect = document.getElementById('projectTypeSelect');
+                    const posterCountInput = document.querySelector('input[name="poster_count"]');
+                    const videoCountInput = document.querySelector('input[name="video_count"]');
+                    const committedPostersInput = document.querySelector('input[name="committed_posters"]');
+                    const committedVideosInput = document.querySelector('input[name="committed_videos"]');
+                    const waitingPostersInput = document.querySelector('input[name="waiting_posters"]');
+                    const waitingVideosInput = document.querySelector('input[name="waiting_videos"]');
+                    const dayClosingTextarea = document.getElementById('dayClosingUpdateTextarea');
+
+                    if (res.exists && res.data) {
+                        const d = res.data;
+                        if (statusSelect) statusSelect.value = d.status || 'pending';
+                        if (typeSelect) typeSelect.value = d.project_type || 'recurring';
+                        if (posterCountInput) posterCountInput.value = d.poster_count;
+                        if (videoCountInput) videoCountInput.value = d.video_count;
+                        if (committedPostersInput) committedPostersInput.value = d.committed_posters;
+                        if (committedVideosInput) committedVideosInput.value = d.committed_videos;
+                        if (waitingPostersInput) waitingPostersInput.value = d.waiting_posters;
+                        if (waitingVideosInput) waitingVideosInput.value = d.waiting_videos;
+                        if (dayClosingTextarea) dayClosingTextarea.value = d.day_closing_update;
+                    } else {
+                        if (statusSelect) statusSelect.value = 'pending';
+                        if (typeSelect) typeSelect.value = 'recurring';
+                        if (posterCountInput) posterCountInput.value = 0;
+                        if (videoCountInput) videoCountInput.value = 0;
+                        if (committedPostersInput) committedPostersInput.value = 0;
+                        if (committedVideosInput) committedVideosInput.value = 0;
+                        if (waitingPostersInput) waitingPostersInput.value = 0;
+                        if (waitingVideosInput) waitingVideosInput.value = 0;
+                        if (dayClosingTextarea) dayClosingTextarea.value = '';
+                    }
+                    toggleDesignDmInputs();
+                }
+            })
+            .catch(err => console.error('Error fetching timesheet data:', err));
+    }
+
+    function handleLeadChange() {
+        if (!leadSelect || !projectSelect) return;
+
+        const leadId = leadSelect.value;
+
+        // Clear previous options
+        projectSelect.innerHTML = '<option value="">Select project</option>';
+
+        if (!leadId) {
+            projectSelect.disabled = true;
+            if (window.jQuery && window.jQuery.fn.select2) {
+                window.jQuery(projectSelect).val('').trigger('change.select2');
+                window.jQuery(projectSelect).prop('disabled', true);
+            }
+            syncDeliveryDate();
+            toggleDesignDmInputs();
+            return;
+        }
+
+        // Filter projects
+        const filtered = assignedProjects.filter(p => p.lead_id == leadId);
+
+        // Populate options
+        filtered.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.product_name + ' (Delivery: ' + (p.timesheet_delivery_date || 'N/A') + ')';
+            opt.dataset.deliveryDate = p.timesheet_delivery_date || '';
+            projectSelect.appendChild(opt);
+        });
+
+        // Enable select
+        projectSelect.disabled = false;
+        if (window.jQuery && window.jQuery.fn.select2) {
+            window.jQuery(projectSelect).prop('disabled', false);
+            window.jQuery(projectSelect).trigger('change.select2');
+        }
+
+        syncDeliveryDate();
+        toggleDesignDmInputs();
+        fetchTimesheetData();
     }
 
     openButtons.forEach(function (button) {
@@ -412,41 +664,107 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    if (leadSelect) {
+        leadSelect.addEventListener('change', handleLeadChange);
+    }
+
     if (projectSelect) {
-        projectSelect.addEventListener('change', syncDeliveryDate);
+        projectSelect.addEventListener('change', function() {
+            syncDeliveryDate();
+            toggleDesignDmInputs();
+            fetchTimesheetData();
+        });
     }
 
-    if (window.jQuery && window.jQuery.fn.select2 && projectSelect) {
-        const $select = window.jQuery(projectSelect);
-
-        if ($select.hasClass('select2-hidden-accessible')) {
-            $select.select2('destroy');
-        }
-
-        $select.select2({
-            width: '100%',
-            placeholder: $select.data('placeholder') || 'Search allocated project',
-            dropdownParent: window.jQuery(modal),
-        });
-
-        $select.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
-        $select.on('change select2:select', syncDeliveryDate);
+    const dateInput = document.getElementById('timesheetDateInput');
+    if (dateInput) {
+        dateInput.addEventListener('change', fetchTimesheetData);
     }
 
-    if (window.jQuery && window.jQuery.fn.select2 && filterProjectSelect) {
-        const $filterSelect = window.jQuery(filterProjectSelect);
+    const typeSelect = document.getElementById('projectTypeSelect');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', toggleDesignDmInputs);
+    }
 
-        if ($filterSelect.hasClass('select2-hidden-accessible')) {
-            $filterSelect.select2('destroy');
+    // Initialize Select2
+    if (window.jQuery && window.jQuery.fn.select2) {
+        const $lead = window.jQuery(leadSelect);
+        const $project = window.jQuery(projectSelect);
+        const $filterProject = window.jQuery(filterProjectSelect);
+
+        if ($lead.length) {
+            if ($lead.hasClass('select2-hidden-accessible')) {
+                $lead.select2('destroy');
+            }
+            $lead.select2({
+                width: '100%',
+                placeholder: 'Select Lead',
+                dropdownParent: window.jQuery(modal),
+            });
+            $lead.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+            $lead.on('change select2:select', handleLeadChange);
         }
 
-        $filterSelect.select2({
-            width: '100%',
-            placeholder: $filterSelect.data('placeholder') || 'All projects',
-            allowClear: true,
-        });
+        if ($project.length) {
+            if ($project.hasClass('select2-hidden-accessible')) {
+                $project.select2('destroy');
+            }
+            $project.select2({
+                width: '100%',
+                placeholder: 'Select project',
+                dropdownParent: window.jQuery(modal),
+            });
+            $project.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+            $project.on('change select2:select', function() {
+                syncDeliveryDate();
+                toggleDesignDmInputs();
+                fetchTimesheetData();
+            });
+        }
 
-        $filterSelect.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+        if ($filterProject.length) {
+            if ($filterProject.hasClass('select2-hidden-accessible')) {
+                $filterProject.select2('destroy');
+            }
+            $filterProject.select2({
+                width: '100%',
+                placeholder: 'All projects',
+                allowClear: true,
+            });
+            $filterProject.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+        }
+
+        const filterLeadSelect = document.querySelector('.pts-filter-lead-select');
+        if (filterLeadSelect) {
+            const $filterLead = window.jQuery(filterLeadSelect);
+            if ($filterLead.hasClass('select2-hidden-accessible')) {
+                $filterLead.select2('destroy');
+            }
+            $filterLead.select2({
+                width: '100%',
+                placeholder: 'All Leads',
+                allowClear: true,
+            });
+            $filterLead.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+        }
+    }
+
+    // Auto-restore old values on validation failure
+    if (selectedProjectId) {
+        const proj = assignedProjects.find(p => p.id == selectedProjectId);
+        if (proj && leadSelect) {
+            leadSelect.value = proj.lead_id;
+            if (window.jQuery && window.jQuery.fn.select2) {
+                window.jQuery(leadSelect).val(proj.lead_id).trigger('change.select2');
+            }
+            handleLeadChange();
+            if (projectSelect) {
+                projectSelect.value = selectedProjectId;
+                if (window.jQuery && window.jQuery.fn.select2) {
+                    window.jQuery(projectSelect).val(selectedProjectId).trigger('change.select2');
+                }
+            }
+        }
     }
 
     window.setTimeout(syncDeliveryDate, 0);

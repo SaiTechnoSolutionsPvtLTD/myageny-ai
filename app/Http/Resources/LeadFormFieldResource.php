@@ -18,6 +18,7 @@ class LeadFormFieldResource extends JsonResource
             'default_value'        => $this->default_value,
             'is_required'          => $this->is_required,
             'is_active'            => $this->is_active,
+            'show_on_lead_create'  => $this->show_on_lead_create,
             'sort_order'           => $this->sort_order,
             'is_calculation'       => $this->is_calculation,
             'calculation_formula'  => $this->calculation_formula,
