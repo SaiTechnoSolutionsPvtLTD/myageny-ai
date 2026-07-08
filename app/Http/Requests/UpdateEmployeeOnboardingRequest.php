@@ -127,6 +127,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'document_bank_passbook' => $fileRules,
 
             'status' => ['required', Rule::in([EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED])],
+            'employee_type' => ['nullable', Rule::in(['billable', 'non_billable'])],
         ];
     }
 

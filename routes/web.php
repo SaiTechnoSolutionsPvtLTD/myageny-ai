@@ -148,6 +148,14 @@ Route::middleware(['auth'])->group(function () {
         ->name('reports.crm.payment-collection');
     Route::get('/reports/crm/payment-collection/export', [CrmReportController::class, 'exportPaymentCollection'])
         ->name('reports.crm.payment-collection.export');
+    Route::get('/reports/crm/branch-comparison', [CrmReportController::class, 'branchComparison'])
+        ->name('reports.crm.branch-comparison');
+    Route::get('/reports/crm/branch-comparison/export', [CrmReportController::class, 'exportBranchComparison'])
+        ->name('reports.crm.branch-comparison.export');
+    Route::get('/reports/crm/smm', [CrmReportController::class, 'smmReport'])
+        ->name('reports.crm.smm');
+    Route::get('/reports/crm/smm/export', [CrmReportController::class, 'exportSmmReport'])
+        ->name('reports.crm.smm.export');
     Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.allocate');
@@ -181,6 +189,8 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.timesheets');
         Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])
             ->name('projects.timesheets.store');
+        Route::patch('/projects/timesheets/{timesheet}/status', [ProjectController::class, 'updateTimesheetStatus'])
+            ->name('projects.timesheets.update-status');
         Route::get('/projects-details', [ProjectController::class, 'index'])
             ->name('projects.index');
         Route::get('/projects-details/{productionInitiation}', [ProjectController::class, 'show'])

@@ -45,7 +45,22 @@
 /* Fields Table */
 .fields-table-wrap {
     background:#fcfcfc; border:1px solid #e1dee3; border-radius:12px; overflow:hidden;
+    display:flex; flex-direction:column;
 }
+.fields-table-scroll {
+    overflow:auto;
+    max-height:calc(100vh - 320px);
+    min-height:200px;
+    border-radius:0 0 12px 12px;
+    /* Custom thin scrollbar */
+    scrollbar-width:thin;
+    scrollbar-color:#d4d0d8 transparent;
+}
+.fields-table-scroll::-webkit-scrollbar { width:6px; height:6px; }
+.fields-table-scroll::-webkit-scrollbar-track { background:transparent; }
+.fields-table-scroll::-webkit-scrollbar-thumb { background:#d4d0d8; border-radius:3px; }
+.fields-table-scroll::-webkit-scrollbar-thumb:hover { background:#b0acb5; }
+.fields-table-scroll::-webkit-scrollbar-corner { background:transparent; }
 .fields-table-toolbar {
     display:flex; justify-content:space-between; align-items:center;
     padding:16px 20px; border-bottom:1px solid #f1f1f1;
@@ -58,10 +73,13 @@
 }
 .search-input-wrap i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9e9e9e; font-size:14px; }
 
-table.fields-table { width:100%; border-collapse:collapse; }
+table.fields-table { width:100%; border-collapse:collapse; min-width:900px; }
 table.fields-table thead th {
     padding:12px 16px; font-size:12px; color:#9e9e9e; font-weight:500;
     text-align:left; background:#f8f8f8; border-bottom:1px solid #f1f1f1;
+    position:sticky; top:0; z-index:2;
+    white-space:nowrap;
+    box-shadow:0 1px 0 #f1f1f1;
 }
 table.fields-table tbody tr { border-bottom:1px solid #f9f9f9; transition:background 0.1s; }
 table.fields-table tbody tr:hover { background:#fafafa; }
@@ -268,33 +286,35 @@ select.form-control { appearance:none; cursor:pointer; }
                     <input type="text" placeholder="Search fields..." oninput="searchFields(this.value)">
                 </div>
             </div>
-            <table class="fields-table">
-                <thead>
-                    <tr>
-                        <th style="width:36px;"></th>
-                        <th style="width:36px;">#</th>
-                        <th>Field Label</th>
-                        <th>Field Name (API Key)</th>
-                        <th>Type</th>
-                        <th>Options</th>
-                        <th>Required</th>
-                        <th>Show on Lead Create</th>
-                        <th>Calculation</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="fieldsTableBody">
-                    <tr>
-                        <td colspan="10">
-                            <div class="empty-state">
-                                <i class="bi bi-hourglass-split"></i>
-                                <p>Loading...</p>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="fields-table-scroll">
+                <table class="fields-table">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;"></th>
+                            <th style="width:36px;">#</th>
+                            <th>Field Label</th>
+                            <th>Field Name (API Key)</th>
+                            <th>Type</th>
+                            <th>Options</th>
+                            <th>Required</th>
+                            <th>Show on Lead Create</th>
+                            <th>Calculation</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fieldsTableBody">
+                        <tr>
+                            <td colspan="10">
+                                <div class="empty-state">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    <p>Loading...</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div><!-- end page-content -->
 </main>

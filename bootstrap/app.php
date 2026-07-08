@@ -42,4 +42,34 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => 'You do not have permission to access this page.',
             ], 403);
         });
+
+        // Handle generic server exceptions with our premium exception error page
+        $exceptions->render(function (\Throwable $e, $request) {
+            // Bypass standard validation/unauthenticated/unauthorized exceptions
+            if ($e instanceof \Illuminate\Validation\ValidationException ||
+                $e instanceof \Illuminate\Auth\AuthenticationException ||
+                $e instanceof \Illuminate\Auth\Access\AuthorizationException) {
+                return null;
+            }
+
+            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                $statusCode = $e->getStatusCode();
+                if ($statusCode < 500) {
+                    return null;
+                }
+            }
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage() ?: 'An unexpected error occurred.',
+                    'exception' => get_class($e),
+                ], 500);
+            }
+
+            return response()->view('errors.custom_exception', [
+                'exception' => $e,
+                'message' => $e->getMessage() ?: 'An unexpected server error occurred.',
+                'title' => class_basename($e),
+            ], 500);
+        });
     })->create();

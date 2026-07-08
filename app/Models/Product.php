@@ -89,6 +89,16 @@ class Product extends Model
         return $this->hasMany(ProductionInitiation::class)->latest();
     }
 
+    public function productionCountReports(): HasMany
+    {
+        return $this->hasMany(ProductionCountReport::class);
+    }
+
+    public function scopeCountWise($query)
+    {
+        return $query->where('count_wise_report', true);
+    }
+
     // ── Price Logic ───────────────────────────────────────────────────
     public function computeFinalPrice(): float
     {

@@ -102,6 +102,7 @@
         'pan_card_no' => 'personal',
         'photograph' => 'personal',
         'status' => 'personal',
+        'employee_type' => 'personal',
         'portal_email' => 'portal',
         'portal_password' => 'portal',
         'branch_id' => 'portal',
@@ -327,6 +328,14 @@
                                     @endforeach
                                 </select>
                                 @error('status')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="eob-group">
+                                <label class="eob-label">Employee Type <span class="eob-label-required">*</span></label>
+                                <select name="employee_type" class="eob-select" required>
+                                    <option value="billable" @selected(old('employee_type', $employee?->employee_type ?? 'billable') === 'billable')>Billable</option>
+                                    <option value="non_billable" @selected(old('employee_type', $employee?->employee_type ?? 'billable') === 'non_billable')>Non Billable</option>
+                                </select>
+                                @error('employee_type')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                         </div>
                     </div>

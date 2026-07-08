@@ -98,13 +98,45 @@
 .usr-action-btn.del:hover  { border-color:#dc2626; color:#dc2626; background:#fef2f2; }
 .usr-action-btn.toggle:hover { border-color:#16a34a; color:#16a34a; background:#f0fdf4; }
 
-/* Toggle switch in table */
-.usr-toggle { position:relative; width:36px; height:20px; }
+/* Toggle switch in table — large, labeled, highlighted */
+.usr-toggle-wrap { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+.usr-toggle { position:relative; width:52px; height:28px; flex-shrink:0; }
 .usr-toggle input { display:none; }
-.usr-toggle-slider { position:absolute; inset:0; border-radius:20px; background:#e1dee3; cursor:pointer; transition:background .2s; }
-.usr-toggle-slider::before { content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .2s; box-shadow:0 1px 4px rgba(0,0,0,.2); }
-.usr-toggle input:checked + .usr-toggle-slider { background:#16a34a; }
-.usr-toggle input:checked + .usr-toggle-slider::before { transform:translateX(16px); }
+.usr-toggle-slider {
+    position:absolute; inset:0;
+    border-radius:999px;
+    background:#e1dee3;
+    cursor:pointer;
+    transition:background .25s, box-shadow .25s;
+    border:2px solid transparent;
+}
+.usr-toggle-slider::before {
+    content:'';
+    position:absolute;
+    width:20px; height:20px;
+    border-radius:50%;
+    background:#fff;
+    top:2px; left:2px;
+    transition:transform .25s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 2px 6px rgba(0,0,0,.22);
+}
+.usr-toggle input:checked + .usr-toggle-slider {
+    background:#16a34a;
+    border-color:#15803d;
+    box-shadow:0 0 0 3px rgba(22,163,74,.18), 0 2px 8px rgba(22,163,74,.22);
+}
+.usr-toggle input:not(:checked) + .usr-toggle-slider {
+    background:#f1f1f4;
+    border-color:#d1d0d5;
+}
+.usr-toggle input:checked + .usr-toggle-slider::before { transform:translateX(24px); }
+.usr-toggle-label {
+    font-size:12px;
+    font-weight:700;
+    min-width:46px;
+}
+.usr-toggle-label.is-active { color:#16a34a; }
+.usr-toggle-label.is-inactive { color:#dc2626; }
 
 /* Pagination */
 .usr-pagination { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-top:1px solid #f0eef2; }
@@ -371,9 +403,14 @@
                                 @can('users.manage')
                                 <form method="POST" action="{{ route('users.toggle-status', $user) }}" style="display:inline;">
                                     @csrf @method('PATCH')
-                                    <label class="usr-toggle" title="{{ $user->is_active ? 'Deactivate' : 'Activate' }}">
-                                        <input type="checkbox" {{ $user->is_active ? 'checked' : '' }} onchange="this.form.submit()">
-                                        <div class="usr-toggle-slider"></div>
+                                    <label class="usr-toggle-wrap" title="{{ $user->is_active ? 'Click to deactivate' : 'Click to activate' }}">
+                                        <span class="usr-toggle">
+                                            <input type="checkbox" {{ $user->is_active ? 'checked' : '' }} onchange="this.form.submit()">
+                                            <div class="usr-toggle-slider"></div>
+                                        </span>
+                                        <span class="usr-toggle-label {{ $user->is_active ? 'is-active' : 'is-inactive' }}">
+                                            {{ $user->is_active ? 'Active' : 'Inactive' }}
+                                        </span>
                                     </label>
                                 </form>
                                 @else

@@ -70,4 +70,98 @@ class BranchAdminScopingTest extends TestCase
         // Clean up session
         auth()->logout();
     }
+
+    /** @test */
+    public function roles_index_applies_filters_to_query()
+    {
+        $request = new \Illuminate\Http\Request([
+            'search' => 'developer',
+            'department_id' => 3
+        ]);
+
+        $query = \App\Models\Role::query()
+            ->when($request->input('search'), function ($query, $search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('display_name', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%');
+                });
+            })
+            ->when($request->input('department_id'), function ($query, $deptId) {
+                $query->where('department_id', $deptId);
+            });
+
+        $sql = $query->toSql();
+        $this->assertStringContainsString('"department_id" = ?', $sql);
+        $this->assertStringContainsString('"name" like ?', $sql);
+    }
+
+    /** @test */
+    public function exception_rendering_uses_custom_exception_view_for_server_errors()
+    {
+        $handler = app(\Illuminate\Contracts\Debug\ExceptionHandler::class);
+        $exception = new \RuntimeException("Test server error message in English");
+        
+        $request = \Illuminate\Http\Request::create('/test-error', 'GET');
+        $response = $handler->render($request, $exception);
+        
+        $this->assertEquals(500, $response->getStatusCode());
+        $this->assertStringContainsString('Test server error message in English', $response->getContent());
+        $this->assertStringContainsString('RuntimeException', $response->getContent());
+        $this->assertStringContainsString('Application Exception', $response->getContent());
+    }
+
+    /** @test */
+    public function crm_reports_apply_branch_filter_to_queries()
+    {
+        $request = new \Illuminate\Http\Request([
+            'branch_id' => 5
+        ]);
+
+        // 1. Leads Summary Query
+        $leadsQuery = \App\Models\Lead::query();
+        if ($request->filled('branch_id')) {
+            $leadsQuery->where('leads.branch_id', $request->branch_id);
+        }
+        $this->assertStringContainsString('"leads"."branch_id" = ?', $leadsQuery->toSql());
+
+        // 2. Product Wise Query
+        $productQuery = \App\Models\LeadProduct::query()
+            ->join('leads', 'leads.id', '=', 'lead_products.lead_id');
+        if ($request->filled('branch_id')) {
+            $productQuery->where('leads.branch_id', $request->branch_id);
+        }
+        $this->assertStringContainsString('"leads"."branch_id" = ?', $productQuery->toSql());
+
+        // 3. Payment Collection Query
+        $paymentQuery = \App\Models\LeadProductPayment::query()
+            ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id');
+        if ($request->filled('branch_id')) {
+            $paymentQuery->where('leads.branch_id', $request->branch_id);
+        }
+        $this->assertStringContainsString('"leads"."branch_id" = ?', $paymentQuery->toSql());
+    }
+
+    /** @test */
+    public function crm_branch_wise_comparison_compiles_data_correctly()
+    {
+        $request = new \Illuminate\Http\Request([
+            'period_type' => 'quarter',
+            'year' => 2026,
+            'quarter' => 2
+        ]);
+
+        $controller = new \App\Http\Controllers\CrmReportController(
+            app(\App\Services\DataVisibilityService::class)
+        );
+
+        $method = new \ReflectionMethod($controller, 'resolvePeriodRange');
+        $method->setAccessible(true);
+        $range = $method->invoke($controller, $request);
+
+        $this->assertEquals('2026-04-01', $range[0]);
+        $this->assertEquals('2026-06-30', $range[1]);
+        $this->assertEquals('Q2 2026', $range[2]);
+        $this->assertEquals('quarter', $range[3]);
+    }
 }

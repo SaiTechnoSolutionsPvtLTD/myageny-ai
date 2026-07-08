@@ -177,6 +177,15 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="crm-rev-field">
+                        <label class="crm-rev-label" for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" class="crm-rev-select">
+                            <option value="">All Branches</option>
+                            @foreach($filterOptions['branches'] as $branch)
+                                <option value="{{ $branch->id }}" @selected($selectedFilters['branch_id'] === $branch->id)>{{ $branch->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
 
                     <div class="crm-rev-actions-row">
                         <button type="submit" class="crm-rev-btn crm-rev-btn-primary">Apply Filters</button>

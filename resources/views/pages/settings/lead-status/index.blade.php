@@ -17,7 +17,7 @@
                 <p class="crm-subtitle">Define the stages a lead can be in</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.index') }}" class="crm-btn crm-btn-ghost">← Back</a>
+                <a href="{{ route('masters.index') }}" class="crm-btn crm-btn-ghost">← Back</a>
                 <button class="crm-btn crm-btn-primary" onclick="openModal('addModal')">+ Add New</button>
             </div>
         </div>

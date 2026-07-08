@@ -52,6 +52,8 @@
 .eob-chip-pending { background:#fff7ed; color:#c2410c; }
 .eob-chip-verified { background:#f0fdf4; color:#15803d; }
 .eob-chip-rejected { background:#fef2f2; color:#b91c1c; }
+.eob-chip-billable { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.eob-chip-non-billable { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
 .eob-filter-card, .eob-table-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:hidden; }
 .eob-filter-form { display:flex; gap:12px; flex-wrap:wrap; padding:16px; align-items:flex-end; }
 .eob-field { display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1; }

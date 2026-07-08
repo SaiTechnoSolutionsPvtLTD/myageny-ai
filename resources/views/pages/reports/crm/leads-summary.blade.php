@@ -94,6 +94,7 @@
         || request()->filled('lead_status')
         || request()->filled('assigned_to')
         || request()->filled('product_id')
+        || request()->filled('branch_id')
         || request('date_from') !== $defaultFromDate
         || request('date_to') !== $defaultToDate;
 @endphp
@@ -228,6 +229,16 @@
                             <option value="">All Users</option>
                             @foreach($users as $user)
                                 <option value="{{ $user->id }}" @selected((string) request('assigned_to') === (string) $user->id)>{{ $user->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="crm-summary-field">
+                        <label class="crm-summary-label" for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" class="crm-summary-select">
+                            <option value="">All Branches</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
                             @endforeach
                         </select>
                     </div>
