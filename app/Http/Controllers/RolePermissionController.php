@@ -27,15 +27,30 @@ class RolePermissionController extends Controller
     /**
      * List all roles.
      */
-    public function rolesIndex()
+    public function rolesIndex(Request $request)
     {
+        $search = trim((string) $request->input('search', ''));
+        $departmentId = $request->input('department_id');
+
         $roles = Role::withCount('users')
             ->with(['permissions', 'department'])
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('display_name', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%');
+                });
+            })
+            ->when($departmentId, function ($query) use ($departmentId) {
+                $query->where('department_id', $departmentId);
+            })
             ->orderByRaw('COALESCE(display_name, name)')
             ->paginate(10)
             ->withQueryString();
 
-        return view('pages.auth_menu.roles.index', compact('roles'));
+        $departments = Department::orderBy('name')->get();
+
+        return view('pages.auth_menu.roles.index', compact('roles', 'departments', 'search', 'departmentId'));
     }
 
     /**

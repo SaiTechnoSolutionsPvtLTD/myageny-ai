@@ -25,6 +25,11 @@
 .auth-flash { margin-bottom: 16px; padding: 12px 14px; border-radius: 10px; font-size: 13px; }
 .auth-flash.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
 .auth-flash.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.auth-filter { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; padding: 18px 20px; border-bottom: 1px solid #f1eff3; background: #fcfcfc; }
+.auth-field { display: flex; flex-direction: column; gap: 6px; min-width: 180px; }
+.auth-label { font-size: 11px; font-weight: 800; color: #8a8a8a; text-transform: uppercase; letter-spacing: .6px; }
+.auth-input, .auth-select { min-height: 42px; padding: 10px 12px; border: 1px solid #e1dee3; border-radius: 10px; background: #fff; font-size: 13px; color: #222; }
+.auth-input { min-width: 280px; }
 </style>
 @endpush
 
@@ -49,8 +54,36 @@
     @endif
 
     <div class="auth-card">
+        <form method="GET" action="{{ route('auth.roles.index') }}" class="auth-filter">
+            <div class="auth-field">
+                <label class="auth-label">Department</label>
+                <select name="department_id" class="auth-select">
+                    <option value="">All Departments</option>
+                    @foreach($departments as $dept)
+                        <option value="{{ $dept->id }}" @selected(request('department_id') == $dept->id)>{{ $dept->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="auth-field">
+                <label class="auth-label">Search</label>
+                <input type="text" name="search" class="auth-input" value="{{ request('search') }}" placeholder="Search role name, key, description...">
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="submit" class="auth-btn auth-btn-primary">Apply</button>
+                @if(request('department_id') || request('search'))
+                    <a href="{{ route('auth.roles.index') }}" class="auth-btn">Reset</a>
+                @endif
+            </div>
+        </form>
+
         @if($roles->isEmpty())
-            <div class="auth-empty">No roles found yet. Create your first role to start assigning access.</div>
+            <div class="auth-empty">
+                @if(request('department_id') || request('search'))
+                    No roles matched your filters. Try resetting or adjusting them.
+                @else
+                    No roles found yet. Create your first role to start assigning access.
+                @endif
+            </div>
         @else
             <table class="auth-table">
                 <thead>

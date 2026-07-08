@@ -965,6 +965,7 @@ class ProjectController extends Controller
 
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
         $productionInitiation = $this->decorateProjectForUser($productionInitiation, $user);
+        $productionInitiation->load(['projectUpdates.createdBy:id,name']);
 
         $projectUpdatesQuery = $productionInitiation->projectUpdates()
             ->with('createdBy:id,name');
@@ -1122,13 +1123,44 @@ class ProjectController extends Controller
             'project_execution_status' => ['required', 'in:ontrack,hold,delivered'],
         ]);
 
+        $oldDeliveryDate = $productionInitiation->project_delivery_date;
+        $oldStatus = $productionInitiation->project_execution_status;
+
+        $newDeliveryDate = $validated['project_delivery_date'] ?: null;
+        $newStatus = $validated['project_execution_status'];
+
+        $changes = [];
+
+        $oldDateStr = $oldDeliveryDate ? \Illuminate\Support\Carbon::parse($oldDeliveryDate)->toDateString() : 'None';
+        $newDateStr = $newDeliveryDate ? \Illuminate\Support\Carbon::parse($newDeliveryDate)->toDateString() : 'None';
+
+        if ($oldDateStr !== $newDateStr) {
+            $changes[] = "Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$newDateStr}</strong>";
+        }
+
+        if ($oldStatus !== $newStatus) {
+            $oldStatusLabel = ucfirst($oldStatus ?: 'None');
+            $newStatusLabel = ucfirst($newStatus);
+            $changes[] = "Project Status updated from <strong>{$oldStatusLabel}</strong> to <strong>{$newStatusLabel}</strong>";
+        }
+
         $productionInitiation->update([
-            'project_delivery_date' => $validated['project_delivery_date'] ?: null,
-            'project_execution_status' => $validated['project_execution_status'],
+            'project_delivery_date' => $newDeliveryDate,
+            'project_execution_status' => $newStatus,
         ]);
 
+        if (count($changes) > 0) {
+            $content = implode('<br>', $changes);
+            
+            $productionInitiation->projectUpdates()->create([
+                'type' => 'schedule_history',
+                'content' => $content,
+                'created_by' => $user->id,
+            ]);
+        }
+
         return redirect()
-            ->route('projects.show', ['productionInitiation' => $productionInitiation, 'tab' => 'overview'])
+            ->route('projects.show', ['productionInitiation' => $productionInitiation, 'tab' => 'timeline'])
             ->with('success', 'Project delivery date and status updated successfully.');
     }
 

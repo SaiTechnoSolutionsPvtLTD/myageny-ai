@@ -561,7 +561,7 @@
                 </a>
 
                 @can('price_requests.menuview')
-                @if(auth()->user()->hasAnyRole(['super_admin', 'Super Admin', 'admin']))
+
                 <a href="{{ route('lead-price-requests.index') }}" class="nav-item {{ request()->routeIs('lead-price-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('lead-price-requests.*'))
                         <div class="active-indicator"></div>
@@ -575,7 +575,7 @@
                         <span>Price Requests</span>
                     </div>
                 </a>
-                @endif
+
                 @endcan
 
                 {{--  @if($canAccessProjectsModule)
@@ -667,13 +667,12 @@
     </nav>
 
     <div class="user-profile">
-        <div class="user-avatar-v">V</div>
+        <div class="user-avatar-v">{{ strtoupper(substr(Auth::user()->name, 0, 1)) }}</div>
         <div class="user-info">
             <span class="user-name">{{ Auth::user()->name }}</span>
-            <span class="user-role">{{ Auth::user()->role_name }}</span>
+            <span class="user-role">{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}</span>
         </div>
         <img src="{{ asset('images/42_3166.svg') }}" alt="Selector">
-
     </div>
  @include('layouts.logout_btn')
 </aside>

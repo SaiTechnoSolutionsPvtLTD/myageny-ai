@@ -81,6 +81,7 @@
 @php
     $hasCustomFilters =
         request()->filled('product_id')
+        || request()->filled('branch_id')
         || request('date_from') !== $defaultFromDate
         || request('date_to') !== $defaultToDate;
 @endphp
@@ -193,6 +194,15 @@
                                 <option value="{{ $product->id }}" @selected((string) request('product_id') === (string) $product->id)>
                                     {{ $product->package_name ?: $product->product_name }}{{ $product->sku ? ' - ' . $product->sku : '' }}
                                 </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="crm-product-field">
+                        <label class="crm-product-label" for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" class="crm-product-select">
+                            <option value="">All Branches</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
                             @endforeach
                         </select>
                     </div>

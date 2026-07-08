@@ -83,6 +83,7 @@
                                 <th>Contact</th>
                                 <th>DOB</th>
                                 <th>Status</th>
+                                <th>Employee Type</th>
                                 <th>Created</th>
                                 <th>Actions</th>
                             </tr>
@@ -110,6 +111,13 @@
                                     <td>{{ optional($employee->date_of_birth)->format('d M Y') }}</td>
                                     <td>
                                         <span class="eob-chip eob-chip-{{ $employee->status }}">{{ ucfirst($employee->status) }}</span>
+                                    </td>
+                                    <td>
+                                        @if($employee->employee_type === 'non_billable')
+                                            <span class="eob-chip eob-chip-non-billable">Non Billable</span>
+                                        @else
+                                            <span class="eob-chip eob-chip-billable">Billable</span>
+                                        @endif
                                     </td>
                                     <td>{{ $employee->created_at->format('d M Y') }}</td>
                                     <td>

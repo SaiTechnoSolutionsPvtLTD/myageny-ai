@@ -103,6 +103,7 @@
                             <div class="eob-show-item"><div class="eob-show-label">Date of Marriage</div><div class="eob-show-value">{{ optional($employee->date_of_marriage)->format('d M Y') ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Aadhaar Card No</div><div class="eob-show-value">{{ $employee->aadhaar_card_no ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Pan Card No</div><div class="eob-show-value">{{ $employee->pan_card_no ?: 'N/A' }}</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Employee Type</div><div class="eob-show-value">{{ $employee->employee_type === 'non_billable' ? 'Non Billable' : 'Billable' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Correspondence Address</div><div class="eob-show-value">{{ $employee->correspondence_address ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Permanent Address</div><div class="eob-show-value">{{ $employee->permanent_address ?: 'N/A' }}</div></div>
                         </div>

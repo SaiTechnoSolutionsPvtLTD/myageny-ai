@@ -286,6 +286,15 @@
             'soft_border' => '#bbf7d0',
             'soft_text' => '#15803d',
         ],
+        'schedule_history' => [
+            'label' => 'Schedule & Status Changed',
+            'title' => '',
+            'description' => '',
+            'accent' => '#b91c1c',
+            'soft_bg' => '#fef2f2',
+            'soft_border' => '#fecaca',
+            'soft_text' => '#991b1b',
+        ],
     ];
     $allocationStatusTone = $isTlScopedView
         ? ($isEmployeeAllocated ? 'done' : 'pending')
@@ -508,6 +517,7 @@
                                             <option value="ontrack" @selected(old('project_execution_status', $projectExecutionStatus) === 'ontrack')>Ontrack</option>
                                             <option value="hold" @selected(old('project_execution_status', $projectExecutionStatus) === 'hold')>Hold</option>
                                             <option value="delivered" @selected(old('project_execution_status', $projectExecutionStatus) === 'delivered')>Delivered</option>
+                                            <option value="lost" @selected(old('project_execution_status', $projectExecutionStatus) === 'lost')>Lost</option>
                                         </select>
                                         @error('project_execution_status')
                                             <div class="ps-allocate-note" style="color:#b91c1c;">{{ $message }}</div>
@@ -906,6 +916,20 @@
                                 {{ $allocatedEmployees->isNotEmpty() ? $allocatedEmployees->pluck('name')->implode(', ') : 'Pending' }}
                             </div>
                         </div>
+
+                        @foreach(($projectItem->projectUpdates ?? collect())->where('type', 'schedule_history')->sortBy('created_at') as $historyUpdate)
+                            <div class="ps-timeline-item" style="--timeline-color:#b91c1c;">
+                                <div class="ps-timeline-title">Schedule & Status Changed</div>
+                                <div class="ps-timeline-sub">Project delivery date and status update history</div>
+                                <div class="ps-timeline-meta">
+                                    Changed By: {{ $historyUpdate->createdBy?->name ?: 'System' }}<br>
+                                    Changed On: {{ optional($historyUpdate->created_at)->format('d M Y h:i A') }}<br>
+                                    <div style="margin-top: 8px; padding: 10px; background: #fff5f5; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #7f1d1d; line-height: 1.5;">
+                                        {!! $historyUpdate->content !!}
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
                     </div>
                 </div>
             </section>

@@ -41,7 +41,8 @@
 .ovp-table { width:100%; border-collapse:collapse; }
 .ovp-table th { padding:12px 14px; text-align:left; border-bottom:1px solid #eef2f7; background:#fafbfc; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#6b7280; white-space:nowrap; }
 .ovp-table td { padding:14px; border-bottom:1px solid #f3f4f6; font-size:13px; color:#111827; vertical-align:middle; }
-.ovp-table tbody tr:hover td { background:#fafafa; }
+.ovp-row { cursor: pointer; }
+.ovp-table tbody tr.ovp-row:hover td { background:#f1f5f9; }
 .ovp-product { font-weight:800; color:#111827; }
 .ovp-meta { font-size:11px; color:#6b7280; margin-top:3px; }
 .ovp-status-pill { display:inline-flex; align-items:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:capitalize; border:1px solid transparent; }
@@ -249,7 +250,7 @@
                                         : [];
                                     $allocationStatus = strtolower((string) ($item->ovp_allocation_status ?: ($item->ovp_allocated_to ? 'allocated' : 'allocation_pending')));
                                 @endphp
-                                <tr>
+                                <tr class="ovp-row" data-href="{{ $item->lead_id ? route('leads.show', $item->lead_id) : '#' }}">
                                     <td>
                                         <div class="ovp-product">{{ $item->product_name }}</div>
                                         <div class="ovp-meta">Working days: {{ $item->total_working_days }}</div>
@@ -484,7 +485,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (!Array.isArray(schema) || schema.length === 0) {
-            customFormWrap.innerHTML = '<div class="ovp-custom-empty">Indha product-ku OVP form map aagala.</div>';
+            customFormWrap.innerHTML = '<div class="ovp-custom-empty">Form Not Mapping</div>';
             return;
         }
 
@@ -640,6 +641,18 @@ document.addEventListener('DOMContentLoaded', function () {
     form.querySelectorAll('[data-decision]').forEach(function (button) {
         button.addEventListener('click', function () {
             decisionInput.value = button.dataset.decision || '';
+        });
+    });
+
+    document.querySelectorAll('.ovp-row').forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('button') || event.target.closest('a') || event.target.closest('select') || event.target.closest('form')) {
+                return;
+            }
+            const href = row.dataset.href;
+            if (href && href !== '#') {
+                window.location.href = href;
+            }
         });
     });
 });

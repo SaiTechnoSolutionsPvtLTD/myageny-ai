@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
+use App\Models\Department;
 use App\Models\Lead;
 use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadSource;
 use App\Models\LeadStatus;
 use App\Models\Product;
+use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
+use App\Models\User;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -51,7 +55,20 @@ class CrmReportController extends Controller
                 'status' => 'Ready for setup',
                 'route' => route('reports.crm.payment-collection'),
             ],
-
+            [
+                'title' => 'Branch Wise Comparison Report',
+                'description' => 'Compare lead volume, revenue collection, sources, and status stages across multiple branches.',
+                'theme' => 'branch',
+                'status' => 'Ready for setup',
+                'route' => route('reports.crm.branch-comparison'),
+            ],
+            [
+                'title' => 'SMM Report',
+                'description' => 'Track Social Media Marketing deliverables — committed poster/video counts, Design & DM team completions, overdue items, and status per lead account.',
+                'theme' => 'smm',
+                'status' => 'Ready for setup',
+                'route' => route('reports.crm.smm'),
+            ],
         ];
 
         return view('pages.reports.crm.index', compact('reports'));
@@ -104,11 +121,14 @@ class CrmReportController extends Controller
         $this->visibility->applyProductVisibility($productOptions);
         $products = $productOptions->get(['id', 'package_name', 'product_name']);
 
+        $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
+
         $filterPanelOpen =
             $request->filled('lead_source')
             || $request->filled('lead_status')
             || $request->filled('assigned_to')
             || $request->filled('product_id')
+            || $request->filled('branch_id')
             || $request->input('date_from') !== $defaultFromDate
             || $request->input('date_to') !== $defaultToDate;
 
@@ -120,6 +140,7 @@ class CrmReportController extends Controller
             'statusOptions',
             'users',
             'products',
+            'branches',
             'defaultFromDate',
             'defaultToDate',
             'filterPanelOpen'
@@ -210,8 +231,11 @@ class CrmReportController extends Controller
         $this->visibility->applyProductVisibility($productOptions);
         $products = $productOptions->get(['id', 'package_name', 'product_name', 'sku']);
 
+        $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
+
         $filterPanelOpen =
             $request->filled('product_id')
+            || $request->filled('branch_id')
             || $request->input('date_from') !== $defaultFromDate
             || $request->input('date_to') !== $defaultToDate;
 
@@ -220,6 +244,7 @@ class CrmReportController extends Controller
             'summary',
             'analytics',
             'products',
+            'branches',
             'defaultFromDate',
             'defaultToDate',
             'filterPanelOpen'
@@ -325,10 +350,12 @@ class CrmReportController extends Controller
         $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
         $paymentModes = LeadProduct::PAYMENT_MODES;
         $customers = $this->paymentCollectionCustomerOptions();
+        $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
 
         $filterPanelOpen =
             $request->filled('customer_id')
             || $request->filled('payment_mode')
+            || $request->filled('branch_id')
             || $request->input('date_from') !== $defaultFromDate
             || $request->input('date_to') !== $defaultToDate;
 
@@ -338,6 +365,7 @@ class CrmReportController extends Controller
             'analytics',
             'paymentModes',
             'customers',
+            'branches',
             'defaultFromDate',
             'defaultToDate',
             'filterPanelOpen'
@@ -458,6 +486,10 @@ class CrmReportController extends Controller
             $query->where('lead_products.product_id', $request->product_id);
         }
 
+        if ($request->filled('branch_id')) {
+            $query->where('leads.branch_id', $request->branch_id);
+        }
+
         if ($request->filled('date_from')) {
             $query->whereDate('leads.lead_date', '>=', $request->date_from);
         }
@@ -505,6 +537,10 @@ class CrmReportController extends Controller
 
         if ($request->filled('product_id')) {
             $query->where('products.id', $request->product_id);
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('leads.branch_id', $request->branch_id);
         }
 
         if ($request->filled('date_from')) {
@@ -563,6 +599,10 @@ class CrmReportController extends Controller
 
         if ($request->filled('payment_mode')) {
             $query->where('lead_product_payments.payment_mode', $request->payment_mode);
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('leads.branch_id', $request->branch_id);
         }
 
         if ($request->filled('date_from')) {
@@ -818,6 +858,7 @@ class CrmReportController extends Controller
         $currentYear = now()->year;
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
+        $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
 
         return [
             'period_types' => [
@@ -836,6 +877,7 @@ class CrmReportController extends Controller
                 4 => 'Quarter 4',
             ],
             'products' => $productOptions->get(['id', 'package_name', 'product_name', 'sku']),
+            'branches' => $branches,
         ];
     }
 
@@ -850,6 +892,7 @@ class CrmReportController extends Controller
             'month' => max(1, min(12, (int) $request->input('month', $now->month))),
             'quarter' => max(1, min(4, (int) $request->input('quarter', (int) ceil($now->month / 3)))),
             'product_id' => $request->filled('product_id') ? (int) $request->input('product_id') : null,
+            'branch_id' => $request->filled('branch_id') ? (int) $request->input('branch_id') : null,
         ];
     }
 
@@ -858,8 +901,8 @@ class CrmReportController extends Controller
         [$currentStart, $currentEnd, $currentLabel] = $this->resolveRevenueComparisonRange($filters, false);
         [$previousStart, $previousEnd, $previousLabel] = $this->resolveRevenueComparisonRange($filters, true);
 
-        $currentMetrics = $this->revenueMetricsForRange($currentStart, $currentEnd, $filters['product_id']);
-        $previousMetrics = $this->revenueMetricsForRange($previousStart, $previousEnd, $filters['product_id']);
+        $currentMetrics = $this->revenueMetricsForRange($currentStart, $currentEnd, $filters['product_id'], $filters['branch_id']);
+        $previousMetrics = $this->revenueMetricsForRange($previousStart, $previousEnd, $filters['product_id'], $filters['branch_id']);
 
         $differenceAmount = round($currentMetrics['value'] - $previousMetrics['value'], 2);
         $differencePercent = $previousMetrics['value'] > 0
@@ -953,16 +996,21 @@ class CrmReportController extends Controller
         ];
     }
 
-    private function revenueMetricsForRange(Carbon $start, Carbon $end, ?int $productId = null): array
+    private function revenueMetricsForRange(Carbon $start, Carbon $end, ?int $productId = null, ?int $branchId = null): array
     {
         $query = LeadProduct::query()
-            ->selectRaw('COUNT(*) as total_count, COALESCE(SUM(total_price), 0) as total_value')
-            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+            ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->selectRaw('COUNT(lead_products.id) as total_count, COALESCE(SUM(lead_products.total_price), 0) as total_value')
+            ->whereBetween('lead_products.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
 
         $this->visibility->applyLeadRelationVisibility($query);
 
         if ($productId) {
-            $query->where('product_id', $productId);
+            $query->where('lead_products.product_id', $productId);
+        }
+
+        if ($branchId) {
+            $query->where('leads.branch_id', $branchId);
         }
 
         $row = $query->first();
@@ -991,7 +1039,7 @@ class CrmReportController extends Controller
             }
 
             [$start, $end, $label] = $this->resolveRevenueComparisonRange($shiftedFilters, false);
-            $metrics = $this->revenueMetricsForRange($start, $end, $filters['product_id']);
+            $metrics = $this->revenueMetricsForRange($start, $end, $filters['product_id'], $filters['branch_id']);
 
             return [
                 'label' => $label,
@@ -999,5 +1047,489 @@ class CrmReportController extends Controller
                 'count' => $metrics['count'],
             ];
         })->values()->all();
+    }
+
+    public function branchComparison(Request $request): View
+    {
+        [$dateFrom, $dateTo, $periodLabel, $periodType] = $this->resolvePeriodRange($request);
+
+        $filterOptions = [
+            'period_types' => [
+                'custom' => 'Custom Date Range',
+                'month' => 'Monthly',
+                'quarter' => 'Quarterly',
+                'year' => 'Yearly',
+            ],
+            'years' => collect(range(now()->year - 5, now()->year + 1))->sortDesc()->values()->all(),
+            'months' => collect(range(1, 12))->mapWithKeys(fn ($month) => [
+                $month => Carbon::create()->month($month)->format('F'),
+            ])->all(),
+            'quarters' => [
+                1 => 'Quarter 1',
+                2 => 'Quarter 2',
+                3 => 'Quarter 3',
+                4 => 'Quarter 4',
+            ],
+        ];
+
+        $selectedFilters = [
+            'period_type' => $periodType,
+            'year' => (int) $request->input('year', now()->year),
+            'month' => (int) $request->input('month', now()->month),
+            'quarter' => (int) $request->input('quarter', ceil(now()->month / 3)),
+            'date_from' => $request->input('date_from', now()->startOfMonth()->toDateString()),
+            'date_to' => $request->input('date_to', now()->endOfMonth()->toDateString()),
+        ];
+
+        $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
+
+        return view('pages.reports.crm.branch-comparison', compact(
+            'filterOptions',
+            'selectedFilters',
+            'comparisonData',
+            'periodLabel',
+            'dateFrom',
+            'dateTo'
+        ));
+    }
+
+    public function exportBranchComparison(Request $request): Response
+    {
+        [$dateFrom, $dateTo, $periodLabel] = $this->resolvePeriodRange($request);
+        $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
+
+        $html = view('pages.reports.crm.branch-comparison-export', [
+            'rows' => $comparisonData['rows'],
+            'allSources' => $comparisonData['all_sources'],
+            'allStatuses' => $comparisonData['all_statuses'],
+            'periodLabel' => $periodLabel,
+        ])->render();
+
+        $fileName = 'branch_wise_comparison_' . now()->format('Y_m_d_His') . '.xls';
+
+        return response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ]);
+    }
+
+    private function resolvePeriodRange(Request $request): array
+    {
+        $now = now();
+        $periodType = $request->input('period_type', 'month');
+
+        if ($periodType === 'custom') {
+            $dateFrom = $request->input('date_from', $now->startOfMonth()->toDateString());
+            $dateTo = $request->input('date_to', $now->endOfMonth()->toDateString());
+            $label = Carbon::parse($dateFrom)->format('d M Y') . ' to ' . Carbon::parse($dateTo)->format('d M Y');
+        } elseif ($periodType === 'quarter') {
+            $year = (int) $request->input('year', $now->year);
+            $quarter = (int) $request->input('quarter', ceil($now->month / 3));
+            $startMonth = (($quarter - 1) * 3) + 1;
+            $start = Carbon::create($year, $startMonth, 1)->startOfQuarter();
+            $end = $start->copy()->endOfQuarter();
+            $dateFrom = $start->toDateString();
+            $dateTo = $end->toDateString();
+            $label = 'Q' . $quarter . ' ' . $year;
+        } elseif ($periodType === 'year') {
+            $year = (int) $request->input('year', $now->year);
+            $start = Carbon::create($year, 1, 1)->startOfYear();
+            $end = $start->copy()->endOfYear();
+            $dateFrom = $start->toDateString();
+            $dateTo = $end->toDateString();
+            $label = (string) $year;
+        } else {
+            $year = (int) $request->input('year', $now->year);
+            $month = (int) $request->input('month', $now->month);
+            $start = Carbon::create($year, $month, 1)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+            $dateFrom = $start->toDateString();
+            $dateTo = $end->toDateString();
+            $label = $start->format('F Y');
+        }
+
+        return [$dateFrom, $dateTo, $label, $periodType];
+    }
+
+    private function buildBranchComparisonData(string $dateFrom, string $dateTo): array
+    {
+        $companyId = $this->visibility->companyIdFor();
+        $branchesQuery = \App\Models\Branch::query()->orderBy('name');
+        if ($companyId) {
+            $branchesQuery->where('company_id', $companyId);
+        }
+        $branches = $branchesQuery->get(['id', 'name']);
+
+        // 1. Total Leads count per branch
+        $leadCounts = DB::table('leads')
+            ->select('branch_id', DB::raw('COUNT(*) as total_leads'))
+            ->whereBetween('lead_date', [$dateFrom, $dateTo])
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->groupBy('branch_id')
+            ->pluck('total_leads', 'branch_id')
+            ->toArray();
+
+        // 2. Converted Leads count per branch
+        $convertedCounts = DB::table('lead_products')
+            ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->select('leads.branch_id', DB::raw('COUNT(DISTINCT leads.id) as converted_leads'))
+            ->where('lead_products.product_status', 'converted')
+            ->whereBetween('lead_products.updated_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id')
+            ->pluck('converted_leads', 'branch_id')
+            ->toArray();
+
+        // 3. Total Revenue (Sales contract value) per branch
+        $revenueAmounts = DB::table('lead_products')
+            ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->select('leads.branch_id', DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as revenue'))
+            ->whereBetween('lead_products.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id')
+            ->pluck('revenue', 'branch_id')
+            ->toArray();
+
+        // 4. Received revenue (Payments collected) per branch
+        $receivedAmounts = DB::table('lead_product_payments')
+            ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+            ->select('leads.branch_id', DB::raw('SUM(COALESCE(lead_product_payments.amount, 0)) as received'))
+            ->whereBetween('lead_product_payments.payment_date', [$dateFrom, $dateTo])
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id')
+            ->pluck('received', 'branch_id')
+            ->toArray();
+
+        // 5. Lead Source distribution per branch
+        $sourceStats = DB::table('leads')
+            ->select('branch_id', 'lead_source', DB::raw('COUNT(*) as count'))
+            ->whereBetween('lead_date', [$dateFrom, $dateTo])
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->groupBy('branch_id', 'lead_source')
+            ->get();
+
+        // 6. Lead Status distribution per branch
+        $statusStats = DB::table('leads')
+            ->select('branch_id', 'lead_status', DB::raw('COUNT(*) as count'))
+            ->whereBetween('lead_date', [$dateFrom, $dateTo])
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->groupBy('branch_id', 'lead_status')
+            ->get();
+
+        $rows = [];
+        $allSources = [];
+        $allStatuses = [];
+
+        foreach ($branches as $branch) {
+            $branchId = $branch->id;
+            $rows[$branchId] = [
+                'branch_id' => $branchId,
+                'branch_name' => $branch->name,
+                'total_leads' => (int) ($leadCounts[$branchId] ?? 0),
+                'converted_leads' => (int) ($convertedCounts[$branchId] ?? 0),
+                'revenue' => (float) ($revenueAmounts[$branchId] ?? 0.0),
+                'received' => (float) ($receivedAmounts[$branchId] ?? 0.0),
+                'sources' => [],
+                'statuses' => [],
+            ];
+        }
+
+        foreach ($sourceStats as $stat) {
+            $branchId = $stat->branch_id;
+            if (isset($rows[$branchId])) {
+                $sourceName = $stat->lead_source ?: 'Unknown';
+                $rows[$branchId]['sources'][$sourceName] = (int) $stat->count;
+                $allSources[$sourceName] = true;
+            }
+        }
+
+        foreach ($statusStats as $stat) {
+            $branchId = $stat->branch_id;
+            if (isset($rows[$branchId])) {
+                $statusName = $stat->lead_status ?: 'Unknown';
+                $rows[$branchId]['statuses'][$statusName] = (int) $stat->count;
+                $allStatuses[$statusName] = true;
+            }
+        }
+
+        $allSources = array_keys($allSources);
+        $allStatuses = array_keys($allStatuses);
+
+        return [
+            'rows' => array_values($rows),
+            'all_sources' => $allSources,
+            'all_statuses' => $allStatuses,
+        ];
+    }
+
+    // ─── SMM Report ──────────────────────────────────────────────────────────────
+
+    public function smmReport(Request $request): View
+    {
+        $companyId = $this->visibility->companyIdFor();
+
+        // Filter options
+        $leads = Lead::query()
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->orderBy('company_name')
+            ->get(['id', 'company_name', 'contact_name']);
+
+        $products = Product::query()
+            ->countWise()
+            ->when($companyId, fn($q) => $q->where('products.company_id', $companyId))
+            ->orderBy('package_name')
+            ->get(['id', 'package_name']);
+
+        $departments = Department::query()
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $rows = $this->buildSmmReportData($request, $companyId);
+
+        $filters = [
+            'date_from'   => $request->input('date_from', now()->startOfMonth()->toDateString()),
+            'date_to'     => $request->input('date_to', now()->endOfMonth()->toDateString()),
+            'lead_id'     => $request->input('lead_id'),
+            'product_id'  => $request->input('product_id'),
+            'status'      => $request->input('status'),
+        ];
+
+        return view('pages.reports.crm.smm-report', compact(
+            'rows', 'filters', 'leads', 'products', 'departments'
+        ));
+    }
+
+    public function exportSmmReport(Request $request): Response
+    {
+        $companyId = $this->visibility->companyIdFor();
+        $rows = $this->buildSmmReportData($request, $companyId);
+
+        $filters = [
+            'date_from' => $request->input('date_from', now()->startOfMonth()->toDateString()),
+            'date_to'   => $request->input('date_to', now()->endOfMonth()->toDateString()),
+        ];
+
+        $html = view('pages.reports.crm.smm-report-export', compact('rows', 'filters'))->render();
+        $fileName = 'smm_report_' . now()->format('Y_m_d_His') . '.xls';
+
+        return response($html, 200, [
+            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ]);
+    }
+
+    private function buildSmmReportData(Request $request, ?int $companyId): \Illuminate\Support\Collection
+    {
+        $dateFrom  = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo    = $request->input('date_to', now()->endOfMonth()->toDateString());
+        $leadId    = $request->input('lead_id');
+        $productId = $request->input('product_id');
+        $status    = $request->input('status');
+
+        // Base query: one row per production_initiation (= one product order per lead)
+        $query = DB::table('production_initiations as pi')
+            ->join('leads as l', 'l.id', '=', 'pi.lead_id')
+            ->join('lead_products as lp', 'lp.id', '=', 'pi.lead_product_id')
+            ->join('products as p', 'p.id', '=', 'pi.product_id')
+            ->leftJoin('departments as d', 'd.id', '=', 'pi.department_id')
+            ->select([
+                'pi.id as pi_id',
+                'pi.lead_id',
+                'pi.lead_product_id',
+                'pi.product_id',
+                'pi.department_id',
+                'pi.project_delivery_date',
+                'pi.project_execution_status',
+                'pi.custom_form_data',
+                'pi.created_at as initiated_at',
+                'pi.tl_employee_allocations',
+                'l.company_name',
+                'l.contact_name',
+                'p.package_name as product_name',
+                'd.name as department_name',
+            ])
+            ->when($companyId, fn($q) => $q->where('pi.company_id', $companyId))
+            ->where('p.count_wise_report', true)
+            ->when($leadId, fn($q) => $q->where('pi.lead_id', $leadId))
+            ->when($productId, fn($q) => $q->where('pi.product_id', $productId))
+            ->orderBy('l.company_name')
+            ->orderBy('pi.id');
+
+        // Date filter against project delivery date
+        if ($dateFrom) {
+            $query->where(function ($q) use ($dateFrom, $dateTo) {
+                $q->whereNull('pi.project_delivery_date')
+                  ->orWhereBetween('pi.project_delivery_date', [$dateFrom, $dateTo]);
+            });
+        }
+
+        $initiations = $query->get();
+
+        // Gather all production count report rows for these initiations (per department)
+        $piIds = $initiations->pluck('pi_id')->unique()->values()->all();
+
+        $countReports = DB::table('production_count_reports as pcr')
+            ->join('departments as dep', 'dep.id', '=', 'pcr.department_id')
+            ->whereIn('pcr.production_initiation_id', $piIds)
+            ->select([
+                'pcr.production_initiation_id',
+                'pcr.department_id',
+                'dep.name as dept_name',
+                'pcr.poster_count',
+                'pcr.video_count',
+                'pcr.allocated_user_ids',
+                'pcr.status',
+            ])
+            ->get()
+            ->groupBy('production_initiation_id');
+
+        // Gather timesheet-completed poster/video counts per initiation + department
+        $timesheetSums = DB::table('project_timesheets as pt')
+            ->join('users as u', 'u.id', '=', 'pt.user_id')
+            ->leftJoin('employee_onboardings as eo', function ($join) {
+                $join->on('eo.portal_user_id', '=', 'pt.user_id')
+                     ->whereNull('eo.deleted_at');
+            })
+            ->leftJoin('departments as dep2', 'dep2.id', '=', 'eo.department_id')
+            ->whereIn('pt.production_initiation_id', $piIds)
+            ->select([
+                'pt.production_initiation_id',
+                'dep2.id as dept_id',
+                'dep2.name as dept_name',
+                DB::raw('SUM(COALESCE(pt.poster_count, 0)) as completed_posters'),
+                DB::raw('SUM(COALESCE(pt.video_count, 0)) as completed_videos'),
+                DB::raw('GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ", ") as persons'),
+            ])
+            ->groupBy('pt.production_initiation_id', 'dep2.id', 'dep2.name')
+            ->get()
+            ->groupBy('production_initiation_id');
+
+        $today = now()->toDateString();
+
+        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status) {
+            $piId = $pi->pi_id;
+
+            // Parse custom_form_data for start/end date (stored as JSON array of {field_name, value})
+            $formData = json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+
+            $startDate = null;
+            $endDate   = null;
+            foreach ($formData as $field) {
+                $key = strtolower(trim($field['field_name'] ?? ''));
+                if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
+                    $startDate = $field['value'] ?? null;
+                }
+                if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date'])) {
+                    $endDate = $field['value'] ?? null;
+                }
+            }
+
+            // Tenure in months
+            $tenure = null;
+            if ($startDate && $endDate) {
+                try {
+                    $tenure = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate), true);
+                    // $tenure = round($tenure, 1);
+                } catch (\Exception $e) {}
+            }
+
+            // Month label from start date or delivery date
+            $monthLabel = null;
+            $dateForMonth = $startDate ?? $pi->project_delivery_date;
+            if ($dateForMonth) {
+                try {
+                    $monthLabel = Carbon::parse($dateForMonth)->format('M Y');
+                } catch (\Exception $e) {}
+            }
+
+            // Production count reports: split by "design" and "dm" in name
+            $pcrs = $countReports->get($piId, collect());
+            $designPcr = $pcrs->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'design'));
+            $dmPcr     = $pcrs->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'digital') || str_contains(strtolower($r->dept_name ?? ''), 'dm') || str_contains(strtolower($r->dept_name ?? ''), 'marketing'));
+
+            $designCommittedPosters = $designPcr ? (int) $designPcr->poster_count : 0;
+            $designCommittedVideos  = $designPcr ? (int) $designPcr->video_count  : 0;
+            $dmCommittedPosters     = $dmPcr     ? (int) $dmPcr->poster_count     : 0;
+            $dmCommittedVideos      = $dmPcr     ? (int) $dmPcr->video_count      : 0;
+
+            $committedPosters = $designCommittedPosters + $dmCommittedPosters;
+            $committedVideos  = $designCommittedVideos  + $dmCommittedVideos;
+
+            // Timesheet completions: split by design vs dm
+            $tsSets = $timesheetSums->get($piId, collect());
+            $designTs = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'design'));
+            $dmTs     = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'digital') || str_contains(strtolower($r->dept_name ?? ''), 'dm') || str_contains(strtolower($r->dept_name ?? ''), 'marketing'));
+
+            $designCompletedPosters = $designTs ? (int) $designTs->completed_posters : 0;
+            $designCompletedVideos  = $designTs ? (int) $designTs->completed_videos  : 0;
+            $designPersons          = $designTs ? ($designTs->persons ?? '-') : '-';
+
+            $dmCompletedPosters = $dmTs ? (int) $dmTs->completed_posters : 0;
+            $dmCompletedVideos  = $dmTs ? (int) $dmTs->completed_videos  : 0;
+            $dmPersons          = $dmTs ? ($dmTs->persons ?? '-') : '-';
+
+            // Pending = Committed (from PCR) − Done (from timesheets), clamped to 0
+            $designPendingPosters = max(0, $designCommittedPosters - $designCompletedPosters);
+            $designPendingVideos  = max(0, $designCommittedVideos  - $designCompletedVideos);
+            $dmPendingPosters     = max(0, $dmCommittedPosters     - $dmCompletedPosters);
+            $dmPendingVideos      = max(0, $dmCommittedVideos      - $dmCompletedVideos);
+
+            // Allocated persons from tl_employee_allocations fallback
+            if ($designPersons === '-' && $pi->tl_employee_allocations) {
+                try {
+                    $allocs = json_decode($pi->tl_employee_allocations, true) ?? [];
+                    $names  = collect($allocs)->pluck('name')->filter()->values()->implode(', ');
+                    if ($names) $designPersons = $names;
+                } catch (\Exception $e) {}
+            }
+
+            // Status calculation
+            $totalCommitted  = $committedPosters + $committedVideos;
+            $totalCompleted  = $designCompletedPosters + $designCompletedVideos + $dmCompletedPosters + $dmCompletedVideos;
+            $deliveryDate    = $pi->project_delivery_date ?? $endDate;
+
+            $computedStatus = 'pending';
+            if ($totalCommitted > 0 && $totalCompleted >= $totalCommitted) {
+                $computedStatus = 'completed';
+            } elseif ($deliveryDate && $deliveryDate < $today) {
+                $computedStatus = 'overdue';
+            }
+
+            // Apply status filter
+            if ($status && $computedStatus !== $status) {
+                return null;
+            }
+
+            $accountName = trim(($pi->company_name ?? '') ?: (trim(($pi->contact_name ?? '') . ' ' . ($pi->last_name ?? ''))));
+
+            return [
+                'pi_id'                    => $piId,
+                'lead_id'                  => $pi->lead_id,
+                'month'                    => $monthLabel ?? '-',
+                'account_name'             => $accountName ?: 'N/A',
+                'product_name'             => $pi->product_name ?? '-',
+                'start_date'               => $startDate,
+                'end_date'                 => $endDate,
+                'delivery_date'            => $pi->project_delivery_date,
+                'tenure'                   => $tenure,
+                'committed_posters'        => $committedPosters,
+                'committed_videos'         => $committedVideos,
+                'design_completed_posters' => $designCompletedPosters,
+                'design_pending_posters'   => $designPendingPosters,
+                'design_completed_videos'  => $designCompletedVideos,
+                'design_pending_videos'    => $designPendingVideos,
+                'design_persons'           => $designPersons,
+                'dm_completed_posters'     => $dmCompletedPosters,
+                'dm_pending_posters'       => $dmPendingPosters,
+                'dm_completed_videos'      => $dmCompletedVideos,
+                'dm_pending_videos'        => $dmPendingVideos,
+                'dm_persons'               => $dmPersons,
+                'status'                   => $computedStatus,
+                'department_name'          => $pi->department_name ?? '-',
+            ];
+        })->filter()->values();
+
+        return $rows;
     }
 }

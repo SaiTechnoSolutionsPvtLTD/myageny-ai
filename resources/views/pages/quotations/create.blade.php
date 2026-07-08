@@ -482,17 +482,17 @@ $(function () {
                 </td>
                 <td class="td-qty">
                     <input type="number" name="items[${idx}][qty]"
-                           class="form-control item-qty" min="0.01" step="0.01"
+                           class="form-control item-qty" min="0.01" step="1"
                            value="${data.qty || 1}" required>
                 </td>
                 <td class="td-price">
                     <input type="number" name="items[${idx}][unit_price]"
-                           class="form-control item-price input-readonly" min="0" step="0.01"
+                           class="form-control item-price input-readonly" min="0" step="1"
                            value="${data.unit_price || ''}" placeholder="0.00" required readonly>
                 </td>
                 <td class="td-disc">
                     <input type="number" name="items[${idx}][discount]"
-                           class="form-control item-disc" min="0" step="0.01"
+                           class="form-control item-disc" min="0" step="1"
                            value="${data.discount || 0}">
                 </td>
                 <td class="td-total" style="text-align:right">

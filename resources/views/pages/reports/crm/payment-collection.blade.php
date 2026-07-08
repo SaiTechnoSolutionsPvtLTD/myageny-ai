@@ -79,6 +79,7 @@
     $hasCustomFilters =
         request()->filled('customer_id')
         || request()->filled('payment_mode')
+        || request()->filled('branch_id')
         || request('date_from') !== $defaultFromDate
         || request('date_to') !== $defaultToDate;
 @endphp
@@ -179,6 +180,16 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="crm-pay-field">
+                        <label class="crm-pay-label" for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" class="crm-pay-select">
+                            <option value="">All Branches</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <div class="crm-pay-form-actions">
                         <button type="submit" class="crm-pay-btn crm-pay-btn-primary">Apply</button>
                         @if($hasCustomFilters)

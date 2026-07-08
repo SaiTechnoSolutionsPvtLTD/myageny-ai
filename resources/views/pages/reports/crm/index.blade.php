@@ -175,6 +175,8 @@
 .crm-report-card.campaign::after { background: #2563eb; }
 .crm-report-card.team::after { background: #059669; }
 .crm-report-card.quotation::after { background: #ec4899; }
+.crm-report-card.branch::after { background: #4f46e5; }
+.crm-report-card.smm::after { background: #0891b2; }
 .crm-report-card-icon {
     width: 54px;
     height: 54px;
@@ -211,6 +213,14 @@
 .crm-report-card-icon.quotation {
     background: linear-gradient(135deg, #fdf2f8, #fce7f3);
     color: #db2777;
+}
+.crm-report-card-icon.branch {
+    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+    color: #4f46e5;
+}
+.crm-report-card-icon.smm {
+    background: linear-gradient(135deg, #ecfeff, #cffafe);
+    color: #0891b2;
 }
 .crm-report-status {
     display: inline-flex;
@@ -406,6 +416,20 @@
                         <circle cx="9" cy="7" r="4"/>
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    @elseif($report['theme'] === 'branch')
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="9" y1="3" x2="9" y2="21"/>
+                        <line x1="15" y1="3" x2="15" y2="21"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="3" y1="15" x2="21" y2="15"/>
+                    </svg>
+                    @elseif($report['theme'] === 'smm')
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        <path d="M8 10h8"/>
+                        <path d="M8 14h5"/>
                     </svg>
                     @else
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

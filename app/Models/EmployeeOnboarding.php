@@ -126,6 +126,7 @@ class EmployeeOnboarding extends Model
         'document_salary_slips',
         'document_bank_passbook',
         'status',
+        'employee_type',
         'created_by',
         'updated_by',
     ];

@@ -398,7 +398,7 @@ window.OVPFormConfig = {
     function renderPreview() {
         const wrap = document.getElementById('ovpf-preview');
         if (!state.fields.length) {
-            wrap.innerHTML = '<div class="ovpf-empty" style="grid-column:1/-1;">Field preview inga display aagum.</div>';
+            wrap.innerHTML = '<div class="ovpf-empty" style="grid-column:1/-1;">No Data</div>';
             return;
         }
 
