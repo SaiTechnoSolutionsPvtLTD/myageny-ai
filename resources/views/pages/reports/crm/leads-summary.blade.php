@@ -140,7 +140,7 @@
                 </div>
                 <div class="crm-summary-stat-label">Report Rows</div>
                 <div class="crm-summary-stat-value">{{ number_format($summary['rows']) }}</div>
-                <div class="crm-summary-stat-note">Current filter set-ku visible lead summary rows.</div>
+                <div class="crm-summary-stat-note">Current filter set visible lead summary rows.</div>
             </div>
             <div class="crm-summary-stat" style="--stat-accent:#2563eb;--stat-soft:#dbeafe;">
                 <div class="crm-summary-stat-top">
@@ -311,6 +311,7 @@
                                 </tr>
                             </thead>
                             <tbody>
+
                                 @foreach($reportRows as $row)
                                     @php
                                         $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
