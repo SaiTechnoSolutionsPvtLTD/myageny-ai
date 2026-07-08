@@ -521,6 +521,12 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:quotation_settings.manage')->name('quotation.update');
     Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:quotation_settings.manage')->name('quotation.file.delete');
 
+    // Lead Reallocation
+    Route::prefix('lead-reallocation')->name('lead-reallocation.')->middleware('can:settings.manage')->group(function () {
+        Route::get('/', [\App\Http\Controllers\LeadReallocationController::class, 'index'])->name('index');
+        Route::post('/reallocate', [\App\Http\Controllers\LeadReallocationController::class, 'reallocate'])->name('reallocate');
+    });
+
     // Lead Source
     Route::resource('lead-sources', LeadSourceController::class)
          ->middleware('can:lead_source.view')

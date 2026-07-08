@@ -391,6 +391,29 @@
             </span>
         </a>
         @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.lead-reallocation.index') }}" class="settings-card branch">
+            <div class="settings-card-icon branch">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M13 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"></path>
+                    <path d="M13 12H3"></path>
+                    <path d="M13 9l3-3"></path>
+                    <path d="M16 6l3 3"></path>
+                    <path d="M19 3v6"></path>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Lead Reallocation</h4>
+            <p class="settings-card-text">Reassign leads and their products from one user to another. Useful for managing team changes and workload distribution.</p>
+            <span class="settings-card-link">
+                Open Lead Reallocation
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
     </div>
 </div>
 @endsection

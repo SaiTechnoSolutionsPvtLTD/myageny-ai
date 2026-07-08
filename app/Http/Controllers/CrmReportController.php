@@ -83,11 +83,15 @@ class CrmReportController extends Controller
 
         $query = $this->buildLeadsSummaryQuery($request);
 
-        $reportRows = $query->paginate(20)->withQueryString();
-        $analyticsRows = (clone $query)->get();
+        // Get all data for analytics and summary
+        $allRows = $query->get();
+
+        // Paginate for display (100 records per page for better data visibility)
+        $reportRows = $query->paginate(100)->withQueryString();
+        $analyticsRows = $allRows;
 
         $summaryQuery = clone $query;
-        $summaryRows = (clone $summaryQuery)->get();
+        $summaryRows = $allRows;
         $leadProductIds = $summaryRows->pluck('lead_product_id')->filter()->unique()->toArray();
 
         $totalPaid = 0;
