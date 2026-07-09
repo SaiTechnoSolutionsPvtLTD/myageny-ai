@@ -68,9 +68,9 @@ class SuperAdminDashboardController extends ApiController
         $wonLeads      = (clone $base())->where('lead_status', 'won')->count();
         $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
         $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
-        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status',['won','lost'])->sum('deal_value');
+        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
         $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority','high')->whereNotIn('lead_status',['won','lost'])->count();
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
@@ -98,8 +98,8 @@ class SuperAdminDashboardController extends ApiController
         $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
         $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
         $totalPending      = $totalProductValue - $totalPaid;
-        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->sum('total_price');
-        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->count();
+        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
         $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
@@ -109,7 +109,7 @@ class SuperAdminDashboardController extends ApiController
             ->get()
             ->map(fn($pm) => [
                 'mode'      => $pm->payment_mode,
-                'mode_label'=> LeadProduct::PAYMENT_MODES[$pm->payment_mode] ?? ucfirst($pm->payment_mode),
+                'mode_label' => LeadProduct::PAYMENT_MODES[$pm->payment_mode] ?? ucfirst($pm->payment_mode),
                 'total'     => (float) $pm->total,
                 'txn_count' => (int)   $pm->txn_count,
             ]);
@@ -132,12 +132,16 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source,   fn($q2) => $q2->where('lead_source', $source));
             })
-            ->with(['lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
-                    'lead.branch:id,name', 'lead.assignedTo:id,name', 'user:id,name'])
+            ->with([
+                'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
+                'lead.branch:id,name',
+                'lead.assignedTo:id,name',
+                'user:id,name'
+            ])
             ->latest()
             ->take(10)
             ->get()
@@ -149,7 +153,7 @@ class SuperAdminDashboardController extends ApiController
                 'outcome'         => $fu->outcome,
                 'outcome_label'   => $fu->outcome_label,
                 'outcome_color'   => $fu->outcome_color,
-                'duration_minutes'=> $fu->duration_minutes,
+                'duration_minutes' => $fu->duration_minutes,
                 'notes'           => $fu->notes,
                 'next_follow_up'  => $fu->next_follow_up?->toDateString(),
                 'logged_by'       => ['id' => $fu->user?->id, 'name' => $fu->user?->name],
@@ -157,7 +161,7 @@ class SuperAdminDashboardController extends ApiController
                     'id'           => $fu->lead?->id,
                     'company_name' => $fu->lead?->company_name,
                     'contact_name' => $fu->lead?->contact_name,
-                    'mobile_number'=> $fu->lead?->mobile_number,
+                    'mobile_number' => $fu->lead?->mobile_number,
                     'lead_status'  => $fu->lead?->lead_status,
                     'branch'       => ['id' => $fu->lead?->branch?->id, 'name' => $fu->lead?->branch?->name],
                     'assigned_to'  => ['id' => $fu->lead?->assignedTo?->id, 'name' => $fu->lead?->assignedTo?->name],
@@ -166,11 +170,11 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 6. Pending reminders today ────────────────────────────
         $overdueCount = LeadReminder::where('is_completed', false)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at','<',now())
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at')
@@ -209,8 +213,8 @@ class SuperAdminDashboardController extends ApiController
                 'status_label'  => $l->status_label,
                 'status_color'  => $l->status_color,
                 'priority'      => $l->priority,
-                'priority_label'=> $l->priority_label,
-                'priority_color'=> $l->priority_color,
+                'priority_label' => $l->priority_label,
+                'priority_color' => $l->priority_color,
                 'deal_value'    => (float) $l->deal_value,
                 'deal_value_formatted' => $l->formatted_deal_value,
                 'branch'        => ['id' => $l->branch?->id, 'name' => $l->branch?->name],
@@ -220,8 +224,8 @@ class SuperAdminDashboardController extends ApiController
         // ── 8. Branch-wise performance ────────────────────────────
         $visibleBranchIds = $this->visibility->visibleBranchIds($request->user());
         $branchPerformance = Branch::where('is_active', true)
-            ->when($visibleBranchIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $visibleBranchIds))
-            ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+            ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
             ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
                 $q = Lead::where('branch_id', $branch->id)
@@ -232,7 +236,7 @@ class SuperAdminDashboardController extends ApiController
                 $total    = (clone $q)->count();
                 $won      = (clone $q)->where('lead_status', 'won')->count();
                 $wonVal   = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
-                $pipeline = (float)(clone $q)->whereNotIn('lead_status',['won','lost'])->sum('deal_value');
+                $pipeline = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
                 $convRate = $total > 0 ? round($won / $total * 100, 1) : 0;
 
                 return [
@@ -241,10 +245,10 @@ class SuperAdminDashboardController extends ApiController
                     'branch_code' => $branch->code,
                     'total_leads' => $total,
                     'won_leads'   => $won,
-                    'lost_leads'  => (clone $q)->where('lead_status','lost')->count(),
+                    'lost_leads'  => (clone $q)->where('lead_status', 'lost')->count(),
                     'won_value'   => $wonVal,
                     'pipeline_value' => $pipeline,
-                    'conversion_rate'=> $convRate,
+                    'conversion_rate' => $convRate,
                 ];
             })
             ->sortByDesc('won_value')
@@ -289,9 +293,9 @@ class SuperAdminDashboardController extends ApiController
         for ($i = 5; $i >= 0; $i--) {
             $month = now()->subMonths($i);
             $q = Lead::whereYear('lead_date', $month->year)
-                     ->whereMonth('lead_date', $month->month)
-                     ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                     ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
+                ->whereMonth('lead_date', $month->month)
+                ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
             $this->visibility->applyLeadVisibility($q, $request->user());
 
             $monthTrend[] = [
@@ -411,10 +415,10 @@ class SuperAdminDashboardController extends ApiController
         $statuses = LeadStatus::query()
             ->when(
                 $companyId,
-                fn ($query) => $query->where(fn ($statusQuery) => $statusQuery
+                fn($query) => $query->where(fn($statusQuery) => $statusQuery
                     ->where('company_id', $companyId)
                     ->orWhereNull('company_id')),
-                fn ($query) => $query->whereNull('company_id')
+                fn($query) => $query->whereNull('company_id')
             )
             ->orderBy('name')
             ->get(['id', 'name']);
@@ -426,11 +430,11 @@ class SuperAdminDashboardController extends ApiController
         $counts = $leadIds->isEmpty()
             ? collect()
             : LeadProduct::query()
-                ->whereIn('lead_id', $leadIds)
-                ->whereIn('lead_status_id', $statuses->pluck('id'))
-                ->select('lead_status_id', DB::raw('COUNT(*) as count'))
-                ->groupBy('lead_status_id')
-                ->pluck('count', 'lead_status_id');
+            ->whereIn('lead_id', $leadIds)
+            ->whereIn('lead_status_id', $statuses->pluck('id'))
+            ->select('lead_status_id', DB::raw('COUNT(*) as count'))
+            ->groupBy('lead_status_id')
+            ->pluck('count', 'lead_status_id');
 
         $stageTotal = (int) $counts->sum();
         $stages = $statuses->map(function ($status) use ($counts, $stageTotal) {
@@ -458,7 +462,7 @@ class SuperAdminDashboardController extends ApiController
 
     public function dashboardData(Request $request)
     {
-         $request->validate([
+        $request->validate([
             'branch_id'  => ['nullable', 'exists:branches,id'],
             'user_id'    => ['nullable', 'exists:users,id'],
             'stage'      => ['nullable', Rule::in(Lead::statusKeys())],
@@ -495,9 +499,9 @@ class SuperAdminDashboardController extends ApiController
         $wonLeads      = (clone $base())->where('lead_status', 'won')->count();
         $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
         $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
-        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status',['won','lost'])->sum('deal_value');
+        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
         $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority','high')->whereNotIn('lead_status',['won','lost'])->count();
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
@@ -525,8 +529,8 @@ class SuperAdminDashboardController extends ApiController
         $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
         $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
         $totalPending      = $totalProductValue - $totalPaid;
-        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->sum('total_price');
-        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status','converted')->count();
+        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
         $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
@@ -536,7 +540,7 @@ class SuperAdminDashboardController extends ApiController
             ->get()
             ->map(fn($pm) => [
                 'mode'      => $pm->payment_mode,
-                'mode_label'=> LeadProduct::PAYMENT_MODES[$pm->payment_mode] ?? ucfirst($pm->payment_mode),
+                'mode_label' => LeadProduct::PAYMENT_MODES[$pm->payment_mode] ?? ucfirst($pm->payment_mode),
                 'total'     => (float) $pm->total,
                 'txn_count' => (int)   $pm->txn_count,
             ]);
@@ -559,12 +563,16 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source,   fn($q2) => $q2->where('lead_source', $source));
             })
-            ->with(['lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
-                    'lead.branch:id,name', 'lead.assignedTo:id,name', 'user:id,name'])
+            ->with([
+                'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
+                'lead.branch:id,name',
+                'lead.assignedTo:id,name',
+                'user:id,name'
+            ])
             ->latest()
             ->take(10)
             ->get()
@@ -576,7 +584,7 @@ class SuperAdminDashboardController extends ApiController
                 'outcome'         => $fu->outcome,
                 'outcome_label'   => $fu->outcome_label,
                 'outcome_color'   => $fu->outcome_color,
-                'duration_minutes'=> $fu->duration_minutes,
+                'duration_minutes' => $fu->duration_minutes,
                 'notes'           => $fu->notes,
                 'next_follow_up'  => $fu->next_follow_up?->toDateString(),
                 'logged_by'       => ['id' => $fu->user?->id, 'name' => $fu->user?->name],
@@ -584,7 +592,7 @@ class SuperAdminDashboardController extends ApiController
                     'id'           => $fu->lead?->id,
                     'company_name' => $fu->lead?->company_name,
                     'contact_name' => $fu->lead?->contact_name,
-                    'mobile_number'=> $fu->lead?->mobile_number,
+                    'mobile_number' => $fu->lead?->mobile_number,
                     'lead_status'  => $fu->lead?->lead_status,
                     'branch'       => ['id' => $fu->lead?->branch?->id, 'name' => $fu->lead?->branch?->name],
                     'assigned_to'  => ['id' => $fu->lead?->assignedTo?->id, 'name' => $fu->lead?->assignedTo?->name],
@@ -593,11 +601,11 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 6. Pending reminders today ────────────────────────────
         $overdueCount = LeadReminder::where('is_completed', false)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at','<',now())
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at')
@@ -619,36 +627,47 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 7. Recent leads ───────────────────────────────────────
         $recentLeads = (clone $base())
-            ->with(['branch:id,name', 'assignedTo:id,name'])
+            ->with(['branch:id,name', 'assignedTo:id,name', 'source:id,name', 'products'])
             ->latest('lead_date')
             ->take(8)
             ->get()
-            ->map(fn($l) => [
-                'id'            => $l->id,
-                'lead_number'   => 'LD-' . str_pad($l->id, 4, '0', STR_PAD_LEFT),
-                'company_name'  => $l->company_name,
-                'contact_name'  => $l->contact_name,
-                'mobile_number' => $l->mobile_number,
-                'lead_date'     => $l->lead_date->toDateString(),
-                'lead_source'   => $l->lead_source,
-                'source_label'  => $l->source_label,
-                'lead_status'   => $l->lead_status,
-                'status_label'  => $l->status_label,
-                'status_color'  => $l->status_color,
-                'priority'      => $l->priority,
-                'priority_label'=> $l->priority_label,
-                'priority_color'=> $l->priority_color,
-                'deal_value'    => (float) $l->deal_value,
-                'deal_value_formatted' => $l->formatted_deal_value,
-                'branch'        => ['id' => $l->branch?->id, 'name' => $l->branch?->name],
-                'assigned_to'   => ['id' => $l->assignedTo?->id, 'name' => $l->assignedTo?->name],
-            ]);
+            ->map(function ($l) {
+
+                $dealValue = $l->products->sum('total_price');
+
+                return [
+                    'id'                     => $l->id,
+                    'lead_number'            => 'LD-' . str_pad($l->id, 4, '0', STR_PAD_LEFT),
+                    'company_name'           => $l->company_name,
+                    'contact_name'           => $l->contact_name,
+                    'mobile_number'          => $l->mobile_number,
+                    'lead_date'              => $l->lead_date->toDateString(),
+                    'lead_source'            => $l->source?->name,
+                    'source_label'           => $l->source?->name,
+                    'lead_status'            => $l->lead_status,
+                    'status_label'           => $l->status_label,
+                    'status_color'           => $l->status_color,
+                    'priority'               => $l->priority,
+                    'priority_label'         => $l->priority_label,
+                    'priority_color'         => $l->priority_color,
+                    'deal_value'             => $dealValue,
+                    'deal_value_formatted'   => number_format($dealValue, 2, '.', ''),
+                    'branch'                 => [
+                        'id' => $l->branch?->id,
+                        'name' => $l->branch?->name,
+                    ],
+                    'assigned_to'            => [
+                        'id' => $l->assignedTo?->id,
+                        'name' => $l->assignedTo?->name,
+                    ],
+                ];
+            });
 
         // ── 8. Branch-wise performance ────────────────────────────
         $visibleBranchIds = $this->visibility->visibleBranchIds($request->user());
         $branchPerformance = Branch::where('is_active', true)
-            ->when($visibleBranchIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $visibleBranchIds))
-            ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+            ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
             ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
                 $q = Lead::where('branch_id', $branch->id)
@@ -659,7 +678,7 @@ class SuperAdminDashboardController extends ApiController
                 $total    = (clone $q)->count();
                 $won      = (clone $q)->where('lead_status', 'won')->count();
                 $wonVal   = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
-                $pipeline = (float)(clone $q)->whereNotIn('lead_status',['won','lost'])->sum('deal_value');
+                $pipeline = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
                 $convRate = $total > 0 ? round($won / $total * 100, 1) : 0;
 
                 return [
@@ -668,10 +687,10 @@ class SuperAdminDashboardController extends ApiController
                     'branch_code' => $branch->code,
                     'total_leads' => $total,
                     'won_leads'   => $won,
-                    'lost_leads'  => (clone $q)->where('lead_status','lost')->count(),
+                    'lost_leads'  => (clone $q)->where('lead_status', 'lost')->count(),
                     'won_value'   => $wonVal,
                     'pipeline_value' => $pipeline,
-                    'conversion_rate'=> $convRate,
+                    'conversion_rate' => $convRate,
                 ];
             })
             ->sortByDesc('won_value')
@@ -716,9 +735,9 @@ class SuperAdminDashboardController extends ApiController
         for ($i = 5; $i >= 0; $i--) {
             $month = now()->subMonths($i);
             $q = Lead::whereYear('lead_date', $month->year)
-                     ->whereMonth('lead_date', $month->month)
-                     ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                     ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
+                ->whereMonth('lead_date', $month->month)
+                ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
             $this->visibility->applyLeadVisibility($q, $request->user());
 
             $monthTrend[] = [

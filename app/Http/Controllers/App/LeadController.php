@@ -62,8 +62,8 @@ class LeadController extends Controller
             'per_page'  => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products'])
-    ->latest('lead_date');
+        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'source:id,name',])
+            ->latest('lead_date');
 
         $this->visibility->applyLeadVisibility($query, $request->user());
 
@@ -218,29 +218,29 @@ class LeadController extends Controller
         abort_unless($this->visibility->canAccessLead($lead, request()->user()), 403);
 
         $lead->load([
-    'branch:id,name',
-    'assignedTo:id,name',
-    'createdBy:id,name',
-    'product:id,product_name',
-    'callUpdates.user:id,name',
-    'callUpdates.outCome:id,name',
-    'callUpdates.outComeSubCategory:id,name',
-    'reminders.user:id,name',
-    'products.payments.recordedBy:id,name',
-    'products.leadStatus',                              // ← add this
-    'products.latestProductionInitiation.initiatedBy',
-    'products.latestProductionInitiation.reviewedBy',
-    'products.latestProductionInitiation.productionApprovalReviewedBy',
-    'products.latestProductionInitiation.projectAllocatedBy',
-    'products.latestProductionInitiation.employeeAllocatedBy',
-    'quotations.items',
-    'quotations.createdBy:id,name',
-    'customFieldValues.field' => function ($query) {
-        $query->where('is_active', true)
-            ->orderBy('sort_order')
-            ->orderBy('label');
-    },
-]);
+            'branch:id,name',
+            'assignedTo:id,name',
+            'createdBy:id,name',
+            'product:id,product_name',
+            'callUpdates.user:id,name',
+            'callUpdates.outCome:id,name',
+            'callUpdates.outComeSubCategory:id,name',
+            'reminders.user:id,name',
+            'products.payments.recordedBy:id,name',
+            'products.leadStatus',
+            'products.latestProductionInitiation.initiatedBy',
+            'products.latestProductionInitiation.reviewedBy',
+            'products.latestProductionInitiation.productionApprovalReviewedBy',
+            'products.latestProductionInitiation.projectAllocatedBy',
+            'products.latestProductionInitiation.employeeAllocatedBy',
+            'quotations.items',
+            'quotations.createdBy:id,name',
+            'customFieldValues.field' => function ($query) {
+                $query->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('label');
+            },
+        ]);
 
         return response()->json([
             'status' => true,
@@ -411,6 +411,9 @@ class LeadController extends Controller
 
     private function formatLeadSummary(Lead $lead): array
     {
+        $dealValue = $lead->products->sum(function ($product) {
+            return ($product->total_price ?? 0) * ($product->quantity ?? 0);
+        });
         return [
             'id'                   => $lead->id,
             'company_name'         => $lead->company_name,
@@ -419,7 +422,7 @@ class LeadController extends Controller
             'email'                => $lead->email,
             'lead_date'            => $lead->lead_date?->toDateString(),
             'lead_source'          => $lead->lead_source,
-            'source_label'         => $lead->source_label,
+            'source_label'         => $lead->source?->name,
             'lead_status'          => $lead->lead_status,
             'status_label'         => $lead->status_label,
             'status_color'         => $lead->status_color,
@@ -428,8 +431,8 @@ class LeadController extends Controller
             'priority_color'       => $lead->priority_color,
             'product_id'           => $lead->product_id,
             'product_name'         => $lead->product?->product_name ?? $lead->product_name,
-            'deal_value'           => $lead->deal_value,
-            'formatted_deal_value' => $lead->formatted_deal_value,
+            'deal_value'           => $dealValue,
+            'formatted_deal_value' => number_format($dealValue, 2, '.', ''),
             'branch'               => $lead->branch
                 ? ['id' => $lead->branch->id, 'name' => $lead->branch->name]
                 : null,
@@ -492,41 +495,41 @@ class LeadController extends Controller
 
             // ── Products with Payments ────────────────────────────────────────
             'products' => $lead->relationLoaded('products')
-    ? $lead->products->map(fn($p) => [
-        'id'                => $p->id,
-        'product_name'      => $p->product_name,
-        'product_status'    => $p->product_status,
-        'lead_status_id'    => $p->lead_status_id,
-        'lead_status_name'  => $p->leadStatus?->name,
-        'description'       => $p->description,
-        'unit_price'        => $p->unit_price,
-        'quantity'          => $p->quantity,
-        'discount_percent'  => $p->discount_percent,
-        'total_price'       => $p->total_price,
-        'payment_status'    => $p->payment_status,
-        'amount_paid'       => $p->amount_paid,
-        'amount_pending'    => $p->amount_pending,
-        'production'        => $this->formatProductionInitiation($p->latestProductionInitiation),
+                ? $lead->products->map(fn($p) => [
+                    'id'                => $p->id,
+                    'product_name'      => $p->product_name,
+                    'product_status'    => $p->product_status,
+                    'lead_status_id'    => $p->lead_status_id,
+                    'lead_status_name'  => $p->leadStatus?->name,
+                    'description'       => $p->description,
+                    'unit_price'        => $p->unit_price,
+                    'quantity'          => $p->quantity,
+                    'discount_percent'  => $p->discount_percent,
+                    'total_price'       => $p->total_price,
+                    'payment_status'    => $p->payment_status,
+                    'amount_paid'       => $p->amount_paid,
+                    'amount_pending'    => $p->amount_pending,
+                    'production'        => $this->formatProductionInitiation($p->latestProductionInitiation),
 
-        'payments' => $p->relationLoaded('payments')
-            ? $p->payments->map(fn($pay) => [
-                'id'               => $pay->id,
-                'amount'           => $pay->amount,
-                'formatted_amount' => $pay->formatted_amount,
-                'payment_mode'     => $pay->payment_mode,
-                'mode_label'       => $pay->mode_label,
-                'mode_icon'        => $pay->mode_icon,
-                'mode_color'       => $pay->mode_color,
-                'payment_date'     => $pay->payment_date?->format('d M Y'),
-                'reference_number' => $pay->reference_number,
-                'notes'            => $pay->notes,
-                'recorded_by'      => $pay->recordedBy
-                    ? ['id' => $pay->recordedBy->id, 'name' => $pay->recordedBy->name]
-                    : null,
-            ])->values()
-            : [],
-    ])->values()
-    : [],
+                    'payments' => $p->relationLoaded('payments')
+                        ? $p->payments->map(fn($pay) => [
+                            'id'               => $pay->id,
+                            'amount'           => $pay->amount,
+                            'formatted_amount' => $pay->formatted_amount,
+                            'payment_mode'     => $pay->payment_mode,
+                            'mode_label'       => $pay->mode_label,
+                            'mode_icon'        => $pay->mode_icon,
+                            'mode_color'       => $pay->mode_color,
+                            'payment_date'     => $pay->payment_date?->format('d M Y'),
+                            'reference_number' => $pay->reference_number,
+                            'notes'            => $pay->notes,
+                            'recorded_by'      => $pay->recordedBy
+                                ? ['id' => $pay->recordedBy->id, 'name' => $pay->recordedBy->name]
+                                : null,
+                        ])->values()
+                        : [],
+                ])->values()
+                : [],
 
             // ── Quotations ────────────────────────────────────────────────────
             'quotations' => $lead->relationLoaded('quotations')
@@ -566,52 +569,52 @@ class LeadController extends Controller
     }
 
     private function formatProductionInitiation($history): ?array
-{
-    if (! $history) {
-        return null;
+    {
+        if (! $history) {
+            return null;
+        }
+
+        $currentStage = $history->employee_allocation_status
+            ?: $history->project_allocation_status
+            ?: $history->production_approval_status
+            ?: $history->status
+            ?: 'initiated';
+
+        return [
+            'current_stage' => $currentStage,
+            'initiated_by'  => $history->initiatedBy
+                ? ['id' => $history->initiatedBy->id, 'name' => $history->initiatedBy->name]
+                : null,
+            'initiated_at'  => $history->created_at?->toIso8601String(),
+            'ovp' => [
+                'reviewed_by' => $history->reviewedBy
+                    ? ['id' => $history->reviewedBy->id, 'name' => $history->reviewedBy->name]
+                    : null,
+                'reviewed_at' => $history->reviewed_at?->toIso8601String(),
+            ],
+            'production_approval' => [
+                'status'      => $history->production_approval_status,
+                'reviewed_by' => $history->productionApprovalReviewedBy
+                    ? ['id' => $history->productionApprovalReviewedBy->id, 'name' => $history->productionApprovalReviewedBy->name]
+                    : null,
+                'reviewed_at' => $history->production_approval_reviewed_at?->toIso8601String(),
+            ],
+            'team_lead_allocation' => [
+                'status'       => $history->project_allocation_status,
+                'allocated_by' => $history->projectAllocatedBy
+                    ? ['id' => $history->projectAllocatedBy->id, 'name' => $history->projectAllocatedBy->name]
+                    : null,
+                'allocated_at' => $history->project_allocated_at?->toIso8601String(),
+            ],
+            'employee_allocation' => [
+                'status'       => $history->employee_allocation_status,
+                'allocated_by' => $history->employeeAllocatedBy
+                    ? ['id' => $history->employeeAllocatedBy->id, 'name' => $history->employeeAllocatedBy->name]
+                    : null,
+                'allocated_at' => $history->employee_allocated_at?->toIso8601String(),
+            ],
+        ];
     }
-
-    $currentStage = $history->employee_allocation_status
-        ?: $history->project_allocation_status
-        ?: $history->production_approval_status
-        ?: $history->status
-        ?: 'initiated';
-
-    return [
-        'current_stage' => $currentStage,
-        'initiated_by'  => $history->initiatedBy
-            ? ['id' => $history->initiatedBy->id, 'name' => $history->initiatedBy->name]
-            : null,
-        'initiated_at'  => $history->created_at?->toIso8601String(),
-        'ovp' => [
-            'reviewed_by' => $history->reviewedBy
-                ? ['id' => $history->reviewedBy->id, 'name' => $history->reviewedBy->name]
-                : null,
-            'reviewed_at' => $history->reviewed_at?->toIso8601String(),
-        ],
-        'production_approval' => [
-            'status'      => $history->production_approval_status,
-            'reviewed_by' => $history->productionApprovalReviewedBy
-                ? ['id' => $history->productionApprovalReviewedBy->id, 'name' => $history->productionApprovalReviewedBy->name]
-                : null,
-            'reviewed_at' => $history->production_approval_reviewed_at?->toIso8601String(),
-        ],
-        'team_lead_allocation' => [
-            'status'       => $history->project_allocation_status,
-            'allocated_by' => $history->projectAllocatedBy
-                ? ['id' => $history->projectAllocatedBy->id, 'name' => $history->projectAllocatedBy->name]
-                : null,
-            'allocated_at' => $history->project_allocated_at?->toIso8601String(),
-        ],
-        'employee_allocation' => [
-            'status'       => $history->employee_allocation_status,
-            'allocated_by' => $history->employeeAllocatedBy
-                ? ['id' => $history->employeeAllocatedBy->id, 'name' => $history->employeeAllocatedBy->name]
-                : null,
-            'allocated_at' => $history->employee_allocated_at?->toIso8601String(),
-        ],
-    ];
-}
 
     public function syncCustomFields(Request $request, Lead $lead): JsonResponse
     {

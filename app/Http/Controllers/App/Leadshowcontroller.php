@@ -45,7 +45,7 @@ class LeadShowController extends Controller
                 required: ["called_at", "call_type", "outcome"],
                 properties: [
                     new OA\Property(property: "called_at",         type: "string", format: "date-time", example: "2027-01-15T10:30:00"),
-                    new OA\Property(property: "call_type",         type: "string", enum: ["outgoing","incoming","missed"], example: "outgoing"),
+                    new OA\Property(property: "call_type",         type: "string", enum: ["outgoing", "incoming", "missed"], example: "outgoing"),
                     new OA\Property(property: "duration_minutes",  type: "integer", nullable: true, example: 15),
                     new OA\Property(property: "outcome",           type: "string", example: "interested", description: "Key from LeadCallUpdate::OUTCOMES"),
                     new OA\Property(property: "notes",             type: "string", nullable: true, example: "Customer wants demo next week"),
@@ -54,7 +54,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Call update created",
+            new OA\Response(
+                response: 201,
+                description: "Call update created",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Call update added successfully."),
@@ -101,7 +103,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "call", in: "path", required: true, description: "Call Update ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Call deleted",
+            new OA\Response(
+                response: 200,
+                description: "Call deleted",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Call record removed."),
@@ -144,13 +148,15 @@ class LeadShowController extends Controller
                     new OA\Property(property: "title",       type: "string",  example: "Follow up call with Ravi"),
                     new OA\Property(property: "description", type: "string",  nullable: true, example: "Discuss bulk order pricing"),
                     new OA\Property(property: "remind_at",   type: "string",  format: "date-time", example: "2027-01-20T09:00:00"),
-                    new OA\Property(property: "type",        type: "string",  enum: ["follow_up","meeting","call","email","demo","other"], example: "call"),
-                    new OA\Property(property: "priority",    type: "string",  enum: ["low","medium","high"], example: "medium"),
+                    new OA\Property(property: "type",        type: "string",  enum: ["follow_up", "meeting", "call", "email", "demo", "other"], example: "call"),
+                    new OA\Property(property: "priority",    type: "string",  enum: ["low", "medium", "high"], example: "medium"),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Reminder created",
+            new OA\Response(
+                response: 201,
+                description: "Reminder created",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Reminder set successfully."),
@@ -159,7 +165,7 @@ class LeadShowController extends Controller
             ),
             new OA\Response(response: 401, description: "Unauthenticated", content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
             new OA\Response(response: 404, description: "Lead not found",  content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 422, description: "Validation error",content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
+            new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
         ]
     )]
     public function storeReminder(Request $request, Lead $lead): JsonResponse
@@ -197,7 +203,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "reminder", in: "path", required: true, description: "Reminder ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Reminder completed",
+            new OA\Response(
+                response: 200,
+                description: "Reminder completed",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Reminder marked as completed."),
@@ -233,7 +241,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "reminder", in: "path", required: true, description: "Reminder ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Reminder deleted",
+            new OA\Response(
+                response: 200,
+                description: "Reminder deleted",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Reminder removed."),
@@ -274,7 +284,7 @@ class LeadShowController extends Controller
                 required: ["product_name", "product_status", "unit_price", "quantity"],
                 properties: [
                     new OA\Property(property: "product_name",     type: "string",  example: "Solar Panel 10kW"),
-                    new OA\Property(property: "product_status",   type: "string",  enum: ["new","hot","warm","cold","converted"], example: "hot"),
+                    new OA\Property(property: "product_status",   type: "string",  enum: ["new", "hot", "warm", "cold", "converted"], example: "hot"),
                     new OA\Property(property: "description",      type: "string",  nullable: true, example: "Mono PERC 10kW panel"),
                     new OA\Property(property: "unit_price",       type: "number",  format: "float", example: 45000.00),
                     new OA\Property(property: "quantity",         type: "integer", example: 4),
@@ -283,7 +293,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Product added",
+            new OA\Response(
+                response: 201,
+                description: "Product added",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Product added successfully."),
@@ -292,7 +304,7 @@ class LeadShowController extends Controller
             ),
             new OA\Response(response: 401, description: "Unauthenticated", content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
             new OA\Response(response: 404, description: "Lead not found",  content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 422, description: "Validation error",content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
+            new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
         ]
     )]
     public function storeProduct(Request $request, Lead $lead): JsonResponse
@@ -337,12 +349,14 @@ class LeadShowController extends Controller
             content: new OA\JsonContent(
                 required: ["product_status"],
                 properties: [
-                    new OA\Property(property: "product_status", type: "string", enum: ["new","hot","warm","cold","converted"], example: "converted"),
+                    new OA\Property(property: "product_status", type: "string", enum: ["new", "hot", "warm", "cold", "converted"], example: "converted"),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Status updated",
+            new OA\Response(
+                response: 200,
+                description: "Status updated",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Product status updated to Converted."),
@@ -355,44 +369,44 @@ class LeadShowController extends Controller
         ]
     )]
     public function updateProductStatus(Request $request, Lead $lead, LeadProduct $product): JsonResponse
-{
-    abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
-    abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
 
-    $request->validate([
-        'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
-        'product_status' => ['nullable', 'string'],
-    ]);
+        $request->validate([
+            'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
+            'product_status' => ['nullable', 'string'],
+        ]);
 
-    $companyId = $lead->company_id ?? $request->user()?->company_id;
-    $statuses = \App\Models\LeadStatus::query()
-        ->when(
-            $companyId,
-            fn ($q) => $q->where(fn ($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')),
-            fn ($q) => $q->whereNull('company_id')
-        )
-        ->orderBy('name')
-        ->get();
+        $companyId = $lead->company_id ?? $request->user()?->company_id;
+        $statuses = \App\Models\LeadStatus::query()
+            ->when(
+                $companyId,
+                fn($q) => $q->where(fn($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')),
+                fn($q) => $q->whereNull('company_id')
+            )
+            ->orderBy('name')
+            ->get();
 
-    $status = $request->filled('lead_status_id')
-        ? $statuses->firstWhere('id', (int) $request->lead_status_id)
-        : $statuses->first(fn ($option) => LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status));
+        $status = $request->filled('lead_status_id')
+            ? $statuses->firstWhere('id', (int) $request->lead_status_id)
+            : $statuses->first(fn($option) => LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status));
 
-    if (! $status) {
-        return response()->json(['status' => false, 'message' => 'Please select a valid status.'], 422);
+        if (! $status) {
+            return response()->json(['status' => false, 'message' => 'Please select a valid status.'], 422);
+        }
+
+        $product->update([
+            'lead_status_id' => $status->id,
+            'product_status' => LeadProduct::statusKey($status->name),
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Product status updated to {$status->name}.",
+            'data'    => $this->formatProduct($product->fresh('leadStatus')),
+        ]);
     }
-
-    $product->update([
-        'lead_status_id' => $status->id,
-        'product_status' => LeadProduct::statusKey($status->name),
-    ]);
-
-    return response()->json([
-        'status'  => true,
-        'message' => "Product status updated to {$status->name}.",
-        'data'    => $this->formatProduct($product->fresh('leadStatus')),
-    ]);
-}
 
     #[OA\Put(
         path: "/api/mobile/leads/{lead}/products/{product}",
@@ -408,7 +422,7 @@ class LeadShowController extends Controller
             content: new OA\JsonContent(
                 properties: [
                     new OA\Property(property: "product_name",     type: "string",  nullable: true),
-                    new OA\Property(property: "product_status",   type: "string",  enum: ["new","hot","warm","cold","converted"], nullable: true),
+                    new OA\Property(property: "product_status",   type: "string",  enum: ["new", "hot", "warm", "cold", "converted"], nullable: true),
                     new OA\Property(property: "description",      type: "string",  nullable: true),
                     new OA\Property(property: "unit_price",       type: "number",  format: "float", nullable: true),
                     new OA\Property(property: "quantity",         type: "integer", nullable: true),
@@ -417,7 +431,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Product updated",
+            new OA\Response(
+                response: 200,
+                description: "Product updated",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Product updated."),
@@ -463,7 +479,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "product", in: "path", required: true, description: "Product ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Product deleted",
+            new OA\Response(
+                response: 200,
+                description: "Product deleted",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Product removed from lead."),
@@ -505,7 +523,7 @@ class LeadShowController extends Controller
                 required: ["amount", "payment_mode", "payment_date"],
                 properties: [
                     new OA\Property(property: "amount",           type: "number", format: "float", example: 50000.00),
-                    new OA\Property(property: "payment_mode",     type: "string", enum: ["cash","bank_transfer","cheque","upi","card"], example: "upi"),
+                    new OA\Property(property: "payment_mode",     type: "string", enum: ["cash", "bank_transfer", "cheque", "upi", "card"], example: "upi"),
                     new OA\Property(property: "payment_date",     type: "string", format: "date", example: "2027-01-15"),
                     new OA\Property(property: "reference_number", type: "string", nullable: true, example: "UPI/2027/001234"),
                     new OA\Property(property: "notes",            type: "string", nullable: true, example: "Advance payment"),
@@ -513,7 +531,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Payment recorded",
+            new OA\Response(
+                response: 201,
+                description: "Payment recorded",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Payment of ₹50,000.00 recorded."),
@@ -532,8 +552,11 @@ class LeadShowController extends Controller
         abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
 
         if ($product->product_status_key !== 'converted') {
-    return back()->with('error', 'Payments can be added only after the product status is Converted.');
-}
+            return response()->json([
+                'status' => false,
+                'message' => 'Payments can be added only after the product status is Converted.',
+            ], 422);
+        }
 
         $data = $request->validate([
             'amount'           => ['required', 'numeric', 'min:0.01'],
@@ -570,7 +593,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "payment", in: "path", required: true, description: "Payment ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Payment deleted",
+            new OA\Response(
+                response: 200,
+                description: "Payment deleted",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Payment entry removed."),
@@ -638,7 +663,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Quotation created",
+            new OA\Response(
+                response: 201,
+                description: "Quotation created",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Quotation QT-0001 created."),
@@ -647,7 +674,7 @@ class LeadShowController extends Controller
             ),
             new OA\Response(response: 401, description: "Unauthenticated", content: new OA\JsonContent(ref: "#/components/schemas/UnauthenticatedResponse")),
             new OA\Response(response: 404, description: "Lead not found",  content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
-            new OA\Response(response: 422, description: "Validation error",content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
+            new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
         ]
     )]
     public function storeQuotation(Request $request, Lead $lead): JsonResponse
@@ -727,7 +754,9 @@ class LeadShowController extends Controller
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Status updated",
+            new OA\Response(
+                response: 200,
+                description: "Status updated",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Quotation status updated to Sent."),
@@ -769,7 +798,9 @@ class LeadShowController extends Controller
             new OA\Parameter(name: "quotation", in: "path", required: true, description: "Quotation ID", schema: new OA\Schema(type: "integer")),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Quotation deleted",
+            new OA\Response(
+                response: 200,
+                description: "Quotation deleted",
                 content: new OA\JsonContent(properties: [
                     new OA\Property(property: "status",  type: "boolean", example: true),
                     new OA\Property(property: "message", type: "string",  example: "Quotation deleted."),
@@ -832,23 +863,23 @@ class LeadShowController extends Controller
     }
 
     private function formatProduct(LeadProduct $product): array
-{
-    return [
-        'id'               => $product->id,
-        'product_name'     => $product->product_name,
-        'product_status'   => $product->product_status,
-        'lead_status_id'   => $product->lead_status_id,
-        'lead_status_name' => $product->leadStatus?->name,
-        'description'      => $product->description,
-        'unit_price'       => (float) $product->unit_price,
-        'quantity'         => $product->quantity,
-        'discount_percent' => (float) $product->discount_percent,
-        'total_price'      => (float) $product->total_price,
-        'payment_status'   => $product->payment_status,
-        'amount_paid'      => (float) $product->amount_paid,
-        'amount_pending'   => (float) ($product->total_price - $product->amount_paid),
-    ];
-}
+    {
+        return [
+            'id'               => $product->id,
+            'product_name'     => $product->product_name,
+            'product_status'   => $product->product_status,
+            'lead_status_id'   => $product->lead_status_id,
+            'lead_status_name' => $product->leadStatus?->name,
+            'description'      => $product->description,
+            'unit_price'       => (float) $product->unit_price,
+            'quantity'         => $product->quantity,
+            'discount_percent' => (float) $product->discount_percent,
+            'total_price'      => (float) $product->total_price,
+            'payment_status'   => $product->payment_status,
+            'amount_paid'      => (float) $product->amount_paid,
+            'amount_pending'   => (float) ($product->total_price - $product->amount_paid),
+        ];
+    }
 
     private function formatPayment(LeadProductPayment $payment): array
     {

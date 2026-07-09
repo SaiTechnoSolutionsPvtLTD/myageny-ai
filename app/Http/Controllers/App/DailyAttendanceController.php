@@ -44,9 +44,9 @@ class DailyAttendanceController extends Controller
 
         $alreadyCheckedIn = DailyAttendance::query()
             ->when($request->filled('employee_id'), fn($q) =>
-                $q->where('employee_id', $request->employee_id))
+            $q->where('employee_id', $request->employee_id))
             ->when(!$request->filled('employee_id') && $request->filled('intern_id'), fn($q) =>
-                $q->where('intern_joining_form_id', $request->intern_id))
+            $q->where('intern_joining_form_id', $request->intern_id))
             ->whereDate('attendance_date', $today)
             ->exists();
 
@@ -117,9 +117,9 @@ class DailyAttendanceController extends Controller
 
         $attendance = DailyAttendance::query()
             ->when($request->filled('employee_id'), fn($q) =>
-                $q->where('employee_id', $request->employee_id))
+            $q->where('employee_id', $request->employee_id))
             ->when(!$request->filled('employee_id') && $request->filled('intern_id'), fn($q) =>
-                $q->where('intern_joining_form_id', $request->intern_id))
+            $q->where('intern_joining_form_id', $request->intern_id))
             ->whereDate('attendance_date', $today)
             ->first();
 
@@ -277,20 +277,24 @@ class DailyAttendanceController extends Controller
             'employee_name'         => $attendance->employee_name,
             'attendance_photo'      => $attendance->attendance_photo,
             'attendance_photo_url'  => $attendance->attendance_photo
-                                            ? asset($attendance->attendance_photo)
-                                            : null,
+                ? asset($attendance->attendance_photo)
+                : null,
             'logout_photo'          => $attendance->logout_photo,
             'logout_photo_url'      => $attendance->logout_photo
-                                            ? asset($attendance->logout_photo)
-                                            : null,
+                ? asset($attendance->logout_photo)
+                : null,
             'login_location'        => $attendance->login_location,
             'login_latitude'        => $attendance->login_latitude,
             'login_longitude'       => $attendance->login_longitude,
-            'login_time'            => $attendance->login_time,
+            'login_time' => $attendance->login_time
+                ? Carbon::createFromFormat('H:i:s', $attendance->login_time)->format('h:i A')
+                : null,
             'logout_location'       => $attendance->logout_location,
             'logout_latitude'       => $attendance->logout_latitude,
             'logout_longitude'      => $attendance->logout_longitude,
-            'logout_time'           => $attendance->logout_time,
+            'logout_time' => $attendance->logout_time
+                ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('h:i A')
+                : null,
             'overall_working_hours' => $attendance->overall_working_hours,
             'attendance_date'       => optional($attendance->attendance_date)->format('Y-m-d'),
             'attendance_status'     => $attendance->attendance_status,

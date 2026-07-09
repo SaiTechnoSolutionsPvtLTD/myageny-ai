@@ -31,6 +31,7 @@ use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
 use App\Http\Controllers\App\ProjectApiController;
+use App\Http\Controllers\App\ReportApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -67,19 +68,19 @@ Route::delete('products/{product}/ovp-form-fields/{field}', [ProductOvpFormContr
 
 // ── Lead Products (Deals) ──────────────────────────────────────
 Route::middleware(['web', 'auth'])->group(function () {
-Route::get('lead-products/{lead_id}', [LeadProductController::class, 'index']);
-Route::post('lead-products',           [LeadProductController::class, 'store']);
-Route::get('lead-products/{id}/production', [LeadProductController::class, 'productionDetail']);
-Route::post('lead-products/{id}/production-initiations', [LeadProductController::class, 'storeProductionInitiation']);
-Route::post('lead-product-price-requests', [LeadProductPriceRequestController::class, 'store']);
-Route::put('lead-products/status',    [LeadProductController::class, 'updateStatus']);
-Route::put('lead-products/{id}',       [LeadProductController::class, 'update']);
-Route::delete('lead-products/{id}',    [LeadProductController::class, 'destroy']);
+    Route::get('lead-products/{lead_id}', [LeadProductController::class, 'index']);
+    Route::post('lead-products',           [LeadProductController::class, 'store']);
+    Route::get('lead-products/{id}/production', [LeadProductController::class, 'productionDetail']);
+    Route::post('lead-products/{id}/production-initiations', [LeadProductController::class, 'storeProductionInitiation']);
+    Route::post('lead-product-price-requests', [LeadProductPriceRequestController::class, 'store']);
+    Route::put('lead-products/status',    [LeadProductController::class, 'updateStatus']);
+    Route::put('lead-products/{id}',       [LeadProductController::class, 'update']);
+    Route::delete('lead-products/{id}',    [LeadProductController::class, 'destroy']);
 
-// ── Payments ───────────────────────────────────────────────────
-Route::get('payments/{lead_product_id}', [LeadProductController::class, 'paymentHistory']);
-Route::post('payments',                   [LeadProductController::class, 'storePayment']);
-Route::delete('payments/{id}',              [LeadProductController::class, 'destroyPayment']);
+    // ── Payments ───────────────────────────────────────────────────
+    Route::get('payments/{lead_product_id}', [LeadProductController::class, 'paymentHistory']);
+    Route::post('payments',                   [LeadProductController::class, 'storePayment']);
+    Route::delete('payments/{id}',              [LeadProductController::class, 'destroyPayment']);
 });
 
 /*
@@ -114,8 +115,6 @@ Route::prefix('mobile/auth')->group(function () {
         Route::post('logout', [MobileAuthController::class, 'logout']);
         Route::get('me',      [MobileAuthController::class, 'me']);
     });
-
-    
 });
 
 
@@ -138,79 +137,78 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     Route::get('dashboard', [MobileDashboardController::class, 'index'])->name('dashboard');
 
     Route::prefix('hrms')->name('hrms.')->group(function () {
-      Route::get('dashboard',         [DashboardApiController::class,  'index'])->name('dashboard');
-      Route::get('employees/meta',    [EmployeeApiController::class,    'meta'])->name('employees.meta');
-      Route::get('employees',         [EmployeeApiController::class,    'index'])->name('employees.index');
-      Route::get('employees/{id}',    [EmployeeApiController::class,    'show'])->name('employees.show');
+        Route::get('dashboard',         [DashboardApiController::class,  'index'])->name('dashboard');
+        Route::get('employees/meta',    [EmployeeApiController::class,    'meta'])->name('employees.meta');
+        Route::get('employees',         [EmployeeApiController::class,    'index'])->name('employees.index');
+        Route::get('employees/{id}',    [EmployeeApiController::class,    'show'])->name('employees.show');
 
-      Route::get('interns',      [InternApiController::class, 'index'])->name('interns.index');
-      Route::get('interns/{id}', [InternApiController::class, 'show'])->name('interns.show');
+        Route::get('interns',      [InternApiController::class, 'index'])->name('interns.index');
+        Route::get('interns/{id}', [InternApiController::class, 'show'])->name('interns.show');
 
-      Route::get('attendance',      [AttendanceApiController::class, 'index'])->name('attendance.index');
-      Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');
+        Route::get('attendance',      [AttendanceApiController::class, 'index'])->name('attendance.index');
+        Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');
 
-      Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');
-      Route::get('assets',        [AssetApiController::class, 'index'])->name('assets.index');
-      Route::get('assets/{id}',   [AssetApiController::class, 'show'])->name('assets.show');
+        Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');
+        Route::get('assets',        [AssetApiController::class, 'index'])->name('assets.index');
+        Route::get('assets/{id}',   [AssetApiController::class, 'show'])->name('assets.show');
 
-      Route::get('holidays/meta', [HolidayApiController::class, 'meta'])->name('holidays.meta');
-      Route::get('holidays',      [HolidayApiController::class, 'index'])->name('holidays.index');
+        Route::get('holidays/meta', [HolidayApiController::class, 'meta'])->name('holidays.meta');
+        Route::get('holidays',      [HolidayApiController::class, 'index'])->name('holidays.index');
 
-      Route::get('leave-types',      [LeaveTypeApiController::class, 'index'])->name('leave-types.index');
-    Route::get('leave-types/{leaveType}', [LeaveTypeApiController::class, 'show'])->name('leave-types.show');
+        Route::get('leave-types',      [LeaveTypeApiController::class, 'index'])->name('leave-types.index');
+        Route::get('leave-types/{leaveType}', [LeaveTypeApiController::class, 'show'])->name('leave-types.show');
 
-    // Leave Requests — static routes BEFORE wildcard
-    Route::get('leave-requests/meta',               [LeaveRequestApiController::class, 'meta'])->name('leave-requests.meta');
-    Route::get('leave-requests/pending-approvals',  [LeaveRequestApiController::class, 'pendingApprovals'])->name('leave-requests.pending-approvals');
-    Route::get('leave-requests/handled-approvals',  [LeaveRequestApiController::class, 'handledApprovals'])->name('leave-requests.handled-approvals');
+        // Leave Requests — static routes BEFORE wildcard
+        Route::get('leave-requests/meta',               [LeaveRequestApiController::class, 'meta'])->name('leave-requests.meta');
+        Route::get('leave-requests/pending-approvals',  [LeaveRequestApiController::class, 'pendingApprovals'])->name('leave-requests.pending-approvals');
+        Route::get('leave-requests/handled-approvals',  [LeaveRequestApiController::class, 'handledApprovals'])->name('leave-requests.handled-approvals');
 
-    Route::get('leave-requests',                    [LeaveRequestApiController::class, 'index'])->name('leave-requests.index');
-    Route::post('leave-requests',                   [LeaveRequestApiController::class, 'store'])->name('leave-requests.store');
-    Route::get('leave-requests/{leaveRequest}',     [LeaveRequestApiController::class, 'show'])->name('leave-requests.show');
+        Route::get('leave-requests',                    [LeaveRequestApiController::class, 'index'])->name('leave-requests.index');
+        Route::post('leave-requests',                   [LeaveRequestApiController::class, 'store'])->name('leave-requests.store');
+        Route::get('leave-requests/{leaveRequest}',     [LeaveRequestApiController::class, 'show'])->name('leave-requests.show');
 
-    // Approve / Reject
-    Route::post('leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestApiController::class, 'approve'])->name('leave-requests.approve');
-    Route::post('leave-requests/{leaveRequest}/approvals/{approval}/reject',  [LeaveRequestApiController::class, 'reject'])->name('leave-requests.reject');
+        // Approve / Reject
+        Route::post('leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestApiController::class, 'approve'])->name('leave-requests.approve');
+        Route::post('leave-requests/{leaveRequest}/approvals/{approval}/reject',  [LeaveRequestApiController::class, 'reject'])->name('leave-requests.reject');
 
-    // Permission Requests — static routes BEFORE wildcard
-    Route::get('permission-requests/meta',              [PermissionRequestApiController::class, 'meta'])->name('permission-requests.meta');
-    Route::get('permission-requests/pending-approvals', [PermissionRequestApiController::class, 'pendingApprovals'])->name('permission-requests.pending-approvals');
-    Route::get('permission-requests/handled-approvals', [PermissionRequestApiController::class, 'handledApprovals'])->name('permission-requests.handled-approvals');
+        // Permission Requests — static routes BEFORE wildcard
+        Route::get('permission-requests/meta',              [PermissionRequestApiController::class, 'meta'])->name('permission-requests.meta');
+        Route::get('permission-requests/pending-approvals', [PermissionRequestApiController::class, 'pendingApprovals'])->name('permission-requests.pending-approvals');
+        Route::get('permission-requests/handled-approvals', [PermissionRequestApiController::class, 'handledApprovals'])->name('permission-requests.handled-approvals');
 
-    Route::get('permission-requests',                   [PermissionRequestApiController::class, 'index'])->name('permission-requests.index');
-    Route::post('permission-requests',                  [PermissionRequestApiController::class, 'store'])->name('permission-requests.store');
-    Route::get('permission-requests/{permissionRequest}', [PermissionRequestApiController::class, 'show'])->name('permission-requests.show');
+        Route::get('permission-requests',                   [PermissionRequestApiController::class, 'index'])->name('permission-requests.index');
+        Route::post('permission-requests',                  [PermissionRequestApiController::class, 'store'])->name('permission-requests.store');
+        Route::get('permission-requests/{permissionRequest}', [PermissionRequestApiController::class, 'show'])->name('permission-requests.show');
 
-    // Approve / Reject
-    Route::post('permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestApiController::class, 'approve'])->name('permission-requests.approve');
-    Route::post('permission-requests/{permissionRequest}/approvals/{approval}/reject',  [PermissionRequestApiController::class, 'reject'])->name('permission-requests.reject');
+        // Approve / Reject
+        Route::post('permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestApiController::class, 'approve'])->name('permission-requests.approve');
+        Route::post('permission-requests/{permissionRequest}/approvals/{approval}/reject',  [PermissionRequestApiController::class, 'reject'])->name('permission-requests.reject');
 
-    Route::get('facility-titles', [FacilityManagementApiController::class, 'titles'])
-        ->name('facility-titles.index');
- 
-    // ── Facility Management CRUD ──────────────────────────────────────────────
-    Route::get('facility-management',             [FacilityManagementApiController::class, 'index'])
-        ->name('facility-management.index');
- 
-    Route::post('facility-management',            [FacilityManagementApiController::class, 'store'])
-        ->name('facility-management.store');
- 
-    Route::get('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'show'])
-        ->name('facility-management.show');
- 
-    Route::put('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'update'])
-        ->name('facility-management.update');
- 
-    Route::delete('facility-management/{facilityManagement}', [FacilityManagementApiController::class, 'destroy'])
-        ->name('facility-management.destroy');
-    
-    Route::get('visitor-management',              [VisitorManagementApiController::class, 'index'])  ->name('visitor-management.index');
-    Route::post('visitor-management',             [VisitorManagementApiController::class, 'store'])  ->name('visitor-management.store');
-    Route::get('visitor-management/{id}',         [VisitorManagementApiController::class, 'show'])   ->name('visitor-management.show');
-    Route::put('visitor-management/{id}',         [VisitorManagementApiController::class, 'update']) ->name('visitor-management.update');
-    Route::delete('visitor-management/{id}',      [VisitorManagementApiController::class, 'destroy'])->name('visitor-management.destroy');
+        Route::get('facility-titles', [FacilityManagementApiController::class, 'titles'])
+            ->name('facility-titles.index');
 
-  });
+        // ── Facility Management CRUD ──────────────────────────────────────────────
+        Route::get('facility-management',             [FacilityManagementApiController::class, 'index'])
+            ->name('facility-management.index');
+
+        Route::post('facility-management',            [FacilityManagementApiController::class, 'store'])
+            ->name('facility-management.store');
+
+        Route::get('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'show'])
+            ->name('facility-management.show');
+
+        Route::put('facility-management/{facilityManagement}',    [FacilityManagementApiController::class, 'update'])
+            ->name('facility-management.update');
+
+        Route::delete('facility-management/{facilityManagement}', [FacilityManagementApiController::class, 'destroy'])
+            ->name('facility-management.destroy');
+
+        Route::get('visitor-management',              [VisitorManagementApiController::class, 'index'])->name('visitor-management.index');
+        Route::post('visitor-management',             [VisitorManagementApiController::class, 'store'])->name('visitor-management.store');
+        Route::get('visitor-management/{id}',         [VisitorManagementApiController::class, 'show'])->name('visitor-management.show');
+        Route::put('visitor-management/{id}',         [VisitorManagementApiController::class, 'update'])->name('visitor-management.update');
+        Route::delete('visitor-management/{id}',      [VisitorManagementApiController::class, 'destroy'])->name('visitor-management.destroy');
+    });
 
     Route::prefix('attendance')->name('attendance.')->group(function () {
         Route::post('check-in', [MobileDailyAttendanceController::class, 'attendanceCheckIn'])->name('check-in');
@@ -219,54 +217,53 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     });
 
     // ── OVP Module ───────────────────────────────────────────────────────────────
-Route::prefix('ovp')->name('ovp.')->group(function () {
-    Route::get('/',                                      [OvpModuleApiController::class, 'index'])->name('index');
-    Route::get('/executives',                            [OvpModuleApiController::class, 'executives'])->name('executives');
-    Route::post('/{productionInitiation}/allocate',      [OvpModuleApiController::class, 'allocate'])->name('allocate');
-    Route::post('/{productionInitiation}/review',        [OvpModuleApiController::class, 'review'])->name('review');
-});
+    Route::prefix('ovp')->name('ovp.')->group(function () {
+        Route::get('/',                                      [OvpModuleApiController::class, 'index'])->name('index');
+        Route::get('/executives',                            [OvpModuleApiController::class, 'executives'])->name('executives');
+        Route::post('/{productionInitiation}/allocate',      [OvpModuleApiController::class, 'allocate'])->name('allocate');
+        Route::post('/{productionInitiation}/review',        [OvpModuleApiController::class, 'review'])->name('review');
+    });
 
-// ── Production Approvals ─────────────────────────────────────────────────────
-Route::prefix('production-approvals')->name('production-approvals.')->group(function () {
-    Route::get('/',                                          [ProductionApprovalApiController::class, 'index'])->name('index');
-    Route::post('/{productionInitiation}/review',            [ProductionApprovalApiController::class, 'review'])->name('review');
-});
+    // ── Production Approvals ─────────────────────────────────────────────────────
+    Route::prefix('production-approvals')->name('production-approvals.')->group(function () {
+        Route::get('/',                                          [ProductionApprovalApiController::class, 'index'])->name('index');
+        Route::post('/{productionInitiation}/review',            [ProductionApprovalApiController::class, 'review'])->name('review');
+    });
 
-// ── Production Initiation ──────────────────────────────────────────────────────
-Route::prefix('production-initiation')->name('production-initiation.')->group(function () {
-    Route::get('/{leadProduct}/schema', [ProductionInitiationApiController::class, 'schema'])->name('schema');
-    Route::post('/{leadProduct}/store',  [ProductionInitiationApiController::class, 'store'])->name('store');
-});
+    // ── Production Initiation ──────────────────────────────────────────────────────
+    Route::prefix('production-initiation')->name('production-initiation.')->group(function () {
+        Route::get('/{leadProduct}/schema', [ProductionInitiationApiController::class, 'schema'])->name('schema');
+        Route::post('/{leadProduct}/store',  [ProductionInitiationApiController::class, 'store'])->name('store');
+    });
 
-Route::prefix('projects')->name('projects.')->group(function () {
+    Route::prefix('projects')->name('projects.')->group(function () {
 
-    // Dashboard
-    Route::get('dashboard', [ProjectApiController::class, 'dashboard'])
-        ->name('dashboard');
+        // Dashboard
+        Route::get('dashboard', [ProjectApiController::class, 'dashboard'])
+            ->name('dashboard');
 
-    // Timesheets (static before wildcard)
-    Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
-        ->name('timesheets.index');
-    Route::post('timesheets', [ProjectApiController::class, 'storeTimesheet'])
-        ->name('timesheets.store');
+        // Timesheets (static before wildcard)
+        Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
+            ->name('timesheets.index');
+        Route::post('timesheets', [ProjectApiController::class, 'storeTimesheet'])
+            ->name('timesheets.store');
 
-    // Project list
-    Route::get('/', [ProjectApiController::class, 'index'])
-        ->name('index');
+        // Project list
+        Route::get('/', [ProjectApiController::class, 'index'])
+            ->name('index');
 
-    // Project detail + actions  (wildcard last)
-    Route::get('/{productionInitiation}',   [ProjectApiController::class, 'show'])
-        ->name('show');
-    Route::post('/{productionInitiation}/allocate',          [ProjectApiController::class, 'allocate'])
-        ->name('allocate');
-    Route::post('/{productionInitiation}/employee-allocate', [ProjectApiController::class, 'allocateEmployees'])
-        ->name('employee-allocate');
-    Route::post('/{productionInitiation}/schedule',          [ProjectApiController::class, 'updateSchedule'])
-        ->name('schedule.update');
-    Route::post('/{productionInitiation}/updates',           [ProjectApiController::class, 'storeUpdate'])
-        ->name('updates.store');
-});
-
+        // Project detail + actions  (wildcard last)
+        Route::get('/{productionInitiation}',   [ProjectApiController::class, 'show'])
+            ->name('show');
+        Route::post('/{productionInitiation}/allocate',          [ProjectApiController::class, 'allocate'])
+            ->name('allocate');
+        Route::post('/{productionInitiation}/employee-allocate', [ProjectApiController::class, 'allocateEmployees'])
+            ->name('employee-allocate');
+        Route::post('/{productionInitiation}/schedule',          [ProjectApiController::class, 'updateSchedule'])
+            ->name('schedule.update');
+        Route::post('/{productionInitiation}/updates',           [ProjectApiController::class, 'storeUpdate'])
+            ->name('updates.store');
+    });
 });
 
 /*
@@ -308,7 +305,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::post('/reminder-list',                         [AppApiController::class, 'reminderList']);
 
     // ── Lead Products ────────────────────────────────────────────────────────
-    Route::post('/{lead}/products',                   [MobileLeadShowController::class, 'storeProduct'])->name('products.store');
+    Route::post('/leadproducts-store',                   [LeadProductController::class, 'store'])->name('products.store');
     Route::put('/{lead}/products/{product}',          [MobileLeadShowController::class, 'updateProduct'])->name('products.update');
     Route::patch('/{lead}/products/{product}/status', [MobileLeadShowController::class, 'updateProductStatus'])->name('products.status');
     Route::delete('/{lead}/products/{product}',       [MobileLeadShowController::class, 'destroyProduct'])->name('products.destroy');
@@ -321,7 +318,15 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::post('/{lead}/quotations',                     [MobileLeadShowController::class, 'storeQuotation'])->name('quotations.store');
     Route::patch('/{lead}/quotations/{quotation}/status', [MobileLeadShowController::class, 'updateQuotationStatus'])->name('quotations.status');
     Route::delete('/{lead}/quotations/{quotation}',       [MobileLeadShowController::class, 'destroyQuotation'])->name('quotations.destroy');
+});
 
 
+/*
+|--------------------------------------------------------------------------
+| Mobile Reports Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.reports.crm.')->group(function () {
 
+    Route::get('/leads-summary', [ReportApiController::class, 'leadsSummaryApi'])->name('index');
 });
