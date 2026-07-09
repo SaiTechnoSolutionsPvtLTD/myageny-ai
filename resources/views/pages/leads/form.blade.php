@@ -130,15 +130,15 @@
                         <label class="lf-label">Lead Source <span class="lf-req">*</span></label>
                         <div class="lf-iw">
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                            <select name="lead_source" class="lf-sel {{ $errors->has('lead_source') ? 'err' : '' }}" required>
+                            <select name="lead_source_id" class="lf-sel {{ $errors->has('lead_source_id') ? 'err' : '' }}" required>
                                 <option value="">— Select Source —</option>
                                 @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
-                                <option value="{{ $key }}" {{ $old('lead_source') == $key ? 'selected' : '' }}>{{ $label }}</option>
+                                <option value="{{ $key }}" {{ $old('lead_source_id') == $key ? 'selected' : '' }}>{{ $label }}</option>
                                 @endforeach
                             </select>
                             <svg class="lf-sel-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
-                        @error('lead_source')<div class="lf-err">{{ $message }}</div>@enderror
+                        @error('lead_source_id')<div class="lf-err">{{ $message }}</div>@enderror
                     </div>
                    <div class="lf-group">
                         <label class="lf-label">Assigned To <span class="lf-req">*</span></label>

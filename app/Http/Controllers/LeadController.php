@@ -34,7 +34,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -137,7 +137,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -186,6 +186,11 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
+        if ($request->filled('product_active')) {
+            $status = $request->product_active;
+            $query->whereHas('product', fn ($q) => $q->where('status', $status));
+        }
+
         if ($request->filled('mobile_number')) {
             $mobileNumber = $request->mobile_number;
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('mobile_number', 'like', '%' . $mobileNumber . '%'));
@@ -225,10 +230,11 @@ class LeadController extends Controller
             || $request->filled('mobile_number')
             || $request->filled('product_id')
             || $request->filled('product_status')
+            || $request->filled('product_active')
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
+            || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate);
 
         return view('pages.leads.products.index', [
             'leadProducts' => $leadProducts,
@@ -282,7 +288,7 @@ class LeadController extends Controller
      */
     public function show(Lead $lead)
     {
-        abort_unless($this->visibility->canAccessLead($lead), 403);
+        // abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $lead->load([
             'branch',

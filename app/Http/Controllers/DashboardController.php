@@ -43,7 +43,7 @@ class DashboardController extends Controller
         $sources = LeadSource::query()
             ->when($user->company_id, fn ($query) => $query->where('company_id', $user->company_id))
             ->orderBy('name')
-            ->pluck('name', 'name')
+            ->pluck('name', 'id')
             ->toArray();
 
         if (empty($sources)) {
@@ -54,7 +54,7 @@ class DashboardController extends Controller
         $statuses = LeadStatus::query()
             ->when($user->company_id, fn ($query) => $query->where('company_id', $user->company_id))
             ->orderBy('name')
-            ->pluck('name', 'name')
+            ->pluck('name', 'id')
             ->toArray();
 
         if (empty($statuses)) {

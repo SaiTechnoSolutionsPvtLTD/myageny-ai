@@ -1840,8 +1840,17 @@ class ProjectController extends Controller
             return false;
         }
 
-        return in_array(strtolower(trim((string) $productionInitiation->production_approval_status)), ['approval', 'approved'], true)
-            && strtolower(trim((string) $productionInitiation->project_allocation_status)) === 'allocation_pending';
+        $isApproved = in_array(strtolower(trim((string) $productionInitiation->production_approval_status)), ['approval', 'approved'], true);
+        if (! $isApproved) {
+            return false;
+        }
+
+        $isPending = strtolower(trim((string) $productionInitiation->project_allocation_status)) === 'allocation_pending';
+        if ($isPending) {
+            return true;
+        }
+
+        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
     }
 
     private function canAllocateEmployees(ProductionInitiation $productionInitiation, User $user): bool
@@ -1853,11 +1862,7 @@ class ProjectController extends Controller
 
     private function canManageProjectSchedule(ProductionInitiation $productionInitiation, User $user): bool
     {
-        if ($user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user)) {
-            return true;
-        }
-
-        return $this->isAssignedTlForProject($productionInitiation, $user);
+        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
     }
 
     private function shouldLimitToAssignedProjects(User $user): bool

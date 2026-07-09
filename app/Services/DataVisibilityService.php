@@ -182,6 +182,44 @@ class DataVisibilityService
         return User::query()
             ->with('roles')
             ->where('is_active', true)
+            ->where(function (Builder $query) {
+                $query->whereHas('roles.department', function (Builder $q) {
+                    $q->whereIn(DB::raw('LOWER(name)'), [
+                        'sales',
+                        'crm',
+                        'business development',
+                        'marketing',
+                        'telecalling',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales',
+                        'crm',
+                        'business_development',
+                        'marketing',
+                        'telecalling',
+                    ]);
+                })
+                ->orWhereHas('roles', function (Builder $q) {
+                    $q->whereIn(DB::raw('LOWER(name)'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                    ]);
+                });
+            })
             ->when($companyId, fn (Builder $query) => $query->where('company_id', $companyId))
             ->when($visibleIds !== null, fn (Builder $query) => $query->whereIn('id', $visibleIds))
             ->orderBy('name')

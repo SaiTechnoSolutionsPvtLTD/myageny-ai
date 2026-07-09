@@ -301,6 +301,7 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/recruitment/{recruitment}/status', [RecruitmentController::class, 'updateStatus'])
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
+    Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');

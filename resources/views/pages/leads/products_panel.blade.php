@@ -78,6 +78,7 @@
 .pp-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(14,10,20,.55);backdrop-filter:blur(6px);align-items:center;justify-content:center}
 .pp-overlay.pp-show{display:flex}
 .pp-modal-box{background:#fff;border-radius:18px;width:90%;max-width:580px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,.22);animation:ppIn .22s cubic-bezier(.4,0,.2,1)}
+.pp-modal-box--wide{max-width:860px}
 @keyframes ppIn{from{opacity:0;transform:scale(.95) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .pp-mhd{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0eef2;position:sticky;top:0;background:#fff;z-index:1}
 .pp-mtitle{font-size:16px;font-weight:800;color:#121212;display:flex;align-items:center;gap:8px}
@@ -139,7 +140,7 @@
 .pp-hist-pbar{height:6px;background:#f0eef2;border-radius:3px;overflow:hidden;margin-bottom:4px}
 .pp-hist-pfill{height:100%;border-radius:3px;transition:width .5s ease}
 .pp-hist-plabels{display:flex;justify-content:space-between;font-size:10px;color:#9e9e9e}
-.pp-hist-list{display:flex;flex-direction:column;gap:10px}
+.pp-hist-list{display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-right:6px}
 .pp-hist-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid #e1dee3;border-radius:11px}
 .pp-hist-item:hover{border-color:#d4cfd8}
 .pp-hist-mode-wrap{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px}
@@ -558,7 +559,7 @@
 
 {{-- ═══════════════ MODAL 3: PAYMENT HISTORY ═══════════════ --}}
 <div class="pp-overlay" id="pp-modal-history">
-    <div class="pp-modal-box">
+    <div class="pp-modal-box pp-modal-box--wide">
         <div class="pp-mhd">
             <div class="pp-mtitle">📊 Payment History — <span id="pp-hist-name" style="color:#7c3aed"></span></div>
             <button type="button" class="pp-mclose" onclick="ppHideModal('pp-modal-history')">✕</button>

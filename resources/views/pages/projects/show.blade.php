@@ -641,7 +641,7 @@
                         @else
                             <div class="ps-allocate-note">TL allocation has not been completed yet. You can select TLs from the dropdown below and allocate them directly.</div>
                         @endif
-
+                            
                         @if($canAllocate)
                             <form method="POST" action="{{ route('projects.allocate', $projectItem) }}">
                                 @csrf

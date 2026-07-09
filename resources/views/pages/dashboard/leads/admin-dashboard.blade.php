@@ -208,6 +208,190 @@
 .da-empty { text-align:center; padding:36px 20px; color:var(--da-muted); }
 .da-empty-ico { font-size:32px; margin-bottom:8px; }
 .da-empty-title { font-size:13px; font-weight:700; color:#6b7280; }
+
+/* ─── Sales Target Tracking Card Improved UI ─── */
+.da-target-card {
+    background: var(--da-white);
+    border: 1px solid var(--da-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    margin-bottom: 24px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+}
+.da-target-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+}
+.da-target-card-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f3f0f6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(to right, #faf9fc, var(--da-white));
+}
+.da-target-card-body {
+    padding: 24px;
+}
+.target-track-container {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 32px;
+    align-items: center;
+}
+@media (max-width: 768px) {
+    .target-track-container {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        text-align: center;
+    }
+}
+.target-gauge-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+.target-gauge-svg-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.target-gauge-svg {
+    width: 120px;
+    height: 120px;
+}
+.target-gauge-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.target-gauge-pct {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--da-text);
+}
+.target-gauge-lbl {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--da-muted);
+    text-transform: uppercase;
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+}
+.target-status-badge {
+    margin-top: 14px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+.target-widgets-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+@media (max-width: 992px) {
+    .target-widgets-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+}
+.target-widget-card {
+    background: #faf9fc;
+    border: 1px solid #f1eef4;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all 0.2s ease;
+}
+.target-widget-card:hover {
+    transform: translateY(-2px);
+    background: var(--da-white);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+.target-widget-card.allocated:hover { border-color: rgba(124, 58, 237, 0.3); }
+.target-widget-card.achieved:hover { border-color: rgba(22, 163, 74, 0.3); }
+.target-widget-card.pending:hover { border-color: rgba(220, 38, 38, 0.3); }
+
+.target-widget-ico {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.target-widget-card.allocated .target-widget-ico { background: rgba(124, 58, 237, 0.08); color: var(--da-purple); }
+.target-widget-card.achieved .target-widget-ico { background: rgba(22, 163, 74, 0.08); color: var(--da-green); }
+.target-widget-card.pending .target-widget-ico { background: rgba(220, 38, 38, 0.08); color: var(--da-red); }
+
+.target-widget-content {
+    display: flex;
+    flex-direction: column;
+}
+.target-widget-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--da-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.target-widget-val {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--da-text);
+    margin-top: 4px;
+    font-family: 'Inter', sans-serif;
+}
+.target-widget-card.achieved .target-widget-val { color: var(--da-green); }
+.target-widget-card.pending .target-widget-val { color: var(--da-red); }
+
+.target-linear-progress-wrap {
+    margin-top: 24px;
+    border-top: 1px solid #f3f0f6;
+    padding-top: 20px;
+}
+.target-linear-progress-lbls {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--da-muted);
+    margin-bottom: 6px;
+}
+.target-linear-progress-bar {
+    height: 8px;
+    background: #f0eef2;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid #e1dee3;
+}
+.target-linear-progress-inner {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
 </style>
 @endpush
 
@@ -361,43 +545,103 @@
         </div>
 
         {{-- ── Target Tracking Card ── --}}
-        <div class="da-card" style="margin-bottom: 20px; display:none;" id="daTargetCard">
-            <div class="da-card-head" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1eef2; padding-bottom: 12px; margin-bottom: 16px;">
-                <div class="da-card-title" style="font-size: 15px; font-weight: 800; color: #111827; display: flex; align-items: center; gap: 8px;">
+        <div class="da-target-card" style="display:none;" id="daTargetCard">
+            <div class="da-target-card-head">
+                <div class="da-card-title" style="font-size: 15px; font-weight: 800; color: var(--da-text); display: flex; align-items: center; gap: 8px;">
                     🎯 Sales Target Tracking
                 </div>
-                <span class="da-badge" id="daTargetTitle" style="font-size: 11px; font-weight: 800; background: #fff1e8; color: #fe5f04; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;">Overall Target</span>
+                <span class="da-badge" id="daTargetTitle" style="font-size: 11px; font-weight: 800; background: #fff1e8; color: var(--da-orange); padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;">Overall Target</span>
             </div>
-            <div class="da-card-body" style="padding:0;">
-                <div class="st-dashboard-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center;">
-                    <!-- Target Metrics -->
-                    <div style="display:flex; flex-direction:column; gap:14px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f8f6f9; padding-bottom:8px;">
-                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Allocated Target</span>
-                            <span style="font-size:16px; font-weight:800; color:var(--da-text); font-family:monospace;" id="lblTargetVal">₹0.00</span>
+            <div class="da-target-card-body">
+                <div class="target-track-container">
+                    <!-- Progress Arc (Left Column) -->
+                    <div class="target-gauge-wrapper">
+                        <div class="target-gauge-svg-container">
+                            <svg class="target-gauge-svg" viewBox="0 0 120 120">
+                                <defs>
+                                    <linearGradient id="tgtGradLow" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#ef4444" />
+                                        <stop offset="100%" stop-color="#f97316" />
+                                    </linearGradient>
+                                    <linearGradient id="tgtGradNormal" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#f97316" />
+                                        <stop offset="100%" stop-color="#16a34a" />
+                                    </linearGradient>
+                                    <linearGradient id="tgtGradSuccess" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#10b981" />
+                                        <stop offset="100%" stop-color="#059669" />
+                                    </linearGradient>
+                                </defs>
+                                <circle cx="60" cy="60" r="50" fill="transparent" stroke="#f3f0f6" stroke-width="8" />
+                                <circle cx="60" cy="60" r="50" fill="transparent" stroke="url(#tgtGradNormal)" stroke-width="8"
+                                        stroke-dasharray="314.16" stroke-dashoffset="314.16" stroke-linecap="round"
+                                        style="transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1); transform: rotate(-90deg); transform-origin: 60px 60px;"
+                                        id="circleProgress" />
+                            </svg>
+                            <div class="target-gauge-text">
+                                <div class="target-gauge-pct" id="lblPercentVal">0%</div>
+                                <div class="target-gauge-lbl">Achieved</div>
+                            </div>
                         </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f8f6f9; padding-bottom:8px;">
-                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Achieved Collection</span>
-                            <span style="font-size:16px; font-weight:800; color:var(--da-green); font-family:monospace;" id="lblAchievedVal">₹0.00</span>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Pending Target</span>
-                            <span style="font-size:16px; font-weight:800; color:var(--da-red); font-family:monospace;" id="lblPendingVal">₹0.00</span>
-                        </div>
+                        <div class="target-status-badge" id="lblStatusText">TARGET TRACKING ACTIVE</div>
                     </div>
-                    
-                    <!-- Progress Arc -->
-                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                        <div style="position:relative; width:94px; height:94px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:#fcf9f5; box-shadow:inset 0 0 0 10px #f3f0f6; border:1px solid #e1dee3;">
-                            <div style="font-size:19px; font-weight:900; color:var(--da-orange);" id="lblPercentVal">0%</div>
+
+                    <!-- Target Metrics (Right Column) -->
+                    <div class="target-widgets-grid">
+                        <!-- Allocated Target -->
+                        <div class="target-widget-card allocated">
+                            <div class="target-widget-ico">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <circle cx="12" cy="12" r="6" />
+                                    <circle cx="12" cy="12" r="2" />
+                                </svg>
+                            </div>
+                            <div class="target-widget-content">
+                                <span class="target-widget-label">Allocated Target</span>
+                                <span class="target-widget-val" id="lblTargetVal">₹0.00</span>
+                            </div>
                         </div>
-                        <div style="margin-top:10px; font-size:10px; font-weight:800; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.7px;" id="lblStatusText">TARGET TRACKING ACTIVE</div>
+
+                        <!-- Achieved Collection -->
+                        <div class="target-widget-card achieved">
+                            <div class="target-widget-ico">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                </svg>
+                            </div>
+                            <div class="target-widget-content">
+                                <span class="target-widget-label">Achieved Collection</span>
+                                <span class="target-widget-val" id="lblAchievedVal">₹0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Pending Target -->
+                        <div class="target-widget-card pending">
+                            <div class="target-widget-ico">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="12" />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg>
+                            </div>
+                            <div class="target-widget-content">
+                                <span class="target-widget-label">Pending Target</span>
+                                <span class="target-widget-val" id="lblPendingVal">₹0.00</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
+
                 <!-- Linear Progress Bar -->
-                <div style="height:10px; background:#f0eef2; border-radius:6px; margin-top:20px; overflow:hidden; border: 1px solid #e1dee3;">
-                    <div style="height:100%; width:0%; background:linear-gradient(90deg, var(--da-orange), var(--da-green)); border-radius:6px; transition:width 0.4s ease;" id="barProgress"></div>
+                <div class="target-linear-progress-wrap">
+                    <div class="target-linear-progress-lbls">
+                        <span>Progress Overview</span>
+                        <span id="lblLinearProgressPct">0%</span>
+                    </div>
+                    <div class="target-linear-progress-bar">
+                        <div class="target-linear-progress-inner" id="barProgress"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -754,11 +998,14 @@ function renderAll(d) {
 
 /* ── Sales Target Stats ── */
 function renderTargetStats(ts) {
+    const cardEl = document.getElementById('daTargetCard');
+    if (!cardEl) return;
+    
     if (!ts || ts.target <= 0) {
-        document.getElementById('daTargetCard').style.display = 'none';
+        cardEl.style.display = 'none';
         return;
     }
-    document.getElementById('daTargetCard').style.display = 'block';
+    cardEl.style.display = 'block';
 
     const targetVal = ts.target;
     const achievedVal = ts.achieved;
@@ -766,31 +1013,69 @@ function renderTargetStats(ts) {
     const percentVal = ts.percent;
     const targetName = ts.name;
 
-    document.getElementById('daTargetTitle').textContent = ts.is_individual ? `${targetName}'s Target` : 'Overall Sales Target';
+    // Update text content
+    document.getElementById('daTargetTitle').textContent = ts.title || (ts.is_individual ? `${targetName}'s Target` : 'Overall Sales Target');
     document.getElementById('lblTargetVal').textContent = fmt(targetVal);
     document.getElementById('lblAchievedVal').textContent = fmt(achievedVal);
     document.getElementById('lblPendingVal').textContent = fmt(pendingVal);
     document.getElementById('lblPercentVal').textContent = `${percentVal}%`;
+    document.getElementById('lblLinearProgressPct').textContent = `${percentVal}%`;
 
-    // Update progress bar width
+    // Update circular progress gauge
+    const circle = document.getElementById('circleProgress');
+    if (circle) {
+        // Circumference of r=50 circle is 2 * PI * r = 314.16
+        const circumference = 314.16;
+        // Clamp percentage for progress visualization, but show real percentage in text
+        const visualPercent = Math.min(100, Math.max(0, percentVal));
+        const offset = circumference - (visualPercent / 100) * circumference;
+        circle.style.strokeDashoffset = offset;
+
+        // Change gradient / stroke color based on target levels
+        if (percentVal >= 100) {
+            circle.setAttribute('stroke', 'url(#tgtGradSuccess)');
+        } else if (percentVal >= 50) {
+            circle.setAttribute('stroke', 'url(#tgtGradNormal)');
+        } else {
+            circle.setAttribute('stroke', 'url(#tgtGradLow)');
+        }
+    }
+
+    // Update linear progress bar width & background gradient/color
     const bar = document.getElementById('barProgress');
-    bar.style.width = `${Math.min(100, percentVal)}%`;
+    if (bar) {
+        bar.style.width = `${Math.min(100, percentVal)}%`;
+        if (percentVal >= 100) {
+            bar.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+            bar.style.boxShadow = '0 0 8px rgba(16, 185, 129, 0.4)';
+        } else if (percentVal >= 50) {
+            bar.style.background = 'linear-gradient(90deg, var(--da-orange), #16a34a)';
+            bar.style.boxShadow = 'none';
+        } else {
+            bar.style.background = 'linear-gradient(90deg, var(--da-red), var(--da-orange))';
+            bar.style.boxShadow = 'none';
+        }
+    }
 
-    // Dynamic color coding based on achievement
-    const pctLabel = document.getElementById('lblPercentVal');
+    // Dynamic color coding and label for status text
     const statusLabel = document.getElementById('lblStatusText');
-    if (percentVal >= 100) {
-        pctLabel.style.color = 'var(--da-green)';
-        statusLabel.textContent = '🚀 EXCEEDED TARGET!';
-        statusLabel.style.color = 'var(--da-green)';
-    } else if (percentVal >= 50) {
-        pctLabel.style.color = 'var(--da-orange)';
-        statusLabel.textContent = '📈 ON TRACK';
-        statusLabel.style.color = 'var(--da-orange)';
-    } else {
-        pctLabel.style.color = 'var(--da-red)';
-        statusLabel.textContent = '⚠️ TARGET PENDING';
-        statusLabel.style.color = 'var(--da-red)';
+    if (statusLabel) {
+        if (percentVal >= 100) {
+            statusLabel.textContent = '🚀 Target Achieved!';
+            statusLabel.style.color = '#065f46';
+            statusLabel.style.background = '#d1fae5';
+            statusLabel.style.border = '1px solid #10b981';
+        } else if (percentVal >= 50) {
+            statusLabel.textContent = '📈 On Track';
+            statusLabel.style.color = '#9a3412';
+            statusLabel.style.background = '#ffedd5';
+            statusLabel.style.border = '1px solid #fed7aa';
+        } else {
+            statusLabel.textContent = '⚠️ Target Pending';
+            statusLabel.style.color = '#991b1b';
+            statusLabel.style.background = '#fee2e2';
+            statusLabel.style.border = '1px solid #fecaca';
+        }
     }
 }
 

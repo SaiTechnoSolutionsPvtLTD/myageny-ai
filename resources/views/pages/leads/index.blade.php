@@ -484,8 +484,9 @@
                             <label class="ld-field-label">Quick Dates</label>
                             <div class="ld-quick-dates">
                                 <button type="button" class="ld-qb" id="quickToday" onclick="setQ('today')">Today</button>
-                                <button type="button" class="ld-qb" onclick="setQ('week')">Week</button>
+                                <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
                                 <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
+                                <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
                             </div>
                         </div>
 
@@ -924,20 +925,38 @@ function updateFilters() {
 
     const from = document.getElementById('f_date_from')?.value;
     const to = document.getElementById('f_date_to')?.value;
+    
+    // Toggle active state for quick buttons
     document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
     document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
+
+    // Calculate dynamic values for Week and Year active states
+    const parts = defaultToDate.split('-').map(Number);
+    const today = new Date(parts[0], parts[1] - 1, parts[2]);
+    const fmt = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - today.getDay() + 1);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const weekStart = fmt(mon);
+    const weekEnd = fmt(sun);
+    document.getElementById('quickWeek')?.classList.toggle('active', from === weekStart && to === weekEnd);
+
+    const yearStart = `${parts[0]}-01-01`;
+    const yearEnd = `${parts[0]}-12-31`;
+    document.getElementById('quickYear')?.classList.toggle('active', from === yearStart && to === yearEnd);
 }
 
 function clearF(id) {
     const el = document.querySelector(ff[id].sel);
     if (el) {
-        if (id === 'f_date_from') {
-            el.value = defaultFromDate;
-        } else if (id === 'f_date_to') {
-            el.value = defaultToDate;
-        } else {
-            el.value = '';
-        }
+        el.value = '';
     }
     updateFilters();
     document.getElementById('filterForm').submit();
@@ -965,20 +984,36 @@ function setQ(p) {
     };
     const f = document.getElementById('f_date_from');
     const t = document.getElementById('f_date_to');
+    if (!f || !t) return;
+
+    let targetFrom = '';
+    let targetTo = '';
 
     if (p === 'today') {
-        f.value = todayDate;
-        t.value = todayDate;
+        targetFrom = todayDate;
+        targetTo = todayDate;
     } else if (p === 'week') {
         const mon = new Date(today);
         mon.setDate(today.getDate() - today.getDay() + 1);
         const sun = new Date(mon);
         sun.setDate(mon.getDate() + 6);
-        f.value = fmt(mon);
-        t.value = fmt(sun);
+        targetFrom = fmt(mon);
+        targetTo = fmt(sun);
     } else if (p === 'month') {
-        f.value = defaultFromDate;
-        t.value = defaultToDate;
+        targetFrom = defaultFromDate;
+        targetTo = defaultToDate;
+    } else if (p === 'year') {
+        targetFrom = `${parts[0]}-01-01`;
+        targetTo = `${parts[0]}-12-31`;
+    }
+
+    // Toggle logic: if active date range matches, clear date filter completely
+    if (f.value === targetFrom && t.value === targetTo) {
+        f.value = '';
+        t.value = '';
+    } else {
+        f.value = targetFrom;
+        t.value = targetTo;
     }
 
     updateFilters();

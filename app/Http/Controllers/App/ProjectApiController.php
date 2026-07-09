@@ -970,8 +970,18 @@ class ProjectApiController extends Controller
     private function canAllocateTl(ProductionInitiation $p, User $user): bool
     {
         if ($this->shouldLimitToAssignedProjects($user)) return false;
-        return in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true)
-            && strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending';
+
+        $isApproved = in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true);
+        if (! $isApproved) {
+            return false;
+        }
+
+        $isPending = strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending';
+        if ($isPending) {
+            return true;
+        }
+
+        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
     }
 
     private function canAllocateEmployees(ProductionInitiation $p, User $user): bool
@@ -983,8 +993,7 @@ class ProjectApiController extends Controller
 
     private function canManageProjectSchedule(ProductionInitiation $p, User $user): bool
     {
-        if ($user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user)) return true;
-        return $this->isAssignedTlForProject($p, $user);
+        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
     }
 
     private function shouldLimitToAssignedProjects(User $user): bool

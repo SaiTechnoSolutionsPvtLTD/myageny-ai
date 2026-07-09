@@ -58,7 +58,7 @@ class SuperAdminDashboardController extends ApiController
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
-                ->when($source, fn($q) => $q->where('lead_source', $source))
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
                 ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
                 ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
         };
@@ -139,7 +139,7 @@ class SuperAdminDashboardController extends ApiController
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
                   ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
                   ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with(['lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
                     'lead.branch:id,name', 'lead.assignedTo:id,name', 'user:id,name'])
@@ -382,7 +382,7 @@ class SuperAdminDashboardController extends ApiController
             'team_performance' => $teamPerformance,
 
             'month_trend' => $monthTrend,
-            'sales_target_stats' => $this->getSalesTargetStats($userId, $dateFrom, $dateTo, $request->user()),
+            'sales_target_stats' => $this->getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $request->user()),
 
             // Enum references for mobile UI
             'enums' => [
@@ -398,7 +398,7 @@ class SuperAdminDashboardController extends ApiController
         ], 'Super Admin Dashboard data fetched.');
     }
 
-    private function getSalesTargetStats($userId, $dateFrom, $dateTo, $currentUser): array
+    private function getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $currentUser): array
     {
         $targetUserId = $userId ?: (!$currentUser->can('settings.manage') ? $currentUser->id : null);
 
@@ -407,16 +407,34 @@ class SuperAdminDashboardController extends ApiController
             $userObj = \App\Models\User::find($targetUserId);
             $targetName = $userObj ? $userObj->name : 'Representative';
             $isIndividual = true;
+            $title = "{$targetName}'s Target";
         } else {
-            $target = (float) \App\Models\SalesTarget::sum('target_amount');
-            $targetName = 'Overall';
-            $isIndividual = false;
+            $effectiveBranchId = $branchId ?: $currentUser->branch_id;
+
+            if ($effectiveBranchId) {
+                $branchObj = \App\Models\Branch::find($effectiveBranchId);
+                $targetName = $branchObj ? $branchObj->name : 'Branch';
+                
+                $userIds = \App\Models\User::where('branch_id', $effectiveBranchId)->pluck('id');
+                $target = (float) \App\Models\SalesTarget::whereIn('user_id', $userIds)->sum('target_amount');
+                $isIndividual = false;
+                $title = "{$targetName} Target";
+            } else {
+                $target = (float) \App\Models\SalesTarget::sum('target_amount');
+                $targetName = 'Overall';
+                $isIndividual = false;
+                $title = 'Overall Sales Target';
+            }
         }
 
         $achievedQuery = \App\Models\LeadProductPayment::query();
         if ($targetUserId) {
             $achievedQuery->whereHas('lead', function($q) use ($targetUserId) {
                 $q->where('assigned_to', $targetUserId);
+            });
+        } elseif (isset($effectiveBranchId) && $effectiveBranchId) {
+            $achievedQuery->whereHas('lead', function($q) use ($effectiveBranchId) {
+                $q->where('branch_id', $effectiveBranchId);
             });
         }
 
@@ -438,6 +456,7 @@ class SuperAdminDashboardController extends ApiController
             'achieved'      => $achieved,
             'pending'       => $pending,
             'percent'       => $percent,
+            'title'         => $title,
         ];
     }
 
@@ -539,7 +558,7 @@ class SuperAdminDashboardController extends ApiController
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
-                ->when($source, fn($q) => $q->where('lead_source', $source))
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
                 ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
                 ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
         };
@@ -620,7 +639,7 @@ class SuperAdminDashboardController extends ApiController
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
                   ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
                   ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with(['lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
                     'lead.branch:id,name', 'lead.assignedTo:id,name', 'user:id,name'])
@@ -863,7 +882,7 @@ class SuperAdminDashboardController extends ApiController
             'team_performance' => $teamPerformance,
 
             'month_trend' => $monthTrend,
-            'sales_target_stats' => $this->getSalesTargetStats($userId, $dateFrom, $dateTo, $request->user()),
+            'sales_target_stats' => $this->getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $request->user()),
 
             // Enum references for mobile UI
             'enums' => [

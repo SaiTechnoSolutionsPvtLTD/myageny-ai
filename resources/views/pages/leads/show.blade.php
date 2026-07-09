@@ -1035,6 +1035,21 @@ tbody tr:last-child td { border-bottom: none; }
                                                     Team Members: {{ $teamCount ? $teamCount . ' member(s) allocated' : 'Pending' }}
                                                 </div>
                                             </div>
+                                            @if($history)
+                                                @foreach($history->projectUpdates()->where('type', 'schedule_history')->orderBy('created_at')->get() as $historyUpdate)
+                                                    <div class="lsp-ah-item" style="--timeline-color:#b91c1c;">
+                                                        <div class="lsp-ah-title">Schedule & Status Changed</div>
+                                                        <div class="lsp-ah-subline">Project delivery date and status update history</div>
+                                                        <div class="lsp-ah-meta">
+                                                            Changed By: {{ $historyUpdate->createdBy?->name ?: 'System' }}<br>
+                                                            Changed On: {{ optional($historyUpdate->created_at)->format('d M Y h:i A') }}<br>
+                                                            <div style="margin-top: 8px; padding: 10px; background: #fff5f5; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #7f1d1d; line-height: 1.5; font-family: sans-serif;">
+                                                                {!! $historyUpdate->content !!}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            @endif
                                         </div>
                                     </div>
                                 </div>
@@ -1561,6 +1576,55 @@ $(document).ready(function(){
         showStep(currentStep);
     });
 
+});
+
+$(document).ready(function() {
+    // 1. Handle standard form submissions (Call Updates, Reminders, etc.)
+    $('form').on('submit', function() {
+        var $form = $(this);
+        
+        // Skip if browser validity check fails
+        if (this.checkValidity && !this.checkValidity()) {
+            return;
+        }
+
+        // Find the submit button(s)
+        var $btn = $form.find('button[type="submit"], input[type="submit"]');
+        if ($btn.length) {
+            // Disable button to prevent double submit
+            $btn.prop('disabled', true);
+            $btn.css({
+                'opacity': '0.7',
+                'cursor': 'not-allowed'
+            });
+            // Show loading text/spinner
+            $btn.html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Loading...');
+        }
+    });
+
+    // 2. Prevent double clicks on buttons generally
+    $(document).on('click', 'button, .lsp-btn, .ppf-btn, .pp-act-btn', function(e) {
+        var $btn = $(this);
+        
+        // Skip if already disabled
+        if ($btn.prop('disabled') || $btn.hasClass('disabled') || $btn.hasClass('clicked-disabled')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return false;
+        }
+        
+        // Temporary disable pointer events to prevent rapid multiple clicks
+        $btn.addClass('clicked-disabled');
+        setTimeout(function() {
+            $btn.removeClass('clicked-disabled');
+        }, 1500);
+    });
+
+    // Dynamic style injection for disabled clicks
+    $('<style>')
+        .prop('type', 'text/css')
+        .html('.clicked-disabled { pointer-events: none !important; opacity: 0.8; }')
+        .appendTo('head');
 });
 </script>
 
