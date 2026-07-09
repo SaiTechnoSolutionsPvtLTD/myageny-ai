@@ -14,8 +14,8 @@ class LeadCallUpdateController extends Controller
 
     public function index(Request $request)
     {
-        $dateFrom = $request->input('date_from', today()->toDateString());
-        $dateTo = $request->input('date_to', today()->toDateString());
+        $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
+        $dateTo = $request->input('date_to', now()->endOfMonth()->toDateString());
 
         $query = LeadCallUpdate::with([
             'lead:id,company_name,contact_name,mobile_number,email',

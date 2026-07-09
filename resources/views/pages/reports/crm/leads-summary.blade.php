@@ -29,7 +29,12 @@
 .crm-summary-card-title { font-size: 15px; font-weight: 800; color: #111827; }
 .crm-summary-card-subtitle { margin-top: 3px; font-size: 12px; color: #6b7280; }
 .crm-summary-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11px; font-weight: 800; }
-.crm-summary-filter-body { padding: 18px; }
+.crm-summary-filter-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.crm-summary-quick-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crm-summary-quick-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; margin-right: 4px; }
+.crm-qbtn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 800; cursor: pointer; transition: all .15s ease; letter-spacing: .02em; }
+.crm-qbtn:hover { border-color: #fb923c; background: #fff7ed; color: #c2410c; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(249,115,22,.12); }
+.crm-qbtn.is-active { border-color: #f97316; background: linear-gradient(135deg, #f97316, #fb923c); color: #fff; box-shadow: 0 6px 16px rgba(249,115,22,.25); }
 .crm-summary-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
 .crm-summary-field { display: flex; flex-direction: column; gap: 7px; }
 .crm-summary-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
@@ -83,6 +88,7 @@
     .crm-summary-form-actions { flex-wrap: wrap; }
     .crm-summary-filter-head, .crm-summary-table-head { flex-direction: column; align-items: flex-start; }
     .crm-summary-tabs { width: 100%; flex-wrap: wrap; }
+    .crm-summary-quick-filters { gap: 6px; }
 }
 </style>
 @endpush
@@ -95,8 +101,8 @@
         || request()->filled('assigned_to')
         || request()->filled('product_id')
         || request()->filled('branch_id')
-        || request('date_from') !== $defaultFromDate
-        || request('date_to') !== $defaultToDate;
+        || request()->filled('date_from')
+        || request()->filled('date_to');
 @endphp
 <div class="crm-summary-page">
     <div class="crm-summary-shell">
@@ -202,7 +208,26 @@
                 <div class="crm-summary-chip">{{ $reportRows->total() }} results</div>
             </div>
             <div class="crm-summary-filter-body">
-                <form method="GET" action="{{ route('reports.crm.leads-summary') }}" class="crm-summary-form">
+                <div class="crm-summary-quick-filters">
+                    <span class="crm-summary-quick-label">Quick:</span>
+                    <button type="button" class="crm-qbtn" id="qbtn-today" data-preset="today">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                        Today
+                    </button>
+                    <button type="button" class="crm-qbtn" id="qbtn-month" data-preset="month">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        This Month
+                    </button>
+                    <button type="button" class="crm-qbtn" id="qbtn-quarter" data-preset="quarter">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h7v7h-7z" stroke-opacity=".35"/></svg>
+                        This Quarter
+                    </button>
+                    <button type="button" class="crm-qbtn" id="qbtn-year" data-preset="year">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        This Year
+                    </button>
+                </div>
+                <form method="GET" action="{{ route('reports.crm.leads-summary') }}" class="crm-summary-form" id="leadsSummaryForm">
                     <div class="crm-summary-field">
                         <label class="crm-summary-label" for="lead_source">Lead Source</label>
                         <select id="lead_source" name="lead_source" class="crm-summary-select">
@@ -245,12 +270,12 @@
 
                     <div class="crm-summary-field">
                         <label class="crm-summary-label" for="date_from">Date From</label>
-                        <input id="date_from" type="date" name="date_from" class="crm-summary-input" value="{{ request('date_from', $defaultFromDate) }}">
+                        <input id="date_from" type="date" name="date_from" class="crm-summary-input" value="{{ request('date_from') }}">
                     </div>
 
                     <div class="crm-summary-field">
                         <label class="crm-summary-label" for="date_to">Date To</label>
-                        <input id="date_to" type="date" name="date_to" class="crm-summary-input" value="{{ request('date_to', $defaultToDate) }}">
+                        <input id="date_to" type="date" name="date_to" class="crm-summary-input" value="{{ request('date_to') }}">
                     </div>
 
                     <div class="crm-summary-field">
@@ -622,6 +647,46 @@
             scales: { y: { beginAtZero: true } }
         }
     });
+    // ── Quick Date Preset Buttons ──────────────────────────────────────────
+    (() => {
+        const fmtDate = (d) => d.toISOString().slice(0, 10);
+
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = today.getMonth(); // 0-indexed
+        const q = Math.floor(m / 3); // 0-indexed quarter
+
+        const presets = {
+            today:   { from: fmtDate(today),                              to: fmtDate(today) },
+            month:   { from: fmtDate(new Date(y, m, 1)),                  to: fmtDate(new Date(y, m + 1, 0)) },
+            quarter: { from: fmtDate(new Date(y, q * 3, 1)),             to: fmtDate(new Date(y, q * 3 + 3, 0)) },
+            year:    { from: fmtDate(new Date(y, 0, 1)),                  to: fmtDate(new Date(y, 11, 31)) },
+        };
+
+        const urlParams   = new URLSearchParams(window.location.search);
+        const currentFrom = urlParams.get('date_from') || '';
+        const currentTo   = urlParams.get('date_to')   || '';
+
+        const fromInput = document.getElementById('date_from');
+        const toInput   = document.getElementById('date_to');
+        const form      = document.getElementById('leadsSummaryForm');
+
+        // Highlight the matching preset button
+        document.querySelectorAll('.crm-qbtn').forEach(btn => {
+            const preset = presets[btn.dataset.preset];
+            if (preset && currentFrom === preset.from && currentTo === preset.to) {
+                btn.classList.add('is-active');
+            }
+
+            btn.addEventListener('click', () => {
+                const p = presets[btn.dataset.preset];
+                if (!p) return;
+                fromInput.value = p.from;
+                toInput.value   = p.to;
+                form.submit();
+            });
+        });
+    })();
 })();
 </script>
 @endpush

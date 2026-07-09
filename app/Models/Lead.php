@@ -22,6 +22,8 @@ class Lead extends Model
         'email',
         'lead_source',
         'lead_status',
+        'lead_source_id',
+        'lead_status_id',
         'product_name',
         'product_id',
         'priority',
@@ -37,9 +39,11 @@ class Lead extends Model
     ];
 
     protected $casts = [
-        'lead_date'  => 'date',
-        'deal_value' => 'decimal:2',
+        'lead_date'      => 'date',
+        'deal_value'     => 'decimal:2',
         'facebook_payload' => 'array',
+        'lead_source_id' => 'integer',
+        'lead_status_id' => 'integer',
     ];
 
     // ── Constants ──────────────────────────────────────────────────
@@ -72,6 +76,16 @@ class Lead extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function leadSource()
+    {
+        return $this->belongsTo(LeadSource::class, 'lead_source_id');
+    }
+
+    public function leadStatus()
+    {
+        return $this->belongsTo(LeadStatus::class, 'lead_status_id');
+    }
+
     public function assignedTo()
     {
         return $this->belongsTo(User::class, 'assigned_to');
@@ -87,6 +101,9 @@ class Lead extends Model
         return $this->belongsTo(Product::class);
     }
 
+    /**
+     * Returns [id => name] map for all lead sources.
+     */
     public static function sourceOptions(): array
     {
         if (static::$sourceOptionsCache !== null) {
@@ -95,15 +112,21 @@ class Lead extends Model
 
         return static::$sourceOptionsCache = LeadSource::query()
             ->orderBy('name')
-            ->pluck('name', 'name')
+            ->pluck('name', 'id')
             ->toArray();
     }
 
+    /**
+     * Returns array of valid lead source IDs.
+     */
     public static function sourceKeys(): array
     {
         return array_keys(static::sourceOptions());
     }
 
+    /**
+     * Returns [id => name] map for all lead statuses.
+     */
     public static function statusOptions(): array
     {
         if (static::$statusOptionsCache !== null) {
@@ -112,10 +135,13 @@ class Lead extends Model
 
         return static::$statusOptionsCache = LeadStatus::query()
             ->orderBy('name')
-            ->pluck('name', 'name')
+            ->pluck('name', 'id')
             ->toArray();
     }
 
+    /**
+     * Returns array of valid lead status IDs.
+     */
     public static function statusKeys(): array
     {
         return array_keys(static::statusOptions());
@@ -138,7 +164,12 @@ class Lead extends Model
 
     public function getStatusColorAttribute(): array
     {
-        $statusKey = str($this->lead_status)->lower()->replace(' ', '_')->value();
+        // Prefer relationship name, fall back to legacy string column
+        $statusName = $this->relationLoaded('leadStatus')
+            ? ($this->leadStatus?->name ?? $this->lead_status)
+            : ($this->lead_status);
+
+        $statusKey = str((string) $statusName)->lower()->replace(' ', '_')->value();
 
         return self::STATUS_COLORS[$statusKey] ?? ['bg' => '#f5f4f6', 'text' => '#7c7c7c', 'border' => '#e1dee3'];
     }
@@ -157,7 +188,33 @@ class Lead extends Model
 
     public function getSourceLabelAttribute(): string
     {
-        return static::sourceOptions()[$this->lead_source] ?? $this->lead_source;
+        // Use relation if loaded, otherwise fall back to sourceOptions map or raw string
+        if ($this->relationLoaded('leadSource') && $this->leadSource) {
+            return $this->leadSource->name;
+        }
+
+        if ($this->lead_source_id) {
+            return static::sourceOptions()[$this->lead_source_id]
+                ?? $this->lead_source
+                ?? (string) $this->lead_source_id;
+        }
+
+        return $this->lead_source ?? '';
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        if ($this->relationLoaded('leadStatus') && $this->leadStatus) {
+            return $this->leadStatus->name;
+        }
+
+        if ($this->lead_status_id) {
+            return static::statusOptions()[$this->lead_status_id]
+                ?? $this->lead_status
+                ?? (string) $this->lead_status_id;
+        }
+
+        return $this->lead_status ?? '';
     }
 
     public function getFormattedDealValueAttribute(): string

@@ -121,7 +121,7 @@
 .smm-filter-head-icon svg { width: 16px; height: 16px; }
 .smm-filter-title { font-size: 14px; font-weight: 800; color: #111827; }
 .smm-filter-sub   { font-size: 12px; color: #9ca3af; margin-top: 1px; }
-.smm-filter-body  { padding: 20px 22px; }
+.smm-filter-body  { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
 .smm-filter-grid  { display: grid; grid-template-columns: 1fr 1fr 2fr 1.5fr 1.2fr auto; gap: 14px; align-items: end; }
 .smm-field { display: flex; flex-direction: column; gap: 6px; }
 .smm-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #64748b; }
@@ -145,6 +145,12 @@
 .smm-btn-apply:hover { background: linear-gradient(135deg, #c2410c, #ea580c); box-shadow: 0 6px 18px rgba(234,88,12,.30); }
 .smm-btn-reset { font-size: 12px; font-weight: 700; color: #6b7280; text-decoration: none; padding: 4px 8px; border-radius: 8px; transition: all .14s; }
 .smm-btn-reset:hover { background: #f1f5f9; color: #374151; }
+
+.smm-quick-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.smm-quick-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; margin-right: 4px; }
+.smm-qbtn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 800; cursor: pointer; transition: all .15s ease; letter-spacing: .02em; font-family: inherit; }
+.smm-qbtn:hover { border-color: #fb923c; background: #fff7ed; color: #c2410c; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(249,115,22,.12); }
+.smm-qbtn.is-active { border-color: #f97316; background: linear-gradient(135deg, #f97316, #fb923c); color: #fff; box-shadow: 0 6px 16px rgba(249,115,22,.25); }
 
 /* ── Tabs ────────────────────────────────────────────────────────── */
 .smm-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
@@ -333,14 +339,33 @@
             @endif
         </div>
         <div class="smm-filter-body">
-            <form method="GET" action="{{ route('reports.crm.smm') }}" class="smm-filter-grid">
+            <div class="smm-quick-filters">
+                <span class="smm-quick-label">Quick:</span>
+                <button type="button" class="smm-qbtn" data-preset="today">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                    Today
+                </button>
+                <button type="button" class="smm-qbtn" data-preset="month">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    This Month
+                </button>
+                <button type="button" class="smm-qbtn" data-preset="quarter">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h7v7h-7z" stroke-opacity=".35"/></svg>
+                    This Quarter
+                </button>
+                <button type="button" class="smm-qbtn" data-preset="year">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    This Year
+                </button>
+            </div>
+            <form method="GET" action="{{ route('reports.crm.smm') }}" class="smm-filter-grid" id="smmForm">
                 <div class="smm-field">
                     <label class="smm-label" for="smm_date_from">Delivery From</label>
-                    <input id="smm_date_from" type="date" name="date_from" class="smm-input" value="{{ $filters['date_from'] }}">
+                    <input id="smm_date_from" type="date" name="date_from" class="smm-input" value="{{ request('date_from', '') }}">
                 </div>
                 <div class="smm-field">
                     <label class="smm-label" for="smm_date_to">Delivery To</label>
-                    <input id="smm_date_to" type="date" name="date_to" class="smm-input" value="{{ $filters['date_to'] }}">
+                    <input id="smm_date_to" type="date" name="date_to" class="smm-input" value="{{ request('date_to', '') }}">
                 </div>
                 <div class="smm-field">
                     <label class="smm-label" for="smm_lead_id">Account / Lead</label>
@@ -627,6 +652,35 @@
             if (panels[view]) panels[view].style.display = '';
         });
     });
+    // ── Quick Date Preset Buttons ──────────────────────────────────────────
+    (() => {
+        const fmtDate = (d) => d.toISOString().slice(0, 10);
+        const today = new Date();
+        const y = today.getFullYear(), m = today.getMonth(), q = Math.floor(m / 3);
+        const presets = {
+            today:   { from: fmtDate(today), to: fmtDate(today) },
+            month:   { from: fmtDate(new Date(y, m, 1)), to: fmtDate(new Date(y, m + 1, 0)) },
+            quarter: { from: fmtDate(new Date(y, q * 3, 1)), to: fmtDate(new Date(y, q * 3 + 3, 0)) },
+            year:    { from: fmtDate(new Date(y, 0, 1)), to: fmtDate(new Date(y, 11, 31)) },
+        };
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentFrom = urlParams.get('date_from') || '';
+        const currentTo   = urlParams.get('date_to')   || '';
+        const fromInput = document.getElementById('smm_date_from');
+        const toInput   = document.getElementById('smm_date_to');
+        const form      = document.getElementById('smmForm');
+        document.querySelectorAll('.smm-qbtn').forEach(btn => {
+            const preset = presets[btn.dataset.preset];
+            if (preset && currentFrom === preset.from && currentTo === preset.to) btn.classList.add('is-active');
+            btn.addEventListener('click', () => {
+                const p = presets[btn.dataset.preset];
+                if (!p || !fromInput || !toInput || !form) return;
+                fromInput.value = p.from;
+                toInput.value   = p.to;
+                form.submit();
+            });
+        });
+    })();
 })();
 </script>
 @endpush

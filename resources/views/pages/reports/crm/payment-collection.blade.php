@@ -33,7 +33,12 @@
 .crm-pay-card-title { font-size: 15px; font-weight: 800; color: #111827; }
 .crm-pay-card-subtitle { margin-top: 3px; font-size: 12px; color: #6b7280; }
 .crm-pay-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; background: #ecfdf5; color: #047857; border: 1px solid #bbf7d0; font-size: 11px; font-weight: 800; }
-.crm-pay-body { padding: 18px; }
+.crm-pay-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.crm-pay-quick-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crm-pay-quick-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; margin-right: 4px; }
+.crm-qbtn-pay { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 800; cursor: pointer; transition: all .15s ease; letter-spacing: .02em; }
+.crm-qbtn-pay:hover { border-color: #22c55e; background: #f0fdf4; color: #047857; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(22,163,74,.12); }
+.crm-qbtn-pay.is-active { border-color: #16a34a; background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; box-shadow: 0 6px 16px rgba(22,163,74,.25); }
 .crm-pay-form { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .crm-pay-field { display: flex; flex-direction: column; gap: 7px; }
 .crm-pay-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
@@ -70,6 +75,7 @@
     .crm-pay-stats, .crm-pay-form, .crm-pay-analytics-grid { grid-template-columns: 1fr; }
     .crm-pay-actions, .crm-pay-form-actions { flex-wrap: wrap; }
     .crm-pay-tabs { width: 100%; flex-wrap: wrap; }
+    .crm-pay-quick-filters { gap: 6px; }
 }
 </style>
 @endpush
@@ -80,8 +86,8 @@
         request()->filled('customer_id')
         || request()->filled('payment_mode')
         || request()->filled('branch_id')
-        || request('date_from') !== $defaultFromDate
-        || request('date_to') !== $defaultToDate;
+        || request()->filled('date_from')
+        || request()->filled('date_to');
 @endphp
 <div class="crm-pay-page">
     <div class="crm-pay-shell">
@@ -151,14 +157,33 @@
                 <div class="crm-pay-chip">{{ $reportRows->total() }} results</div>
             </div>
             <div class="crm-pay-body">
-                <form method="GET" action="{{ route('reports.crm.payment-collection') }}" class="crm-pay-form">
+                <div class="crm-pay-quick-filters">
+                    <span class="crm-pay-quick-label">Quick:</span>
+                    <button type="button" class="crm-qbtn-pay" data-preset="today">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                        Today
+                    </button>
+                    <button type="button" class="crm-qbtn-pay" data-preset="month">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        This Month
+                    </button>
+                    <button type="button" class="crm-qbtn-pay" data-preset="quarter">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h7v7h-7z" stroke-opacity=".35"/></svg>
+                        This Quarter
+                    </button>
+                    <button type="button" class="crm-qbtn-pay" data-preset="year">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        This Year
+                    </button>
+                </div>
+                <form method="GET" action="{{ route('reports.crm.payment-collection') }}" class="crm-pay-form" id="paymentCollectionForm">
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="date_from">Date From</label>
-                        <input id="date_from" type="date" name="date_from" class="crm-pay-input" value="{{ request('date_from', $defaultFromDate) }}">
+                        <input id="date_from" type="date" name="date_from" class="crm-pay-input" value="{{ request('date_from') }}">
                     </div>
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="date_to">Date To</label>
-                        <input id="date_to" type="date" name="date_to" class="crm-pay-input" value="{{ request('date_to', $defaultToDate) }}">
+                        <input id="date_to" type="date" name="date_to" class="crm-pay-input" value="{{ request('date_to') }}">
                     </div>
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="customer_id">Customer</label>
@@ -440,6 +465,35 @@
             scales: { y: { beginAtZero: true, ticks: { callback: (value) => currency(value) } } }
         }
     });
+    // ── Quick Date Preset Buttons ──────────────────────────────────────────
+    (() => {
+        const fmtDate = (d) => d.toISOString().slice(0, 10);
+        const today = new Date();
+        const y = today.getFullYear(), m = today.getMonth(), q = Math.floor(m / 3);
+        const presets = {
+            today:   { from: fmtDate(today), to: fmtDate(today) },
+            month:   { from: fmtDate(new Date(y, m, 1)), to: fmtDate(new Date(y, m + 1, 0)) },
+            quarter: { from: fmtDate(new Date(y, q * 3, 1)), to: fmtDate(new Date(y, q * 3 + 3, 0)) },
+            year:    { from: fmtDate(new Date(y, 0, 1)), to: fmtDate(new Date(y, 11, 31)) },
+        };
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentFrom = urlParams.get('date_from') || '';
+        const currentTo   = urlParams.get('date_to')   || '';
+        const fromInput = document.getElementById('date_from');
+        const toInput   = document.getElementById('date_to');
+        const form      = document.getElementById('paymentCollectionForm');
+        document.querySelectorAll('.crm-qbtn-pay').forEach(btn => {
+            const preset = presets[btn.dataset.preset];
+            if (preset && currentFrom === preset.from && currentTo === preset.to) btn.classList.add('is-active');
+            btn.addEventListener('click', () => {
+                const p = presets[btn.dataset.preset];
+                if (!p) return;
+                fromInput.value = p.from;
+                toInput.value   = p.to;
+                form.submit();
+            });
+        });
+    })();
 })();
 </script>
 @endpush

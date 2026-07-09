@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Models\LeadFieldValue;
 use App\Models\LeadFormField;
 use App\Models\LeadProduct;
+use App\Models\LeadSource;
 use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\User;
@@ -469,17 +470,27 @@ class FacebookLeadImporter
     {
         $changed = false;
 
-        DB::transaction(function () use ($lead, $mappedValues, $leadFields, &$changed) {
+        // Map legacy field names to their FK equivalents
+        $fieldAliases = [
+            'lead_source'    => 'lead_source_id',
+            'lead_source_id' => 'lead_source_id',
+            'lead_status'    => 'lead_status_id',
+            'lead_status_id' => 'lead_status_id',
+        ];
+
+        DB::transaction(function () use ($lead, $mappedValues, $leadFields, &$changed, $fieldAliases) {
             foreach ($mappedValues['core'] as $fieldName => $value) {
                 if (!$this->isLeadColumn($fieldName) || is_array($value) || $value === null || $value === '') {
                     continue;
                 }
 
-                if ($lead->{$fieldName} === null || $lead->{$fieldName} === '') {
+                $targetField = $fieldAliases[$fieldName] ?? $fieldName;
+
+                if ($lead->{$targetField} === null || $lead->{$targetField} === '') {
                     $normalizedValue = $this->normalizeCoreValue($fieldName, $value);
 
                     if ($normalizedValue !== null && $normalizedValue !== '') {
-                        $lead->{$fieldName} = $normalizedValue;
+                        $lead->{$targetField} = $normalizedValue;
                         $changed = true;
                     }
                 }
@@ -502,12 +513,15 @@ class FacebookLeadImporter
         }
 
         return match ($fieldName) {
-            'priority' => $this->normalizePriority((string) $value),
-            'deal_value' => $this->normalizeMoney($value),
-            'product_id' => $this->normalizeProductId($value),
-            'lead_date' => $this->normalizeDate($value),
-            'lead_status' => $this->normalizeLeadStatusId($value),
-            default => trim((string) $value),
+            'priority'      => $this->normalizePriority((string) $value),
+            'deal_value'    => $this->normalizeMoney($value),
+            'product_id'    => $this->normalizeProductId($value),
+            'lead_date'     => $this->normalizeDate($value),
+            'lead_status',
+            'lead_status_id' => $this->normalizeLeadStatusId($value),
+            'lead_source',
+            'lead_source_id' => $this->normalizeLeadSourceId($value),
+            default         => trim((string) $value),
         };
     }
 
@@ -590,23 +604,24 @@ class FacebookLeadImporter
         return [
             'company_name' => $companyName !== '' ? $companyName : 'Facebook Lead',
             'contact_name' => $contactName !== '' ? $contactName : 'Facebook Lead',
-            'lead_date' => $core['lead_date'] ?? $leadDate,
+            'lead_date'    => $core['lead_date'] ?? $leadDate,
             'mobile_number' => $mobileNumber !== '' ? $mobileNumber : '0000000000',
-            'email' => $core['email'] ?? null,
-            'lead_source' => $core['lead_source'] ?? 'Facebook',
-            'lead_status' => $this->normalizeLeadStatusId($core['lead_status'] ?? null, $assignedUser?->company_id)
+            'email'        => $core['email'] ?? null,
+            'lead_source_id' => $this->normalizeLeadSourceId($core['lead_source'] ?? null, $assignedUser?->company_id)
+                ?? $this->defaultLeadSourceId($assignedUser?->company_id),
+            'lead_status_id' => $this->normalizeLeadStatusId($core['lead_status'] ?? null, $assignedUser?->company_id)
                 ?? $this->defaultLeadStatusId($assignedUser?->company_id),
             'product_name' => $core['product_name'] ?? null,
-            'product_id' => $this->normalizeProductId($core['product_id'] ?? null),
-            'priority' => $this->normalizePriority($core['priority'] ?? null),
-            'deal_value' => $this->normalizeMoney($core['deal_value'] ?? null),
-            'remarks' => '',
-            'assigned_to' => $assignedUser?->id,
-            'created_by' => $assignedUser?->id,
-            'company_id' => $assignedUser?->company_id,
-            'facebook_lead_id' => $facebookLeadId,
+            'product_id'   => $this->normalizeProductId($core['product_id'] ?? null),
+            'priority'     => $this->normalizePriority($core['priority'] ?? null),
+            'deal_value'   => $this->normalizeMoney($core['deal_value'] ?? null),
+            'remarks'      => '',
+            'assigned_to'  => $assignedUser?->id,
+            'created_by'   => $assignedUser?->id,
+            'company_id'   => $assignedUser?->company_id,
+            'facebook_lead_id'     => $facebookLeadId,
             'facebook_campaign_id' => data_get($submission, 'campaign_id') ?: data_get($submission, 'ad_id') ?: $campaignIdentifier,
-            'facebook_payload' => $submission,
+            'facebook_payload'     => $submission,
         ];
     }
 
@@ -665,21 +680,22 @@ class FacebookLeadImporter
 
         LeadProduct::firstOrCreate(
             [
-                'lead_id' => $lead->id,
+                'lead_id'    => $lead->id,
                 'product_id' => $product->id,
             ],
             [
-                'deal_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
-                'product_name' => $productName ?: $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
-                'description' => $product->description,
-                'unit_price' => (float) ($product->final_price ?? 0),
-                'quantity' => 1,
+                'deal_name'      => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                'product_name'   => $productName ?: $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                'description'    => $product->description,
+                'unit_price'     => (float) ($product->final_price ?? 0),
+                'quantity'       => 1,
                 'discount_percent' => 0,
-                'remarks' => 'Created automatically from Facebook lead import.',
+                'remarks'        => 'Created automatically from Facebook lead import.',
                 'product_status' => 'new',
-                'amount_paid' => 0,
-                'created_by' => $assignedUser?->id ?: $lead->assigned_to ?: $lead->created_by,
-                'company_id' => $lead->company_id,
+                'amount_paid'    => 0,
+                'lead_source_id' => $lead->lead_source_id,
+                'created_by'     => $assignedUser?->id ?: $lead->assigned_to ?: $lead->created_by,
+                'company_id'     => $lead->company_id,
             ]
         );
     }
@@ -753,6 +769,79 @@ class FacebookLeadImporter
         });
 
         return $preferred?->id ?: $statuses->first()?->id;
+    }
+
+    /**
+     * Resolve a lead source name string to its ID in lead_sources.
+     * If not found by name, tries to find or create one with that name.
+     */
+    protected function normalizeLeadSourceId(mixed $value, ?int $companyId = null): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        // If an integer-like value, return as-is (already an ID)
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $name = trim((string) $value);
+
+        if ($name === '') {
+            return null;
+        }
+
+        $query = LeadSource::query();
+
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $sources = $query->get(['id', 'name']);
+
+        $nameLower = strtolower($name);
+        $matched = $sources->first(
+            fn (LeadSource $s) => strtolower(trim($s->name)) === $nameLower
+        );
+
+        return $matched?->id;
+    }
+
+    /**
+     * Find or create the default 'Facebook' lead source for the given company.
+     */
+    protected function defaultLeadSourceId(?int $companyId = null): ?int
+    {
+        $query = LeadSource::query();
+
+        if ($companyId !== null) {
+            $query->where('company_id', $companyId);
+        }
+
+        $sources = $query->orderBy('id')->get(['id', 'name']);
+
+        // Look for a source named 'facebook' (case-insensitive)
+        $preferred = $sources->first(
+            fn (LeadSource $s) => strtolower(trim($s->name)) === 'facebook'
+        );
+
+        if ($preferred) {
+            return $preferred->id;
+        }
+
+        // If none found and we have a company, create 'Facebook' source
+        if ($companyId !== null) {
+            $created = LeadSource::create([
+                'name'       => 'Facebook',
+                'company_id' => $companyId,
+            ]);
+
+            return $created->id;
+        }
+
+        // Fall back to any first source
+        return $sources->first()?->id;
     }
 
     protected function normalizePriority(?string $priority): string
@@ -846,6 +935,7 @@ class FacebookLeadImporter
             'mobile_number',
             'email',
             'lead_source',
+            'lead_source_id',
             'lead_status',
             'product_name',
             'product_id',

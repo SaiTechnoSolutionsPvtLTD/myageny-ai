@@ -15,6 +15,7 @@ use App\Models\ProductionInitiation;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -76,11 +77,6 @@ class CrmReportController extends Controller
 
     public function leadsSummary(Request $request): View
     {
-        $defaultFromDate = now()->startOfMonth()->toDateString();
-        $defaultToDate = now()->endOfMonth()->toDateString();
-
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
-
         $query = $this->buildLeadsSummaryQuery($request);
 
         // Get all data for analytics and summary
@@ -90,7 +86,6 @@ class CrmReportController extends Controller
         $reportRows = $query->paginate(100)->withQueryString();
         $analyticsRows = $allRows;
 
-        $summaryQuery = clone $query;
         $summaryRows = $allRows;
         $leadProductIds = $summaryRows->pluck('lead_product_id')->filter()->unique()->toArray();
 
@@ -112,11 +107,11 @@ class CrmReportController extends Controller
 
         $sourceOptions = LeadSource::query()
             ->orderBy('name')
-            ->pluck('name');
+            ->pluck('name', 'id');
 
         $statusOptions = LeadStatus::query()
             ->orderBy('name')
-            ->pluck('name');
+            ->pluck('name', 'id');
 
         $users = $this->visibility->visibleAssignableUsers();
 
@@ -133,8 +128,8 @@ class CrmReportController extends Controller
             || $request->filled('assigned_to')
             || $request->filled('product_id')
             || $request->filled('branch_id')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || $request->filled('date_from')
+            || $request->filled('date_to');
 
         return view('pages.reports.crm.leads-summary', compact(
             'reportRows',
@@ -145,8 +140,6 @@ class CrmReportController extends Controller
             'users',
             'products',
             'branches',
-            'defaultFromDate',
-            'defaultToDate',
             'filterPanelOpen'
         ));
     }
@@ -156,7 +149,10 @@ class CrmReportController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
+        $request->merge([
+            'date_from' => $request->input('date_from', $defaultFromDate),
+            'date_to'   => $request->input('date_to', $defaultToDate),
+        ]);
 
         $allRows = $this->buildLeadsSummaryQuery($request)->get();
         // Get all payments for these products
@@ -213,11 +209,6 @@ class CrmReportController extends Controller
 
     public function productWise(Request $request): View
     {
-        $defaultFromDate = now()->startOfMonth()->toDateString();
-        $defaultToDate = now()->endOfMonth()->toDateString();
-
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
-
         $query = $this->buildProductWiseQuery($request);
         $reportRows = $query->paginate(20)->withQueryString();
         $analyticsRows = (clone $query)->get();
@@ -240,8 +231,8 @@ class CrmReportController extends Controller
         $filterPanelOpen =
             $request->filled('product_id')
             || $request->filled('branch_id')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || $request->filled('date_from')
+            || $request->filled('date_to');
 
         return view('pages.reports.crm.product-wise', compact(
             'reportRows',
@@ -249,8 +240,6 @@ class CrmReportController extends Controller
             'analytics',
             'products',
             'branches',
-            'defaultFromDate',
-            'defaultToDate',
             'filterPanelOpen'
         ));
     }
@@ -260,7 +249,10 @@ class CrmReportController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
+        $request->merge([
+            'date_from' => $request->input('date_from', $defaultFromDate),
+            'date_to'   => $request->input('date_to', $defaultToDate),
+        ]);
 
         $rows = $this->buildProductWiseQuery($request)->get()->map(function ($row) {
             return [
@@ -335,11 +327,6 @@ class CrmReportController extends Controller
 
     public function paymentCollection(Request $request): View
     {
-        $defaultFromDate = now()->startOfMonth()->toDateString();
-        $defaultToDate = now()->endOfMonth()->toDateString();
-
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
-
         $query = $this->buildPaymentCollectionQuery($request);
         $reportRows = $query->paginate(20)->withQueryString();
         $analyticsRows = (clone $query)->get();
@@ -360,8 +347,8 @@ class CrmReportController extends Controller
             $request->filled('customer_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || $request->filled('date_from')
+            || $request->filled('date_to');
 
         return view('pages.reports.crm.payment-collection', compact(
             'reportRows',
@@ -370,8 +357,6 @@ class CrmReportController extends Controller
             'paymentModes',
             'customers',
             'branches',
-            'defaultFromDate',
-            'defaultToDate',
             'filterPanelOpen'
         ));
     }
@@ -381,7 +366,10 @@ class CrmReportController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
+        $request->merge([
+            'date_from' => $request->input('date_from', $defaultFromDate),
+            'date_to'   => $request->input('date_to', $defaultToDate),
+        ]);
 
         $rows = $this->buildPaymentCollectionQuery($request)->get()->map(function ($row) {
             return [
@@ -413,14 +401,18 @@ class CrmReportController extends Controller
         ]);
     }
 
-    private function applyDefaultDateRange(Request $request, string $defaultFromDate, string $defaultToDate): void
+    private function applyDefaultDateRange(Request $request, string $defaultFromDate, string $defaultToDate): ?RedirectResponse
     {
         if (! $request->filled('date_from') && ! $request->filled('date_to')) {
-            $request->merge([
-                'date_from' => $defaultFromDate,
-                'date_to' => $defaultToDate,
-            ]);
+            return redirect()->to(
+                $request->fullUrlWithQuery([
+                    'date_from' => $defaultFromDate,
+                    'date_to'   => $defaultToDate,
+                ])
+            );
         }
+
+        return null;
     }
 
     private function buildLeadsSummaryQuery(Request $request)
@@ -431,6 +423,8 @@ class CrmReportController extends Controller
 
         $query = Lead::query()
             ->leftJoin('lead_products', 'lead_products.lead_id', '=', 'leads.id')
+            ->leftJoin('lead_sources as lead_source_table', 'lead_source_table.id', '=', 'leads.lead_source_id')
+            ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
             ->leftJoin('lead_statuses as product_lead_statuses', 'product_lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
             ->leftJoinSub($convertedSubquery, 'converted_products', function ($join) {
@@ -441,8 +435,9 @@ class CrmReportController extends Controller
                 'leads.contact_name',
                 'leads.email',
                 'leads.mobile_number',
-                'leads.lead_source',
-                'leads.lead_status as base_lead_status',
+                // Prefer FK-resolved name, fall back to legacy string column
+                DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
+                DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
                 'leads.lead_date',
                 'leads.created_at as lead_created_at',
                 'lead_products.id as lead_product_id',
@@ -471,15 +466,30 @@ class CrmReportController extends Controller
         }
 
         if ($request->filled('lead_source')) {
-            $query->where('leads.lead_source', $request->lead_source);
+            // Filter accepts either an ID (new) or a name string (legacy)
+            $val = $request->lead_source;
+            if (is_numeric($val)) {
+                $query->where('leads.lead_source_id', (int) $val);
+            } else {
+                $query->where('lead_source_table.name', $val);
+            }
         }
 
         if ($request->filled('lead_status')) {
-            $query->where(function ($statusQuery) use ($request) {
-                $statusQuery
-                    ->where('leads.lead_status', $request->lead_status)
-                    ->orWhere('product_lead_statuses.name', $request->lead_status);
-            });
+            $val = $request->lead_status;
+            if (is_numeric($val)) {
+                $query->where(function ($statusQuery) use ($val) {
+                    $statusQuery
+                        ->where('leads.lead_status_id', (int) $val)
+                        ->orWhere('lead_products.lead_status_id', (int) $val);
+                });
+            } else {
+                $query->where(function ($statusQuery) use ($val) {
+                    $statusQuery
+                        ->where('lead_status_table.name', $val)
+                        ->orWhere('product_lead_statuses.name', $val);
+                });
+            }
         }
 
         if ($request->filled('assigned_to')) {
@@ -1292,8 +1302,8 @@ class CrmReportController extends Controller
         $rows = $this->buildSmmReportData($request, $companyId);
 
         $filters = [
-            'date_from'   => $request->input('date_from', now()->startOfMonth()->toDateString()),
-            'date_to'     => $request->input('date_to', now()->endOfMonth()->toDateString()),
+            'date_from'   => $request->input('date_from', ''),
+            'date_to'     => $request->input('date_to', ''),
             'lead_id'     => $request->input('lead_id'),
             'product_id'  => $request->input('product_id'),
             'status'      => $request->input('status'),
@@ -1325,8 +1335,8 @@ class CrmReportController extends Controller
 
     private function buildSmmReportData(Request $request, ?int $companyId): \Illuminate\Support\Collection
     {
-        $dateFrom  = $request->input('date_from', now()->startOfMonth()->toDateString());
-        $dateTo    = $request->input('date_to', now()->endOfMonth()->toDateString());
+        $dateFrom  = $request->input('date_from', '');
+        $dateTo    = $request->input('date_to', '');
         $leadId    = $request->input('lead_id');
         $productId = $request->input('product_id');
         $status    = $request->input('status');

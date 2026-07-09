@@ -360,6 +360,48 @@
             </div>
         </div>
 
+        {{-- ── Target Tracking Card ── --}}
+        <div class="da-card" style="margin-bottom: 20px; display:none;" id="daTargetCard">
+            <div class="da-card-head" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1eef2; padding-bottom: 12px; margin-bottom: 16px;">
+                <div class="da-card-title" style="font-size: 15px; font-weight: 800; color: #111827; display: flex; align-items: center; gap: 8px;">
+                    🎯 Sales Target Tracking
+                </div>
+                <span class="da-badge" id="daTargetTitle" style="font-size: 11px; font-weight: 800; background: #fff1e8; color: #fe5f04; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;">Overall Target</span>
+            </div>
+            <div class="da-card-body" style="padding:0;">
+                <div class="st-dashboard-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center;">
+                    <!-- Target Metrics -->
+                    <div style="display:flex; flex-direction:column; gap:14px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f8f6f9; padding-bottom:8px;">
+                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Allocated Target</span>
+                            <span style="font-size:16px; font-weight:800; color:var(--da-text); font-family:monospace;" id="lblTargetVal">₹0.00</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f8f6f9; padding-bottom:8px;">
+                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Achieved Collection</span>
+                            <span style="font-size:16px; font-weight:800; color:var(--da-green); font-family:monospace;" id="lblAchievedVal">₹0.00</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px; font-weight:700; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.4px;">Pending Target</span>
+                            <span style="font-size:16px; font-weight:800; color:var(--da-red); font-family:monospace;" id="lblPendingVal">₹0.00</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Arc -->
+                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                        <div style="position:relative; width:94px; height:94px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:#fcf9f5; box-shadow:inset 0 0 0 10px #f3f0f6; border:1px solid #e1dee3;">
+                            <div style="font-size:19px; font-weight:900; color:var(--da-orange);" id="lblPercentVal">0%</div>
+                        </div>
+                        <div style="margin-top:10px; font-size:10px; font-weight:800; color:var(--da-muted); text-transform:uppercase; letter-spacing:0.7px;" id="lblStatusText">TARGET TRACKING ACTIVE</div>
+                    </div>
+                </div>
+                
+                <!-- Linear Progress Bar -->
+                <div style="height:10px; background:#f0eef2; border-radius:6px; margin-top:20px; overflow:hidden; border: 1px solid #e1dee3;">
+                    <div style="height:100%; width:0%; background:linear-gradient(90deg, var(--da-orange), var(--da-green)); border-radius:6px; transition:width 0.4s ease;" id="barProgress"></div>
+                </div>
+            </div>
+        </div>
+
         {{-- ── Financials ── --}}
         <div>
             <div class="da-section-head">
@@ -404,7 +446,7 @@
                 <div class="da-card-title">📈 6-Month Lead Trend</div>
                 <div style="display:flex;align-items:center;gap:12px;font-size:11px;font-weight:700">
                     <span style="display:flex;align-items:center;gap:4px;color:#374151"><span style="width:10px;height:10px;border-radius:50%;background:var(--da-orange);display:inline-block"></span>Total</span>
-                    <span style="display:flex;align-items:center;gap:4px;color:var(--da-green)"><span style="width:10px;height:10px;border-radius:50%;background:var(--da-green);display:inline-block"></span>Won</span>
+                    <span style="display:flex;align-items:center;gap:4px;color:var(--da-green)"><span style="width:10px;height:10px;border-radius:50%;background:var(--da-green);display:inline-block"></span>Convert</span>
                     <span style="display:flex;align-items:center;gap:4px;color:var(--da-red)"><span style="width:10px;height:10px;border-radius:50%;background:#fca5a5;display:inline-block"></span>Lost</span>
                 </div>
             </div>
@@ -698,6 +740,7 @@ function hideError() {
 ═══════════════════════════════════════════════════════ */
 function renderAll(d) {
     renderKpis(d.kpis, d.filters_applied);
+    renderTargetStats(d.sales_target_stats);
     renderFinancials(d.financials);
     renderFunnel(d.pipeline_funnel);
     renderSources(d.source_distribution, d.financials.payment_by_mode);
@@ -707,6 +750,48 @@ function renderAll(d) {
     renderFollowups(d.today_followups);
     renderReminders(d.reminders);
     renderRecentLeads(d.recent_leads);
+}
+
+/* ── Sales Target Stats ── */
+function renderTargetStats(ts) {
+    if (!ts || ts.target <= 0) {
+        document.getElementById('daTargetCard').style.display = 'none';
+        return;
+    }
+    document.getElementById('daTargetCard').style.display = 'block';
+
+    const targetVal = ts.target;
+    const achievedVal = ts.achieved;
+    const pendingVal = ts.pending;
+    const percentVal = ts.percent;
+    const targetName = ts.name;
+
+    document.getElementById('daTargetTitle').textContent = ts.is_individual ? `${targetName}'s Target` : 'Overall Sales Target';
+    document.getElementById('lblTargetVal').textContent = fmt(targetVal);
+    document.getElementById('lblAchievedVal').textContent = fmt(achievedVal);
+    document.getElementById('lblPendingVal').textContent = fmt(pendingVal);
+    document.getElementById('lblPercentVal').textContent = `${percentVal}%`;
+
+    // Update progress bar width
+    const bar = document.getElementById('barProgress');
+    bar.style.width = `${Math.min(100, percentVal)}%`;
+
+    // Dynamic color coding based on achievement
+    const pctLabel = document.getElementById('lblPercentVal');
+    const statusLabel = document.getElementById('lblStatusText');
+    if (percentVal >= 100) {
+        pctLabel.style.color = 'var(--da-green)';
+        statusLabel.textContent = '🚀 EXCEEDED TARGET!';
+        statusLabel.style.color = 'var(--da-green)';
+    } else if (percentVal >= 50) {
+        pctLabel.style.color = 'var(--da-orange)';
+        statusLabel.textContent = '📈 ON TRACK';
+        statusLabel.style.color = 'var(--da-orange)';
+    } else {
+        pctLabel.style.color = 'var(--da-red)';
+        statusLabel.textContent = '⚠️ TARGET PENDING';
+        statusLabel.style.color = 'var(--da-red)';
+    }
 }
 
 /* ── Helpers ── */
@@ -841,19 +926,19 @@ function renderTrend(months) {
     var maxVal = Math.max.apply(null, months.map(function(m) { return m.total; })) || 1;
     var cols   = months.map(function(m) {
         var bh = Math.round(m.total / maxVal * 100);
-        var wh = Math.round(m.won  / maxVal * 100);
+        var wh = Math.round(m.convert  / maxVal * 100);
         var lh = Math.round(m.lost / maxVal * 100);
         return '<div class="da-trend-col">' +
             '<div class="da-trend-total">' + m.total + '</div>' +
             '<div class="da-trend-bars">' +
             '<div class="da-trend-bar" style="height:' + bh + '%;background:var(--da-orange)" title="Total:' + m.total + '"></div>' +
-            '<div class="da-trend-bar" style="height:' + wh + '%;background:var(--da-green)"  title="Won:'   + m.won   + '"></div>' +
+            '<div class="da-trend-bar" style="height:' + wh + '%;background:var(--da-green)"  title="Convert:' + m.convert + '"></div>' +
             '<div class="da-trend-bar" style="height:' + lh + '%;background:#fca5a5"          title="Lost:'  + m.lost  + '"></div>' +
             '</div><div class="da-trend-lbl">' + m.month_short + '</div></div>';
     }).join('');
 
     var vals = months.map(function(m) {
-        return '<div class="da-trend-val-item"><div class="da-trend-val-lbl">Won ₹</div><div class="da-trend-val-num">' + (m.won_value >= 100000 ? (m.won_value/100000).toFixed(1)+'L' : Math.round(m.won_value).toLocaleString('en-IN')) + '</div></div>';
+        return '<div class="da-trend-val-item"><div class="da-trend-val-lbl">Convert ₹</div><div class="da-trend-val-num">' + (m.convert_value >= 100000 ? (m.convert_value/100000).toFixed(1)+'L' : Math.round(m.convert_value).toLocaleString('en-IN')) + '</div></div>';
     }).join('');
 
     document.getElementById('daTrendBody').innerHTML =
@@ -891,11 +976,11 @@ function renderBranchPerf(branches) {
 /* ── Team Performance ── */
 function renderTeamPerf(team) {
     if (!team.length) { document.getElementById('daTeamBody').innerHTML = empty('👥','No team data for selected filters'); return; }
-    var maxVal = team.reduce(function(m, u) { return Math.max(m, u.won_value); }, 1);
+    var maxVal = team.reduce(function(m, u) { return Math.max(m, u.convert_value); }, 1);
 
     var rows = team.map(function(u, i) {
         var mc   = avColor(u.user_id);
-        var tpct = Math.round(u.won_value / maxVal * 100);
+        var tpct = Math.round(u.convert_value / maxVal * 100);
         return '<tr>' +
             '<td><div class="da-rank" style="background:' + mc + '20;color:' + mc + '">' + (i+1) + '</div></td>' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
@@ -904,13 +989,13 @@ function renderTeamPerf(team) {
             '<div style="font-size:10px;color:var(--da-muted)">' + (u.role || 'Staff') + '</div></div></div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:6px"><div style="height:100%;width:' + tpct + '%;background:' + mc + ';border-radius:2px"></div></div></td>' +
             '<td style="text-align:right;font-weight:700;color:#374151">' + u.total_leads + '</td>' +
-            '<td style="text-align:right"><span style="color:var(--da-green);font-weight:700">' + u.won_leads + 'W</span> <span style="color:var(--da-red);font-weight:700">' + u.lost_leads + 'L</span></td>' +
-            '<td style="text-align:right;font-weight:800;color:' + mc + '">' + fmtL(u.won_value) + '</td></tr>';
+            '<td style="text-align:right"><span style="color:var(--da-green);font-weight:700">' + u.convert_leads + ' C</span> <span style="color:var(--da-red);font-weight:700">' + u.lost_leads + 'L</span></td>' +
+            '<td style="text-align:right;font-weight:800;color:' + mc + '">' + fmtL(u.convert_value) + '</td></tr>';
     }).join('');
 
     document.getElementById('daTeamBody').innerHTML =
         '<table class="da-perf-tbl"><thead><tr>' +
-        '<th>#</th><th>Member</th><th style="text-align:right">Leads</th><th style="text-align:right">W/L</th><th style="text-align:right">Won Value</th>' +
+        '<th>#</th><th>Member</th><th style="text-align:right">Leads</th><th style="text-align:right">C/L</th><th style="text-align:right">Convert Value</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -970,7 +1055,6 @@ function renderRecentLeads(leads) {
     if (!leads.length) { document.getElementById('daRecentBody').innerHTML = empty('📋','No recent leads'); return; }
 
     var rows = leads.map(function(l) {
-        var sc  = l.status_color   || { bg:'#f5f4f6', text:'#7c7c7c', border:'#e1dee3' };
         var pc  = l.priority_color || { bg:'#f5f4f6', text:'#7c7c7c' };
         var ac  = avColor(l.id);
         return '<tr onclick="window.location=\'' + LEAD_BASE + '/' + l.id + '\'">' +
@@ -979,7 +1063,6 @@ function renderRecentLeads(leads) {
             '<div><div class="da-lead-name">' + l.company_name + '</div><div class="da-lead-contact">' + l.contact_name + '</div></div></div></td>' +
             '<td style="font-family:monospace">' + l.mobile_number + '</td>' +
             '<td>' + l.source_label + '</td>' +
-            '<td>' + '<span class="da-pill" style="background:' + sc.bg + ';color:' + sc.text + ';border-color:' + sc.border + '">' + l.status_label + '</span>' + '</td>' +
             '<td>' + '<span class="da-pill" style="background:' + pc.bg + ';color:' + pc.text + '">' + l.priority_label + '</span>' + '</td>' +
             '<td style="font-weight:800">' + l.deal_value_formatted + '</td>' +
             '<td>' + (l.assigned_to?.name || '—') + '</td>' +
@@ -990,7 +1073,7 @@ function renderRecentLeads(leads) {
 
     document.getElementById('daRecentBody').innerHTML =
         '<table class="da-leads-tbl"><thead><tr>' +
-        '<th>Lead</th><th>Mobile</th><th>Source</th><th>Stage</th><th>Priority</th><th>Deal Value</th><th>Assigned To</th><th>Branch</th><th>Date</th>' +
+        '<th>Lead</th><th>Mobile</th><th>Source</th><th>Priority</th><th>Deal Value</th><th>Assigned To</th><th>Branch</th><th>Date</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 

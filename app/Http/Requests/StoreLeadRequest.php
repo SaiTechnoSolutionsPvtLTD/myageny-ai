@@ -7,6 +7,8 @@ namespace App\Http\Requests;
 
 use App\Models\Lead;
 use App\Models\LeadFormField;
+use App\Models\LeadSource;
+use App\Models\LeadStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +24,8 @@ class StoreLeadRequest extends FormRequest
             'lead_date'     => ['required', 'date'],
             'mobile_number' => ['required', 'string', 'max:20'],
             'email'         => ['nullable', 'email', 'max:150'],
-            'lead_source'   => ['required', 'string', Rule::in(Lead::sourceKeys())],
+            'lead_source_id' => ['required', 'integer', 'exists:lead_sources,id'],
+            'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'product_name'  => ['nullable', 'string', 'max:100'],
             'assigned_to'   => ['required', 'exists:users,id'],
             'priority'      => ['required', 'in:low,medium,high'],
@@ -40,10 +43,11 @@ class StoreLeadRequest extends FormRequest
             'contact_name.required'  => 'Contact person name is required.',
             'lead_date.required'     => 'Lead date is required.',
             'mobile_number.required' => 'Mobile number is required.',
-            'lead_source.required'   => 'Please select a lead source.',
+            'lead_source_id.required' => 'Please select a lead source.',
+            'lead_source_id.exists'   => 'Selected lead source is invalid.',
+            'lead_status_id.exists'   => 'Selected lead status is invalid.',
             'assigned_to.required'   => 'Please select an assigned user.',
             'branch_id.required'     => 'Please select a branch.',
-            'lead_status.required'   => 'Please select a lead status.',
             'priority.required'      => 'Please select a priority level.',
         ], $this->customFieldMessages());
     }

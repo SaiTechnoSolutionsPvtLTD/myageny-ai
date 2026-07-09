@@ -67,11 +67,11 @@ class LeadController extends Controller
         }
 
         if ($request->filled('lead_source')) {
-            $query->where('lead_source', $request->lead_source);
+            $query->where('lead_source_id', $request->lead_source);
         }
 
         if ($request->filled('lead_status')) {
-            $query->where('lead_status', $request->lead_status);
+            $query->where('lead_status_id', $request->lead_status);
         }
 
         if ($request->filled('priority')) {
@@ -103,6 +103,9 @@ class LeadController extends Controller
         $this->visibility->applyLeadVisibility($productQuery);
         $products = $productQuery->pluck('product_name');
 
+        $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
+        $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
+
         // Stats for top cards
         $stats = [
             'total'         => $activeLeadIds->count(),
@@ -123,7 +126,7 @@ class LeadController extends Controller
             || $request->input('date_from') !== $defaultFromDate
             || $request->input('date_to') !== $defaultToDate;
 
-        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen'));
+        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
     }
 
     /**
@@ -368,12 +371,12 @@ class LeadController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $request->validate([
-            'lead_status' => ['required', 'string', Rule::in(Lead::statusKeys())],
+            'lead_status_id' => ['required', 'integer', 'exists:lead_statuses,id'],
         ]);
 
-        $lead->update(['lead_status' => $request->lead_status]);
+        $lead->update(['lead_status_id' => $request->lead_status_id]);
 
-        return back()->with('success', "Lead status updated to <strong>{$lead->status_label}</strong>.");
+        return back()->with('success', 'Lead status updated successfully.');
     }
 
     public function leadStatus()

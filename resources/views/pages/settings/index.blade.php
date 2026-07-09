@@ -393,6 +393,27 @@
         @endcan
 
         @can('settings.manage')
+        <a href="{{ route('settings.sales-targets.index') }}" class="settings-card outcome">
+            <div class="settings-card-icon outcome">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Target Allocation</h4>
+            <p class="settings-card-text">Configure target revenue amounts for Sales department members to compare target vs actual collection.</p>
+            <span class="settings-card-link">
+                Open Target Allocation
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('settings.manage')
         <a href="{{ route('settings.lead-reallocation.index') }}" class="settings-card branch">
             <div class="settings-card-icon branch">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
