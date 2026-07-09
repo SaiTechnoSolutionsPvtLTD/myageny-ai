@@ -47,7 +47,7 @@
 
                         <div class="eob-empid-card">
                             <div class="eob-empid-label">Ready To Convert</div>
-                            <div class="eob-empid-value">{{ $generatedEmployeeId }}</div>
+                            <div class="eob-empid-value" id="convertEmployeeIdDisplay">{{ $generatedEmployeeId }}</div>
                             <div class="eob-empid-sub">This employee ID will be assigned after portal account creation.</div>
                         </div>
 
@@ -82,7 +82,7 @@
                                 <div class="eob-form-grid">
                                     <div class="eob-group">
                                         <label class="eob-label">Employee ID</label>
-                                        <input type="text" class="eob-input" value="{{ $generatedEmployeeId }}" readonly>
+                                        <input type="text" class="eob-input" id="convertEmployeeIdInput" value="{{ $generatedEmployeeId }}" readonly>
                                         <div class="eob-help">Auto-generated during conversion.</div>
                                     </div>
                                     <div class="eob-group">
@@ -98,7 +98,7 @@
                                     </div>
                                     <div class="eob-group">
                                         <label class="eob-label">Branch <span class="eob-label-required">*</span></label>
-                                        <select name="branch_id" class="eob-select" required>
+                                        <select name="branch_id" class="eob-select" id="convertBranchSelect" required>
                                             <option value="">Select Branch</option>
                                             @foreach($branches as $branch)
                                                 <option value="{{ $branch->id }}" @selected((string) old('branch_id', auth()->user()?->branch_id) === (string) $branch->id)>{{ $branch->name }}</option>
@@ -157,3 +157,29 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const branchSelect = document.getElementById('convertBranchSelect');
+    const isConverted = {{ $form->convertedEmployee ? 'true' : 'false' }};
+
+    if (branchSelect && !isConverted) {
+        branchSelect.addEventListener('change', function () {
+            const branchId = branchSelect.value;
+            fetch(`/employee-onboarding/generate-id?branch_id=${branchId}`)
+                .then(res => res.json())
+                .then(data => {
+                    const empIdInput = document.getElementById('convertEmployeeIdInput');
+                    const empIdDisplay = document.getElementById('convertEmployeeIdDisplay');
+                    if (data.employee_id) {
+                        if (empIdInput) empIdInput.value = data.employee_id;
+                        if (empIdDisplay) empIdDisplay.textContent = data.employee_id;
+                    }
+                })
+                .catch(err => console.error('Error fetching generated Employee ID:', err));
+        });
+    }
+});
+</script>
+@endpush

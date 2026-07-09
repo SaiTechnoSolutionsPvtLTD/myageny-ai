@@ -482,7 +482,7 @@ $(function () {
                 </td>
                 <td class="td-qty">
                     <input type="number" name="items[${idx}][qty]"
-                           class="form-control item-qty" min="0.01" step="1"
+                           class="form-control item-qty" min="1" step="1"
                            value="${data.qty || 1}" required>
                 </td>
                 <td class="td-price">

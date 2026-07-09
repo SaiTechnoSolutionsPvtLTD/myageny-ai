@@ -35,7 +35,7 @@ protected static function booted()
     'lead_id', 'product_id', 'deal_name',
     'product_name', 'description',
     'unit_price', 'quantity', 'discount_percent',
-    'remarks', 'product_status', 'lead_status_id',
+    'remarks', 'product_status', 'lead_status_id', 'lead_source_id',
     'amount_paid', 'created_by', 'company_id',
     'payment_status',
 ];
@@ -45,8 +45,9 @@ protected static function booted()
         'quantity'         => 'integer',
         'discount_percent' => 'float',
         'total_price'      => 'float',
-        'amount_paid'       => 'float',
-        'lead_status_id'    => 'integer',
+        'amount_paid'      => 'float',
+        'lead_status_id'   => 'integer',
+        'lead_source_id'   => 'integer',
     ];
 
      // ── Product Status Constants ───────────────────────────────────
@@ -121,6 +122,16 @@ protected static function booted()
         return $this->belongsTo(Product::class);
     }
 
+    public function leadStatus()
+    {
+        return $this->belongsTo(LeadStatus::class, 'lead_status_id');
+    }
+
+    public function leadSource()
+    {
+        return $this->belongsTo(\App\Models\LeadSource::class, 'lead_source_id');
+    }
+
     public function payments()
 {
     return $this->hasMany(LeadProductPayment::class, 'lead_product_id')->latest('payment_date');
@@ -180,16 +191,6 @@ protected static function booted()
         return self::PRODUCT_STATUS_CONFIG[$this->product_status_key]
             ?? ['bg' => '#f5f4f6', 'text' => '#7c7c7c', 'border' => '#e1dee3', 'icon' => '', 'dot' => '#9ca3af'];
     }
-
-    public function leadStatus()
-    {
-        return $this->belongsTo(LeadStatus::class, 'lead_status_id');
-    }
-
-//     public function leadStatus()
-// {
-//     return $this->belongsTo(\App\Models\LeadStatus::class);
-// }
 
     public function getStatusLabelAttribute(): string
     {

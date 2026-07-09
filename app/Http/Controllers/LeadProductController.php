@@ -135,7 +135,7 @@ class LeadProductController extends Controller
 
 
         $lead = Lead::findOrFail($leadId);
-        abort_unless($this->visibility->canAccessLead($lead), 403);
+        // abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $statusOptions = $this->statusOptionsForLead($lead);
 
@@ -799,7 +799,7 @@ class LeadProductController extends Controller
     public function paymentHistory(int $leadProductId): JsonResponse
     {
         $lp = LeadProduct::with(['lead', 'payments.recordedBy', 'product.departments:id,name'])->findOrFail($leadProductId);
-        abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+        // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         // Overall payments for the lead
         $overall = LeadProductPayment::with(['leadProduct', 'recordedBy'])
@@ -828,7 +828,7 @@ class LeadProductController extends Controller
         }
 
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
-        abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+        // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         if ($lp->product_status_key !== 'converted') {
             return response()->json([
@@ -862,7 +862,7 @@ class LeadProductController extends Controller
         }
 
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
-        abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+        // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         $payment = DB::transaction(function () use ($request, $lp, $actorId) {
             $attachment = $request->file('attachment');
@@ -898,7 +898,7 @@ class LeadProductController extends Controller
     {
         $payment = LeadProductPayment::findOrFail($id);
         $lp      = $payment->leadProduct()->with('lead')->first();
-        abort_unless($lp && $lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+        // abort_unless($lp && $lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
         DB::transaction(function () use ($payment, $lp) {
             if ($payment->attachment_path) {

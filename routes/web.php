@@ -1,58 +1,59 @@
 <?php
 
-use App\Http\Controllers\AiController;
 use App\Http\Controllers\AccessMappingController;
-use App\Http\Controllers\AssetEntryController;
+use App\Http\Controllers\AiController;
 use App\Http\Controllers\AssetCategoryController;
+use App\Http\Controllers\AssetEntryController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\DepartmentController;
-use App\Http\Controllers\DynamicFormController;
-use App\Http\Controllers\EmployeeOnboardingController;
-use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CrmReportController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\DesignSettingController;
+use App\Http\Controllers\DynamicFormController;
+use App\Http\Controllers\EmployeeExitController;
+use App\Http\Controllers\EmployeeOnboardingController;
 use App\Http\Controllers\FacebookIntegrationController;
+use App\Http\Controllers\FacilityManagementController;
+use App\Http\Controllers\FacilityTitleController;
 use App\Http\Controllers\HolidayCalendarController;
 use App\Http\Controllers\HouseKeepingCategoryController;
 use App\Http\Controllers\HouseKeepingManagementController;
 use App\Http\Controllers\HouseKeepingWorkController;
 use App\Http\Controllers\HrmsAnnouncementController;
 use App\Http\Controllers\InternJoiningFormController;
-use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadCallUpdateController;
+use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadProductPriceRequestController;
 use App\Http\Controllers\LeadShowController;
-use App\Http\Controllers\LeaveRequestController;
-use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\LeadSourceController;
 use App\Http\Controllers\LeadStatusController;
+use App\Http\Controllers\LeaveRequestController;
+use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\MastersController;
 use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\OvpModuleController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\OutcomeSubCategoryController;
-use App\Http\Controllers\ProductionApprovalController;
-use App\Http\Controllers\PermissionRequestController;
+use App\Http\Controllers\OvpModuleController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollSettingController;
-use App\Http\Controllers\DesignSettingController;
+use App\Http\Controllers\PermissionRequestController;
 use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductionApprovalController;
 use App\Http\Controllers\ProductOvpFormController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\QuotationSettingsController;
 use App\Http\Controllers\RecruitmentController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\SalesTargetSettingController;
 use App\Http\Controllers\SuperAdminDashboardController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VisitorManagementController;
-use App\Http\Controllers\FacilityManagementController;
-use App\Http\Controllers\FacilityTitleController;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use Illuminate\Support\Facades\Auth;
@@ -300,6 +301,7 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/recruitment/{recruitment}/status', [RecruitmentController::class, 'updateStatus'])
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
+    Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
@@ -517,6 +519,9 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
 
     Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:design_settings.menuview')->name('design-settings.index');
     Route::post('/design-settings', [DesignSettingController::class, 'store'])->middleware('can:design_settings.manage')->name('design-settings.store');
+
+    Route::get('/sales-targets', [SalesTargetSettingController::class, 'index'])->middleware('can:settings.manage')->name('sales-targets.index');
+    Route::post('/sales-targets', [SalesTargetSettingController::class, 'store'])->middleware('can:settings.manage')->name('sales-targets.store');
 
     Route::post('/quotation', [QuotationSettingsController::class, 'update'])->middleware('can:quotation_settings.manage')->name('quotation.update');
     Route::delete('/quotation/file/{type}', [QuotationSettingsController::class, 'deleteFile'])->middleware('can:quotation_settings.manage')->name('quotation.file.delete');

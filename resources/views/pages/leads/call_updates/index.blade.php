@@ -50,6 +50,77 @@
 .cu-empty-title { font-size:15px; font-weight:800; color:#7c7c7c; margin-bottom:6px; }
 .cu-results { font-size:12px; color:#9e9e9e; }
 .cu-results strong { color:#121212; }
+.cu-quick-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.cu-qbtn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; border: 1.5px solid #e1dee3; background: #faf8fb; color: #7c7c7c; font-size: 11px; font-weight: 800; cursor: pointer; transition: all .15s ease; text-transform: uppercase; letter-spacing: .02em; }
+.cu-qbtn:hover { border-color: #fe5f04; background: #fffaf7; color: #fe5f04; }
+.cu-qbtn.is-active { border-color: #fe5f04; background: linear-gradient(135deg, #fe5f04, #ff7c30); color: #fff; box-shadow: 0 4px 10px rgba(254,95,4,.2); }
+
+/* Premium Table Revamp Styles */
+.cu-table-wrap { overflow-x:auto; }
+.cu-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.cu-table th { padding: 14px 18px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #7c7c7c; text-align: left; background: #fbfafc; border-bottom: 1.5px solid #eae6eb; }
+.cu-table td { padding: 16px 18px; font-size: 13px; color: #2e2e2e; border-bottom: 1px solid #f3eff2; vertical-align: middle; transition: all 0.15s ease; }
+.cu-table tbody tr { transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.cu-table tbody tr:hover td { background: #fffaf7; }
+.cu-table tbody tr:last-child td { border-bottom: none; }
+
+.cu-lead-id { font-family: monospace; color: #fe5f04; font-size: 12px; font-weight: 800; background: #fff2ea; padding: 4px 8px; border-radius: 6px; text-decoration: none; display: inline-block; transition: all 0.15s; }
+.cu-lead-id:hover { background: #fe5f04; color: #fff; transform: translateY(-1px); }
+
+.cu-client { font-weight: 750; color: #121212; font-size: 13.5px; }
+.cu-company { font-size: 11.5px; color: #7c7c7c; margin-top: 3px; font-weight: 500; }
+
+.cu-contact-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-bottom: 4px; }
+.cu-contact-item svg { color: #fe5f04; }
+.cu-contact-item a { color: #475569; text-decoration: none; font-weight: 600; transition: color 0.15s; }
+.cu-contact-item a:hover { color: #fe5f04; }
+
+/* Truncated note element styling */
+.cu-note-bubble {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #faf8fb;
+    border: 1.5px solid #e1dee3;
+    font-size: 12.5px;
+    color: #374151;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cu-note-bubble:hover {
+    border-color: #fe5f04;
+    background: #fff7f2;
+    color: #c2410c;
+    box-shadow: 0 4px 12px rgba(254,95,4,0.08);
+    transform: translateY(-1px);
+}
+
+/* Premium Modal Styles */
+.cu-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.cu-modal-overlay { position: absolute; width: 100%; height: 100%; background: rgba(18, 18, 18, 0.4); backdrop-filter: blur(4px); animation: fadeIn 0.2s ease-out; }
+.cu-modal-card { position: relative; width: 90%; max-width: 500px; background: #fff; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); overflow: hidden; animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid #e1dee3; }
+.cu-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #f1eef2; background: #faf8fb; }
+.cu-modal-title { font-size: 15px; font-weight: 800; color: #121212; }
+.cu-modal-close { background: none; border: none; font-size: 18px; color: #7c7c7c; cursor: pointer; transition: color 0.15s; }
+.cu-modal-close:hover { color: #fe5f04; }
+.cu-modal-body { padding: 20px; }
+.cu-modal-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cu-modal-meta-item { display: flex; flex-direction: column; gap: 4px; }
+.cu-modal-meta-label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #9e9e9e; letter-spacing: 0.5px; }
+.cu-modal-meta-value { font-size: 13px; font-weight: 700; color: #121212; }
+.cu-modal-divider { height: 1px; background: #f1eef2; margin: 16px 0; }
+.cu-modal-note-section { background: #faf8fb; border-radius: 12px; padding: 14px; border: 1px dashed #e1dee3; }
+.cu-modal-note-content { font-size: 13px; color: #2e2e2e; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.cu-modal-foot { padding: 12px 20px; border-top: 1px solid #f1eef2; background: #faf8fb; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
 @media (max-width: 1180px) {
     .cu-row { grid-template-columns:1fr 1fr; }
     .cu-actions { grid-column:1 / -1; }
@@ -72,12 +143,19 @@
     </div>
 
     <div class="cu-body">
-        <form method="GET" action="{{ route('leads.calls.index') }}" class="cu-filter-card">
+        <form method="GET" action="{{ route('leads.calls.index') }}" class="cu-filter-card" id="filterForm">
             <div class="cu-filter-head">
                 <div class="cu-head-title">Filter Call Updates</div>
-                <div class="cu-head-sub">Showing current date by default. Change the filters below to view other dates or users.</div>
+                <div class="cu-head-sub">Showing current month by default. Change the filters below to view other dates or users.</div>
             </div>
             <div class="cu-filter-body">
+                <div class="cu-quick-filters">
+                    <span style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#9e9e9e; margin-right:4px;">Quick:</span>
+                    <button type="button" class="cu-qbtn" data-preset="today">Today</button>
+                    <button type="button" class="cu-qbtn" data-preset="month">This Month</button>
+                    <button type="button" class="cu-qbtn" data-preset="quarter">This Quarter</button>
+                    <button type="button" class="cu-qbtn" data-preset="year">This Year</button>
+                </div>
                 <div class="cu-row">
                     <div class="cu-group">
                         <label class="cu-label">Search</label>
@@ -103,15 +181,15 @@
                     </div>
                     <div class="cu-group">
                         <label class="cu-label">Date From</label>
-                        <input type="date" name="date_from" class="cu-input" value="{{ $dateFrom }}">
+                        <input type="date" name="date_from" id="date_from" class="cu-input" value="{{ $dateFrom }}" readonly onclick="this.showPicker && this.showPicker()">
                     </div>
                     <div class="cu-group">
                         <label class="cu-label">Date To</label>
-                        <input type="date" name="date_to" class="cu-input" value="{{ $dateTo }}">
+                        <input type="date" name="date_to" id="date_to" class="cu-input" value="{{ $dateTo }}" readonly onclick="this.showPicker && this.showPicker()">
                     </div>
                     <div class="cu-actions">
                         <button type="submit" class="cu-btn cu-btn-primary">Apply</button>
-                        <a href="{{ route('leads.calls.index') }}" class="cu-btn cu-btn-ghost">Today</a>
+                        <a href="{{ route('leads.calls.index') }}" class="cu-btn cu-btn-ghost">Reset</a>
                     </div>
                 </div>
             </div>
@@ -158,24 +236,40 @@
                             </td>
                             <td class="cu-contact">
                                 @if($call->lead?->mobile_number)
-                                <div><a href="tel:{{ $call->lead->mobile_number }}" onclick="event.stopPropagation()">{{ $call->lead->mobile_number }}</a></div>
+                                <div class="cu-contact-item">
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                    <a href="tel:{{ $call->lead->mobile_number }}" onclick="event.stopPropagation()">{{ $call->lead->mobile_number }}</a>
+                                </div>
                                 @endif
                                 @if($call->lead?->email)
-                                <div class="cu-company"><a href="mailto:{{ $call->lead->email }}" onclick="event.stopPropagation()">{{ $call->lead->email }}</a></div>
+                                <div class="cu-contact-item">
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                    <a href="mailto:{{ $call->lead->email }}" onclick="event.stopPropagation()">{{ $call->lead->email }}</a>
+                                </div>
                                 @endif
                             </td>
-                            <td>
-                                <div class="cu-update-note">{{ $call->notes ?: 'No notes added.' }}</div>
-                                <div class="cu-meta">
-                                    <span class="cu-pill cu-pill-time">{{ $call->called_at?->format('d M Y, h:i A') ?? '—' }}</span>
-                                    @if($call->outCome?->name)
-                                    <span class="cu-pill" style="background:#f5f3ff;color:#6d28d9">{{ $call->outCome->name }}</span>
-                                    @endif
-                                    @if($call->outComeSubCategory?->name)
-                                    <span class="cu-pill" style="background:#eef2ff;color:#4338ca">{{ $call->outComeSubCategory->name }}</span>
-                                    @endif
-                                </div>
-                            </td>
+                             <td>
+                                 <div class="cu-note-bubble" 
+                                      data-lead="LD-{{ str_pad($call->lead_id, 4, '0', STR_PAD_LEFT) }}"
+                                      data-client="{{ $call->lead?->contact_name ?? '—' }} ({{ $call->lead?->company_name ?? '—' }})"
+                                      data-user="{{ $call->user?->name ?? 'System' }}"
+                                      data-called="{{ $call->called_at?->format('d M Y, h:i A') ?? '—' }}"
+                                      data-outcome="{{ $call->outCome?->name ?? '' }}"
+                                      data-outcomesub="{{ $call->outComeSubCategory?->name ?? '' }}"
+                                      data-notes="{{ $call->notes }}"
+                                      onclick="event.stopPropagation(); showCallDetails(this)">
+                                     {{ Str::limit($call->notes, 25, '...') }}
+                                 </div>
+                                 <div class="cu-meta" style="margin-top: 8px;">
+                                     <span class="cu-pill cu-pill-time">{{ $call->called_at?->format('d M Y, h:i A') ?? '—' }}</span>
+                                     @if($call->outCome?->name)
+                                     <span class="cu-pill" style="background:#f5f3ff;color:#6d28d9">{{ $call->outCome->name }}</span>
+                                     @endif
+                                     @if($call->outComeSubCategory?->name)
+                                     <span class="cu-pill" style="background:#eef2ff;color:#4338ca">{{ $call->outComeSubCategory->name }}</span>
+                                     @endif
+                                 </div>
+                             </td>
                             <td>
                                 <span class="cu-pill cu-pill-user">{{ $call->user?->name ?? 'System' }}</span>
                             </td>
@@ -191,4 +285,126 @@
         </div>
     </div>
 </div>
+
+<!-- Elegant Call Update Details Modal -->
+<div id="cuDetailsModal" class="cu-modal" style="display:none;">
+    <div class="cu-modal-overlay" onclick="closeCuModal()"></div>
+    <div class="cu-modal-card">
+        <div class="cu-modal-head">
+            <div class="cu-modal-title">📞 Call Update Details</div>
+            <button class="cu-modal-close" onclick="closeCuModal()">✕</button>
+        </div>
+        <div class="cu-modal-body">
+            <div class="cu-modal-meta-grid">
+                <div class="cu-modal-meta-item">
+                    <span class="cu-modal-meta-label">Lead ID</span>
+                    <span class="cu-modal-meta-value" id="modalLeadId">—</span>
+                </div>
+                <div class="cu-modal-meta-item">
+                    <span class="cu-modal-meta-label">Client / Company</span>
+                    <span class="cu-modal-meta-value" id="modalClientCompany">—</span>
+                </div>
+                <div class="cu-modal-meta-item">
+                    <span class="cu-modal-meta-label">Username</span>
+                    <span class="cu-modal-meta-value" id="modalUser">—</span>
+                </div>
+                <div class="cu-modal-meta-item">
+                    <span class="cu-modal-meta-label">Called At</span>
+                    <span class="cu-modal-meta-value" id="modalCalledAt">—</span>
+                </div>
+            </div>
+            
+            <div style="margin-top:16px;" id="modalBadgesContainer">
+                <!-- Outcomes will go here -->
+            </div>
+
+            <div class="cu-modal-divider"></div>
+
+            <div class="cu-modal-note-section">
+                <span class="cu-modal-meta-label" style="margin-bottom:8px; display:block;">Call Notes / Updates</span>
+                <div class="cu-modal-note-content" id="modalNotesText">—</div>
+            </div>
+        </div>
+        <div class="cu-modal-foot">
+            <button type="button" class="cu-btn cu-btn-ghost" onclick="closeCuModal()" style="width:100%;">Close</button>
+        </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+function showCallDetails(el) {
+    const leadId = el.getAttribute('data-lead');
+    const clientCompany = el.getAttribute('data-client');
+    const user = el.getAttribute('data-user');
+    const calledAt = el.getAttribute('data-called');
+    const outcome = el.getAttribute('data-outcome');
+    const outcomeSub = el.getAttribute('data-outcomesub');
+    const notes = el.getAttribute('data-notes');
+
+    openCuModal(leadId, clientCompany, user, calledAt, notes, outcome, outcomeSub);
+}
+
+function openCuModal(leadId, clientCompany, user, calledAt, notes, outcome, outcomeSub) {
+    document.getElementById('modalLeadId').textContent = leadId;
+    document.getElementById('modalClientCompany').textContent = clientCompany;
+    document.getElementById('modalUser').textContent = user;
+    document.getElementById('modalCalledAt').textContent = calledAt;
+    document.getElementById('modalNotesText').textContent = notes || 'No notes added.';
+
+    const badgesContainer = document.getElementById('modalBadgesContainer');
+    badgesContainer.innerHTML = '';
+    if (outcome) {
+        badgesContainer.innerHTML += `<span class="cu-pill" style="background:#f5f3ff;color:#6d28d9;margin-right:6px;padding:5px 10px;font-size:11px;">${outcome}</span>`;
+    }
+    if (outcomeSub) {
+        badgesContainer.innerHTML += `<span class="cu-pill" style="background:#eef2ff;color:#4338ca;padding:5px 10px;font-size:11px;">${outcomeSub}</span>`;
+    }
+
+    document.getElementById('cuDetailsModal').style.display = 'flex';
+}
+
+function closeCuModal() {
+    document.getElementById('cuDetailsModal').style.display = 'none';
+}
+
+(() => {
+    const fmtDate = (d) => d.toISOString().slice(0, 10);
+    const today = new Date();
+    const y = today.getFullYear(), m = today.getMonth(), q = Math.floor(m / 3);
+    const presets = {
+        today:   { from: fmtDate(today), to: fmtDate(today) },
+        month:   { from: fmtDate(new Date(y, m, 1)), to: fmtDate(new Date(y, m + 1, 0)) },
+        quarter: { from: fmtDate(new Date(y, q * 3, 1)), to: fmtDate(new Date(y, q * 3 + 3, 0)) },
+        year:    { from: fmtDate(new Date(y, 0, 1)), to: fmtDate(new Date(y, 11, 31)) },
+    };
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentFrom = urlParams.get('date_from') || '';
+    const currentTo   = urlParams.get('date_to')   || '';
+    const fromInput = document.getElementById('date_from');
+    const toInput   = document.getElementById('date_to');
+    const form      = document.getElementById('filterForm');
+
+    const defaultFrom = '{{ now()->startOfMonth()->toDateString() }}';
+    const defaultTo   = '{{ now()->endOfMonth()->toDateString() }}';
+    const activeFrom  = currentFrom || defaultFrom;
+    const activeTo    = currentTo   || defaultTo;
+
+    document.querySelectorAll('.cu-qbtn').forEach(btn => {
+        const preset = presets[btn.dataset.preset];
+        if (preset && activeFrom === preset.from && activeTo === preset.to) {
+            btn.classList.add('is-active');
+        }
+        btn.addEventListener('click', () => {
+            const p = presets[btn.dataset.preset];
+            if (!p) return;
+            fromInput.value = p.from;
+            toInput.value   = p.to;
+            form.submit();
+        });
+    });
+})();
+</script>
+@endpush
+
 @endsection

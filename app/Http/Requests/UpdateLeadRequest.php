@@ -4,6 +4,8 @@ namespace App\Http\Requests;
 
 use App\Models\Lead;
 use App\Models\LeadFormField;
+use App\Models\LeadSource;
+use App\Models\LeadStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,18 +16,19 @@ class UpdateLeadRequest extends FormRequest
     public function rules(): array
     {
         return array_merge([
-            'company_name'  => ['required', 'string', 'max:150'],
-            'contact_name'  => ['required', 'string', 'max:100'],
-            'lead_date'     => ['required', 'date'],
-            'mobile_number' => ['required', 'string', 'max:20'],
-            'email'         => ['nullable', 'email', 'max:150'],
-
-            'product_name'  => ['nullable', 'string', 'max:100'],
-            'assigned_to'   => ['required', 'exists:users,id'],
-            'priority'      => ['required', 'in:low,medium,high'],
-            'deal_value'    => ['nullable', 'numeric', 'min:0'],
-            'remarks'       => ['nullable', 'string', 'max:2000'],
-            'branch_id'     => ['required', 'exists:branches,id'],
+            'company_name'   => ['required', 'string', 'max:150'],
+            'contact_name'   => ['required', 'string', 'max:100'],
+            'lead_date'      => ['required', 'date'],
+            'mobile_number'  => ['required', 'string', 'max:20'],
+            'email'          => ['nullable', 'email', 'max:150'],
+            'lead_source_id' => ['required', 'integer', 'exists:lead_sources,id'],
+            'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
+            'product_name'   => ['nullable', 'string', 'max:100'],
+            'assigned_to'    => ['required', 'exists:users,id'],
+            'priority'       => ['required', 'in:low,medium,high'],
+            'deal_value'     => ['nullable', 'numeric', 'min:0'],
+            'remarks'        => ['nullable', 'string', 'max:2000'],
+            'branch_id'      => ['required', 'exists:branches,id'],
         ], $this->customFieldRules());
     }
 

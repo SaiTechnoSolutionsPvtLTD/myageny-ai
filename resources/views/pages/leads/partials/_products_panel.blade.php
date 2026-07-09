@@ -226,7 +226,7 @@
 .pp-hist-pfill{height:100%;border-radius:3px;transition:width .5s ease}
 .pp-hist-plabels{display:flex;justify-content:space-between;font-size:10px;color:#9e9e9e}
 .pp-hist-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#7c7c7c;margin:0 0 10px 0}
-.pp-hist-list{display:flex;flex-direction:column;gap:8px}
+.pp-hist-list{display:flex;flex-direction:column;gap:8px;max-height:450px;overflow-y:auto;padding-right:6px}
 .pp-hist-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid #e1dee3;border-radius:11px;transition:border-color .15s}
 .pp-hist-item:hover{border-color:#d4cfd8}
 .pp-hist-mode-wrap{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px}
@@ -591,7 +591,7 @@
      MODAL 3 — PAYMENT HISTORY
 ══════════════════════════════════════════════════════ --}}
 <div class="pp-overlay" id="pp-modal-history">
-    <div class="pp-modal-box">
+    <div class="pp-modal-box pp-modal-box--wide">
         <div class="pp-mhd">
             <div class="pp-mtitle">
                 📊 Payment History —

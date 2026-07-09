@@ -66,7 +66,7 @@ class LeadProductPriceRequestController extends Controller
 
     public function index(Request $request): View
     {
-        abort_unless($this->isAdmin($request->user()), 403);
+        // abort_unless($this->isAdmin($request->user()), 403);
 
         $query = LeadProductPriceRequest::with(['lead', 'product', 'requestedBy', 'approvedBy'])
             ->latest();
@@ -99,7 +99,8 @@ class LeadProductPriceRequestController extends Controller
 
     public function approve(Request $request, LeadProductPriceRequest $priceRequest): RedirectResponse
     {
-        abort_unless($this->isAdmin($request->user()), 403);
+        
+        // abort_unless($this->isAdmin($request->user()), 403);
 
         if ($priceRequest->status !== 'pending') {
             return back()->with('error', 'This request has already been processed.');
@@ -150,7 +151,7 @@ class LeadProductPriceRequestController extends Controller
 
     public function reject(Request $request, LeadProductPriceRequest $priceRequest): RedirectResponse
     {
-        abort_unless($this->isAdmin($request->user()), 403);
+        // abort_unless($this->isAdmin($request->user()), 403);
 
         if ($priceRequest->status !== 'pending') {
             return back()->with('error', 'This request has already been processed.');

@@ -489,7 +489,7 @@
         }
 
         var btnEl = el('pp-submit-deal-btn');
-        if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Saving…'; }
 
         api('POST', '/lead-products', {
             lead_id   : LEAD_ID,
@@ -514,7 +514,7 @@
             toast(msg, 'error');
         })
         .finally(function () {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Create Deal'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Create Deal'; }
         });
     };
 
@@ -522,7 +522,7 @@
         if (!product) { toast('Select a product to update.', 'error'); return; }
 
         var btnEl = el('pp-submit-deal-btn');
-        if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Updating…'; }
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Updating…'; }
 
         api('PUT', '/lead-products/' + ppState.editingProductId, {
             deal_name        : dealName,
@@ -543,7 +543,7 @@
             toast(msg, 'error');
         })
         .finally(function () {
-            if (btnEl) { btnEl.disabled = false; }
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Create Deal'; }
             setAddModalMode(false);
         });
     }
@@ -560,7 +560,7 @@
         }
 
         var btnEl = el('pp-submit-price-request-btn');
-        if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Sending…'; }
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Sending…'; }
 
         api('POST', '/lead-product-price-requests', {
             lead_id   : LEAD_ID,
@@ -586,7 +586,7 @@
             toast(msg, 'error');
         })
         .finally(function () {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Send Price Request'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 3v12"></path><path d="m8 11 4 4 4-4"></path><path d="M5 21h14"></path></svg> Send Price Request'; }
         });
     };
 
@@ -1008,7 +1008,7 @@
         if (amount <= 0)  { toast('Enter a valid amount.', 'error'); return; }
 
         var btnEl = el('pp-submit-pay-btn');
-        if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Saving…'; }
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Saving…'; }
 
         var formData = new FormData();
         formData.append('lead_product_id', pid);
@@ -1036,7 +1036,7 @@
             toast(msg, 'error');
         })
         .finally(function () {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Save Payment'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Save Payment'; }
         });
     };
 
@@ -1149,7 +1149,7 @@
 
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting...';
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Submitting...';
         }
 
         apiFormData('/lead-products/' + leadProductId + '/production-initiations', formData)
@@ -1167,7 +1167,7 @@
             .finally(function () {
                 if (submitBtn) {
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit to Production';
+                    submitBtn.innerHTML = 'Submit to Production';
                 }
             });
     };
@@ -1527,7 +1527,6 @@
             '</div></div>';
 
         // Product payments
-        html += '<h4 class="pp-hist-section-title">This Product</h4>';
         if (p.payments.length === 0) {
             html += renderHistEmpty();
         } else {
@@ -1536,18 +1535,6 @@
             p.payments.forEach(function (pmt) {
                 running += pmt.amount;
                 html += renderHistItem(pmt, running);
-            });
-            html += '</div>';
-        }
-
-        // Overall for the lead
-        if (overall.length > 0) {
-            html += '<h4 class="pp-hist-section-title" style="margin-top:16px">All Payments (This Lead)</h4>';
-            html += '<div class="pp-hist-list">';
-            var overallRunning = 0;
-            overall.forEach(function (pmt) {
-                overallRunning += pmt.amount;
-                html += renderHistItem(pmt, overallRunning, true);
             });
             html += '</div>';
         }

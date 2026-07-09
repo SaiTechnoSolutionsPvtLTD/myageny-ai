@@ -249,7 +249,7 @@ class InternJoiningFormController extends Controller
 
         return view('pages.hrms.Interns.intern_joining_forms.convert_to_employee', [
             'form' => $intern,
-            'generatedEmployeeId' => $this->generateNextEmployeeId(),
+            'generatedEmployeeId' => $this->generateNextEmployeeId($intern->portalUser?->branch_id ?? auth()->user()?->branch_id),
             'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
             'departments' => Department::orderBy('name')->get(),
             'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
@@ -274,7 +274,7 @@ class InternJoiningFormController extends Controller
 
             $employee = new EmployeeOnboarding();
             $employee->fill([
-                'employee_id' => $this->generateNextEmployeeId(),
+                'employee_id' => $this->generateNextEmployeeId($validated['branch_id'] ?? null),
                 'source_intern_joining_form_id' => $intern->id,
                 'role_id' => $validated['role_id'],
                 'department_id' => $validated['department_id'],
@@ -656,21 +656,29 @@ class InternJoiningFormController extends Controller
         return InternJoiningForm::INTERN_ID_PREFIX . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
-    private function generateNextEmployeeId(): string
+    private function generateNextEmployeeId(?int $branchId = null): string
     {
-        $latestEmployeeId = EmployeeOnboarding::query()
-            ->where('employee_id', 'like', self::EMPLOYEE_ID_PREFIX . '%')
-            ->orderByDesc('employee_id')
-            ->lockForUpdate()
-            ->value('employee_id');
-
-        $lastNumber = 0;
-
-        if ($latestEmployeeId && preg_match('/^' . preg_quote(self::EMPLOYEE_ID_PREFIX, '/') . '(\d+)$/', $latestEmployeeId, $matches)) {
-            $lastNumber = (int) $matches[1];
+        $branchCode = null;
+        if ($branchId) {
+            $branchCode = Branch::where('id', $branchId)->value('code');
         }
 
-        return self::EMPLOYEE_ID_PREFIX . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
+        $prefix = $branchCode ?: self::EMPLOYEE_ID_PREFIX;
+        $prefix = trim((string) $prefix);
+
+        $employeeIds = EmployeeOnboarding::query()
+            ->where('employee_id', 'like', $prefix . '%')
+            ->pluck('employee_id');
+
+        $lastNumber = 0;
+        foreach ($employeeIds as $empId) {
+            $numPart = substr($empId, strlen($prefix));
+            if (is_numeric($numPart)) {
+                $lastNumber = max($lastNumber, (int) $numPart);
+            }
+        }
+
+        return $prefix . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
     private function teamLeadUsers(): Collection

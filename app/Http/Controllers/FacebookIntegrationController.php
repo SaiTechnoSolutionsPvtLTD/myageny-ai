@@ -378,21 +378,22 @@ class FacebookIntegrationController extends Controller
             ->each(function (Lead $lead) use ($product) {
                 LeadProduct::firstOrCreate(
                     [
-                        'lead_id' => $lead->id,
+                        'lead_id'    => $lead->id,
                         'product_id' => $product->id,
                     ],
                     [
-                        'deal_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
-                        'product_name' => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
-                        'description' => $product->description,
-                        'unit_price' => (float) ($product->final_price ?? 0),
-                        'quantity' => 1,
+                        'deal_name'      => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                        'product_name'   => $product->package_name ?: $product->product_name ?: 'Facebook Imported Product',
+                        'description'    => $product->description,
+                        'unit_price'     => (float) ($product->final_price ?? 0),
+                        'quantity'       => 1,
                         'discount_percent' => 0,
-                        'remarks' => 'Created automatically from Facebook campaign product mapping.',
+                        'remarks'        => 'Created automatically from Facebook campaign product mapping.',
                         'product_status' => 'new',
-                        'amount_paid' => 0,
-                        'created_by' => $lead->assigned_to ?: $lead->created_by,
-                        'company_id' => $lead->company_id,
+                        'amount_paid'    => 0,
+                        'lead_source_id' => $lead->lead_source_id,
+                        'created_by'     => $lead->assigned_to ?: $lead->created_by,
+                        'company_id'     => $lead->company_id,
                     ]
                 );
             });

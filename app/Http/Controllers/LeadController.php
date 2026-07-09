@@ -34,7 +34,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -67,11 +67,11 @@ class LeadController extends Controller
         }
 
         if ($request->filled('lead_source')) {
-            $query->where('lead_source', $request->lead_source);
+            $query->where('lead_source_id', $request->lead_source);
         }
 
         if ($request->filled('lead_status')) {
-            $query->where('lead_status', $request->lead_status);
+            $query->where('lead_status_id', $request->lead_status);
         }
 
         if ($request->filled('priority')) {
@@ -103,6 +103,9 @@ class LeadController extends Controller
         $this->visibility->applyLeadVisibility($productQuery);
         $products = $productQuery->pluck('product_name');
 
+        $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
+        $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
+
         // Stats for top cards
         $stats = [
             'total'         => $activeLeadIds->count(),
@@ -123,7 +126,7 @@ class LeadController extends Controller
             || $request->input('date_from') !== $defaultFromDate
             || $request->input('date_to') !== $defaultToDate;
 
-        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen'));
+        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
     }
 
     /**
@@ -134,7 +137,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -183,6 +186,11 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
+        if ($request->filled('product_active')) {
+            $status = $request->product_active;
+            $query->whereHas('product', fn ($q) => $q->where('status', $status));
+        }
+
         if ($request->filled('mobile_number')) {
             $mobileNumber = $request->mobile_number;
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('mobile_number', 'like', '%' . $mobileNumber . '%'));
@@ -222,10 +230,11 @@ class LeadController extends Controller
             || $request->filled('mobile_number')
             || $request->filled('product_id')
             || $request->filled('product_status')
+            || $request->filled('product_active')
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
+            || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate);
 
         return view('pages.leads.products.index', [
             'leadProducts' => $leadProducts,
@@ -279,7 +288,7 @@ class LeadController extends Controller
      */
     public function show(Lead $lead)
     {
-        abort_unless($this->visibility->canAccessLead($lead), 403);
+        // abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $lead->load([
             'branch',
@@ -368,12 +377,12 @@ class LeadController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $request->validate([
-            'lead_status' => ['required', 'string', Rule::in(Lead::statusKeys())],
+            'lead_status_id' => ['required', 'integer', 'exists:lead_statuses,id'],
         ]);
 
-        $lead->update(['lead_status' => $request->lead_status]);
+        $lead->update(['lead_status_id' => $request->lead_status_id]);
 
-        return back()->with('success', "Lead status updated to <strong>{$lead->status_label}</strong>.");
+        return back()->with('success', 'Lead status updated successfully.');
     }
 
     public function leadStatus()

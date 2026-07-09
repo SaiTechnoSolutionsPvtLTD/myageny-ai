@@ -113,6 +113,12 @@
     .lpd-filter-toggle-right { width:100%; justify-content:space-between; }
     .lpd-field-wide { grid-column:span 1; }
 }
+.lpd-btn.active {
+    background: #fff0e6;
+    border-color: #fe5f04;
+    color: #fe5f04;
+    font-weight: 700;
+}
 </style>
 @endpush
 
@@ -123,10 +129,11 @@
         || request()->filled('mobile_number')
         || request()->filled('product_id')
         || request()->filled('product_status')
+        || request()->filled('product_active')
         || request()->filled('branch_id')
         || request()->filled('assigned_to')
-        || request('date_from') !== $defaultFromDate
-        || request('date_to') !== $defaultToDate;
+        || (request()->has('date_from') && request('date_from') !== $defaultFromDate)
+        || (request()->has('date_to') && request('date_to') !== $defaultToDate);
 @endphp
 <div class="lpd-page">
     <div class="lpd-topbar">
@@ -287,6 +294,15 @@
                 </div>
 
                 <div class="lpd-field">
+                    <label class="lpd-label" for="product_active">Product Status (Catalog)</label>
+                    <select id="product_active" name="product_active" class="lpd-select">
+                        <option value="">All Statuses</option>
+                        <option value="active" @selected(request('product_active') === 'active')>Active</option>
+                        <option value="inactive" @selected(request('product_active') === 'inactive')>Inactive</option>
+                    </select>
+                </div>
+
+                <div class="lpd-field">
                     <label class="lpd-label" for="date_from">Created From</label>
                     <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from', $defaultFromDate) }}">
                 </div>
@@ -294,6 +310,16 @@
                 <div class="lpd-field">
                     <label class="lpd-label" for="date_to">Created To</label>
                     <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to', $defaultToDate) }}">
+                </div>
+
+                <div class="lpd-field">
+                    <label class="lpd-label">Quick Dates</label>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickToday" onclick="setQ('today')">Today</button>
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickWeek" onclick="setQ('week')">Week</button>
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickMonth" onclick="setQ('month')">Month</button>
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickYear" onclick="setQ('year')">Year</button>
+                    </div>
                 </div>
 
                 <div class="lpd-filter-actions">
@@ -403,3 +429,88 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+const todayDate = @json(now()->toDateString());
+const defaultFromDate = @json($defaultFromDate);
+const defaultToDate = @json($defaultToDate);
+
+function updateFilters() {
+    const from = document.getElementById('date_from')?.value;
+    const to = document.getElementById('date_to')?.value;
+
+    document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
+    document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
+
+    const parts = defaultToDate.split('-').map(Number);
+    const today = new Date(parts[0], parts[1] - 1, parts[2]);
+    const fmt = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - today.getDay() + 1);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const weekStart = fmt(mon);
+    const weekEnd = fmt(sun);
+    document.getElementById('quickWeek')?.classList.toggle('active', from === weekStart && to === weekEnd);
+
+    const yearStart = `${parts[0]}-01-01`;
+    const yearEnd = `${parts[0]}-12-31`;
+    document.getElementById('quickYear')?.classList.toggle('active', from === yearStart && to === yearEnd);
+}
+
+function setQ(p) {
+    const parts = defaultToDate.split('-').map(Number);
+    const today = new Date(parts[0], parts[1] - 1, parts[2]);
+    const fmt = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+    if (!f || !t) return;
+
+    let targetFrom = '';
+    let targetTo = '';
+
+    if (p === 'today') {
+        targetFrom = todayDate;
+        targetTo = todayDate;
+    } else if (p === 'week') {
+        const mon = new Date(today);
+        mon.setDate(today.getDate() - today.getDay() + 1);
+        const sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        targetFrom = fmt(mon);
+        targetTo = fmt(sun);
+    } else if (p === 'month') {
+        targetFrom = defaultFromDate;
+        targetTo = defaultToDate;
+    } else if (p === 'year') {
+        targetFrom = `${parts[0]}-01-01`;
+        targetTo = `${parts[0]}-12-31`;
+    }
+
+    if (f.value === targetFrom && t.value === targetTo) {
+        f.value = '';
+        t.value = '';
+    } else {
+        f.value = targetFrom;
+        t.value = targetTo;
+    }
+
+    updateFilters();
+    f.closest('form').submit();
+}
+
+document.addEventListener('DOMContentLoaded', updateFilters);
+</script>
+@endpush

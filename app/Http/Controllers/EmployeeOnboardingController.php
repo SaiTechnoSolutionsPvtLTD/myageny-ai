@@ -88,7 +88,7 @@ class EmployeeOnboardingController extends Controller
 
         return view('pages.hrms.employee_onboarding.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
-            'generatedEmployeeId' => $this->generateNextEmployeeId(),
+            'generatedEmployeeId' => $this->generateNextEmployeeId(old('branch_id', auth()->user()?->branch_id)),
             'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
             'departments' => Department::orderBy('name')->get(),
             'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
@@ -107,7 +107,7 @@ class EmployeeOnboardingController extends Controller
 
             $employee = new EmployeeOnboarding();
             $employee->fill($this->extractAttributes($validated));
-            $employee->employee_id = $this->generateNextEmployeeId();
+            $employee->employee_id = $this->generateNextEmployeeId($validated['branch_id'] ?? null);
             $employee->portal_user_id = $portalUser->id;
             $employee->created_by = auth()->id();
             $employee->updated_by = auth()->id();
@@ -560,20 +560,35 @@ class EmployeeOnboardingController extends Controller
         return $role->display_name ?: Str::of(Str::afterLast($role->name, '__'))->replace('_', ' ')->title()->value();
     }
 
-    private function generateNextEmployeeId(): string
+    public function getGeneratedId(Request $request): \Illuminate\Http\JsonResponse
     {
-        $latestEmployeeId = EmployeeOnboarding::query()
-            ->where('employee_id', 'like', self::EMPLOYEE_ID_PREFIX . '%')
-            ->orderByDesc('employee_id')
-            ->lockForUpdate()
-            ->value('employee_id');
+        $branchId = $request->query('branch_id');
+        $employeeId = $this->generateNextEmployeeId($branchId ? (int) $branchId : null);
+        return response()->json(['employee_id' => $employeeId]);
+    }
 
-        $lastNumber = 0;
-
-        if ($latestEmployeeId && preg_match('/^' . preg_quote(self::EMPLOYEE_ID_PREFIX, '/') . '(\d+)$/', $latestEmployeeId, $matches)) {
-            $lastNumber = (int) $matches[1];
+    private function generateNextEmployeeId(?int $branchId = null): string
+    {
+        $branchCode = null;
+        if ($branchId) {
+            $branchCode = Branch::where('id', $branchId)->value('code');
         }
 
-        return self::EMPLOYEE_ID_PREFIX . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
+        $prefix = $branchCode ?: self::EMPLOYEE_ID_PREFIX;
+        $prefix = trim((string) $prefix);
+
+        $employeeIds = EmployeeOnboarding::query()
+            ->where('employee_id', 'like', $prefix . '%')
+            ->pluck('employee_id');
+
+        $lastNumber = 0;
+        foreach ($employeeIds as $empId) {
+            $numPart = substr($empId, strlen($prefix));
+            if (is_numeric($numPart)) {
+                $lastNumber = max($lastNumber, (int) $numPart);
+            }
+        }
+
+        return $prefix . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 }

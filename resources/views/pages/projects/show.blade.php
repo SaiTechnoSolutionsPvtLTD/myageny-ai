@@ -641,7 +641,7 @@
                         @else
                             <div class="ps-allocate-note">TL allocation has not been completed yet. You can select TLs from the dropdown below and allocate them directly.</div>
                         @endif
-
+                            
                         @if($canAllocate)
                             <form method="POST" action="{{ route('projects.allocate', $projectItem) }}">
                                 @csrf
@@ -944,7 +944,7 @@
                             <i class="bi bi-calendar2-week" style="color:#059669;font-size:18px;"></i>
                             Content Calendar
                         </div>
-                        <div class="ps-card-sub">Google Sheet integrate aana content calendar — real-time auto-refresh with live data sync.</div>
+                        <div class="ps-card-sub">Google Sheets-integrated content calendar with real-time auto-refresh and live data synchronization.</div>
                     </div>
                     <div id="cc-sync-status" style="display:none;">
                         <div class="cc-sync-badge">

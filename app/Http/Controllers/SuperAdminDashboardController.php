@@ -58,7 +58,7 @@ class SuperAdminDashboardController extends ApiController
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
-                ->when($source, fn($q) => $q->where('lead_source', $source))
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
                 ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
                 ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
         };
@@ -83,7 +83,12 @@ class SuperAdminDashboardController extends ApiController
         $sourceCounts = [];
         $sourceTotal  = 0;
         foreach (Lead::sourceOptions() as $key => $label) {
-            $count = (clone $base())->where('lead_source', $key)->count();
+            $count = (clone $base())
+                ->where(function($q) use ($key, $label) {
+                    $q->where('lead_source_id', $key)
+                      ->orWhere('lead_source', $label);
+                })
+                ->count();
             $sourceTotal += $count;
             $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
         }
@@ -132,9 +137,9 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                    ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
@@ -265,9 +270,10 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total  = (clone $q)->count();
-                $won    = (clone $q)->where('lead_status', 'won')->count();
+                $leadIds = (clone $q)->pluck('id');
+                $convertCount = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
-                $wonVal = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
 
                 return [
                     'user_id'         => $user->id,
@@ -276,15 +282,15 @@ class SuperAdminDashboardController extends ApiController
                     'role'            => $user->roles->first()?->display_name,
                     'role_name'       => $user->roles->first()?->name,
                     'total_leads'     => $total,
-                    'won_leads'       => $won,
+                    'convert_leads'   => $convertCount,
                     'lost_leads'      => $lost,
-                    'active_leads'    => $total - $won - $lost,
-                    'won_value'       => $wonVal,
-                    'conversion_rate' => $total > 0 ? round($won / $total * 100, 1) : 0,
+                    'active_leads'    => $total - $convertCount - $lost,
+                    'convert_value'   => $convertVal,
+                    'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
             })
             ->filter(fn($u) => $u['total_leads'] > 0)
-            ->sortByDesc('won_value')
+            ->sortByDesc('convert_value')
             ->values()
             ->take(10);
 
@@ -298,15 +304,19 @@ class SuperAdminDashboardController extends ApiController
                 ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
             $this->visibility->applyLeadVisibility($q, $request->user());
 
+            $leadIds = (clone $q)->pluck('id');
+            $convertCount = (clone $q)->whereHas('products', fn($qp) => $qp->where('product_status', 'converted'))->count();
+            $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+
             $monthTrend[] = [
                 'month'       => $month->format('M Y'),
                 'month_short' => $month->format('M'),
                 'year'        => (int) $month->format('Y'),
                 'month_num'   => (int) $month->format('m'),
                 'total'       => (clone $q)->count(),
-                'won'         => (clone $q)->where('lead_status', 'won')->count(),
+                'convert'     => $convertCount,
                 'lost'        => (clone $q)->where('lead_status', 'lost')->count(),
-                'won_value'   => (float)(clone $q)->where('lead_status', 'won')->sum('deal_value'),
+                'convert_value' => $convertVal,
             ];
         }
 
@@ -376,6 +386,7 @@ class SuperAdminDashboardController extends ApiController
             'team_performance' => $teamPerformance,
 
             'month_trend' => $monthTrend,
+            'sales_target_stats' => $this->getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $request->user()),
 
             // Enum references for mobile UI
             'enums' => [
@@ -389,6 +400,68 @@ class SuperAdminDashboardController extends ApiController
             ],
 
         ], 'Super Admin Dashboard data fetched.');
+    }
+
+    private function getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $currentUser): array
+    {
+        $targetUserId = $userId ?: (!$currentUser->can('settings.manage') ? $currentUser->id : null);
+
+        if ($targetUserId) {
+            $target = (float) \App\Models\SalesTarget::where('user_id', $targetUserId)->value('target_amount');
+            $userObj = \App\Models\User::find($targetUserId);
+            $targetName = $userObj ? $userObj->name : 'Representative';
+            $isIndividual = true;
+            $title = "{$targetName}'s Target";
+        } else {
+            $effectiveBranchId = $branchId ?: $currentUser->branch_id;
+
+            if ($effectiveBranchId) {
+                $branchObj = \App\Models\Branch::find($effectiveBranchId);
+                $targetName = $branchObj ? $branchObj->name : 'Branch';
+                
+                $userIds = \App\Models\User::where('branch_id', $effectiveBranchId)->pluck('id');
+                $target = (float) \App\Models\SalesTarget::whereIn('user_id', $userIds)->sum('target_amount');
+                $isIndividual = false;
+                $title = "{$targetName} Target";
+            } else {
+                $target = (float) \App\Models\SalesTarget::sum('target_amount');
+                $targetName = 'Overall';
+                $isIndividual = false;
+                $title = 'Overall Sales Target';
+            }
+        }
+
+        $achievedQuery = \App\Models\LeadProductPayment::query();
+        if ($targetUserId) {
+            $achievedQuery->whereHas('lead', function($q) use ($targetUserId) {
+                $q->where('assigned_to', $targetUserId);
+            });
+        } elseif (isset($effectiveBranchId) && $effectiveBranchId) {
+            $achievedQuery->whereHas('lead', function($q) use ($effectiveBranchId) {
+                $q->where('branch_id', $effectiveBranchId);
+            });
+        }
+
+        if ($dateFrom) {
+            $achievedQuery->whereDate('payment_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $achievedQuery->whereDate('payment_date', '<=', $dateTo);
+        }
+
+        $achieved = (float) $achievedQuery->sum('amount');
+        $pending  = max(0.00, $target - $achieved);
+        $percent  = $target > 0 ? round(($achieved / $target) * 100, 1) : 0;
+
+        return [
+            'name'          => $targetName,
+            'is_individual' => $isIndividual,
+            'target'        => $target,
+            'achieved'      => $achieved,
+            'pending'       => $pending,
+            'percent'       => $percent,
+            'title'         => $title,
+        ];
     }
 
     // ── Private: resolve date range from quick_date or explicit dates ──
@@ -489,7 +562,7 @@ class SuperAdminDashboardController extends ApiController
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
-                ->when($source, fn($q) => $q->where('lead_source', $source))
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
                 ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
                 ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
         };
@@ -514,7 +587,12 @@ class SuperAdminDashboardController extends ApiController
         $sourceCounts = [];
         $sourceTotal  = 0;
         foreach (Lead::sourceOptions() as $key => $label) {
-            $count = (clone $base())->where('lead_source', $key)->count();
+            $count = (clone $base())
+                ->where(function($q) use ($key, $label) {
+                    $q->where('lead_source_id', $key)
+                      ->orWhere('lead_source', $label);
+                })
+                ->count();
             $sourceTotal += $count;
             $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
         }
@@ -563,9 +641,9 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                    ->when($source,   fn($q2) => $q2->where('lead_source', $source));
+                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
@@ -707,9 +785,10 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total  = (clone $q)->count();
-                $won    = (clone $q)->where('lead_status', 'won')->count();
+                $leadIds = (clone $q)->pluck('id');
+                $convertCount = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
-                $wonVal = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
 
                 return [
                     'user_id'         => $user->id,
@@ -718,15 +797,15 @@ class SuperAdminDashboardController extends ApiController
                     'role'            => $user->roles->first()?->display_name,
                     'role_name'       => $user->roles->first()?->name,
                     'total_leads'     => $total,
-                    'won_leads'       => $won,
+                    'convert_leads'   => $convertCount,
                     'lost_leads'      => $lost,
-                    'active_leads'    => $total - $won - $lost,
-                    'won_value'       => $wonVal,
-                    'conversion_rate' => $total > 0 ? round($won / $total * 100, 1) : 0,
+                    'active_leads'    => $total - $convertCount - $lost,
+                    'convert_value'   => $convertVal,
+                    'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
             })
             ->filter(fn($u) => $u['total_leads'] > 0)
-            ->sortByDesc('won_value')
+            ->sortByDesc('convert_value')
             ->values()
             ->take(10);
 
@@ -740,15 +819,19 @@ class SuperAdminDashboardController extends ApiController
                 ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
             $this->visibility->applyLeadVisibility($q, $request->user());
 
+            $leadIds = (clone $q)->pluck('id');
+            $convertCount = (clone $q)->whereHas('products', fn($qp) => $qp->where('product_status', 'converted'))->count();
+            $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+
             $monthTrend[] = [
                 'month'       => $month->format('M Y'),
                 'month_short' => $month->format('M'),
                 'year'        => (int) $month->format('Y'),
                 'month_num'   => (int) $month->format('m'),
                 'total'       => (clone $q)->count(),
-                'won'         => (clone $q)->where('lead_status', 'won')->count(),
+                'convert'     => $convertCount,
                 'lost'        => (clone $q)->where('lead_status', 'lost')->count(),
-                'won_value'   => (float)(clone $q)->where('lead_status', 'won')->sum('deal_value'),
+                'convert_value' => $convertVal,
             ];
         }
 
@@ -818,6 +901,7 @@ class SuperAdminDashboardController extends ApiController
             'team_performance' => $teamPerformance,
 
             'month_trend' => $monthTrend,
+            'sales_target_stats' => $this->getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $request->user()),
 
             // Enum references for mobile UI
             'enums' => [

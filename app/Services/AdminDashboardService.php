@@ -20,8 +20,8 @@ class AdminDashboardService
     {
         $query = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
-            ->join('products', 'products.id', '=', 'lead_products.product_id')
-            ->join('users', 'users.id', '=', 'leads.assigned_to')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->leftJoin('users', 'users.id', '=', 'leads.assigned_to')
             ->leftJoin('branches', 'branches.id', '=', 'users.branch_id');
 
         $visibleUserIds = $this->visibility->visibleUserIds();
@@ -81,8 +81,8 @@ class AdminDashboardService
         $query = LeadProductPayment::query()
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
-            ->join('products', 'products.id', '=', 'lead_products.product_id')
-            ->join('users', 'users.id', '=', 'leads.assigned_to')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->leftJoin('users', 'users.id', '=', 'leads.assigned_to')
             ->leftJoin('branches', 'branches.id', '=', 'users.branch_id');
 
         $visibleUserIds = $this->visibility->visibleUserIds();
@@ -188,7 +188,7 @@ class AdminDashboardService
 
         $rows = (clone $base)
             ->selectRaw("
-                products.product_name as product_name,
+                COALESCE(products.product_name, lead_products.product_name) as product_name,
                 SUM(lead_products.total_price) as total_cost,
                 COALESCE(SUM(pay.received), 0) as received_amount
             ")
@@ -200,7 +200,7 @@ class AdminDashboardService
                 '=',
                 'lead_products.id'
             )
-            ->groupBy('products.id', 'products.product_name')
+            ->groupBy('lead_products.product_id', 'products.product_name', 'lead_products.product_name')
             ->get();
 
         return $rows->map(function ($row) {
@@ -318,11 +318,11 @@ class AdminDashboardService
 
         $rows = $this->baseQuery($filters)
             ->selectRaw("
-                products.product_name as product_name,
+                COALESCE(products.product_name, lead_products.product_name) as product_name,
                 SUM(lead_products.total_price) as total_sales
             ")
             ->where('lead_products.created_at', '>=', $sixMonthsAgo)
-            ->groupBy('products.id', 'products.product_name')
+            ->groupBy('lead_products.product_id', 'products.product_name', 'lead_products.product_name')
             ->orderByDesc('total_sales')
             ->get();
 
