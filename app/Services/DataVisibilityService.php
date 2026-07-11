@@ -241,6 +241,14 @@ class DataVisibilityService
     {
         $this->applyCompanyVisibility($query, $user, 'company_id');
 
+        $user ??= auth()->user();
+        if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
+            return $query->where(function ($q) use ($user) {
+                $q->where('customer_support_tl_id', $user->id)
+                  ->orWhere('customer_support_executive_id', $user->id);
+            });
+        }
+
         $visibleIds = $this->visibleUserIds($user);
 
         if ($visibleIds === null) {
@@ -260,6 +268,14 @@ class DataVisibilityService
             });
         }
 
+        $user ??= auth()->user();
+        if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
+            return $query->whereHas($relation, function ($q) use ($user) {
+                $q->where('customer_support_tl_id', $user->id)
+                  ->orWhere('customer_support_executive_id', $user->id);
+            });
+        }
+
         $visibleIds = $this->visibleUserIds($user);
 
         if ($visibleIds === null) {
@@ -274,6 +290,17 @@ class DataVisibilityService
     public function applyQuotationVisibility(Builder $query, ?User $user = null): Builder
     {
         $this->applyCompanyVisibility($query, $user, 'company_id');
+
+        $user ??= auth()->user();
+        if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
+            return $query->where(function (Builder $quotationQuery) use ($user) {
+                $quotationQuery
+                    ->whereHas('lead', function (Builder $leadQuery) use ($user) {
+                        $leadQuery->where('customer_support_tl_id', $user->id)
+                                  ->orWhere('customer_support_executive_id', $user->id);
+                    });
+            });
+        }
 
         $visibleIds = $this->visibleUserIds($user);
 
@@ -318,6 +345,12 @@ class DataVisibilityService
             return false;
         }
 
+        $user ??= auth()->user();
+        if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
+            return (int) $lead->customer_support_tl_id === $user->id
+                || (int) $lead->customer_support_executive_id === $user->id;
+        }
+
         $visibleIds = $this->visibleUserIds($user);
 
         return $visibleIds === null || in_array((int) $lead->assigned_to, $visibleIds, true);
@@ -328,6 +361,16 @@ class DataVisibilityService
         $companyId = $this->companyIdFor($user);
 
         if ($companyId && (int) $quotation->company_id !== $companyId) {
+            return false;
+        }
+
+        $user ??= auth()->user();
+        if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
+            $quotation->loadMissing('lead:id,customer_support_tl_id,customer_support_executive_id');
+            if ($quotation->lead) {
+                return (int) $quotation->lead->customer_support_tl_id === $user->id
+                    || (int) $quotation->lead->customer_support_executive_id === $user->id;
+            }
             return false;
         }
 

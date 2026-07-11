@@ -36,6 +36,8 @@ class Lead extends Model
         'facebook_lead_id',
         'facebook_campaign_id',
         'facebook_payload',
+        'customer_support_tl_id',
+        'customer_support_executive_id',
     ];
 
     protected $casts = [
@@ -99,6 +101,16 @@ class Lead extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function customerSupportTl()
+    {
+        return $this->belongsTo(User::class, 'customer_support_tl_id');
+    }
+
+    public function customerSupportExecutive()
+    {
+        return $this->belongsTo(User::class, 'customer_support_executive_id');
     }
 
     /**

@@ -100,31 +100,23 @@
 .da-card-body { padding:16px 18px; }
 
 /* ─── KPI grid ─── */
-.da-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-.da-kpi { background:var(--da-white); border:1px solid var(--da-border); border-radius:14px; padding:16px 18px; position:relative; overflow:hidden; transition:box-shadow .2s,transform .2s; }
-.da-kpi:hover { box-shadow:0 6px 24px rgba(0,0,0,.07); transform:translateY(-2px); }
-.da-kpi::after { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
-.da-kpi[data-accent="orange"]::after  { background:linear-gradient(90deg,var(--da-orange),var(--da-orange2)); }
-.da-kpi[data-accent="blue"]::after    { background:linear-gradient(90deg,var(--da-blue),#60a5fa); }
-.da-kpi[data-accent="green"]::after   { background:linear-gradient(90deg,var(--da-green),#4ade80); }
-.da-kpi[data-accent="red"]::after     { background:linear-gradient(90deg,var(--da-red),#f87171); }
-.da-kpi[data-accent="purple"]::after  { background:linear-gradient(90deg,var(--da-purple),#a78bfa); }
-.da-kpi[data-accent="teal"]::after    { background:linear-gradient(90deg,#059669,#34d399); }
-.da-kpi[data-accent="amber"]::after   { background:linear-gradient(90deg,var(--da-amber),#fbbf24); }
-.da-kpi[data-accent="rose"]::after    { background:linear-gradient(90deg,#be123c,#fb923c); }
-.da-kpi-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
-.da-kpi-val  { font-size:26px; font-weight:900; line-height:1; }
-.da-kpi-lbl  { font-size:12px; font-weight:600; color:var(--da-muted); margin-top:5px; }
-.da-kpi-sub  { font-size:11px; color:var(--da-muted); margin-top:4px; }
+.da-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; }
+.da-kpi { position:relative; overflow:hidden; border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(15,23,42,.05), 0 8px 10px -6px rgba(15,23,42,.03); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
+.da-kpi:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.15),0 10px 10px -5px rgba(15,23,42,.08); }
+.da-kpi-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,0.2); color:#fff; font-size:16px; backdrop-filter:blur(4px); margin-bottom:12px; }
+.da-kpi-val  { font-size:26px; font-weight:900; color:#fff; line-height:1.2; margin-top:8px; }
+.da-kpi-lbl  { font-size:11px; font-weight:800; color:rgba(255,255,255,0.95); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.da-kpi-sub  { font-size:12px; color:rgba(255,255,255,0.85); font-weight:500; margin-top:8px; }
 
 /* ─── Financial grid ─── */
-.da-fin-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-.da-fin { background:var(--da-white); border:1px solid var(--da-border); border-radius:14px; padding:16px 18px; border-left:4px solid transparent; }
-.da-fin-lbl { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--da-muted); margin-bottom:7px; }
-.da-fin-val { font-size:22px; font-weight:900; }
-.da-fin-sub { font-size:11px; color:var(--da-muted); margin-top:5px; }
-.da-fin-bar-outer { height:4px; background:#f0eef2; border-radius:2px; margin-top:10px; }
-.da-fin-bar-inner { height:100%; border-radius:2px; transition:width .8s ease; }
+.da-fin-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; }
+.da-fin { background:var(--da-white); border:1px solid var(--da-border); border-radius:16px; padding:20px; border-left:4px solid transparent; box-shadow:0 10px 25px -5px rgba(15,23,42,.03); transition:all 0.3s cubic-bezier(0.4,0,0.2,1); }
+.da-fin:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.1),0 10px 10px -5px rgba(15,23,42,.05); }
+.da-fin-lbl { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--da-muted); margin-bottom:8px; }
+.da-fin-val { font-size:24px; font-weight:900; line-height:1.2; }
+.da-fin-sub { font-size:12px; color:var(--da-muted); margin-top:8px; font-weight:500; }
+.da-fin-bar-outer { height:6px; background:#f0eef2; border-radius:3px; margin-top:12px; overflow:hidden; }
+.da-fin-bar-inner { height:100%; border-radius:3px; transition:width .8s ease; }
 
 /* ─── Two/three col layouts ─── */
 .da-two-col   { display:grid; grid-template-columns:1fr 380px; gap:16px; }
@@ -199,7 +191,7 @@
 /* Skeleton loading */
 .da-skel { background:linear-gradient(90deg,#f3f0f6 25%,#e9e5ee 50%,#f3f0f6 75%); background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:6px; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-.da-skel-card { background:var(--da-white); border:1px solid var(--da-border); border-radius:14px; padding:16px 18px; }
+.da-skel-card { background:var(--da-white); border:1px solid var(--da-border); border-radius:16px; padding:20px; min-height:140px; display:flex; flex-direction:column; justify-content:space-between; }
 
 /* Utility badge */
 .da-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; border:1px solid transparent; }
@@ -539,7 +531,12 @@
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
                 @for($i = 0; $i < 8; $i++)
-                <div class="da-skel-card" style="height:110px"><div class="da-skel" style="height:16px;width:60%;margin-bottom:8px"></div><div class="da-skel" style="height:32px;width:40%"></div></div>
+                <div class="da-skel-card">
+                    <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
+                    <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:70%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:40%"></div>
+                </div>
                 @endfor
             </div>
         </div>
@@ -657,7 +654,12 @@
             </div>
             <div class="da-fin-grid" id="daFinGrid">
                 @for($i = 0; $i < 4; $i++)
-                <div class="da-skel-card" style="border-left:4px solid #e2dfe6;height:110px"><div class="da-skel" style="height:12px;width:50%;margin-bottom:10px"></div><div class="da-skel" style="height:28px;width:70%"></div></div>
+                <div class="da-skel-card" style="border-left: 4px solid #e2dfe6; min-height: 135px; justify-content: space-between;">
+                    <div class="da-skel" style="height:11px;width:60%;"></div>
+                    <div class="da-skel" style="height:24px;width:70%;margin-top:8px;"></div>
+                    <div class="da-skel" style="height:12px;width:40%;margin-top:8px;"></div>
+                    <div class="da-skel" style="height:6px;width:100%;margin-top:12px;border-radius:3px;"></div>
+                </div>
                 @endfor
             </div>
         </div>
@@ -1090,30 +1092,42 @@ function renderKpis(k, filters) {
     var period = filters.quick_date ? ({ today:'Today', week:'This Week', month:'This Month', quarter:'This Quarter', year:'This Year' })[filters.quick_date] || '' : (filters.date_from ? filters.date_from + ' → ' + (filters.date_to || '…') : 'All Time');
     document.getElementById('daKpiPeriod').textContent = period;
 
+    var gradients = {
+        orange: 'linear-gradient(135deg, #fe5f04 0%, #ff8c42 100%)',
+        blue:   'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+        green:  'linear-gradient(135deg, #047857 0%, #10b981 100%)',
+        red:    'linear-gradient(135deg, #b91c1c 0%, #ef4444 100%)',
+        purple: 'linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%)',
+        teal:   'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)',
+        amber:  'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+        rose:   'linear-gradient(135deg, #be123c 0%, #f43f5e 100%)'
+    };
+
     var kpis = [
-        { accent:'orange', bg:'#fff0e6', ic:'#fe5f04', val:k.total_leads,    label:'Total Leads',     sub:'All in scope',
+        { accent:'orange', val:k.total_leads,    label:'Total Leads',     sub:'All in scope',
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
-        { accent:'blue',   bg:'#eff6ff', ic:'#2563eb', val:k.active_leads,   label:'Active Leads',    sub:'Excl. Won & Lost',
+        { accent:'blue',   val:k.active_leads,   label:'Active Leads',    sub:'Excl. Won & Lost',
           svg:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
-        { accent:'green',  bg:'#f0fdf4', ic:'#16a34a', val:k.won_leads,      label:'Won',             sub:fmtL(k.won_value) + ' value',
+        { accent:'green',  val:k.won_leads,      label:'Won',             sub:fmtL(k.won_value) + ' value',
           svg:'<polyline points="20 6 9 17 4 12"/>' },
-        { accent:'red',    bg:'#fef2f2', ic:'#dc2626', val:k.lost_leads,     label:'Lost',            sub:'Review needed',
+        { accent:'red',    val:k.lost_leads,     label:'Lost',            sub:'Review needed',
           svg:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' },
-        { accent:'purple', bg:'#faf5ff', ic:'#7c3aed', val:fmtL(k.pipeline_value), label:'Pipeline Value', sub:'Active deals',
+        { accent:'purple', val:fmtL(k.pipeline_value), label:'Pipeline Value', sub:'Active deals',
           svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
-        { accent:'teal',   bg:'#f0fdfa', ic:'#059669', val:fmtL(k.won_value),      label:'Won Value',      sub:'Closed revenue',
+        { accent:'teal',   val:fmtL(k.won_value),      label:'Won Value',      sub:'Closed revenue',
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
-        { accent:'amber',  bg:'#fffbeb', ic:'#b45309', val:k.conversion_rate + '%', label:'Conversion Rate', sub:'Won ÷ Total leads',
+        { accent:'amber',  val:k.conversion_rate + '%', label:'Conversion Rate', sub:'Won ÷ Total leads',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
-        { accent:'rose',   bg:'#fef2f2', ic:'#dc2626', val:k.high_priority,  label:'High Priority',   sub:'Active, needs action',
+        { accent:'rose',   val:k.high_priority,  label:'High Priority',   sub:'Active, needs action',
           svg:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' },
     ];
 
     var html = kpis.map(function(kpi) {
-        return '<div class="da-kpi" data-accent="' + kpi.accent + '">' +
-            '<div class="da-kpi-icon" style="background:' + kpi.bg + '">' +
-            '<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="' + kpi.ic + '" stroke-width="2">' + kpi.svg + '</svg></div>' +
-            '<div class="da-kpi-val" style="color:' + kpi.ic + '">' + kpi.val + '</div>' +
+        var grad = gradients[kpi.accent] || gradients.orange;
+        return '<div class="da-kpi" style="background:' + grad + ';">' +
+            '<div class="da-kpi-icon">' +
+            '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' + kpi.svg + '</svg></div>' +
+            '<div class="da-kpi-val">' + kpi.val + '</div>' +
             '<div class="da-kpi-lbl">' + kpi.label + '</div>' +
             '<div class="da-kpi-sub">' + kpi.sub + '</div></div>';
     }).join('');

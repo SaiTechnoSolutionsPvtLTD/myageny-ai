@@ -267,6 +267,10 @@ class User extends Authenticatable
             return $departmentRoute;
         }
 
+        if ($this->belongsToCustomerSupportDepartment() || $this->hasCustomerSupportLikeRole()) {
+            return 'dashboard.customer-success';
+        }
+
         if ($this->isHrmsAttendanceOnlyUser()) {
             return 'hrms.dashboard';
         }
@@ -374,6 +378,20 @@ class User extends Authenticatable
             'business_development_executive',
             'telecaller',
         ])->isNotEmpty();
+    }
+
+    public function belongsToCustomerSupportDepartment(): bool
+    {
+        return collect($this->departmentKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'support') || str_contains($key, 'success');
+        });
+    }
+
+    public function hasCustomerSupportLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'support') || str_contains($key, 'success');
+        });
     }
 
     public function hasTlLikeRole(): bool

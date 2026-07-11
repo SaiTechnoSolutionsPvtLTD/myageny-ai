@@ -34,7 +34,6 @@ class LeadAndLeadProductMigrationCommand extends Command
         $leads = DB::connection('mysql2')
             ->table('leads')
             ->orderBy('id', 'desc')
-            ->take(1000)
             ->get();
 
         $leadIdMap = [];
@@ -44,10 +43,11 @@ class LeadAndLeadProductMigrationCommand extends Command
         {
             // Get lead source from source database and match with master
             $sourceNameFromDb = $lead->LeadSource ?? 'Online';
-            
+
             // Find matching lead source in master, if not found use 'Online'
             $leadSourceRecord = LeadSource::where('name', $sourceNameFromDb)->first();
             if (!$leadSourceRecord) {
+
                 $leadSourceRecord = LeadSource::firstOrCreate(['name' => 'Online']);
             }
 
@@ -127,8 +127,8 @@ class LeadAndLeadProductMigrationCommand extends Command
                     'company_id' => 1,
                     'lead_id' => $newLeadId,
                     'product_id' => $productId ?? null,
-                    'product_name' => $sourceProduct->productname. "/".$sourceProduct->id ?? null,
-                    'unit_price' => $unitPrice,
+                    'product_name' => $sourceProduct->productname ?? null,
+                    'unit_price' => $leadProduct->totalcost ?? 0,
                     'quantity' => 1,
                     // 'total_price' => $leadProduct->totalcost ?? 0,
                     'amount_paid' =>  0,
@@ -136,7 +136,7 @@ class LeadAndLeadProductMigrationCommand extends Command
                     'payment_date' => $leadProduct->paymentdate,
                     'product_status' => $leadProduct->status,
                     'lead_status_id' => $leadStatusId,
-                    'lead_source_id' => $leadSourceRecord->id,
+                    'lead_source_id' => $leadSourceRecord->id ?? null,
                     'remarks' => $leadProduct->producttype,
                     'created_by' => 1,
                     'created_at' => $leadProduct->created_at,
@@ -150,6 +150,7 @@ class LeadAndLeadProductMigrationCommand extends Command
         $this->migrateNotes($leadIdMap);
 
         // Migrate payments to lead_product_payments
+
         $this->migratePayments($leadIdMap, $leadProductIdMap);
     }
 
@@ -228,7 +229,7 @@ class LeadAndLeadProductMigrationCommand extends Command
             // Create called_at timestamp from notification_date and notification_time
             $calledDate = $note->notification_date ?: ($note->created_at ? Carbon::parse($note->created_at)->toDateString() : today()->toDateString());
             $calledAt = $calledDate . ' ' . ($note->notification_time ?? '00:00:00');
-            
+
             $nextFollowDate = Carbon::parse($calledDate)->addDays(2)->toDateString();
 
             // Insert into lead_call_updates
@@ -275,17 +276,19 @@ class LeadAndLeadProductMigrationCommand extends Command
      */
     private function migratePayments(array $leadIdMap, array $leadProductIdMap)
     {
-        
+
         if (empty($leadIdMap)) {
             return;
         }
 
-        $payments = DB::connection('mysql2')
-            ->table('leadpaymenthistories')
-            ->whereIn('leadid', array_keys($leadIdMap))
-            ->orderBy('id')
-            ->get();
-                
+        $query = DB::connection('mysql2')
+    ->table('leadpaymenthistories')
+    ->whereIn('leadid', array_keys($leadIdMap))
+    ->orderBy('id');
+
+// dd($query->toSql(), $query->getBindings());
+
+$payments = $query->get();
         $userMap = []; // Cache for user mappings
 
         foreach ($payments as $payment) {
