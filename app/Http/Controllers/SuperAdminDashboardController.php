@@ -705,7 +705,7 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 7. Recent leads ───────────────────────────────────────
         $recentLeads = (clone $base())
-            ->with(['branch:id,name', 'assignedTo:id,name', 'source:id,name', 'products'])
+            ->with(['branch:id,name', 'assignedTo:id,name', 'leadSource:id,name', 'products'])
             ->latest('lead_date')
             ->take(8)
             ->get()

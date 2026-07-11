@@ -12,14 +12,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
+use App\Models\Product;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
+use App\Models\LeadProductPriceRequest;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 #[OA\Tag(name: "Lead Sub-Resources", description: "Call updates, reminders, products, payments, and quotations on a lead")]
 
@@ -389,8 +393,11 @@ class LeadShowController extends Controller
             ->get();
 
         $status = $request->filled('lead_status_id')
-            ? $statuses->firstWhere('id', (int) $request->lead_status_id)
-            : $statuses->first(fn($option) => LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status));
+            ? \App\Models\LeadStatus::find($request->lead_status_id)
+            : $statuses->first(
+                fn($option) =>
+                LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status)
+            );
 
         if (! $status) {
             return response()->json(['status' => false, 'message' => 'Please select a valid status.'], 422);
@@ -448,25 +455,39 @@ class LeadShowController extends Controller
     public function updateProduct(Request $request, Lead $lead, LeadProduct $product): JsonResponse
     {
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
-
         abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
 
         $data = $request->validate([
-            'product_name'     => ['sometimes', 'required', 'string', 'max:150'],
-            'product_status'   => ['sometimes', 'required', 'in:new,hot,warm,cold,converted'],
+            'product_id'       => ['required', 'integer', 'exists:products,id'],
+            'product_status'   => ['required', 'in:new,hot,warm,cold,converted'],
             'description'      => ['nullable', 'string', 'max:500'],
-            'unit_price'       => ['sometimes', 'required', 'numeric', 'min:0'],
-            'quantity'         => ['sometimes', 'required', 'integer', 'min:1'],
+            'unit_price'       => ['required', 'numeric', 'min:0'],
+            'quantity'         => ['required', 'integer', 'min:1'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+
+        // Reused, not duplicated — identical helper the web edit form uses to
+        // derive the display name from the selected catalog product/category.
+        $catalogProduct = Product::with('category')->findOrFail($data['product_id']);
+        $data['product_name']     = $this->leadProductName($catalogProduct);
+        $data['discount_percent'] = $data['discount_percent'] ?? 0;
+        // Changing the underlying product invalidates any custom lead-status
+        // previously tied to the old product — same reset the web performs.
+        $data['lead_status_id']   = null;
 
         $product->update($data);
 
         return response()->json([
             'status'  => true,
             'message' => 'Product updated.',
-            'data'    => $this->formatProduct($product),
+            'data'    => $this->formatProduct($product->fresh()),
         ]);
+    }
+
+    private function leadProductName(Product $product): string
+    {
+        return $product->product_name
+            ?: trim(($product->category?->name ? $product->category->name . ' | ' : '') . $product->package_name);
     }
 
     #[OA\Delete(
@@ -580,6 +601,26 @@ class LeadShowController extends Controller
             'message' => 'Payment of ₹' . number_format($data['amount'], 2) . ' recorded.',
             'data'    => $this->formatPayment($payment),
         ], 201);
+    }
+
+    public function productPayments(Request $request, Lead $lead, LeadProduct $product): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
+
+        $payments = $product->payments()
+            ->with('recordedBy:id,name')
+            ->orderByDesc('payment_date')
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'payments' => $payments,
+                'product'  => $this->formatProduct($product->fresh()),
+            ],
+        ]);
     }
 
     #[OA\Delete(
@@ -926,5 +967,62 @@ class LeadShowController extends Controller
                 ])->values()
                 : [],
         ];
+    }
+
+    public function priceRequest(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'lead_id'                          => ['required', 'exists:leads,id'],
+            'deal_name'                        => ['required', 'string', 'max:255'],
+            'products'                         => ['required', 'array', 'min:1'],
+            'products.*.product_id'            => ['required', 'exists:products,id'],
+            'products.*.requested_unit_price'  => ['required', 'numeric', 'min:0'],
+            'products.*.quantity'              => ['required', 'integer', 'min:1'],
+            'products.*.discount_percent'      => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'products.*.remarks'               => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Not present in the web store() you shared, but added for consistency
+        // with every other mobile lead-scoped endpoint in this app (updateProduct,
+        // storeProductPayment, leadsMeta, etc.), all of which gate on
+        // canAccessLead — otherwise any authenticated mobile user could submit a
+        // price request against a lead outside their branch/company visibility.
+        $lead = Lead::findOrFail($request->lead_id);
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+
+        $created = DB::transaction(function () use ($request) {
+            $rows = [];
+            foreach ($request->products as $row) {
+                $product = Product::findOrFail($row['product_id']);
+                $rows[] = LeadProductPriceRequest::create([
+                    'lead_id'              => $request->lead_id,
+                    'product_id'           => $product->id,
+                    'deal_name'            => $request->deal_name,
+                    'product_name'         => $product->package_name,
+                    'product_description'  => $product->description,
+                    'original_unit_price'  => (float) $product->final_price,
+                    'requested_unit_price' => (float) $row['requested_unit_price'],
+                    'quantity'             => (int) $row['quantity'],
+                    'discount_percent'     => (float) ($row['discount_percent'] ?? 0),
+                    'remarks'              => $row['remarks'] ?? null,
+                    'status'               => 'pending',
+                    'requested_by'         => $request->user()->id,
+                ]);
+            }
+            return $rows;
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Price change request sent for admin approval.',
+            'data'    => $created,
+        ], 201);
     }
 }

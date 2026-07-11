@@ -144,7 +144,7 @@ class ProductionInitiationApiController extends Controller
 
         // ── Get department like web does ──────────────────────────────────
         $departmentId = null;
-        
+
         // First, try to get department from request
         if ($request->has('department_id') && $request->input('department_id')) {
             $departmentId = $request->input('department_id');
@@ -157,7 +157,7 @@ class ProductionInitiationApiController extends Controller
                     $departmentId = $firstDepartment->id;
                 }
             }
-            
+
             // If still no department, get the first available department
             if (!$departmentId) {
                 $firstDepartment = Department::first();

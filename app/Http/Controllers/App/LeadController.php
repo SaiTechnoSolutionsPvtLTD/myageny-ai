@@ -12,6 +12,7 @@ use App\Models\LeadFieldValue;
 use App\Models\LeadProductPriceRequest;
 use App\Models\LeadProduct;
 use App\Models\LeadCallUpdate;
+use App\Models\LeadStatus;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -62,8 +63,8 @@ class LeadController extends Controller
             'per_page'  => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'source:id,name',])
-            ->latest('lead_date');
+        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'leadSource:id,name',])
+            ->orderByDesc('id');;
 
         $this->visibility->applyLeadVisibility($query, $request->user());
 
@@ -142,7 +143,9 @@ class LeadController extends Controller
             'lead_date'     => ['nullable', 'date'],
             'mobile_number' => ['required', 'string', 'max:20'],
             'email'         => ['nullable', 'email', 'max:255'],
-            'lead_source'   => ['required', 'string'],
+            'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
+            'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
+            'lead_status'     => ['nullable', 'string'],
             'product_id'    => ['nullable', 'integer', 'exists:products,id'],
             'priority'      => ['required', 'string'],
             'remarks'       => ['nullable', 'string'],
@@ -278,7 +281,9 @@ class LeadController extends Controller
             'lead_date'     => ['nullable', 'date'],
             'mobile_number' => ['sometimes', 'required', 'string', 'max:20'],
             'email'         => ['nullable', 'email', 'max:255'],
-            'lead_source'   => ['sometimes', 'required', 'string', Rule::in(Lead::sourceKeys())],
+            'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
+            'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
+            'lead_status'     => ['nullable', 'string'],
             'product_id'    => ['nullable', 'integer', 'exists:products,id'],
             'priority'      => ['sometimes', 'required', 'string', 'in:' . implode(',', array_keys(Lead::PRIORITIES))],
             'remarks'       => ['nullable', 'string'],
@@ -421,8 +426,9 @@ class LeadController extends Controller
             'mobile_number'        => $lead->mobile_number,
             'email'                => $lead->email,
             'lead_date'            => $lead->lead_date?->toDateString(),
-            'lead_source'          => $lead->lead_source,
-            'source_label'         => $lead->source?->name,
+            'lead_source_id'          => $lead->leadSource?->id,
+            'lead_source'          => $lead->leadSource?->name,
+            'source_label'         => $lead->leadSource?->name,
             'lead_status'          => $lead->lead_status,
             'status_label'         => $lead->status_label,
             'status_color'         => $lead->status_color,

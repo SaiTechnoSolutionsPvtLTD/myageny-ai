@@ -310,8 +310,12 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::patch('/{lead}/products/{product}/status', [MobileLeadShowController::class, 'updateProductStatus'])->name('products.status');
     Route::delete('/{lead}/products/{product}',       [MobileLeadShowController::class, 'destroyProduct'])->name('products.destroy');
 
+    Route::post('/price-requests', [MobileLeadShowController::class, 'priceRequest'])
+        ->name('mobile.leads.price-requests.store');
+
     // ── Product Payments ─────────────────────────────────────────────────────
     Route::post('/{lead}/products/{product}/payments',             [MobileLeadShowController::class, 'storeProductPayment'])->name('products.payments.store');
+    Route::get('/{lead}/products/{product}/payments',   [MobileLeadShowController::class, 'productPayments'])->name('products.payments.index');
     Route::delete('/{lead}/products/{product}/payments/{payment}', [MobileLeadShowController::class, 'destroyProductPayment'])->name('products.payments.destroy');
 
     // ── Quotations ───────────────────────────────────────────────────────────
@@ -329,4 +333,9 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
 Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.reports.crm.')->group(function () {
 
     Route::get('/leads-summary', [ReportApiController::class, 'leadsSummaryApi'])->name('index');
+    Route::get('/payment-collection', [ReportApiController::class, 'paymentCollectionApi'])->name('payment-collection');
+    Route::get('/product-wise', [ReportApiController::class, 'productWiseApi'])->name('product-wise');
+    Route::get('/revenue-comparison', [ReportApiController::class, 'revenueComparisonApi'])->name('revenue-comparison');
+    Route::get('/branch-comparison', [ReportApiController::class, 'branchComparisonApi'])->name('branch-comparison');
+    Route::get('/smm', [ReportApiController::class, 'smmReportApi'])->name('smm');
 });
