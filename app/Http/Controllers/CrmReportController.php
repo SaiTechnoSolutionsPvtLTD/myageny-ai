@@ -1341,6 +1341,21 @@ class CrmReportController extends Controller
         $productId = $request->input('product_id');
         $status    = $request->input('status');
 
+        // Fetch all users with their departments to map allocations
+        $usersWithDept = DB::table('users as u')
+            ->leftJoin('employee_onboardings as eo', function ($join) {
+                $join->on('eo.portal_user_id', '=', 'u.id')
+                     ->whereNull('eo.deleted_at');
+            })
+            ->leftJoin('departments as dep', 'dep.id', '=', 'eo.department_id')
+            ->select([
+                'u.id',
+                'u.name',
+                'dep.name as dept_name',
+            ])
+            ->get()
+            ->keyBy('id');
+
         // Base query: one row per production_initiation (= one product order per lead)
         $query = DB::table('production_initiations as pi')
             ->join('leads as l', 'l.id', '=', 'pi.lead_id')
@@ -1358,6 +1373,8 @@ class CrmReportController extends Controller
                 'pi.custom_form_data',
                 'pi.created_at as initiated_at',
                 'pi.tl_employee_allocations',
+                'pi.project_allocated_employee_user_ids',
+                'pi.project_allocated_tl_user_ids',
                 'l.company_name',
                 'l.contact_name',
                 'p.package_name as product_name',
@@ -1405,37 +1422,54 @@ class CrmReportController extends Controller
                 $join->on('eo.portal_user_id', '=', 'pt.user_id')
                      ->whereNull('eo.deleted_at');
             })
-            ->leftJoin('departments as dep2', 'dep2.id', '=', 'eo.department_id')
+            ->leftJoin('departments as dep_eo', 'dep_eo.id', '=', 'eo.department_id')
+            ->leftJoin('model_has_roles as mhr', function ($join) {
+                $join->on('mhr.model_id', '=', 'pt.user_id')
+                     ->where('mhr.model_type', '=', 'App\Models\User');
+            })
+            ->leftJoin('roles as r', 'r.id', '=', 'mhr.role_id')
+            ->leftJoin('departments as dep_role', 'dep_role.id', '=', 'r.department_id')
             ->whereIn('pt.production_initiation_id', $piIds)
             ->select([
                 'pt.production_initiation_id',
-                'dep2.id as dept_id',
-                'dep2.name as dept_name',
+                DB::raw('COALESCE(dep_eo.name, dep_role.name) as dept_name'),
                 DB::raw('SUM(COALESCE(pt.poster_count, 0)) as completed_posters'),
                 DB::raw('SUM(COALESCE(pt.video_count, 0)) as completed_videos'),
                 DB::raw('GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ", ") as persons'),
             ])
-            ->groupBy('pt.production_initiation_id', 'dep2.id', 'dep2.name')
+            ->groupBy('pt.production_initiation_id', DB::raw('COALESCE(dep_eo.name, dep_role.name)'))
             ->get()
             ->groupBy('production_initiation_id');
 
         $today = now()->toDateString();
 
-        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status) {
+        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status, $usersWithDept) {
             $piId = $pi->pi_id;
 
-            // Parse custom_form_data for start/end date (stored as JSON array of {field_name, value})
+            // Parse custom_form_data for start/end date and committed counts
             $formData = json_decode($pi->custom_form_data ?? '[]', true) ?? [];
 
             $startDate = null;
             $endDate   = null;
+            $committedPostersFromForm = 0;
+            $committedVideosFromForm  = 0;
+
             foreach ($formData as $field) {
                 $key = strtolower(trim($field['field_name'] ?? ''));
+                $label = strtolower(trim($field['label'] ?? ($field['key'] ?? '')));
+                $value = trim((string) ($field['value'] ?? ''));
+
                 if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
-                    $startDate = $field['value'] ?? null;
+                    $startDate = $value ?: null;
                 }
                 if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date'])) {
-                    $endDate = $field['value'] ?? null;
+                    $endDate = $value ?: null;
+                }
+                if ($label === 'number of posters' || $label === 'number of poster' || str_contains($key, 'number_of_posters') || str_contains($key, 'poster_count')) {
+                    $committedPostersFromForm = (int) $value;
+                }
+                if ($label === 'number of videos' || $label === 'number of video' || str_contains($key, 'number_of_videos') || str_contains($key, 'video_count')) {
+                    $committedVideosFromForm = (int) $value;
                 }
             }
 
@@ -1467,29 +1501,111 @@ class CrmReportController extends Controller
             $dmCommittedPosters     = $dmPcr     ? (int) $dmPcr->poster_count     : 0;
             $dmCommittedVideos      = $dmPcr     ? (int) $dmPcr->video_count      : 0;
 
-            $committedPosters = $designCommittedPosters + $dmCommittedPosters;
-            $committedVideos  = $designCommittedVideos  + $dmCommittedVideos;
+            // Resolve main committed counts (fallback to custom form data if count report is 0)
+            $mainCommittedPosters = $designCommittedPosters ?: ($dmCommittedPosters ?: $committedPostersFromForm);
+            $mainCommittedVideos  = $designCommittedVideos  ?: ($dmCommittedVideos  ?: $committedVideosFromForm);
+
+            // Both Design and DM teams get the same committed deliverables count for the project
+            $designCommittedPosters = $mainCommittedPosters;
+            $designCommittedVideos  = $mainCommittedVideos;
+            $dmCommittedPosters     = $mainCommittedPosters;
+            $dmCommittedVideos      = $mainCommittedVideos;
+
+            $committedPosters = $mainCommittedPosters;
+            $committedVideos  = $mainCommittedVideos;
 
             // Timesheet completions: split by design vs dm
             $tsSets = $timesheetSums->get($piId, collect());
-            $designTs = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'design'));
-            $dmTs     = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'digital') || str_contains(strtolower($r->dept_name ?? ''), 'dm') || str_contains(strtolower($r->dept_name ?? ''), 'marketing'));
 
-            $designCompletedPosters = $designTs ? (int) $designTs->completed_posters : 0;
-            $designCompletedVideos  = $designTs ? (int) $designTs->completed_videos  : 0;
-            $designPersons          = $designTs ? ($designTs->persons ?? '-') : '-';
+            $designCompletedPosters = 0;
+            $designCompletedVideos  = 0;
+            $designPersonsList      = [];
 
-            $dmCompletedPosters = $dmTs ? (int) $dmTs->completed_posters : 0;
-            $dmCompletedVideos  = $dmTs ? (int) $dmTs->completed_videos  : 0;
-            $dmPersons          = $dmTs ? ($dmTs->persons ?? '-') : '-';
+            $dmCompletedPosters = 0;
+            $dmCompletedVideos  = 0;
+            $dmPersonsList      = [];
 
-            // Pending = Committed (from PCR) − Done (from timesheets), clamped to 0
+            foreach ($tsSets as $ts) {
+                $tsDeptLower = strtolower($ts->dept_name ?? '');
+                $tsPersons = array_filter(array_map('trim', explode(',', $ts->persons ?? '')));
+
+                if (str_contains($tsDeptLower, 'design')) {
+                    $designCompletedPosters += (int) $ts->completed_posters;
+                    $designCompletedVideos  += (int) $ts->completed_videos;
+                    $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                } elseif (str_contains($tsDeptLower, 'digital') || str_contains($tsDeptLower, 'dm') || str_contains($tsDeptLower, 'marketing')) {
+                    $dmCompletedPosters += (int) $ts->completed_posters;
+                    $dmCompletedVideos  += (int) $ts->completed_videos;
+                    $dmPersonsList = array_merge($dmPersonsList, $tsPersons);
+                } else {
+                    // Fallback to project's department
+                    $projDeptLower = strtolower($pi->department_name ?? '');
+                    if (str_contains($projDeptLower, 'design')) {
+                        $designCompletedPosters += (int) $ts->completed_posters;
+                        $designCompletedVideos  += (int) $ts->completed_videos;
+                        $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                    } elseif (str_contains($projDeptLower, 'digital') || str_contains($projDeptLower, 'dm') || str_contains($projDeptLower, 'marketing')) {
+                        $dmCompletedPosters += (int) $ts->completed_posters;
+                        $dmCompletedVideos  += (int) $ts->completed_videos;
+                        $dmPersonsList = array_merge($dmPersonsList, $tsPersons);
+                    } else {
+                        // Default to Design
+                        $designCompletedPosters += (int) $ts->completed_posters;
+                        $designCompletedVideos  += (int) $ts->completed_videos;
+                        $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                    }
+                }
+            }
+
+            $designPersons = !empty($designPersonsList) ? implode(', ', array_unique($designPersonsList)) : '-';
+            $dmPersons     = !empty($dmPersonsList)     ? implode(', ', array_unique($dmPersonsList))     : '-';
+
+            // Pending = Committed − Done (from timesheets), clamped to 0
             $designPendingPosters = max(0, $designCommittedPosters - $designCompletedPosters);
             $designPendingVideos  = max(0, $designCommittedVideos  - $designCompletedVideos);
             $dmPendingPosters     = max(0, $dmCommittedPosters     - $dmCompletedPosters);
             $dmPendingVideos      = max(0, $dmCommittedVideos      - $dmCompletedVideos);
 
-            // Allocated persons from tl_employee_allocations fallback
+            // Allocated persons fallback using project_allocated_employee_user_ids and project_allocated_tl_user_ids
+            $designAllocatedNames = [];
+            $dmAllocatedNames     = [];
+
+            $allocatedEmployeeIds = json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+            $allocatedTlIds       = json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+            $allocatedUserIds     = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds)));
+
+            foreach ($allocatedUserIds as $uId) {
+                $userDept = $usersWithDept->get($uId);
+                if ($userDept) {
+                    $uName = $userDept->name;
+                    $uDeptLower = strtolower($userDept->dept_name ?? '');
+
+                    if (str_contains($uDeptLower, 'design')) {
+                        $designAllocatedNames[] = $uName;
+                    } elseif (str_contains($uDeptLower, 'digital') || str_contains($uDeptLower, 'dm') || str_contains($uDeptLower, 'marketing')) {
+                        $dmAllocatedNames[] = $uName;
+                    } else {
+                        // Fallback to project's department if user's department doesn't match Design/DM
+                        $projDeptLower = strtolower($pi->department_name ?? '');
+                        if (str_contains($projDeptLower, 'design')) {
+                            $designAllocatedNames[] = $uName;
+                        } elseif (str_contains($projDeptLower, 'digital') || str_contains($projDeptLower, 'dm') || str_contains($projDeptLower, 'marketing')) {
+                            $dmAllocatedNames[] = $uName;
+                        } else {
+                            $designAllocatedNames[] = $uName;
+                        }
+                    }
+                }
+            }
+
+            if ($designPersons === '-') {
+                $designPersons = !empty($designAllocatedNames) ? implode(', ', array_unique($designAllocatedNames)) : '-';
+            }
+            if ($dmPersons === '-') {
+                $dmPersons = !empty($dmAllocatedNames) ? implode(', ', array_unique($dmAllocatedNames)) : '-';
+            }
+
+            // Fallback to tl_employee_allocations if still '-'
             if ($designPersons === '-' && $pi->tl_employee_allocations) {
                 try {
                     $allocs = json_decode($pi->tl_employee_allocations, true) ?? [];
@@ -1498,9 +1614,14 @@ class CrmReportController extends Controller
                 } catch (\Exception $e) {}
             }
 
+            $completedPosters = $designCompletedPosters + $dmCompletedPosters;
+            $completedVideos  = $designCompletedVideos + $dmCompletedVideos;
+            $pendingPosters   = max(0, $committedPosters - $completedPosters);
+            $pendingVideos    = max(0, $committedVideos - $completedVideos);
+
             // Status calculation
             $totalCommitted  = $committedPosters + $committedVideos;
-            $totalCompleted  = $designCompletedPosters + $designCompletedVideos + $dmCompletedPosters + $dmCompletedVideos;
+            $totalCompleted  = $completedPosters + $completedVideos;
             $deliveryDate    = $pi->project_delivery_date ?? $endDate;
 
             $computedStatus = 'pending';
@@ -1529,6 +1650,10 @@ class CrmReportController extends Controller
                 'tenure'                   => $tenure,
                 'committed_posters'        => $committedPosters,
                 'committed_videos'         => $committedVideos,
+                'completed_posters'        => $completedPosters,
+                'pending_posters'          => $pendingPosters,
+                'completed_videos'         => $completedVideos,
+                'pending_videos'           => $pendingVideos,
                 'design_completed_posters' => $designCompletedPosters,
                 'design_pending_posters'   => $designPendingPosters,
                 'design_completed_videos'  => $designCompletedVideos,

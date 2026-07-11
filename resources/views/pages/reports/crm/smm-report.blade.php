@@ -182,12 +182,15 @@
     white-space: nowrap; background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #64748b;
 }
 .smm-tbl th.th-accent { background: #fff7ed; color: #c2410c; border-bottom-color: #fdba74; }
+.smm-tbl th.th-total  { background: #eff6ff; color: #1d4ed8; border-bottom-color: #93c5fd; }
 .smm-tbl th.th-design { background: #f0fdf4; color: #15803d; border-bottom-color: #86efac; }
 .smm-tbl th.th-dm     { background: #f5f3ff; color: #7c3aed; border-bottom-color: #c4b5fd; }
 .smm-tbl th.th-center { text-align: center; }
 .smm-tbl th.th-group  { text-align: center; font-size: 11px; font-weight: 900; padding: 9px 14px; letter-spacing: .04em; border-bottom-width: 1px; }
+.smm-tbl th.th-grp-total { background: #eff6ff; color: #1d4ed8; border-bottom-color: #93c5fd; border-top: 2px solid #93c5fd; }
 .smm-tbl th.th-grp-design { background: #f0fdf4; color: #15803d; border-bottom-color: #86efac; border-top: 2px solid #86efac; }
 .smm-tbl th.th-grp-dm     { background: #f5f3ff; color: #7c3aed; border-bottom-color: #c4b5fd; border-top: 2px solid #c4b5fd; }
+.smm-tbl th.sep-total  { border-left: 2px solid #93c5fd; }
 .smm-tbl th.sep-design { border-left: 2px solid #86efac; }
 .smm-tbl th.sep-dm     { border-left: 2px solid #c4b5fd; }
 .smm-tbl td {
@@ -197,6 +200,7 @@
 .smm-tbl tbody tr { transition: background .12s; }
 .smm-tbl tbody tr:hover td { background: #fff7ed; }
 .smm-tbl tbody tr:last-child td { border-bottom: none; }
+.smm-tbl td.sep-total  { border-left: 2px solid #93c5fd; }
 .smm-tbl td.sep-design { border-left: 2px solid #bbf7d0; }
 .smm-tbl td.sep-dm     { border-left: 2px solid #c4b5fd; }
 .smm-tbl td.td-center  { text-align: center; }
@@ -447,8 +451,8 @@
                         <th rowspan="2" class="th-accent th-center">Tenure</th>
                         <th rowspan="2" class="th-center" style="color:#ea580c;">Committed<br>Posters</th>
                         <th rowspan="2" class="th-center" style="color:#ea580c;">Committed<br>Videos</th>
-                        <th colspan="5" class="th-group th-grp-design">🎨 Design Team</th>
-                        <th colspan="5" class="th-group th-grp-dm">📢 Digital Marketing Team</th>
+                        <th colspan="5" class="th-group th-grp-design sep-design">🎨 Design Team</th>
+                        <th colspan="5" class="th-group th-grp-dm sep-dm">📢 Digital Marketing Team</th>
                         <th rowspan="2" class="th-center">Status</th>
                     </tr>
                     <tr>
@@ -468,8 +472,7 @@
                     @forelse($rows as $row)
                         @php
                             $tc  = $row['committed_posters'] + $row['committed_videos'];
-                            $td  = $row['design_completed_posters'] + $row['design_completed_videos']
-                                 + $row['dm_completed_posters'] + $row['dm_completed_videos'];
+                            $td  = $row['completed_posters'] + $row['completed_videos'];
                             $pct    = $tc > 0 ? min(100, round($td / $tc * 100)) : 0;
                             $barCls = $pct >= 100 ? 'success' : ($row['status'] === 'overdue' ? 'danger' : '');
                             $ini    = strtoupper(substr($row['account_name'], 0, 1));
@@ -487,11 +490,14 @@
                             <td><span class="smm-date">{{ $row['end_date'] ? \Carbon\Carbon::parse($row['end_date'])->format('d M Y') : '—' }}</span></td>
                             <td class="td-center">
                                 @if($row['tenure'] !== null)
-                                    <span class="smm-tenure">{{ $row['tenure'] }}<span style="font-size:10px;color:#94a3b8;font-weight:500;"> mo</span></span>
+                                    <span class="smm-tenure">{{ $row['tenure'] }}<span style="font-size:10px;color:#94a3b8;font-weight:500;"> days</span></span>
                                 @else <span style="color:#d1d5db;">—</span> @endif
                             </td>
                             <td class="td-center"><span class="smm-num {{ $row['committed_posters'] ? 'commit' : 'zero' }}">{{ $row['committed_posters'] ?: '—' }}</span></td>
                             <td class="td-center"><span class="smm-num {{ $row['committed_videos'] ? 'commit' : 'zero' }}">{{ $row['committed_videos'] ?: '—' }}</span></td>
+
+
+
                             <td class="td-center sep-design"><span class="smm-num {{ $row['design_completed_posters'] ? 'done' : 'zero' }}">{{ $row['design_completed_posters'] ?: '—' }}</span></td>
                             <td class="td-center"><span class="smm-num {{ $row['design_pending_posters'] ? 'pend' : 'zero' }}">{{ $row['design_pending_posters'] ?: '—' }}</span></td>
                             <td class="td-center"><span class="smm-num {{ $row['design_completed_videos'] ? 'done' : 'zero' }}">{{ $row['design_completed_videos'] ?: '—' }}</span></td>
@@ -506,14 +512,14 @@
                                 <span class="smm-badge {{ $row['status'] }}">
                                     <span class="smm-badge-dot"></span> {{ ucfirst($row['status']) }}
                                 </span>
-                                @if($tc > 0)
+                                {{--  @if($tc > 0)
                                     <div class="smm-prog-track"><div class="smm-prog-fill {{ $barCls }}" style="width:{{ $pct }}%"></div></div>
                                     <div class="smm-prog-label">{{ $pct }}% complete</div>
-                                @endif
+                                @endif  --}}
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="19">
+                        <tr><td colspan="23">
                             <div class="smm-empty">
                                 <div class="smm-empty-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
                                 <div class="smm-empty-title">No SMM Records Found</div>
@@ -548,8 +554,8 @@
                         <th rowspan="2" class="th-accent th-center">Tenure</th>
                         <th rowspan="2" class="th-center" style="color:#ea580c;">Committed<br>Posters</th>
                         <th rowspan="2" class="th-center" style="color:#ea580c;">Committed<br>Videos</th>
-                        <th colspan="5" class="th-group th-grp-design">🎨 Design Team</th>
-                        <th colspan="5" class="th-group th-grp-dm">📢 Digital Marketing Team</th>
+                        <th colspan="5" class="th-group th-grp-design sep-design">🎨 Design Team</th>
+                        <th colspan="5" class="th-group th-grp-dm sep-dm">📢 Digital Marketing Team</th>
                         <th rowspan="2" class="th-center">Status</th>
                     </tr>
                     <tr>
@@ -568,7 +574,7 @@
                 <tbody>
                     @forelse($byLead as $accountName => $accountRows)
                         <tr class="smm-group-header">
-                            <td colspan="19">
+                            <td colspan="23">
                                 <span class="smm-account-avatar" style="display:inline-flex;width:26px;height:26px;border-radius:8px;font-size:12px;vertical-align:middle;margin-right:8px;">{{ strtoupper(substr($accountName, 0, 1)) }}</span>
                                 {{ $accountName }}
                                 <span class="smm-group-count">{{ $accountRows->count() }} product{{ $accountRows->count() !== 1 ? 's' : '' }}</span>
@@ -578,8 +584,7 @@
                         @foreach($accountRows as $row)
                             @php
                                 $tc  = $row['committed_posters'] + $row['committed_videos'];
-                                $td  = $row['design_completed_posters'] + $row['design_completed_videos']
-                                     + $row['dm_completed_posters'] + $row['dm_completed_videos'];
+                                $td  = $row['completed_posters'] + $row['completed_videos'];
                                 $pct    = $tc > 0 ? min(100, round($td / $tc * 100)) : 0;
                                 $barCls = $pct >= 100 ? 'success' : ($row['status'] === 'overdue' ? 'danger' : '');
                             @endphp
@@ -590,11 +595,18 @@
                                 <td><span class="smm-date">{{ $row['start_date'] ? \Carbon\Carbon::parse($row['start_date'])->format('d M Y') : '—' }}</span></td>
                                 <td><span class="smm-date">{{ $row['end_date'] ? \Carbon\Carbon::parse($row['end_date'])->format('d M Y') : '—' }}</span></td>
                                 <td class="td-center">
-                                    @if($row['tenure'] !== null)<span class="smm-tenure">{{ $row['tenure'] }}<span style="font-size:10px;color:#94a3b8;font-weight:500;"> mo</span></span>
+                                    @if($row['tenure'] !== null)<span class="smm-tenure">{{ $row['tenure'] }}<span style="font-size:10px;color:#94a3b8;font-weight:500;"> days</span></span>
                                     @else<span style="color:#d1d5db;">—</span>@endif
                                 </td>
                                 <td class="td-center"><span class="smm-num {{ $row['committed_posters'] ? 'commit' : 'zero' }}">{{ $row['committed_posters'] ?: '—' }}</span></td>
                                 <td class="td-center"><span class="smm-num {{ $row['committed_videos'] ? 'commit' : 'zero' }}">{{ $row['committed_videos'] ?: '—' }}</span></td>
+
+
+
+
+
+
+
                                 <td class="td-center sep-design"><span class="smm-num {{ $row['design_completed_posters'] ? 'done' : 'zero' }}">{{ $row['design_completed_posters'] ?: '—' }}</span></td>
                                 <td class="td-center"><span class="smm-num {{ $row['design_pending_posters'] ? 'pend' : 'zero' }}">{{ $row['design_pending_posters'] ?: '—' }}</span></td>
                                 <td class="td-center"><span class="smm-num {{ $row['design_completed_videos'] ? 'done' : 'zero' }}">{{ $row['design_completed_videos'] ?: '—' }}</span></td>
@@ -615,7 +627,7 @@
                             </tr>
                         @endforeach
                     @empty
-                        <tr><td colspan="19">
+                        <tr><td colspan="23">
                             <div class="smm-empty">
                                 <div class="smm-empty-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
                                 <div class="smm-empty-title">No SMM Records Found</div>

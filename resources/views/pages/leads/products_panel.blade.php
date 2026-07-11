@@ -165,20 +165,20 @@
         <div class="pp-sum-value">₹{{ number_format($totalValue,2) }}</div>
         <div class="pp-sum-sub">{{ $prodCount }} product(s)</div>
     </div>
-    <div class="pp-sum-card pp-paid">
+    <div class="pp-sum-card pp-paid" style="cursor:pointer" onclick="PP.ppShowReceivedPayments()">
         <div class="pp-sum-label">Amount Received</div>
-        <div class="pp-sum-value" style="color:#16a34a">₹{{ number_format($totalPaid,2) }}</div>
-        <div class="pp-sum-sub" style="color:#16a34a">Collected so far</div>
+        <div class="pp-sum-value" id="pp-sum-paid" style="color:#16a34a">₹{{ number_format($totalPaid,2) }}</div>
+        <div class="pp-sum-sub" style="color:#16a34a">Collected so far (Click to view)</div>
     </div>
-    <div class="pp-sum-card pp-pending">
+    <div class="pp-sum-card pp-pending" style="cursor:pointer" onclick="PP.ppShowPendingPayments()">
         <div class="pp-sum-label">Amount Pending</div>
-        <div class="pp-sum-value" style="color:{{ $totalPending>0?'#dc2626':'#16a34a' }}">₹{{ number_format($totalPending,2) }}</div>
-        <div class="pp-sum-sub" style="color:{{ $totalPending>0?'#dc2626':'#16a34a' }}">{{ $totalPending>0?'Outstanding':'Fully Settled ✓' }}</div>
+        <div class="pp-sum-value" id="pp-sum-pending" style="color:{{ $totalPending>0?'#dc2626':'#16a34a' }}">₹{{ number_format($totalPending,2) }}</div>
+        <div class="pp-sum-sub" style="color:{{ $totalPending>0?'#dc2626':'#16a34a' }}">{{ $totalPending>0?'Outstanding (Click to view)':'Fully Settled ✓ (Click to view)' }}</div>
     </div>
-    <div class="pp-sum-card pp-count">
+    <div class="pp-sum-card pp-count" style="cursor:pointer" onclick="PP.ppShowConvertedProducts()">
         <div class="pp-sum-label">Converted</div>
-        <div class="pp-sum-value" style="color:#7c3aed">{{ $lead->products->where('product_status','converted')->count() }}</div>
-        <div class="pp-sum-sub">of {{ $prodCount }} total</div>
+        <div class="pp-sum-value" id="pp-sum-converted" style="color:#7c3aed">{{ $lead->products->where('product_status','converted')->count() }}</div>
+        <div class="pp-sum-sub">of {{ $prodCount }} total (Click to view)</div>
     </div>
 </div>
 

@@ -65,7 +65,7 @@
 
         <div class="lr-page">
             <div class="lr-summary-grid">
-                @can('leaverequest.approve')
+                @can('leave_requests.approve')
                 <div class="lr-summary-card">
                     <div class="lr-summary-label">Waiting For Me</div>
                     <div class="lr-summary-value">{{ $pendingApprovals->count() }}</div>
@@ -77,7 +77,7 @@
                     <div class="lr-summary-value">{{ $leaveRequests->total() }}</div>
                     <div class="lr-summary-sub">Your leave requests with current approval status.</div>
                 </div>
-                @can('leaverequest.approve')
+                @can('leave_requests.approve')
                 <div class="lr-summary-card">
                     <div class="lr-summary-label">Recent Decisions</div>
                     <div class="lr-summary-value">{{ $handledApprovals->count() }}</div>
@@ -87,17 +87,17 @@
             </div>
 
             <div class="lr-nav">
-                @can('leaverequest.approve')
+                @can('leave_requests.approve')
                 <a href="#leave-approvals" class="lr-nav-link">Waiting For My Approval <span class="lr-nav-count">{{ $pendingApprovals->count() }}</span></a>
                 @endcan
                 <a href="#leave-my-requests" class="lr-nav-link">My Leave Requests <span class="lr-nav-count">{{ $leaveRequests->total() }}</span></a>
-                @can('leaverequest.approve')
+                @can('leave_requests.approve')
                 <a href="#leave-decisions" class="lr-nav-link">My Recent Decisions <span class="lr-nav-count">{{ $handledApprovals->count() }}</span></a>
                 @endcan
             </div>
 
             <div class="lr-grid">
-            @can('leaverequest.approve')
+            @can('leave_requests.approve')
             <div id="leave-approvals" class="eob-table-card lr-section-card">
                 <div class="lr-section-head">
                     <div>

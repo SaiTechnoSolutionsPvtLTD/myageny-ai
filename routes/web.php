@@ -277,8 +277,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/checkout', [AttendanceController::class, 'storeCheckout'])->name('attendance.checkout.store');
     Route::get('/attendance/lookup', [AttendanceController::class, 'lookupAttendance'])->name('attendance.lookup');
     Route::get('/attendance/export', [AttendanceController::class, 'export'])->name('attendance.export');
-    Route::get('/house-keeping-management', [HouseKeepingManagementController::class, 'index'])->name('house-keeping.index');
-    Route::post('/house-keeping-management/completions', [HouseKeepingManagementController::class, 'updateCompletion'])->name('house-keeping.completions.update');
+    Route::get('/house-keeping-management', [HouseKeepingManagementController::class, 'index'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.index');
+    Route::post('/house-keeping-management/completions', [HouseKeepingManagementController::class, 'updateCompletion'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.completions.update');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
         ->name('leave-requests.approve');
@@ -454,9 +458,11 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->except(['show']);
 
     Route::resource('house-keeping-categories', HouseKeepingCategoryController::class)
+         ->middleware('can:settings.manage')
          ->except(['show']);
 
     Route::resource('house-keeping-works', HouseKeepingWorkController::class)
+         ->middleware('can:settings.manage')
          ->except(['show']);
 
     Route::resource('facility-titles', FacilityTitleController::class)

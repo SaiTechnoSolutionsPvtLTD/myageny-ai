@@ -113,8 +113,16 @@
     var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production', 'pp-modal-status-confirm'];
 
     function ppShow(id) {
+        console.log('PP: ppShow called for ID:', id);
         var e = el(id);
-        if (e) { e.classList.add('pp-show'); document.body.style.overflow = 'hidden'; }
+        if (!e) {
+            console.error('PP: Element with ID "' + id + '" not found in DOM!');
+            alert('Error: Modal element with ID "' + id + '" was not found in the page!');
+            return;
+        }
+        e.classList.add('pp-show');
+        document.body.style.overflow = 'hidden';
+        console.log('PP: Successfully showed modal:', id);
     }
 
     PP.ppHideModal = function (id) {
@@ -1070,6 +1078,233 @@
         .catch(function () {
             setInner('pp-hist-body', '<div class="pp-hist-empty"><div class="pp-hist-empty-ico">⚠️</div><div>Failed to load history.</div></div>');
         });
+    };
+
+    /* ─────────────────────────────────────────────────────────────
+       SUMMARY INFO POPUP MODALS
+       ───────────────────────────────────────────────────────────── */
+    PP.ppShowReceivedPayments = function () {
+        console.log('PP: ppShowReceivedPayments function executed!');
+        var payments = [];
+        ppState.deals.forEach(function (deal) {
+            deal.products.forEach(function (p) {
+                if (p.payments && p.payments.length > 0) {
+                    p.payments.forEach(function (pmt) {
+                        payments.push({
+                            payment: pmt,
+                            productName: p.name,
+                            dealName: deal.deal_name
+                        });
+                    });
+                }
+            });
+        });
+
+        payments.sort(function (a, b) {
+            return new Date(b.payment.date) - new Date(a.payment.date);
+        });
+
+        var title = 'Received Payments List';
+        var bodyHtml = '';
+
+        if (payments.length === 0) {
+            bodyHtml = '<div style="padding: 40px; text-align: center; color: #64748b; font-size: 14px;">No received payments recorded yet.</div>';
+        } else {
+            bodyHtml = '<div style="overflow-y: auto; max-height: 480px;"><table class="pp-table" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">' +
+                '<thead>' +
+                    '<tr style="border-bottom: 2px solid #e2e8f0; background: #f8fafc;">' +
+                        '<th style="padding: 12px 16px;">Product / Deal</th>' +
+                        '<th style="padding: 12px 16px;">Paid Date & By</th>' +
+                        '<th style="padding: 12px 16px;">Payment Method</th>' +
+                        '<th style="padding: 12px 16px;">Reference & Notes</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Amount</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    payments.map(function (item) {
+                        var pmt = item.payment;
+                        var attUrl = (pmt.attachment && pmt.attachment.url) || pmt.attachment_url || null;
+                        var attName = (pmt.attachment && pmt.attachment.name) || pmt.attachment_name || 'Download';
+                        var attHtml = attUrl ? ' <a href="' + escAttr(attUrl) + '" target="_blank" style="color: #2563eb; text-decoration: underline; font-size: 11px;">[' + escHtml(attName) + ']</a>' : '';
+
+                        return '<tr style="border-bottom: 1px solid #f1f5f9;">' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<div style="font-weight: 700; color: #0f172a;">' + escHtml(item.productName) + '</div>' +
+                                '<div style="font-size: 11px; color: #64748b;">Deal: ' + escHtml(item.dealName) + '</div>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<div>' + escHtml(pmt.date) + '</div>' +
+                                '<div style="font-size: 11px; color: #64748b;">By: ' + escHtml(pmt.by) + '</div>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<span class="pp-pill" style="background: ' + pmt.modeColor + '20; color: ' + pmt.modeColor + '; font-weight: 600; font-size: 11px; border: 1px solid ' + pmt.modeColor + '40;">' +
+                                    pmt.modeIcon + ' ' + pmt.modeLabel +
+                                '</span>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px; max-width: 200px; word-break: break-word;">' +
+                                (pmt.ref ? '<div>Ref: ' + escHtml(pmt.ref) + '</div>' : '') +
+                                (pmt.notes ? '<div style="font-size: 11px; color: #64748b; font-style: italic;">Notes: ' + escHtml(pmt.notes) + '</div>' : '') +
+                                attHtml +
+                            '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; font-weight: 700; color: #16a34a;">' +
+                                fmt(pmt.amount) +
+                            '</td>' +
+                        '</tr>';
+                    }).join('') +
+                '</tbody>' +
+            '</table></div>';
+        }
+
+        var titleEl = el('pp-modal-info-title');
+        var bodyEl = el('pp-modal-info-body');
+        if (titleEl) titleEl.innerText = title;
+        if (bodyEl) bodyEl.innerHTML = bodyHtml;
+        ppShow('pp-modal-info-summary');
+    };
+
+    PP.ppShowPendingPayments = function () {
+        console.log('PP: ppShowPendingPayments function executed!');
+        var pendingProducts = [];
+        ppState.deals.forEach(function (deal) {
+            deal.products.forEach(function (p) {
+                var due = p.total - p.paid;
+                if (due > 0) {
+                    pendingProducts.push({
+                        product: p,
+                        due: due,
+                        dealName: deal.deal_name
+                    });
+                }
+            });
+        });
+
+        pendingProducts.sort(function (a, b) {
+            return b.due - a.due;
+        });
+
+        var title = 'Pending Payments List';
+        var bodyHtml = '';
+
+        if (pendingProducts.length === 0) {
+            bodyHtml = '<div style="padding: 40px; text-align: center; color: #16a34a; font-size: 14px; font-weight: 700;">All payments fully settled! No outstanding amounts.</div>';
+        } else {
+            bodyHtml = '<div style="overflow-y: auto; max-height: 480px;"><table class="pp-table" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">' +
+                '<thead>' +
+                    '<tr style="border-bottom: 2px solid #e2e8f0; background: #f8fafc;">' +
+                        '<th style="padding: 12px 16px;">Product / Deal</th>' +
+                        '<th style="padding: 12px 16px;">Status</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Total Value</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Amount Paid</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Pending Due</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    pendingProducts.map(function (item) {
+                        var prod = item.product;
+                        var statusValue = String(prod.status_id || prod.status_value || '');
+                        var statusCfg = getStatusConfig(statusValue, prod.status_label);
+
+                        return '<tr style="border-bottom: 1px solid #f1f5f9;">' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<div style="font-weight: 700; color: #0f172a;">' + escHtml(prod.name) + '</div>' +
+                                '<div style="font-size: 11px; color: #64748b;">Deal: ' + escHtml(item.dealName) + '</div>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<span class="pp-pill" style="background: ' + statusCfg.bg + '; color: ' + statusCfg.text + '; border: 1px solid ' + statusCfg.border + '; font-weight: 600; font-size: 11px;">' +
+                                    statusCfg.icon + ' ' + (prod.status_label || prod.status_value) +
+                                '</span>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right;">' + fmt(prod.total) + '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; color: #16a34a; font-weight: 600;">' + fmt(prod.paid) + '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; color: #dc2626; font-weight: 700;">' + fmt(item.due) + '</td>' +
+                        '</tr>';
+                    }).join('') +
+                '</tbody>' +
+            '</table></div>';
+        }
+
+        var titleEl = el('pp-modal-info-title');
+        var bodyEl = el('pp-modal-info-body');
+        if (titleEl) titleEl.innerText = title;
+        if (bodyEl) bodyEl.innerHTML = bodyHtml;
+        ppShow('pp-modal-info-summary');
+    };
+
+    PP.ppShowConvertedProducts = function () {
+        console.log('PP: ppShowConvertedProducts function executed!');
+        var convertedProducts = [];
+        ppState.deals.forEach(function (deal) {
+            deal.products.forEach(function (p) {
+                if (isConvertedProduct(p)) {
+                    convertedProducts.push({
+                        product: p,
+                        dealName: deal.deal_name
+                    });
+                }
+            });
+        });
+
+        convertedProducts.sort(function (a, b) {
+            return a.product.name.localeCompare(b.product.name);
+        });
+
+        var title = 'Converted Products List';
+        var bodyHtml = '';
+
+        if (convertedProducts.length === 0) {
+            bodyHtml = '<div style="padding: 40px; text-align: center; color: #64748b; font-size: 14px;">No converted products in this lead yet.</div>';
+        } else {
+            bodyHtml = '<div style="overflow-y: auto; max-height: 480px;"><table class="pp-table" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">' +
+                '<thead>' +
+                    '<tr style="border-bottom: 2px solid #e2e8f0; background: #f8fafc;">' +
+                        '<th style="padding: 12px 16px;">Product / Deal</th>' +
+                        '<th style="padding: 12px 16px;">Production Status</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Total Value</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Amount Paid</th>' +
+                        '<th style="padding: 12px 16px; text-align: right;">Pending Due</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    convertedProducts.map(function (item) {
+                        var prod = item.product;
+                        var due = prod.total - prod.paid;
+                        var dueColor = due > 0 ? '#dc2626' : '#16a34a';
+
+                        var productionHtml = '<span style="color: #64748b; font-style: italic;">Not initiated</span>';
+                        if (prod.productionInitiation) {
+                            var dept = prod.productionInitiation.department_name || 'Production';
+                            productionHtml = '<span style="color: #047857; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">' +
+                                '✓ ' + escHtml(dept) +
+                            '</span>';
+                            if (prod.productionInitiation.view_url) {
+                                productionHtml = '<a href="' + escAttr(prod.productionInitiation.view_url) + '" style="color: #047857; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;">' +
+                                    '✓ ' + escHtml(dept) +
+                                '</a>';
+                            }
+                        }
+
+                        return '<tr style="border-bottom: 1px solid #f1f5f9;">' +
+                            '<td style="padding: 12px 16px;">' +
+                                '<div style="font-weight: 700; color: #0f172a;">' + escHtml(prod.name) + '</div>' +
+                                '<div style="font-size: 11px; color: #64748b;">Deal: ' + escHtml(item.dealName) + '</div>' +
+                            '</td>' +
+                            '<td style="padding: 12px 16px;">' +
+                                productionHtml +
+                            '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; font-weight: 600;">' + fmt(prod.total) + '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; color: #16a34a; font-weight: 600;">' + fmt(prod.paid) + '</td>' +
+                            '<td style="padding: 12px 16px; text-align: right; color: ' + dueColor + '; font-weight: 700;">' + fmt(due) + '</td>' +
+                        '</tr>';
+                    }).join('') +
+                '</tbody>' +
+            '</table></div>';
+        }
+
+        var titleEl = el('pp-modal-info-title');
+        var bodyEl = el('pp-modal-info-body');
+        if (titleEl) titleEl.innerText = title;
+        if (bodyEl) bodyEl.innerHTML = bodyHtml;
+        ppShow('pp-modal-info-summary');
     };
 
     PP.ppShowProduction = function (prodId) {

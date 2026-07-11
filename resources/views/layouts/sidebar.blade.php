@@ -241,6 +241,7 @@
                 @endcan
 
                 @if(! $hrmsSelfService)
+                @can('house_keeping.menuview')
                 <a href="{{ route('house-keeping.index') }}" class="nav-item {{ request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*') ? 'active' : '' }}">
                     @if(request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*'))
                         <div class="active-indicator"></div>
@@ -256,6 +257,7 @@
                         <span>House Keeping</span>
                     </div>
                 </a>
+                @endcan
                 @endif
 
                 @if(! $hrmsSelfService)

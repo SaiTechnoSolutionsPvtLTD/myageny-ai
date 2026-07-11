@@ -40,6 +40,7 @@ class Permission extends SpatiePermission
         'facility_management' => ['menuview'],
         'assets' => ['menuview'],
         'holiday_calendar' => ['menuview'],
+        'house_keeping' => ['menuview'],
         'lead_status' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'lead_source' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'outcome_category' => ['menuview', 'view', 'create', 'edit', 'delete'],
