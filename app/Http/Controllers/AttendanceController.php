@@ -630,7 +630,13 @@ class AttendanceController extends Controller
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        return (bool) ($user && (
+            $user->isSystemAdmin()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isCompanyAdmin()
+            || $user->isBranchAdmin()
+        ));
     }
 
     private function currentEmployee(): ?EmployeeOnboarding

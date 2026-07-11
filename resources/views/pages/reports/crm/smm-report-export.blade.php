@@ -12,7 +12,7 @@
             <th rowspan="2">Product</th>
             <th rowspan="2">Start Date</th>
             <th rowspan="2">End Date</th>
-            <th rowspan="2">Tenure (Months)</th>
+            <th rowspan="2">Tenure (Days)</th>
             <th rowspan="2">Committed Posters</th>
             <th rowspan="2">Committed Videos</th>
             <th colspan="5" style="background:#f0fdf4;color:#047857;border:1px solid #bbf7d0;">Design Team</th>
@@ -43,6 +43,7 @@
                 <td align="center">{{ $row['tenure'] !== null ? $row['tenure'] : '' }}</td>
                 <td align="center">{{ $row['committed_posters'] ?: 0 }}</td>
                 <td align="center">{{ $row['committed_videos'] ?: 0 }}</td>
+                
                 <td align="center" style="background:#f0fdf4;">{{ $row['design_completed_posters'] ?: 0 }}</td>
                 <td align="center" style="background:#fefce8;color:#854d0e;">{{ $row['design_pending_posters'] ?: 0 }}</td>
                 <td align="center" style="background:#f0fdf4;">{{ $row['design_completed_videos'] ?: 0 }}</td>
@@ -69,6 +70,7 @@
             <td colspan="6">Total</td>
             <td align="center">{{ $rows->sum('committed_posters') }}</td>
             <td align="center">{{ $rows->sum('committed_videos') }}</td>
+            
             <td align="center" style="background:#f0fdf4;">{{ $rows->sum('design_completed_posters') }}</td>
             <td align="center" style="background:#fefce8;">{{ $rows->sum('design_pending_posters') }}</td>
             <td align="center" style="background:#f0fdf4;">{{ $rows->sum('design_completed_videos') }}</td>

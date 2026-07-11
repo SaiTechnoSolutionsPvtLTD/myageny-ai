@@ -333,22 +333,22 @@
         <div class="pp-sum-value" id="pp-sum-total">₹{{ number_format($totalValue,2) }}</div>
         <div class="pp-sum-sub" id="pp-sum-count">{{ $prodCount }} product(s)</div>
     </div>
-    <div class="pp-sum-card pp-paid">
+    <div class="pp-sum-card pp-paid" style="cursor:pointer" onclick="PP.ppShowReceivedPayments()">
         <div class="pp-sum-label">Amount Received </div>
-        <div class="pp-sum-value"  style="color:#16a34a">₹{{ number_format($totalPaid,2) }}</div>
-        <div class="pp-sum-sub" style="color:#16a34a">Collected so far</div>
+        <div class="pp-sum-value" id="pp-sum-paid" style="color:#16a34a">₹{{ number_format($totalPaid,2) }}</div>
+        <div class="pp-sum-sub" style="color:#16a34a">Collected so far (Click to view)</div>
     </div>
-    <div class="pp-sum-card pp-pending">
+    <div class="pp-sum-card pp-pending" style="cursor:pointer" onclick="PP.ppShowPendingPayments()">
         <div class="pp-sum-label">Amount Pending</div>
         <div class="pp-sum-value" id="pp-sum-pending" style="color:{{ $totalPending>0?'#dc2626':'#16a34a' }}">
             ₹{{ number_format($totalPending,2) }}
         </div>
-        <div class="pp-sum-sub">{{ $totalPending>0 ? 'Outstanding' : 'Fully Settled ✓' }}</div>
+        <div class="pp-sum-sub">{{ $totalPending>0 ? 'Outstanding (Click to view)' : 'Fully Settled ✓ (Click to view)' }}</div>
     </div>
-    <div class="pp-sum-card pp-count">
+    <div class="pp-sum-card pp-count" style="cursor:pointer" onclick="PP.ppShowConvertedProducts()">
         <div class="pp-sum-label">Converted</div>
         <div class="pp-sum-value" id="pp-sum-converted" style="color:#7c3aed">{{ $converted }}</div>
-        <div class="pp-sum-sub">of {{ $prodCount }} total</div>
+        <div class="pp-sum-sub">of {{ $prodCount }} total (Click to view)</div>
     </div>
 </div>
 
@@ -684,6 +684,21 @@
     </div>
 </div>
 
+<div class="pp-overlay" id="pp-modal-info-summary">
+    <div class="pp-modal-box pp-modal-box--wide">
+        <div class="pp-mhd">
+            <h3 class="pp-mtitle" id="pp-modal-info-title">Summary Details</h3>
+            <button type="button" class="pp-mclose" onclick="PP.ppHideModal('pp-modal-info-summary')">✕</button>
+        </div>
+        <div class="pp-mbody" id="pp-modal-info-body">
+            <!-- Content will be rendered dynamically by JS -->
+        </div>
+        <div class="pp-mfoot" style="justify-content: flex-end;">
+            <button type="button" class="ppf-btn ppf-btn-sec" onclick="PP.ppHideModal('pp-modal-info-summary')">Close</button>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
 <script>
 /* Inject server-side config for products-panel.js */
@@ -696,6 +711,6 @@ window.PP_CONFIG = {
 };
 window.PP = window.PP || {};
 </script>
-<script src="{{ asset('js/products-panel.js') }}"></script>
+<script src="{{ asset('js/products-panel.js') }}?v={{ filemtime(public_path('js/products-panel.js')) }}"></script>
 
 @endpush

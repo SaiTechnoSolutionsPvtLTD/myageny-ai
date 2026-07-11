@@ -43,7 +43,18 @@ if (!function_exists('amount_in_words')) {
         }
 
         $rupees = implode('', array_reverse($str));
-        $paise = ($decimal) ? " and " . $words[$decimal / 10 * 10] . " " . $words[$decimal % 10] . " Paise" : '';
+        $paise = '';
+        if ($decimal > 0) {
+            $decimal = (int) $decimal;
+            if ($decimal < 21) {
+                $paise_words = $words[$decimal];
+            } else {
+                $tens = $words[floor($decimal / 10) * 10];
+                $ones = $words[$decimal % 10];
+                $paise_words = trim($tens . ' ' . $ones);
+            }
+            $paise = " and " . $paise_words . " Paise";
+        }
 
         return trim($rupees) . " Rupees" . $paise . " Only";
     }
