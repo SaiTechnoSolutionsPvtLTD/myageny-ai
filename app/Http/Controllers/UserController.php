@@ -70,7 +70,10 @@ class UserController extends Controller
 
         Branch::ensureDefaultForCurrentCompany();
         $branches = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
-        $roles    = Role::orderBy('name')->get();
+        $roles    = Role::withoutGlobalScope('company')
+            ->where('company_id', auth()->user()?->company_id)
+            ->orderBy('name')
+            ->get();
 
         return view('pages.users.create', compact('branches', 'roles'));
     }
@@ -124,7 +127,10 @@ class UserController extends Controller
     public function show(User $user)
     {
         $user->load(['branch', 'roles', 'roles.permissions', 'permissions']);
-        $roles = Role::orderByRaw('COALESCE(display_name, name)')->get();
+        $roles = Role::withoutGlobalScope('company')
+            ->where('company_id', $user->company_id)
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
         $permissions = Permission::orderBy('module')
             ->orderByRaw('COALESCE(display_name, name)')
             ->get()
@@ -142,7 +148,10 @@ class UserController extends Controller
 
         Branch::ensureDefaultForCurrentCompany();
         $branches    = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
-        $roles       = Role::orderBy('display_name')->get();
+        $roles       = Role::withoutGlobalScope('company')
+            ->where('company_id', $user->company_id)
+            ->orderBy('display_name')
+            ->get();
         $currentRole = $user->roles->first()?->name;
 
         return view('pages.users.edit', compact('user', 'branches', 'roles', 'currentRole'));

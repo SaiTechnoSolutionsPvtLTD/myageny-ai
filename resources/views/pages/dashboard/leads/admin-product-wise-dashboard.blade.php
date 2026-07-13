@@ -378,6 +378,11 @@ async function loadDashboard() {
             credentials: 'same-origin',
         });
 
+        if (res.status === 401) {
+            window.location.href = "{{ route('login') }}";
+            throw new Error('Unauthenticated. Redirecting to login page...');
+        }
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const json = await res.json();

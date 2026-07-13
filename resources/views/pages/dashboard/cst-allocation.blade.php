@@ -92,12 +92,56 @@
 .modal-footer      { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 
 /* Custom Pagination styles */
-.pagination        { display:flex; list-style:none; padding:0; margin:16px 0; gap:5px; align-items:center; }
-.page-item         { display:inline; }
+.pagination {
+    display: flex;
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0 0;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+}
+.page-item {
+    display: inline;
+}
 .page-item a,
-.page-item span    { padding:6px 12px; border:1px solid var(--cst-border); border-radius:8px; text-decoration:none; color:var(--cst-text); font-weight:600; font-size:12px; }
-.page-item.active span { background:var(--cst-orange); color:#fff; border-color:var(--cst-orange); }
-.page-item.disabled span { color:var(--cst-muted); background:#f9fafb; cursor:not-allowed; }
+.page-item span,
+.page-item .page-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--cst-border);
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--cst-text);
+    font-weight: 600;
+    font-size: 13px;
+    background: #ffffff;
+    transition: all 0.2s ease;
+}
+.page-item a:hover {
+    border-color: var(--cst-orange);
+    color: var(--cst-orange);
+    background: #fff8f3;
+}
+.page-item.active span,
+.page-item.active .page-link,
+.page-item.active a {
+    background: var(--cst-orange) !important;
+    color: #ffffff !important;
+    border-color: var(--cst-orange) !important;
+}
+.page-item.disabled span,
+.page-item.disabled .page-link,
+.page-item.disabled a {
+    color: var(--cst-muted) !important;
+    background: #f9fafb !important;
+    border-color: var(--cst-border) !important;
+    cursor: not-allowed;
+}
 </style>
 @endpush
 
@@ -259,7 +303,7 @@
 
                 {{-- Pagination Links --}}
                 <div style="display:flex; justify-content:center; margin-top:20px;">
-                    {{ $pendingLeads->appends(request()->except('page_pending'))->links() }}
+                    {{ $pendingLeads->appends(request()->except('page_pending'))->links('pagination::bootstrap-4') }}
                 </div>
             </div>
         </div>
@@ -352,7 +396,7 @@
 
                 {{-- Pagination Links --}}
                 <div style="display:flex; justify-content:center; margin-top:20px;">
-                    {{ $completedLeads->appends(request()->except('page_completed'))->links() }}
+                    {{ $completedLeads->appends(request()->except('page_completed'))->links('pagination::bootstrap-4') }}
                 </div>
             </div>
         </div>

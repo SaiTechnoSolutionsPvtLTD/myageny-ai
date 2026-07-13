@@ -48,10 +48,10 @@ class employeeMigration extends Command
             return self::SUCCESS;
         }
 
-        $branch = Branch::query()->where('is_active', true)->orderBy('id')->first();
+        $branchesList = Branch::query()->get();
 
-        if (! $branch) {
-            $this->error('No active branch found. Employee store logic requires a branch.');
+        if ($branchesList->isEmpty()) {
+            $this->error('No branch found. Employee store logic requires a branch.');
 
             return self::FAILURE;
         }
@@ -66,6 +66,7 @@ class employeeMigration extends Command
         $userReused = 0;
 
         foreach ($sourceRows as $sourceRow) {
+            $branch = $this->resolveBranch($sourceRow, $branchesList);
             $context = $this->buildContext($sourceRow, $designationLookup, $branch);
 
             if ($context['skip_reason'] !== null) {
@@ -266,8 +267,9 @@ class employeeMigration extends Command
 
             if (! $employee) {
                 $employee = new EmployeeOnboarding();
-                $employee->employee_id = $this->generateNextEmployeeId();
+                $employee->employee_id = $this->generateNextEmployeeId($context['branch']->code);
                 $employee->created_by = $actorId;
+                $employee->company_id = 1;
             }
 
             $employee->fill($this->employeeAttributes($sourceRow, $context));
@@ -374,7 +376,7 @@ class employeeMigration extends Command
             }
         }
 
-        return User::query()
+        $tl = User::query()
             ->with('roles.roleMapping')
             ->where('is_active', true)
             ->where(function ($query) use ($branch) {
@@ -383,6 +385,37 @@ class employeeMigration extends Command
             })
             ->get()
             ->first(fn (User $user) => $this->userHasTeamLeadRoleForDepartment($user, $role->department_id));
+
+        if ($tl) {
+            return $tl;
+        }
+
+        // Fallback: search parent role globally across all branches
+        if ($mapping) {
+            $managerGlobal = User::query()
+                ->where('is_active', true)
+                ->whereHas('roles', fn ($query) => $query->where('roles.id', $mapping->parent_role_id))
+                ->orderBy('id')
+                ->first();
+
+            if ($managerGlobal) {
+                return $managerGlobal;
+            }
+        }
+
+        // Fallback: search team lead globally across all branches
+        $tlGlobal = User::query()
+            ->with('roles.roleMapping')
+            ->where('is_active', true)
+            ->get()
+            ->first(fn (User $user) => $this->userHasTeamLeadRoleForDepartment($user, $role->department_id));
+
+        if ($tlGlobal) {
+            return $tlGlobal;
+        }
+
+        // Final fallback: first active user
+        return User::query()->where('is_active', true)->orderBy('id')->first();
     }
 
     private function findExistingUser(object $sourceRow): ?User
@@ -547,16 +580,56 @@ class employeeMigration extends Command
         return $attributes;
     }
 
-    private function generateNextEmployeeId(): string
+    private function generateNextEmployeeId(string $branchCode): string
     {
         $latestEmployeeId = EmployeeOnboarding::query()
-            ->where('employee_id', 'like', self::EMPLOYEE_ID_PREFIX . '%')
-            ->orderByDesc('employee_id')
+            ->where('employee_id', 'like', $branchCode . '%')
+            ->orderByRaw('CAST(SUBSTRING(employee_id, ' . (strlen($branchCode) + 1) . ') AS UNSIGNED) DESC')
             ->value('employee_id');
 
-        $nextNumber = (int) preg_replace('/\D+/', '', (string) $latestEmployeeId) + 1;
+        $nextNumber = 1;
+        if ($latestEmployeeId) {
+            $numPart = substr($latestEmployeeId, strlen($branchCode));
+            if (is_numeric($numPart)) {
+                $nextNumber = (int) $numPart + 1;
+            }
+        }
 
-        return self::EMPLOYEE_ID_PREFIX . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
+        return $branchCode . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function resolveBranch(object $sourceRow, Collection $branchesList): Branch
+    {
+        $branchName = '';
+        if (isset($sourceRow->branch_id) && !empty($sourceRow->branch_id)) {
+            $branchName = trim((string) $sourceRow->branch_id);
+        } elseif (isset($sourceRow->branch_name) && !empty($sourceRow->branch_name)) {
+            $branchName = trim((string) $sourceRow->branch_name);
+        } elseif (isset($sourceRow->branch) && !empty($sourceRow->branch)) {
+            $branchName = trim((string) $sourceRow->branch);
+        }
+
+        if (!empty($branchName)) {
+            if (is_numeric($branchName)) {
+                $branch = $branchesList->firstWhere('id', (int) $branchName);
+                if ($branch) {
+                    return $branch;
+                }
+            }
+
+            $branch = $branchesList->first(function ($b) use ($branchName) {
+                return strcasecmp($b->name, $branchName) === 0
+                    || strcasecmp($b->code, $branchName) === 0
+                    || str_contains(strtolower($b->name), strtolower($branchName))
+                    || str_contains(strtolower($branchName), strtolower($b->name));
+            });
+
+            if ($branch) {
+                return $branch;
+            }
+        }
+
+        return $branchesList->firstWhere('is_default', true) ?: $branchesList->first();
     }
 
     private function resolveGrossSalary(object $sourceRow): float

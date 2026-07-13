@@ -75,24 +75,12 @@ class EmployeeDataMigrationAndUserCreateCommand extends Command
             }
 
             // 1. Resolve Branch from the existing branches in our database (do not create any new branches)
-            $branchName = trim($oldEmp->branch_name ?? '');
-            $branch = null;
-
-            if (!empty($branchName)) {
-                // Find match (case-insensitive or substring)
-                $branch = $branchesList->first(function ($b) use ($branchName) {
-                    return strcasecmp($b->name, $branchName) === 0 || str_contains(strtolower($b->name), strtolower($branchName));
-                });
-            }
-
-            // Fallback to default branch or the first branch in the list
-            if (!$branch) {
-                $branch = $branchesList->where('is_default', true)->first() ?: $branchesList->first();
-            }
+            $branch = $this->resolveBranch($oldEmp, $branchesList);
 
             // 2. Resolve Status (active / inactive)
-            // employee_status = 1 means active, 0 means resigned
-            $isActive = trim((string) $oldEmp->employee_status) === '1';
+            // employee_status = 0 or rejoining = 1 means active, employee_status = 1 means resigned/inactive
+            $isActive = trim((string) ($oldEmp->rejoining ?? '')) === '1'
+                || trim((string) ($oldEmp->employee_status ?? '')) === '0';
             $status = $isActive ? 'active' : 'resigned';
 
             // 3. Resolve Designation & Department
@@ -281,6 +269,40 @@ class EmployeeDataMigrationAndUserCreateCommand extends Command
         );
 
         return self::SUCCESS;
+    }
+
+    private function resolveBranch(object $sourceRow, \Illuminate\Support\Collection $branchesList): Branch
+    {
+        $branchName = '';
+        if (isset($sourceRow->branch_id) && !empty($sourceRow->branch_id)) {
+            $branchName = trim((string) $sourceRow->branch_id);
+        } elseif (isset($sourceRow->branch_name) && !empty($sourceRow->branch_name)) {
+            $branchName = trim((string) $sourceRow->branch_name);
+        } elseif (isset($sourceRow->branch) && !empty($sourceRow->branch)) {
+            $branchName = trim((string) $sourceRow->branch);
+        }
+
+        if (!empty($branchName)) {
+            if (is_numeric($branchName)) {
+                $branch = $branchesList->firstWhere('id', (int) $branchName);
+                if ($branch) {
+                    return $branch;
+                }
+            }
+
+            $branch = $branchesList->first(function ($b) use ($branchName) {
+                return strcasecmp($b->name, $branchName) === 0 
+                    || strcasecmp($b->code, $branchName) === 0 
+                    || str_contains(strtolower($b->name), strtolower($branchName))
+                    || str_contains(strtolower($branchName), strtolower($b->name));
+            });
+
+            if ($branch) {
+                return $branch;
+            }
+        }
+
+        return $branchesList->firstWhere('is_default', true) ?: $branchesList->first();
     }
 
     private function findExistingEmployee(?User $user, string $email, ?string $mobile): ?EmployeeOnboarding

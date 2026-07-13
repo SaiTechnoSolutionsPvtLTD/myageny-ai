@@ -943,7 +943,10 @@ console.log('🔥 dashboardLoad called');
     fetch(url, { headers: headers, credentials: 'same-origin' })
         .then(function(res) {
             console.log('STATUS:', res.status);
-            if (res.status === 401) throw new Error('Unauthenticated. Please log in again.');
+            if (res.status === 401) {
+                window.location.href = "{{ route('login') }}";
+                throw new Error('Unauthenticated. Redirecting to login page...');
+            }
             if (res.status === 403) throw new Error('Access denied. Super Admin role required.');
             if (!res.ok) throw new Error('Server error (' + res.status + ')');
             return res.json();

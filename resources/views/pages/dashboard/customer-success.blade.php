@@ -325,6 +325,10 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadFilters() {
     try {
         const res = await fetch('/api/customer-success/filters');
+        if (res.status === 401) {
+            window.location.href = "{{ route('login') }}";
+            return;
+        }
         const json = await res.json();
         if (!json.status) throw new Error(json.message);
 
@@ -396,6 +400,10 @@ async function loadDashboard() {
 
     try {
         const res = await fetch(`/api/customer-success/data?${qs}`);
+        if (res.status === 401) {
+            window.location.href = "{{ route('login') }}";
+            return;
+        }
         const json = await res.json();
         if (!json.status) throw new Error(json.message);
 
