@@ -1,0 +1,504 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Lead;
+use App\Models\LeadProduct;
+use App\Models\LeadProductPayment;
+use App\Models\User;
+use App\Models\Branch;
+use App\Models\Product;
+use App\Models\ProductionInitiation;
+use App\Services\DataVisibilityService;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class CustomerSuccessDashboardController extends Controller
+{
+    public function __construct(private readonly DataVisibilityService $visibility) {}
+
+    /**
+     * Display the customer success dashboard view.
+     */
+    public function index(Request $request): View
+    {
+        return view('pages.dashboard.customer-success');
+    }
+
+    /**
+     * Get Customer Support Team members.
+     */
+    private function getSupportUserIds(User $user): array
+    {
+        $visibleUserIds = $this->visibility->visibleUserIds();
+        
+        $supportUserIds = User::where(function($query) {
+            $query->whereHas('roles.department', function($q) {
+                $q->where('name', 'like', '%customer support%')
+                  ->orWhere('name', 'like', '%customer success%')
+                  ->orWhere('id', 5);
+            })->orWhereHas('employeeOnboarding', function($q) {
+                $q->where('department_id', 5);
+            });
+        })->pluck('id')->toArray();
+
+        if ($visibleUserIds !== null) {
+            return array_values(array_intersect($visibleUserIds, $supportUserIds));
+        }
+
+        return $supportUserIds;
+    }
+
+    /**
+     * Return filter options (Executives, Branches, Products, Sources).
+     */
+    public function filters(Request $request): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+            $supportUserIds = $this->getSupportUserIds($currentUser);
+            
+            $users = User::whereIn('id', $supportUserIds)
+                ->orderBy('name')
+                ->get(['id', 'name']);
+                
+            $branches = $this->visibility->visibleBranches($currentUser);
+            
+            $products = Product::query();
+            $this->visibility->applyProductVisibility($products, $currentUser);
+            $products = $products->select('id', 'product_name')->orderBy('product_name')->get();
+            
+            $sources = $this->visibility->visibleLeadSources($currentUser);
+
+            return response()->json([
+                'status' => true,
+                'data'   => compact('users', 'branches', 'products', 'sources'),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load filter options.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper to retrieve the expiry date of a count_wise production initiation.
+     */
+    private function getRenewalDate($pi): ?string
+    {
+        $formData = is_array($pi->custom_form_data) 
+            ? $pi->custom_form_data 
+            : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+            
+        foreach ($formData as $field) {
+            $key = strtolower(trim($field['field_name'] ?? ''));
+            $value = trim((string) ($field['value'] ?? ''));
+            
+            if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date'])) {
+                if (!empty($value)) {
+                    try {
+                        return Carbon::parse($value)->toDateString();
+                    } catch (\Exception $e) {}
+                }
+            }
+        }
+        
+        return $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date)->toDateString() : null;
+    }
+
+    /**
+     * Return dashboard metrics data feed.
+     */
+    public function data(Request $request): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+            $supportUserIds = $this->getSupportUserIds($currentUser);
+            
+            $filters = $request->only([
+                'user_id', 'branch_id', 'product_id', 'source', 'from_date', 'to_date'
+            ]);
+
+            // Set default date range to current month if empty
+            if (empty($filters['from_date']) && empty($filters['to_date'])) {
+                $filters['from_date'] = now()->startOfMonth()->toDateString();
+                $filters['to_date'] = now()->endOfMonth()->toDateString();
+            }
+
+            $isSupportTl = $currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole();
+            $isSupportExec = $currentUser->hasCustomerSupportLikeRole() && !$currentUser->hasTlLikeRole();
+            $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+
+            // Set up base query constraint closure
+            $applySupportScope = function($query) use ($filters, $currentUser, $isSupportTl, $isSupportExec, $isAdmin) {
+                if (!empty($filters['user_id'])) {
+                    $query->where('leads.customer_support_executive_id', (int) $filters['user_id']);
+                } else {
+                    if ($isSupportTl && !$isAdmin) {
+                        $query->where('leads.customer_support_tl_id', $currentUser->id);
+                    } elseif ($isSupportExec && !$isAdmin) {
+                        $query->where('leads.customer_support_executive_id', $currentUser->id);
+                    } else {
+                        // Admins see all customer support allocated leads
+                        $query->whereNotNull('leads.customer_support_tl_id');
+                    }
+                }
+            };
+
+            if (empty($supportUserIds) && !$isAdmin) {
+                return response()->json([
+                    'status' => true,
+                    'data'   => $this->emptyDashboardResponse()
+                ]);
+            }
+
+            // 1. Fetch count-wise recurring initiations for renewals
+            $initiations = ProductionInitiation::query()
+                ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+                ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+                ->join('products', 'products.id', '=', 'production_initiations.product_id')
+                ->select([
+                    'production_initiations.id',
+                    'production_initiations.project_delivery_date',
+                    'production_initiations.custom_form_data',
+                    'production_initiations.product_name',
+                    'lead_products.total_price',
+                    'lead_products.amount_paid',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'leads.customer_support_tl_id',
+                    'leads.customer_support_executive_id'
+                ])
+                ->where('products.count_wise_report', true)
+                ->where($applySupportScope)
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->get();
+
+            $today = Carbon::today();
+            $cmStart = $today->copy()->startOfMonth();
+            $cmEnd = $today->copy()->endOfMonth();
+            $nmStart = $today->copy()->addMonth()->startOfMonth();
+            $nmEnd = $today->copy()->addMonth()->endOfMonth();
+            $lmStart = $today->copy()->subMonth()->startOfMonth();
+            $lmEnd = $today->copy()->subMonth()->endOfMonth();
+
+            $cmrCount = 0; $cmrValue = 0; $cmrItems = [];
+            $nmrCount = 0; $nmrValue = 0; $nmrItems = [];
+            $lmrCount = 0; $lmrValue = 0; $lmrItems = [];
+
+            foreach ($initiations as $pi) {
+                $rDateStr = $this->getRenewalDate($pi);
+                if (!$rDateStr) continue;
+
+                $rDate = Carbon::parse($rDateStr);
+                $price = (float) $pi->total_price;
+                $paid  = (float) $pi->amount_paid;
+
+                $item = [
+                    'id'           => $pi->id,
+                    'company_name' => $pi->company_name ?: ($pi->contact_name ?: 'N/A'),
+                    'product_name' => $pi->product_name,
+                    'renewal_date' => $rDateStr,
+                    'value'        => $price,
+                    'paid'         => $paid,
+                    'pending'      => max(0, $price - $paid),
+                    'assigned_to'  => $pi->customer_support_executive_id ?: $pi->customer_support_tl_id
+                ];
+
+                if ($rDate->between($cmStart, $cmEnd)) {
+                    $cmrCount++;
+                    $cmrValue += $price;
+                    $cmrItems[] = $item;
+                } elseif ($rDate->between($nmStart, $nmEnd)) {
+                    $nmrCount++;
+                    $nmrValue += $price;
+                    $nmrItems[] = $item;
+                } elseif ($rDate->between($lmStart, $lmEnd)) {
+                    $lmrCount++;
+                    $lmrValue += $price;
+                    $lmrItems[] = $item;
+                }
+            }
+
+            // 2. Department & Product wise pending payments
+            $pendingProducts = LeadProduct::query()
+                ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+                ->join('products', 'products.id', '=', 'lead_products.product_id')
+                ->select([
+                    'lead_products.id',
+                    'lead_products.total_price',
+                    'lead_products.amount_paid',
+                    'products.product_name',
+                    'products.id as p_id',
+                    'leads.company_name'
+                ])
+                ->where($applySupportScope)
+                ->where('lead_products.payment_status', '!=', 'paid')
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->with('product.departments')
+                ->get();
+
+            $deptProductData = [];
+            foreach ($pendingProducts as $lp) {
+                $pending = (float) $lp->total_price - (float) $lp->amount_paid;
+                if ($pending <= 0) continue;
+
+                $productName = $lp->product_name;
+                $departments = $lp->product?->departments ?? collect();
+
+                if ($departments->isEmpty()) {
+                    $deptName = 'Unassigned';
+                    $key = $deptName . '_' . $productName;
+                    if (!isset($deptProductData[$key])) {
+                        $deptProductData[$key] = [
+                            'department'     => $deptName,
+                            'product'        => $productName,
+                            'pending_amount' => 0.0,
+                            'count'          => 0
+                        ];
+                    }
+                    $deptProductData[$key]['pending_amount'] += $pending;
+                    $deptProductData[$key]['count']++;
+                } else {
+                    foreach ($departments as $dept) {
+                        $deptName = $dept->name;
+                        $key = $deptName . '_' . $productName;
+                        if (!isset($deptProductData[$key])) {
+                            $deptProductData[$key] = [
+                                'department'     => $deptName,
+                                'product'        => $productName,
+                                'pending_amount' => 0.0,
+                                'count'          => 0
+                            ];
+                        }
+                        $deptProductData[$key]['pending_amount'] += $pending;
+                        $deptProductData[$key]['count']++;
+                    }
+                }
+            }
+            $deptProductList = array_values($deptProductData);
+
+            // 3. Payment Collections
+            $todayStart = Carbon::today()->startOfDay();
+            $todayEnd = Carbon::today()->endOfDay();
+            $monthStart = Carbon::today()->startOfMonth()->startOfDay();
+            $monthEnd = Carbon::today()->endOfMonth()->endOfDay();
+            
+            $fromDate = !empty($filters['from_date']) ? Carbon::parse($filters['from_date'])->startOfDay() : null;
+            $toDate = !empty($filters['to_date']) ? Carbon::parse($filters['to_date'])->endOfDay() : null;
+
+            $paymentQuery = LeadProductPayment::query()
+                ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
+                ->whereIn('lead_product_payments.recorded_by', $supportUserIds)
+                ->where($applySupportScope)
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']));
+
+            $todayPayments = (clone $paymentQuery)
+                ->whereBetween('lead_product_payments.payment_date', [$todayStart, $todayEnd])
+                ->sum('lead_product_payments.amount');
+
+            $monthPayments = (clone $paymentQuery)
+                ->whereBetween('lead_product_payments.payment_date', [$monthStart, $monthEnd])
+                ->sum('lead_product_payments.amount');
+
+            // Daily trend
+            $trendQuery = clone $paymentQuery;
+            if ($fromDate) {
+                $trendQuery->whereDate('lead_product_payments.payment_date', '>=', $fromDate);
+            }
+            if ($toDate) {
+                $trendQuery->whereDate('lead_product_payments.payment_date', '<=', $toDate);
+            }
+            $trendData = $trendQuery
+                ->selectRaw("DATE_FORMAT(lead_product_payments.payment_date, '%Y-%m-%d') as day, SUM(lead_product_payments.amount) as daily_amount")
+                ->groupBy('day')
+                ->orderBy('day')
+                ->get()
+                ->map(fn($row) => [
+                    'date'   => $row->day,
+                    'amount' => (float) $row->daily_amount
+                ])->toArray();
+
+            // 4. Upsell Leads (non count-wise converted products)
+            $upsellQuery = LeadProduct::query()
+                ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+                ->join('products', 'products.id', '=', 'lead_products.product_id')
+                ->where($applySupportScope)
+                ->where('lead_products.product_status', '=', 'converted')
+                ->where('products.count_wise_report', '!=', true)
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']));
+
+            if ($fromDate) {
+                $upsellQuery->whereDate('lead_products.created_at', '>=', $fromDate);
+            }
+            if ($toDate) {
+                $upsellQuery->whereDate('lead_products.created_at', '<=', $toDate);
+            }
+
+            $upsellStats = (clone $upsellQuery)
+                ->selectRaw('COUNT(DISTINCT leads.id) as upsell_count, SUM(lead_products.total_price) as upsell_value')
+                ->first();
+
+            $upsellCount = (int) ($upsellStats->upsell_count ?? 0);
+            $upsellValue = (float) ($upsellStats->upsell_value ?? 0);
+
+            $upsellLeadsList = (clone $upsellQuery)
+                ->select([
+                    'leads.id',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'products.product_name',
+                    'lead_products.total_price',
+                    'lead_products.created_at'
+                ])
+                ->orderByDesc('lead_products.created_at')
+                ->limit(10)
+                ->get()
+                ->map(fn($row) => [
+                    'id'           => $row->id,
+                    'company_name' => $row->company_name ?: ($row->contact_name ?: 'N/A'),
+                    'product_name' => $row->product_name,
+                    'value'        => (float) $row->total_price,
+                    'created_at'   => $row->created_at ? Carbon::parse($row->created_at)->format('d M Y') : '—'
+                ])->toArray();
+
+            // 5. User-wise aggregates
+            $userStats = [];
+            $displayUserQuery = User::whereIn('id', $supportUserIds);
+            if ($isSupportTl && !$isAdmin) {
+                $assignedExecIds = Lead::where('customer_support_tl_id', $currentUser->id)
+                    ->whereNotNull('customer_support_executive_id')
+                    ->pluck('customer_support_executive_id')
+                    ->unique()
+                    ->toArray();
+                $displayUserQuery->whereIn('id', array_merge([$currentUser->id], $assignedExecIds));
+            } elseif ($isSupportExec && !$isAdmin) {
+                $displayUserQuery->where('id', $currentUser->id);
+            }
+            $supportUsers = $displayUserQuery->orderBy('name')->get();
+
+            foreach ($supportUsers as $user) {
+                $uid = $user->id;
+                $userIsTl = $user->hasCustomerSupportLikeRole() && $user->hasTlLikeRole();
+
+                $handledCount = Lead::where(function($q) use ($uid, $userIsTl) {
+                        if ($userIsTl) {
+                            $q->where('customer_support_tl_id', $uid);
+                        } else {
+                            $q->where('customer_support_executive_id', $uid);
+                        }
+                    })
+                    ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
+                    ->when($toDate, fn($q) => $q->whereDate('lead_date', '<=', $toDate))
+                    ->count();
+
+                $convertedCount = Lead::where(function($q) use ($uid, $userIsTl) {
+                        if ($userIsTl) {
+                            $q->where('customer_support_tl_id', $uid);
+                        } else {
+                            $q->where('customer_support_executive_id', $uid);
+                        }
+                    })
+                    ->where('lead_status_id', 5)
+                    ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
+                    ->when($toDate, fn($q) => $q->whereDate('lead_date', '<=', $toDate))
+                    ->count();
+
+                $uCollected = LeadProductPayment::query()
+                    ->where('recorded_by', $uid)
+                    ->when($fromDate, fn($q) => $q->whereDate('payment_date', '>=', $fromDate))
+                    ->when($toDate, fn($q) => $q->whereDate('payment_date', '<=', $toDate))
+                    ->sum('amount');
+
+                // Renewal counts for this user (CMR month)
+                $userCmrCount = 0;
+                $userCmrValue = 0;
+                foreach ($cmrItems as $item) {
+                    if ($item['assigned_to'] == $uid) {
+                        $userCmrCount++;
+                        $userCmrValue += $item['value'];
+                    }
+                }
+
+                $userStats[] = [
+                    'id'              => $uid,
+                    'name'            => $user->name,
+                    'handled_leads'   => $handledCount,
+                    'converted_leads' => $convertedCount,
+                    'total_collected' => (float) $uCollected,
+                    'cmr_count'       => $userCmrCount,
+                    'cmr_value'       => (float) $userCmrValue
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'cmr' => [
+                        'count' => $cmrCount,
+                        'value' => round($cmrValue, 2),
+                        'items' => $cmrItems
+                    ],
+                    'cmr_plus' => [
+                        'count' => $nmrCount,
+                        'value' => round($nmrValue, 2),
+                        'items' => $nmrItems
+                    ],
+                    'cmr_minus' => [
+                        'count' => $lmrCount,
+                        'value' => round($lmrValue, 2),
+                        'items' => $lmrItems
+                    ],
+                    'dept_product_pending' => $deptProductList,
+                    'today_payments'       => round((float)$todayPayments, 2),
+                    'month_payments'       => round((float)$monthPayments, 2),
+                    'upsells' => [
+                        'count' => $upsellCount,
+                        'value' => round($upsellValue, 2),
+                        'items' => $upsellLeadsList
+                    ],
+                    'daily_trend'          => $trendData,
+                    'user_performance'     => $userStats,
+                ]
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load customer success data.',
+                'error'   => config('app.debug') ? $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Default empty dashboard payload.
+     */
+    private function emptyDashboardResponse(): array
+    {
+        return [
+            'cmr'                  => ['count' => 0, 'value' => 0, 'items' => []],
+            'cmr_plus'             => ['count' => 0, 'value' => 0, 'items' => []],
+            'cmr_minus'            => ['count' => 0, 'value' => 0, 'items' => []],
+            'dept_product_pending' => [],
+            'today_payments'       => 0,
+            'month_payments'       => 0,
+            'upsells'              => ['count' => 0, 'value' => 0, 'items' => []],
+            'daily_trend'          => [],
+            'user_performance'     => [],
+        ];
+    }
+}

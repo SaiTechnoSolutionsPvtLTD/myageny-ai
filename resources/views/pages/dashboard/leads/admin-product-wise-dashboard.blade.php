@@ -55,24 +55,32 @@
 @keyframes spin    { to { transform:rotate(360deg); } }
 
 /* ── Summary Cards ──────────────────────────────────────── */
-.cards-grid        { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+.cards-grid        { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
                      gap:16px; margin-bottom:28px; }
-.summary-card      { background:var(--bg); border:1px solid var(--border); border-radius:14px;
-                     padding:20px; display:flex; flex-direction:column; gap:6px; }
-.summary-card .sc-label  { font-size:12px; color:var(--muted); font-weight:500; }
-.summary-card .sc-value  { font-size:28px; font-weight:700; color:var(--text); line-height:1; }
-.summary-card .sc-sub    { font-size:11px; color:var(--muted); }
-.sc-icon           { width:38px; height:38px; border-radius:10px; display:flex;
-                     align-items:center; justify-content:center; font-size:18px; margin-bottom:4px; }
-.sc-orange  { background:#fff0e6; }
-.sc-green   { background:#e6f9f4; }
-.sc-red     { background:#ffecec; }
-.sc-blue    { background:#eef0ff; }
-.sc-purple  { background:#f0e8f8; }
-.sc-teal    { background:#e6f6f3; }
-.sc-warning { background:#fff8e6; }
-.sc-pink    { background:#fff0f3; }
-.divider-card { grid-column:1/-1; height:1px; background:var(--border); }
+.summary-card      { position:relative; overflow:hidden; border:none; border-radius:16px;
+                     padding:20px; display:flex; flex-direction:column; justify-content:space-between;
+                     transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
+.summary-card:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.15),0 10px 10px -5px rgba(15,23,42,.08); }
+.summary-card .sc-label  { font-size:11px; font-weight:800; color:rgba(255,255,255,0.95); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.summary-card .sc-value  { font-size:26px; font-weight:900; color:#fff; line-height:1.2; margin-top:8px; }
+.summary-card .sc-sub    { font-size:12px; color:rgba(255,255,255,0.85); font-weight:500; margin-top:8px; }
+.sc-icon           { width:38px; height:38px; border-radius:12px; display:flex;
+                     align-items:center; justify-content:center; font-size:18px; margin-bottom:12px;
+                     background:rgba(255,255,255,0.2) !important; backdrop-filter:blur(4px); }
+.sc-orange  { background:linear-gradient(135deg, #fe5f04 0%, #ff8c42 100%) !important; }
+.sc-green   { background:linear-gradient(135deg, #047857 0%, #10b981 100%) !important; }
+.sc-red     { background:linear-gradient(135deg, #b91c1c 0%, #ef4444 100%) !important; }
+.sc-blue    { background:linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important; }
+.sc-purple  { background:linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%) !important; }
+.sc-teal    { background:linear-gradient(135deg, #0f766e 0%, #0d9488 100%) !important; }
+.sc-warning { background:linear-gradient(135deg, #b45309 0%, #f59e0b 100%) !important; }
+.sc-pink    { background:linear-gradient(135deg, #be123c 0%, #f43f5e 100%) !important; }
+.divider-card { grid-column:1/-1; height:1px; background:var(--border); margin:12px 0; }
+
+/* Skeleton loaders */
+.da-skel { background:linear-gradient(90deg,#f3f0f6 25%,#e9e5ee 50%,#f3f0f6 75%); background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:6px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.da-skel-card { background:#ffffff; border:1px solid var(--border); border-radius:16px; padding:20px; min-height:140px; display:flex; flex-direction:column; justify-content:space-between; }
 
 /* ── Charts Grid ────────────────────────────────────────── */
 .charts-grid       { display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin-bottom:28px; }
@@ -224,50 +232,17 @@
 
         {{-- ── Product Summary Cards ────────────────────────── --}}
         <div class="cards-grid" id="cardsGrid">
-            {{-- Populated via JS --}}
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-orange">📦</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Total Products</div>
+            @for($i = 0; $i < 8; $i++)
+            <div class="da-skel-card">
+                <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
+                <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
+                <div class="da-skel" style="height:12px;width:70%;margin-bottom:8px"></div>
+                <div class="da-skel" style="height:12px;width:40%"></div>
             </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-green">✅</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Converted</div>
-            </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-red">🔥</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Hot</div>
-            </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-blue">❄️</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Cold</div>
-            </div>
-
+            @if($i == 3)
             <div class="divider-card"></div>
-
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-purple">💰</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Total Value</div>
-            </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-teal">🏆</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Converted Value</div>
-            </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-warning">💵</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Received</div>
-            </div>
-            <div class="summary-card" style="opacity:.4;">
-                <div class="sc-icon sc-pink">⏳</div>
-                <div class="sc-value">—</div>
-                <div class="sc-label">Pending</div>
-            </div>
+            @endif
+            @endfor
         </div>
 
         {{-- ── Top User + Pipeline ──────────────────────────── --}}
@@ -403,6 +378,11 @@ async function loadDashboard() {
             credentials: 'same-origin',
         });
 
+        if (res.status === 401) {
+            window.location.href = "{{ route('login') }}";
+            throw new Error('Unauthenticated. Redirecting to login page...');
+        }
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const json = await res.json();
@@ -431,24 +411,24 @@ function renderCards(ps, vs) {
     const grid = document.getElementById('cardsGrid');
     grid.innerHTML = `
         <!-- Product summary -->
-        <div class="summary-card">
-            <div class="sc-icon sc-orange">📦</div>
+        <div class="summary-card sc-orange">
+            <div class="sc-icon">📦</div>
             <div class="sc-value">${num(ps.total_products)}</div>
             <div class="sc-label">Total Products</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-green">✅</div>
+        <div class="summary-card sc-green">
+            <div class="sc-icon">✅</div>
             <div class="sc-value">${num(ps.converted_products)}</div>
             <div class="sc-label">Converted</div>
             <div class="sc-sub">${pct(ps.converted_products, ps.total_products)}% conversion</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-red">🔥</div>
+        <div class="summary-card sc-red">
+            <div class="sc-icon">🔥</div>
             <div class="sc-value">${num(ps.hot_products)}</div>
             <div class="sc-label">Hot Leads</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-blue">❄️</div>
+        <div class="summary-card sc-blue">
+            <div class="sc-icon">❄️</div>
             <div class="sc-value">${num(ps.cold_products)}</div>
             <div class="sc-label">Cold Leads</div>
         </div>
@@ -456,24 +436,24 @@ function renderCards(ps, vs) {
         <div class="divider-card"></div>
 
         <!-- Value summary -->
-        <div class="summary-card">
-            <div class="sc-icon sc-purple">💰</div>
-            <div class="sc-value" style="font-size:20px;">${fmt(vs.total_products_value)}</div>
+        <div class="summary-card sc-purple">
+            <div class="sc-icon">💰</div>
+            <div class="sc-value">${fmt(vs.total_products_value)}</div>
             <div class="sc-label">Total Value</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-teal">🏆</div>
-            <div class="sc-value" style="font-size:20px;">${fmt(vs.converted_products_value)}</div>
+        <div class="summary-card sc-teal">
+            <div class="sc-icon">🏆</div>
+            <div class="sc-value">${fmt(vs.converted_products_value)}</div>
             <div class="sc-label">Converted Value</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-warning">💵</div>
-            <div class="sc-value" style="font-size:20px;color:#469d89;">${fmt(vs.received_value)}</div>
+        <div class="summary-card sc-warning">
+            <div class="sc-icon">💵</div>
+            <div class="sc-value">${fmt(vs.received_value)}</div>
             <div class="sc-label">Received</div>
         </div>
-        <div class="summary-card">
-            <div class="sc-icon sc-pink">⏳</div>
-            <div class="sc-value" style="font-size:20px;color:#ff5a55;">${fmt(vs.pending_value)}</div>
+        <div class="summary-card sc-pink">
+            <div class="sc-icon">⏳</div>
+            <div class="sc-value">${fmt(vs.pending_value)}</div>
             <div class="sc-label">Pending</div>
         </div>
     `;

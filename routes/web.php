@@ -105,6 +105,22 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/product-dashboard/admin', [SuperAdminDashboardController::class, 'adminProductindex'])
         ->middleware('can:dashboard.view');
 
+    // Customer Success Dashboard
+    Route::get('/dashboard/customer-success', [\App\Http\Controllers\CustomerSuccessDashboardController::class, 'index'])
+        ->name('dashboard.customer-success');
+    Route::get('/api/customer-success/data', [\App\Http\Controllers\CustomerSuccessDashboardController::class, 'data'])
+        ->name('api.customer-success.data');
+    Route::get('/api/customer-success/filters', [\App\Http\Controllers\CustomerSuccessDashboardController::class, 'filters'])
+        ->name('api.customer-success.filters');
+
+    // CST Allocation Module
+    Route::get('/cst-allocation', [\App\Http\Controllers\CstAllocationController::class, 'index'])
+        ->name('cst-allocation.index');
+    Route::post('/cst-allocation/{lead}/allocate-tl', [\App\Http\Controllers\CstAllocationController::class, 'allocateTl'])
+        ->name('cst-allocation.allocate-tl');
+    Route::post('/cst-allocation/{lead}/allocate-executive', [\App\Http\Controllers\CstAllocationController::class, 'allocateExecutive'])
+        ->name('cst-allocation.allocate-executive');
+
     // Default redirect by role
     Route::get('/dashboard', function () {
         $user = auth()->user();
