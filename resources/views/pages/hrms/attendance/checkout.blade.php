@@ -37,6 +37,59 @@
     .att-grid{grid-template-columns:1fr}
     .att-field.full{grid-column:auto}
 }
+.select2-container--default .select2-selection--single.att-select2-selection {
+    height: 45px;
+    border: 1px solid #e1dee3;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default .select2-selection--single.att-select2-selection .select2-selection__rendered {
+    line-height: 43px;
+    padding-left: 12px;
+    padding-right: 36px;
+    font-size: 14px;
+    color: #20222a;
+}
+.select2-container--default .select2-selection--single.att-select2-selection .select2-selection__arrow {
+    height: 43px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default.select2-container--focus .select2-selection--single.att-select2-selection,
+.select2-container--default.select2-container--open .select2-selection--single.att-select2-selection {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254,95,4,.1);
+}
+.select2-dropdown {
+    border: 1px solid #e1dee3;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(18,18,18,.08);
+}
+.select2-search--dropdown {
+    padding: 10px;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #e1dee3;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: #fe5f04;
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 9px 11px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #fe5f04;
+    color: #fff;
+}
 </style>
 @endpush
 
@@ -67,7 +120,7 @@
                 <div class="att-grid">
                     <div class="att-field full">
                         <label class="att-label">Employee / Intern <span class="att-req">*</span></label>
-                        <select name="attendee_key" class="att-select" id="attendee_key" required>
+                        <select name="attendee_key" class="att-select select2" id="attendee_key" required>
                             <option value="">Select attendee</option>
                             @foreach($attendees as $attendee)
                                 <option value="{{ $attendee['select_key'] }}" @selected(old('attendee_key') == $attendee['select_key'])>
@@ -181,6 +234,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 resetAttendanceState('Unable to load attendance timing right now.', true);
             });
     };
+
+    if (window.jQuery && window.jQuery.fn.select2) {
+        const $attendee = $('#attendee_key');
+        if ($attendee.hasClass('select2-hidden-accessible')) {
+            $attendee.select2('destroy');
+        }
+        $attendee.select2({
+            placeholder: "Select attendee",
+            allowClear: true,
+            width: '100%'
+        });
+        $attendee.next('.select2-container').find('.select2-selection--single').addClass('att-select2-selection');
+        $attendee.on('change.select2 change', function () {
+            lookupAttendance();
+        });
+    }
 
     attendeeField.addEventListener('change', lookupAttendance);
     dateField.addEventListener('change', lookupAttendance);

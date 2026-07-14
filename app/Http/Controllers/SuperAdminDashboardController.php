@@ -75,6 +75,17 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
+
+        $convertedProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+        $upcomingAmount = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', '!=', 'converted')->sum('total_price');
+        $convertedValue = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+        $totalProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->count();
+        $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
+        
+        $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
+            ->whereIn('lead_id', $leadIds)
+            ->whereDate('remind_at', today())
+            ->count();
         $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
@@ -341,6 +352,11 @@ class SuperAdminDashboardController extends ApiController
                 'pipeline_value'    => $pipelineValue,
                 'won_value'         => $wonValue,
                 'conversion_rate'   => $convRate,
+                'converted_products_count' => $convertedProductsCount,
+                'upcoming_amount'   => $upcomingAmount,
+                'converted_value'   => $convertedValue,
+                'converted_percentage' => $convertedPercentage,
+                'followups_count'   => $followupsCount,
             ],
 
             'financials' => [
@@ -570,11 +586,21 @@ class SuperAdminDashboardController extends ApiController
         $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
         $pipelineValue = (float)(clone $base())->whereNotIn('lead_status',['won','lost'])->sum('deal_value');
         $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority','high')->whereNotIn('lead_status',['won','lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
+
+        $convertedProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+        $upcomingAmount = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', '!=', 'converted')->sum('total_price');
+        $convertedValue = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+        $totalProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->count();
+        $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
+        
+        $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
+            ->whereIn('lead_id', $leadIds)
+            ->whereDate('remind_at', today())
+            ->count();
         $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
@@ -837,10 +863,14 @@ class SuperAdminDashboardController extends ApiController
                 'active_leads'      => $activeLeads,
                 'won_leads'         => $wonLeads,
                 'lost_leads'        => $lostLeads,
-                'high_priority'     => $highPriority,
+                'followups_count'   => $followupsCount,
                 'pipeline_value'    => $pipelineValue,
                 'won_value'         => $wonValue,
                 'conversion_rate'   => $convRate,
+                'converted_products_count' => $convertedProductsCount,
+                'upcoming_amount'   => $upcomingAmount,
+                'converted_value'   => $convertedValue,
+                'converted_percentage' => $convertedPercentage,
             ],
 
             'financials' => [

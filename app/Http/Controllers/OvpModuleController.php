@@ -17,6 +17,7 @@ class OvpModuleController extends Controller
 {
     private const OVP_TL_ROLE_KEYS = [
         'customer_support_team_tl',
+        'senior_customer_success_team_executive',
     ];
 
     private const OVP_EXECUTIVE_ROLE_KEYS = [

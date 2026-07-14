@@ -171,9 +171,10 @@ class CustomerSuccessDashboardController extends Controller
                     'leads.company_name',
                     'leads.contact_name',
                     'leads.customer_support_tl_id',
-                    'leads.customer_support_executive_id'
+                    'leads.customer_support_executive_id',
+                    'products.is_this_renewal_product'
                 ])
-                ->where('products.count_wise_report', true)
+                ->where(fn($q) => $q->where('products.count_wise_report', true)->orWhere('products.is_this_renewal_product', true))
                 ->where($applySupportScope)
                 ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
                 ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
@@ -337,6 +338,7 @@ class CustomerSuccessDashboardController extends Controller
                 ->where($applySupportScope)
                 ->where('lead_products.product_status', '=', 'converted')
                 ->where('products.count_wise_report', '!=', true)
+                ->where('products.is_this_renewal_product', '!=', true)
                 ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
                 ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
                 ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']));

@@ -163,6 +163,7 @@ class AttendanceController extends Controller
             $employee = $this->activeEmployeesQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
+                'company_id' => $employee->company_id,
                 'employee_id' => $employee->id,
                 'attendee_type' => 'employee',
                 'intern_joining_form_id' => null,
@@ -184,6 +185,7 @@ class AttendanceController extends Controller
             $intern = $this->activeInternsQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
+                'company_id' => $intern->company_id,
                 'employee_id' => null,
                 'attendee_type' => 'intern',
                 'intern_joining_form_id' => $intern->id,

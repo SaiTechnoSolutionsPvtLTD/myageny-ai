@@ -40,6 +40,20 @@ class UpdateUserRequest extends FormRequest
                     }
                 },
             ],
+            'branches'              => ['nullable', 'array'],
+            'branches.*'            => [
+                'integer',
+                'exists:branches,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($companyId) {
+                    if (! $value || $companyId === null) {
+                        return;
+                    }
+                    $branch = Branch::withoutGlobalScopes()->find($value);
+                    if ($branch && (int) $branch->company_id !== (int) $companyId) {
+                        $fail('One of the selected branches does not belong to your company.');
+                    }
+                },
+            ],
             'role'                  => [
                 'required',
                 function (string $attribute, mixed $value, \Closure $fail) use ($companyId) {

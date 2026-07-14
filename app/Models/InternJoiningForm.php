@@ -22,10 +22,13 @@ class InternJoiningForm extends Model
             }
 
             $user = auth()->user();
-            if ($user && $user->isBranchAdmin() && $user->branch_id) {
-                $builder->whereHas('portalUser', function ($query) use ($user) {
-                    $query->where('branch_id', $user->branch_id);
-                });
+            if ($user && $user->isBranchAdmin()) {
+                $branchIds = $user->getMyBranchIds();
+                if (!empty($branchIds)) {
+                    $builder->whereHas('portalUser', function ($query) use ($branchIds) {
+                        $query->whereIn('branch_id', $branchIds);
+                    });
+                }
             }
         });
     }

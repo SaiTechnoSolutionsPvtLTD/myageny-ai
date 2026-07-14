@@ -18,8 +18,11 @@ class QuotationSetting extends Model
             }
 
             $user = auth()->user();
-            if ($user && $user->isBranchAdmin() && $user->branch_id) {
-                $builder->where($builder->getModel()->getTable() . '.branch_id', $user->branch_id);
+            if ($user && $user->isBranchAdmin()) {
+                $branchIds = $user->getMyBranchIds();
+                if (!empty($branchIds)) {
+                    $builder->whereIn($builder->getModel()->getTable() . '.branch_id', $branchIds);
+                }
             }
         });
     }

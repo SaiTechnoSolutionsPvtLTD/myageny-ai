@@ -26,6 +26,7 @@ class StoreProductRequest extends FormRequest
             'sort_order'            => ['nullable', 'integer', 'min:0'],
             'assigned_to'           => ['nullable', 'exists:users,id'],
             'count_wise_report'     => ['boolean'],
+            'is_this_renewal_product'=> ['boolean'],
             'department_ids'        => ['nullable', 'array'],
             'department_ids.*'      => ['integer', 'exists:departments,id'],
 
@@ -53,6 +54,7 @@ class StoreProductRequest extends FormRequest
             'discount_value' => $this->discount_value ?? 0,
             'sort_order'     => $this->sort_order ?? 0,
             'count_wise_report' => $this->boolean('count_wise_report'),
+            'is_this_renewal_product' => $this->boolean('is_this_renewal_product'),
         ]);
     }
 }

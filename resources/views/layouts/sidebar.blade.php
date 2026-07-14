@@ -33,6 +33,59 @@
         || request()->routeIs('settings.holiday-calendars.*');
     $hrmsSelfService = auth()->user()?->isHrmsAttendanceOnlyUser();
     $canAccessProjectsModule = auth()->user()?->canAccessProjectsModule();
+
+    // OVP Module & Production Approvals Sidebar Counts
+    $ovpNewCount = 0;
+    $prodApprovalPendingCount = 0;
+    
+    if (auth()->check()) {
+        $currentUser = auth()->user();
+        
+        if ($currentUser->can('ovp_module.menuview')) {
+            $ovpTlRoleKeys = ['customer_support_team_tl'];
+            $ovpExecutiveRoleKeys = ['customer_support_team_executive'];
+            
+            $normalizeRole = function(string $value): string {
+                $value = \Illuminate\Support\Str::contains($value, '__') ? \Illuminate\Support\Str::afterLast($value, '__') : $value;
+                return \Illuminate\Support\Str::of($value)
+                    ->lower()
+                    ->replace('&', 'and')
+                    ->replace(['-', ' '], '_')
+                    ->replaceMatches('/[^a-z0-9_]+/', '')
+                    ->replaceMatches('/_+/', '_')
+                    ->trim('_')
+                    ->value();
+            };
+
+            $hasRoleKey = function($u, array $keys) use ($normalizeRole): bool {
+                $normalizedKeys = collect($keys)->map(fn (string $key) => $normalizeRole($key))->filter()->unique();
+                return $u->resolvedRoles(withDepartment: true)->contains(function ($role) use ($normalizedKeys, $normalizeRole) {
+                    return $normalizedKeys->contains($normalizeRole((string) $role->name))
+                        || $normalizedKeys->contains($normalizeRole((string) ($role->display_name ?? '')));
+                });
+            };
+
+            $isTlScoped = ! $currentUser->hasAdminLikeRole() && ($hasRoleKey($currentUser, $ovpTlRoleKeys) || $currentUser->hasTlLikeRole());
+            $isExecutiveScoped = ! $currentUser->hasAdminLikeRole() && ! $isTlScoped && ($hasRoleKey($currentUser, $ovpExecutiveRoleKeys) || $currentUser->hasExecutiveLikeRole());
+
+            $ovpQuery = \App\Models\ProductionInitiation::query()
+                ->whereIn('status', ['ovp_pending', 'initiated']);
+                
+            if ($isExecutiveScoped) {
+                $ovpQuery->where('ovp_allocated_to', $currentUser->id);
+            }
+            
+            $threeDaysAgo = \Illuminate\Support\Carbon::now()->subDays(3);
+            $ovpNewCount = $ovpQuery->where('created_at', '>=', $threeDaysAgo)->count();
+        }
+        
+        if ($currentUser->can('production_approval_module.menuview')) {
+            $prodApprovalPendingCount = \App\Models\ProductionInitiation::query()
+                ->whereIn('status', ['approval', 'approved'])
+                ->where('production_approval_status', 'pending')
+                ->count();
+        }
+    }
 @endphp
 
 <aside class="sidebar">
@@ -547,6 +600,7 @@
                 </a>
                 @endcan
 
+                @can('reports.menuview')
                 <a href="{{ route('reports.crm.index') }}" class="nav-item {{ request()->routeIs('reports.crm.*') ? 'active' : '' }}">
                     @if(request()->routeIs('reports.crm.*'))
                         <div class="active-indicator"></div>
@@ -561,6 +615,7 @@
                         <span>Reports</span>
                     </div>
                 </a>
+                @endcan
 
                 @can('price_requests.menuview')
 
@@ -580,7 +635,7 @@
 
                 @endcan
 
-                @if(auth()->user()->isSuperAdmin() || auth()->user()->isCompanyAdmin() || auth()->user()->hasAdminLikeRole() || auth()->user()->belongsToCustomerSupportDepartment() || auth()->user()->hasCustomerSupportLikeRole())
+                @can('cst_allocation.menuview')
                 <a href="{{ route('cst-allocation.index') }}" class="nav-item {{ request()->routeIs('cst-allocation.*') ? 'active' : '' }}">
                     @if(request()->routeIs('cst-allocation.*'))
                         <div class="active-indicator"></div>
@@ -595,7 +650,7 @@
                         <span>CST Allocation</span>
                     </div>
                 </a>
-                @endif
+                @endcan
 
                 {{--  @if($canAccessProjectsModule)
                 <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.*') ? 'active' : '' }}">
@@ -628,6 +683,9 @@
                             <path d="M14 13h6"></path>
                         </svg>
                         <span>OVP Module</span>
+                        @if(isset($ovpNewCount) && $ovpNewCount > 0)
+                            <span class="nav-badge" style="margin-left: auto; background-color: #fe5f04; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 10px; line-height: 1;">{{ $ovpNewCount }}</span>
+                        @endif
                     </div>
                 </a>
                 @endcan
@@ -646,6 +704,9 @@
                             <path d="M14 13h6"></path>
                         </svg>
                         <span>Production Approvals</span>
+                        @if(isset($prodApprovalPendingCount) && $prodApprovalPendingCount > 0)
+                            <span class="nav-badge" style="margin-left: auto; background-color: #fe5f04; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 10px; line-height: 1;">{{ $prodApprovalPendingCount }}</span>
+                        @endif
                     </div>
                 </a>
                 @endcan

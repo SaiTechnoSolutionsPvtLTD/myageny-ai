@@ -71,8 +71,11 @@ class User extends Authenticatable
             }
 
             $user = auth()->user();
-            if ($user && $user->isBranchAdmin() && $user->branch_id) {
-                $builder->where($builder->getModel()->getTable() . '.branch_id', $user->branch_id);
+            if ($user && $user->isBranchAdmin()) {
+                $branchIds = $user->getMyBranchIds();
+                if (!empty($branchIds)) {
+                    $builder->whereIn($builder->getModel()->getTable() . '.branch_id', $branchIds);
+                }
             }
         });
     }
@@ -128,6 +131,34 @@ class User extends Authenticatable
     public function branch()
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function branches()
+    {
+        return $this->belongsToMany(Branch::class, 'branch_user');
+    }
+
+    protected ?array $memoizedBranchIds = null;
+
+    public function getMyBranchIds(): array
+    {
+        if ($this->memoizedBranchIds === null) {
+            $ids = [];
+            try {
+                $ids = \DB::table('branch_user')
+                    ->where('user_id', $this->id)
+                    ->pluck('branch_id')
+                    ->map(fn($id) => (int) $id)
+                    ->all();
+            } catch (\Throwable $e) {
+                // Fail-safe if table doesn't exist
+            }
+            if ($this->branch_id) {
+                $ids[] = (int) $this->branch_id;
+            }
+            $this->memoizedBranchIds = array_unique($ids);
+        }
+        return $this->memoizedBranchIds;
     }
 
     public function company()
@@ -430,6 +461,8 @@ class User extends Authenticatable
             'admin',
             'company_admin',
             'branch_admin',
+            'cheif_operating_officer',
+            'chief_business_officer',
             'development_project_coordinator'
         ])->isNotEmpty();
     }
