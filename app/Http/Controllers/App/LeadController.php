@@ -13,6 +13,7 @@ use App\Models\LeadProductPriceRequest;
 use App\Models\LeadProduct;
 use App\Models\LeadCallUpdate;
 use App\Models\LeadStatus;
+use App\Models\LeadSource;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -170,6 +171,14 @@ class LeadController extends Controller
             $leadData['branch_id'] = $leadData['branch_id'] ?? $request->user()->branch_id;
 
             abort_unless($this->visibility->canAssignTo($leadData['assigned_to'], $request->user()), 403);
+
+            // Get source name from lead_source_id
+            $leadData['lead_source'] = null;
+
+            if (!empty($leadData['lead_source_id'])) {
+                $leadSource = LeadSource::find($leadData['lead_source_id']);
+                $leadData['lead_source'] = $leadSource?->name;
+            }
 
             $lead = Lead::create($leadData);
 

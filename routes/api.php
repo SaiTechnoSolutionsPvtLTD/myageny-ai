@@ -27,6 +27,7 @@ use App\Http\Controllers\App\HRMS\LeaveRequestApiController;
 use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
 use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
 use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
+use App\Http\Controllers\App\HRMS\AttendanceLocationApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -214,6 +215,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('check-in', [MobileDailyAttendanceController::class, 'attendanceCheckIn'])->name('check-in');
         Route::post('check-out', [MobileDailyAttendanceController::class, 'attendanceCheckOut'])->name('check-out');
         Route::get('daily-list', [MobileDailyAttendanceController::class, 'dailyAttendanceList'])->name('daily-list');
+        Route::get('/branch-location', [AttendanceLocationApiController::class, 'myBranch']);
     });
 
     // ── OVP Module ───────────────────────────────────────────────────────────────
@@ -238,31 +240,57 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
     Route::prefix('projects')->name('projects.')->group(function () {
 
-        // Dashboard
+        // ── Static / literal segments FIRST ─────────────────────────────────
         Route::get('dashboard', [ProjectApiController::class, 'dashboard'])
             ->name('dashboard');
 
-        // Timesheets (static before wildcard)
         Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
             ->name('timesheets.index');
         Route::post('timesheets', [ProjectApiController::class, 'storeTimesheet'])
             ->name('timesheets.store');
 
-        // Project list
+        Route::patch('timesheets/{timesheet}/status', [ProjectApiController::class, 'updateTimesheetStatus'])
+            ->name('timesheets.update-status');
+
         Route::get('/', [ProjectApiController::class, 'index'])
             ->name('index');
 
-        // Project detail + actions  (wildcard last)
-        Route::get('/{productionInitiation}',   [ProjectApiController::class, 'show'])
+        Route::post('updates/quick', [ProjectApiController::class, 'storeQuickUpdate'])
+            ->name('updates.quick-store');
+
+        Route::get('my-accounts', [ProjectApiController::class, 'myAccounts'])
+            ->name('mobile.projects.my-accounts.index');
+
+        Route::get('my-accounts/{lead}', [ProjectApiController::class, 'showMyAccount'])
+            ->name('mobile.projects.my-accounts.show');
+
+        Route::get('designing-dashboard', [ProjectApiController::class, 'designingDashboard'])
+            ->name('mobile.projects.designing-dashboard');
+
+        Route::post('designing-dashboard/update-task', [ProjectApiController::class, 'updatePlannedTask'])
+            ->name('mobile.projects.designing-dashboard.update-task');
+
+        Route::post('designing-dashboard/allocate', [ProjectApiController::class, 'allocateDailyTask'])
+            ->name('mobile.projects.designing-dashboard.allocate');
+
+        // ── {productionInitiation} wildcard LAST ────────────────────────────
+        Route::get('/{productionInitiation}', [ProjectApiController::class, 'show'])
             ->name('show');
-        Route::post('/{productionInitiation}/allocate',          [ProjectApiController::class, 'allocate'])
+        Route::post('/{productionInitiation}/allocate', [ProjectApiController::class, 'allocate'])
             ->name('allocate');
         Route::post('/{productionInitiation}/employee-allocate', [ProjectApiController::class, 'allocateEmployees'])
             ->name('employee-allocate');
-        Route::post('/{productionInitiation}/schedule',          [ProjectApiController::class, 'updateSchedule'])
+        Route::post('/{productionInitiation}/schedule', [ProjectApiController::class, 'updateSchedule'])
             ->name('schedule.update');
-        Route::post('/{productionInitiation}/updates',           [ProjectApiController::class, 'storeUpdate'])
+        Route::post('/{productionInitiation}/updates', [ProjectApiController::class, 'storeUpdate'])
             ->name('updates.store');
+
+        Route::patch('{productionInitiation}/content-calendar-sheet', [ProjectApiController::class, 'updateContentCalendarSheet'])
+            ->name('mobile.projects.content-calendar-sheet.update');
+        Route::patch('{productionInitiation}/content-calendar/approve', [ProjectApiController::class, 'approveContentCalendar'])
+            ->name('mobile.projects.content-calendar.approve');
+        Route::get('{productionInitiation}/content-calendar-data', [ProjectApiController::class, 'fetchContentCalendarData'])
+            ->name('mobile.projects.content-calendar-data');
     });
 });
 
@@ -322,6 +350,10 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::post('/{lead}/quotations',                     [MobileLeadShowController::class, 'storeQuotation'])->name('quotations.store');
     Route::patch('/{lead}/quotations/{quotation}/status', [MobileLeadShowController::class, 'updateQuotationStatus'])->name('quotations.status');
     Route::delete('/{lead}/quotations/{quotation}',       [MobileLeadShowController::class, 'destroyQuotation'])->name('quotations.destroy');
+    Route::put('/{lead}/quotations/{quotation}/approve', [MobileLeadShowController::class, 'approveQuotation'])
+        ->name('quotations.approve');
+    Route::post('/{lead}/quotations/{quotation}/send-email', [MobileLeadShowController::class, 'sendQuotationEmail'])
+        ->name('quotations.send-email');
 });
 
 

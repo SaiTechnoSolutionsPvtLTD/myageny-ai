@@ -17,6 +17,7 @@ use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
 use App\Models\LeadProductPriceRequest;
 use App\Models\Quotation;
+use App\Models\QuotationSetting;
 use App\Models\QuotationItem;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,11 @@ use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Throwable;
 
 #[OA\Tag(name: "Lead Sub-Resources", description: "Call updates, reminders, products, payments, and quotations on a lead")]
 
@@ -862,6 +868,138 @@ class LeadShowController extends Controller
             'status'  => true,
             'message' => 'Quotation deleted.',
         ]);
+    }
+
+    public function approveQuotation(Request $request, Lead $lead, Quotation $quotation): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_if($quotation->lead_id !== $lead->id, 403, 'Quotation does not belong to this lead.');
+
+        $quotation->update([
+            'is_approved' => true,
+            'approved_by' => $request->user()->id,
+            'approved_at' => now(),
+        ]);
+        $quotation->load(['items', 'lead', 'approver']);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Quotation approved successfully.',
+            'data'    => $this->formatQuotation($quotation), // or equivalent shape used by getAllQuotations
+        ]);
+    }
+
+    public function sendQuotationEmail(Request $request, Lead $lead, Quotation $quotation): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_if($quotation->lead_id !== $lead->id, 403, 'Quotation does not belong to this lead.');
+
+        $quotation->loadMissing(['items.product', 'createdBy']);
+        $lead->loadMissing(['createdBy', 'assignedTo']);
+        $email = trim((string) $lead->email);
+
+        if ($email === '') {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Lead email not available for this quotation.',
+            ], 422);
+        }
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Lead email is invalid. Please update the lead email and try again.',
+            ], 422);
+        }
+
+        try {
+            $pdf      = $this->makeQuotationPdf($quotation);
+            $filename = $this->quotationPdfFilename($quotation);
+
+            $agreeUrl = URL::signedRoute('quotations.customer-response', [
+                'quotation' => $quotation->id,
+                'response'  => Quotation::CUSTOMER_RESPONSE_AGREE,
+            ]);
+            $disagreeUrl = URL::signedRoute('quotations.customer-response', [
+                'quotation' => $quotation->id,
+                'response'  => Quotation::CUSTOMER_RESPONSE_DISAGREE,
+            ]);
+
+            Mail::send('emails.quotation', [
+                'quotation'   => $quotation,
+                'lead'        => $lead,
+                'agreeUrl'    => $agreeUrl,
+                'disagreeUrl' => $disagreeUrl,
+            ], function ($message) use ($quotation, $lead, $email, $pdf, $filename) {
+                $message->to($email, $lead->contact_name ?: null)
+                    ->subject('Quotation ' . $quotation->quotation_no)
+                    ->attachData($pdf->output(), $filename, ['mime' => 'application/pdf']);
+            });
+        } catch (Throwable $exception) {
+            Log::error('Quotation email send failed.', [
+                'quotation_id' => $quotation->id,
+                'email'        => $email,
+                'error'        => $exception->getMessage(),
+            ]);
+            return response()->json([
+                'status'  => false,
+                'message' => 'Quotation mail could not be sent. Please check mail settings and try again.',
+            ], 500);
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Quotation ' . $quotation->quotation_no . ' sent to ' . $email . '.',
+        ]);
+    }
+
+    private function makeQuotationPdf(Quotation $quotation)
+    {
+        $quotation->loadMissing(['items.product', 'createdBy', 'lead.createdBy', 'lead.assignedTo']);
+        $quoteSetting = $this->quotationSettingsFor($quotation);
+
+        return Pdf::loadView('pages.quotations.quotation_format_1', compact('quotation', 'quoteSetting'))
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont' => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+            ]);
+    }
+
+    private function quotationSettingsFor(Quotation $quotation): array
+    {
+        $branchId = auth()->user()?->branch_id
+            ?? $quotation->lead?->createdBy?->branch_id;
+
+        $settings = QuotationSetting::where('branch_id', $branchId)->get();
+
+        return [
+            'logo' => $settings->where('key', 'logo')->first()?->value,
+            'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
+            'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
+            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
+            'prefix' => $settings->where('key', 'prefix')->first()?->value,
+            'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
+            'terms' => $settings->where('key', 'terms')->first()?->value,
+            'company_address' => $settings->where('key', 'company_address')->first()?->value,
+            'company_name' => $settings->where('key', 'company_name')->first()?->value,
+            'company_phone' => $settings->where('key', 'company_phone')->first()?->value,
+            'company_email' => $settings->where('key', 'company_email')->first()?->value,
+            'company_gstin' => $settings->where('key', 'company_gstin')->first()?->value,
+            'bank_name' => $settings->where('key', 'bank_name')->first()?->value,
+            'bank_account' => $settings->where('key', 'bank_account')->first()?->value,
+            'bank_ifsc' => $settings->where('key', 'bank_ifsc')->first()?->value,
+            'watermark_text' => $settings->where('key', 'watermark_text')->first()?->value,
+            'signature' => $settings->where('key', 'signature')->first()?->value,
+            'account_name' => $settings->where('key', 'account_name')->first()?->value,
+            'bank_branch' => $settings->where('key', 'bank_branch')->first()?->value,
+            'bank_upi' => $settings->where('key', 'bank_upi')->first()?->value,
+        ];
+    }
+
+    private function quotationPdfFilename(Quotation $quotation): string
+    {
+        return 'QT-' . str_pad((string) $quotation->id, 6, '0', STR_PAD_LEFT) . '.pdf';
     }
 
     // ════════════════════════════════════════════════════════════════

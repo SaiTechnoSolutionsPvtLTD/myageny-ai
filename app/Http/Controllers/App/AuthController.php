@@ -327,9 +327,14 @@ class AuthController extends Controller
             'dashboard_route' => $mobileRoute,
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
-            'branch'          => $user->branch ? [
-                'id'   => $user->branch->id,
-                'name' => $user->branch->name,
+            'branch' => $user->branch ? [
+                'id'                       => $user->branch->id,
+                'name'                     => $user->branch->name,
+                'latitude'                 => $user->branch->latitude,
+                'longitude'                => $user->branch->longitude,
+                'latitude_2'               => 11.0364872,
+                'longitude_2'              => 77.0161404,
+                'attendance_radius_meters' => 50,
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),
             'profile_photo'   => $user->photo ?? null,
