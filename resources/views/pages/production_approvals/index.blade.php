@@ -89,6 +89,138 @@
     .pa-modal-body { padding:16px; }
     .pa-modal-actions { padding:14px 16px 16px; }
 }
+
+/* Select2 Premium Overrides */
+.select2-container {
+    width: 100% !important;
+}
+.select2-container--open {
+    z-index: 9999999 !important;
+}
+.pa-filter-bar .select2-container--default .select2-selection--single {
+    height: 40px !important;
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    display: flex !important;
+    align-items: center !important;
+}
+.pa-filter-bar .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 38px !important;
+    padding-left: 12px !important;
+    padding-right: 32px !important;
+    font-size: 13px !important;
+    color: #111827 !important;
+    font-weight: 500 !important;
+}
+.pa-filter-bar .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 38px !important;
+    right: 10px !important;
+}
+.pa-filter-bar .select2-container--default.select2-container--focus .select2-selection--single,
+.pa-filter-bar .select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #166534 !important;
+    box-shadow: 0 0 0 4px rgba(22,101,52,.12) !important;
+    outline: none !important;
+}
+.select2-dropdown {
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 34px rgba(15,23,42,.08) !important;
+    background: #fff !important;
+}
+.select2-results__option {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    color: #111827 !important;
+    background-color: #fff !important;
+}
+.select2-container--default .select2-results__option--selected {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #166534 !important;
+    color: #fff !important;
+}
+.select2-search--dropdown {
+    padding: 8px !important;
+    background-color: #fff !important;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 8px !important;
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+    outline: none !important;
+    color: #111827 !important;
+    background: #fff !important;
+}
+
+/* Accordion Filter Bar */
+.pa-filter-accordion {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    box-shadow: 0 12px 34px rgba(15,23,42,.04);
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: all .2s ease;
+}
+.pa-accordion-header {
+    width: 100%;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    font-weight: 800;
+    color: #111827;
+    font-size: 14px;
+    text-align: left;
+}
+.pa-accordion-header:hover {
+    background: #fafafa;
+}
+.pa-accordion-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: 13px;
+    color: #374151;
+}
+.pa-accordion-arrow {
+    font-size: 14px;
+    color: #6b7280;
+    transition: transform .2s ease;
+}
+.pa-filter-accordion.is-active .pa-accordion-arrow {
+    transform: rotate(180deg);
+}
+.pa-accordion-body {
+    padding: 0 24px 24px;
+    border-top: 1px solid #f3f4f6;
+}
+.pa-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #e9f9ee;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 800;
+    margin-left: 8px;
+    border: 1px solid #bce6c7;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
 </style>
 @endpush
 
@@ -106,6 +238,113 @@
         @if(session('success'))
             <div class="pa-flash success">{{ session('success') }}</div>
         @endif
+
+        @php
+            $hasActiveFilters = request()->filled('start_date') || 
+                                request()->filled('end_date') || 
+                                request()->filled('product_id') || 
+                                request()->filled('status') || 
+                                request()->filled('user_id') || 
+                                request()->filled('company_id') || 
+                                request()->filled('department_id');
+        @endphp
+
+        {{-- Filter Accordion --}}
+        <div class="pa-filter-accordion {{ $hasActiveFilters ? 'is-active' : '' }}">
+            <button type="button" class="pa-accordion-header">
+                <span class="pa-accordion-title">
+                    <i class="bi bi-funnel-fill" style="color: #166534;"></i> FILTER OPTIONS
+                    @if($hasActiveFilters)
+                        <span class="pa-filter-badge">Active</span>
+                    @endif
+                </span>
+                <span class="pa-accordion-arrow">
+                    <i class="bi bi-chevron-down"></i>
+                </span>
+            </button>
+            <div class="pa-accordion-body" style="{{ $hasActiveFilters ? 'display: block;' : 'display: none;' }}">
+                <div class="pa-filter-bar" style="padding-top: 20px;">
+                    <form method="GET" action="{{ route('production-approvals.index') }}" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; align-items:flex-end;">
+                        <input type="hidden" name="bucket" value="{{ $selectedBucket }}">
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Start Date</label>
+                            <input type="date" name="start_date" value="{{ request('start_date') }}" class="pa-input" style="padding:9px 12px; background:#fff;">
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">End Date</label>
+                            <input type="date" name="end_date" value="{{ request('end_date') }}" class="pa-input" style="padding:9px 12px; background:#fff;">
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Product</label>
+                            <div style="position:relative;">
+                                <select name="product_id" class="pa-input select2" style="padding:9px 12px; background:#fff;">
+                                    <option value="">All Products</option>
+                                    @foreach($products as $p)
+                                        <option value="{{ $p->id }}" {{ request('product_id') == $p->id ? 'selected' : '' }}>{{ $p->product_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Status</label>
+                            <div style="position:relative;">
+                                <select name="status" class="pa-input select2" style="padding:9px 12px; background:#fff;">
+                                    <option value="">All Statuses</option>
+                                    <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
+                                    <option value="approval" {{ request('status') == 'approval' ? 'selected' : '' }}>Approval</option>
+                                    <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Actioned User</label>
+                            <div style="position:relative;">
+                                <select name="user_id" class="pa-input select2" style="padding:9px 12px; background:#fff;">
+                                    <option value="">All Users</option>
+                                    @foreach($users as $u)
+                                        <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Company</label>
+                            <div style="position:relative;">
+                                <select name="company_id" class="pa-input select2" style="padding:9px 12px; background:#fff;">
+                                    <option value="">All Companies</option>
+                                    @foreach($companies as $c)
+                                        <option value="{{ $c->id }}" {{ request('company_id') == $c->id ? 'selected' : '' }}>{{ $c->company_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Department</label>
+                            <div style="position:relative;">
+                                <select name="department_id" class="pa-input select2" style="padding:9px 12px; background:#fff;">
+                                    <option value="">All Departments</option>
+                                    @foreach($departments as $d)
+                                        <option value="{{ $d->id }}" {{ request('department_id') == $d->id ? 'selected' : '' }}>{{ $d->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:10px; grid-column: 1 / -1; justify-content: flex-end; margin-top:4px;">
+                            <button type="submit" class="pa-btn approve" style="padding:10px 20px; font-size:13px; font-weight:800;">Apply Filters</button>
+                            <a href="{{ route('production-approvals.index', ['bucket' => $selectedBucket]) }}" class="pa-btn" style="padding:10px 20px; font-size:13px; font-weight:800; text-decoration:none; line-height:18px;">Reset</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
 
         <section class="pa-grid">
             @foreach($cards as $key => $card)
@@ -163,7 +402,6 @@
                                 <tr>
                                     <td>
                                         <div class="pa-product">{{ $item->product_name }}</div>
-                                        <div class="pa-meta">Working days: {{ $item->total_working_days }}</div>
                                     </td>
                                     <td>
                                         {{ $displayCompany }}
@@ -245,6 +483,16 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Accordion Toggle
+    if (window.jQuery) {
+        window.jQuery('.pa-accordion-header').on('click', function() {
+            const $accordion = window.jQuery(this).closest('.pa-filter-accordion');
+            const $body = $accordion.find('.pa-accordion-body');
+            $accordion.toggleClass('is-active');
+            $body.slideToggle(200);
+        });
+    }
+
     const modal = document.getElementById('pa-review-modal');
     const form = document.getElementById('pa-review-form');
 

@@ -173,6 +173,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('reports.crm.smm');
     Route::get('/reports/crm/smm/export', [CrmReportController::class, 'exportSmmReport'])
         ->name('reports.crm.smm.export');
+    Route::get('/reports/crm/sales-comparison', [CrmReportController::class, 'salesComparison'])
+        ->name('reports.crm.sales-comparison');
+    Route::get('/reports/crm/sales-comparison/export', [CrmReportController::class, 'exportSalesComparison'])
+        ->name('reports.crm.sales-comparison.export');
     Route::post('/ovp-module/{productionInitiation}/allocate', [OvpModuleController::class, 'allocate'])
         ->middleware('can:ovp_module.menuview')
         ->name('ovp-module.allocate');

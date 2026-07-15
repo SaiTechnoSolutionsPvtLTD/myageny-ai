@@ -177,6 +177,7 @@
 .crm-report-card.quotation::after { background: #ec4899; }
 .crm-report-card.branch::after { background: #4f46e5; }
 .crm-report-card.smm::after { background: #0891b2; }
+.crm-report-card.sales-comparison::after { background: #10b981; }
 .crm-report-card-icon {
     width: 54px;
     height: 54px;
@@ -221,6 +222,10 @@
 .crm-report-card-icon.smm {
     background: linear-gradient(135deg, #ecfeff, #cffafe);
     color: #0891b2;
+}
+.crm-report-card-icon.sales-comparison {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    color: #16a34a;
 }
 .crm-report-status {
     display: inline-flex;
@@ -430,6 +435,12 @@
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                         <path d="M8 10h8"/>
                         <path d="M8 14h5"/>
+                    </svg>
+                    @elseif($report['theme'] === 'sales-comparison')
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="18" y1="20" x2="18" y2="10"/>
+                        <line x1="12" y1="20" x2="12" y2="4"/>
+                        <line x1="6" y1="20" x2="6" y2="14"/>
                     </svg>
                     @else
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

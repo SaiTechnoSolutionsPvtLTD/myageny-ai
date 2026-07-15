@@ -979,45 +979,54 @@
                     @endif
 
                     {{-- Sheet URL Configure Form --}}
-                    <div class="cc-sheet-form">
-                        <div class="cc-sheet-form-title">
-                            <i class="bi bi-link-45deg" style="font-size:16px;"></i>
-                            Google Sheet URL Configure
-                        </div>
-                        <form method="POST" action="{{ route('projects.content-calendar-sheet.update', $projectItem) }}" class="" id="cc-sheet-url-form">
-                            @csrf
-                            @method('PATCH')
-                            <div class="cc-sheet-input-row">
-                                <input
-                                    type="url"
-                                    name="content_calendar_sheet_url"
-                                    id="cc-sheet-url-input"
-                                    class="cc-sheet-input"
-                                    placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit..."
-                                    value="{{ $contentCalendarSheetUrl }}"
-                                    @if($projectItem->content_calendar_approved) disabled @endif
-                                >
-                                @if(!$projectItem->content_calendar_approved)
-                                    <button type="submit" class="cc-sheet-btn">
-                                        <i class="bi bi-save"></i> Save URL
-                                    </button>
-                                @else
-                                    <button type="button" class="cc-sheet-btn disabled" style="background: #cbd5e1; cursor: not-allowed; border-color: #cbd5e1; color: #64748b;" disabled>
-                                        <i class="bi bi-lock-fill"></i> Locked
-                                    </button>
-                                @endif
-                                @if($contentCalendarSheetUrl)
-                                    <a href="{{ $contentCalendarSheetUrl }}" target="_blank" class="ps-btn" style="gap:6px;">
-                                        <i class="bi bi-box-arrow-up-right"></i> Open Sheet
-                                    </a>
-                                @endif
+                    @if(auth()->user()?->belongsToDesigningDepartment())
+                        @if($contentCalendarSheetUrl)
+                            <div style="margin-bottom: 20px;">
+                                <a href="{{ $contentCalendarSheetUrl }}" target="_blank" class="ps-btn" style="gap:6px; display:inline-flex; align-items:center; background:#fff; border:1px solid #dbe1e8; border-radius:8px; padding:10px 16px; font-weight:600; color:#374151; text-decoration:none;">
+                                    <i class="bi bi-box-arrow-up-right"></i> Open Content Calendar Sheet
+                                </a>
                             </div>
-                            @error('content_calendar_sheet_url')
-                                <div class="ps-allocate-note" style="color:#b91c1c;margin-top:8px;">{{ $message }}</div>
-                            @enderror
-                        </form>
-
-                    </div>
+                        @endif
+                    @else
+                        <div class="cc-sheet-form">
+                            <div class="cc-sheet-form-title">
+                                <i class="bi bi-link-45deg" style="font-size:16px;"></i>
+                                Google Sheet URL Configure
+                            </div>
+                            <form method="POST" action="{{ route('projects.content-calendar-sheet.update', $projectItem) }}" class="" id="cc-sheet-url-form">
+                                @csrf
+                                @method('PATCH')
+                                <div class="cc-sheet-input-row">
+                                    <input
+                                        type="url"
+                                        name="content_calendar_sheet_url"
+                                        id="cc-sheet-url-input"
+                                        class="cc-sheet-input"
+                                        placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit..."
+                                        value="{{ $contentCalendarSheetUrl }}"
+                                        @if($projectItem->content_calendar_approved) disabled @endif
+                                    >
+                                    @if(!$projectItem->content_calendar_approved)
+                                        <button type="submit" class="cc-sheet-btn">
+                                            <i class="bi bi-save"></i> Save URL
+                                        </button>
+                                    @else
+                                        <button type="button" class="cc-sheet-btn disabled" style="background: #cbd5e1; cursor: not-allowed; border-color: #cbd5e1; color: #64748b;" disabled>
+                                            <i class="bi bi-lock-fill"></i> Locked
+                                        </button>
+                                    @endif
+                                    @if($contentCalendarSheetUrl)
+                                        <a href="{{ $contentCalendarSheetUrl }}" target="_blank" class="ps-btn" style="gap:6px;">
+                                            <i class="bi bi-box-arrow-up-right"></i> Open Sheet
+                                        </a>
+                                    @endif
+                                </div>
+                                @error('content_calendar_sheet_url')
+                                    <div class="ps-allocate-note" style="color:#b91c1c;margin-top:8px;">{{ $message }}</div>
+                                @enderror
+                            </form>
+                        </div>
+                    @endif
 
                     {{-- Content Calendar Table --}}
                     @if($contentCalendarSheetUrl)

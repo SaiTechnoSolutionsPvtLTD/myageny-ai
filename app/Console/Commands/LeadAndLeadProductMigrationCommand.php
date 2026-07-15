@@ -34,6 +34,7 @@ class LeadAndLeadProductMigrationCommand extends Command
         $leads = DB::connection('mysql2')
             ->table('leads')
             ->orderBy('id', 'desc')
+
             ->get();
 
         $leadIdMap = [];

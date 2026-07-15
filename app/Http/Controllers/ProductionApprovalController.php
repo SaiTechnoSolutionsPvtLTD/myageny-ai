@@ -13,17 +13,41 @@ class ProductionApprovalController extends Controller
 {
     public function index(Request $request): View
     {
-        $initiations = ProductionInitiation::query()
+        $query = ProductionInitiation::query()
             ->with([
                 'lead:id,company_name,contact_name',
                 'department:id,name',
                 'reviewedBy:id,name',
                 'productionApprovalReviewedBy:id,name',
+                'product:id,product_name',
             ])
             ->whereIn('status', ['approval', 'approved'])
-            ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject'])
-            ->latest()
-            ->get();
+            ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject']);
+
+        // Apply filters
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+        if ($request->filled('product_id')) {
+            $query->where('product_id', $request->product_id);
+        }
+        if ($request->filled('status')) {
+            $query->where('production_approval_status', $request->status);
+        }
+        if ($request->filled('user_id')) {
+            $query->where('production_approval_reviewed_by', $request->user_id);
+        }
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
+        }
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->department_id);
+        }
+
+        $initiations = $query->latest()->get();
 
         $buckets = [
             'pending' => [
@@ -67,10 +91,19 @@ class ProductionApprovalController extends Controller
             $selectedBucket = 'pending';
         }
 
+        $products = \App\Models\Product::orderBy('product_name')->get(['id', 'product_name']);
+        $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
+        $users = \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']);
+        $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
+
         return view('pages.production_approvals.index', [
             'cards' => $buckets,
             'selectedBucket' => $selectedBucket,
             'selectedCard' => $buckets[$selectedBucket],
+            'products' => $products,
+            'departments' => $departments,
+            'users' => $users,
+            'companies' => $companies,
         ]);
     }
 

@@ -23,7 +23,7 @@
     .gstin-pill { display: inline-block; background: #fdf4e7; color: #c8973a; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 3px; margin-top: 5px; }
     .table-wrap { padding: 0 28px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 10px; }
-    thead tr { background: {{ $quoteSetting['theme_color'] }}; color: #fff; }
+    thead tr { background: {{ $quoteSetting['secondary_color'] ?: $quoteSetting['theme_color'] }}; color: #fff; }
     thead th { padding: 8px; text-align: left; font-size: 8.5px; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; }
     thead th.r, tbody td.r { text-align: right; }
     thead th.c, tbody td.c { text-align: center; }

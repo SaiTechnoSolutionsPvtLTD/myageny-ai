@@ -70,6 +70,13 @@ class CrmReportController extends Controller
                 'status' => 'Ready for setup',
                 'route' => route('reports.crm.smm'),
             ],
+            [
+                'title' => 'Sales Comparison Report',
+                'description' => 'Compare actual sales collections against allocated targets branch-wise or user-wise for any selected period.',
+                'theme' => 'sales-comparison',
+                'status' => 'Ready for setup',
+                'route' => route('reports.crm.sales-comparison'),
+            ],
         ];
 
         return view('pages.reports.crm.index', compact('reports'));
@@ -1670,5 +1677,330 @@ class CrmReportController extends Controller
         })->filter()->values();
 
         return $rows;
+    }
+
+    public function salesComparison(Request $request): View
+    {
+        $companyId = $this->visibility->companyIdFor() ?: 1;
+
+        $periodType = $request->query('period_type', 'month');
+        $scope = $request->query('scope', 'all_branches');
+
+        $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+
+        $selectedBranchId = $request->query('branch_id');
+        if (!$selectedBranchId) {
+            $selectedBranchId = auth()->user()->branch_id ?: ($branches->first()?->id ?? null);
+        }
+
+        $selectedMonth = $request->query('month', date('Y-m'));
+        $currentQuarter = date('Y') . '-Q' . ceil(date('m') / 3);
+        $selectedQuarter = $request->query('quarter', $currentQuarter);
+        $selectedYear = $request->query('year', date('Y'));
+
+        $periodVal = $selectedMonth;
+        if ($periodType === 'quarter') {
+            $periodVal = $selectedQuarter;
+        } elseif ($periodType === 'year') {
+            $periodVal = $selectedYear;
+        }
+
+        $periodDetails = $this->resolvePeriodDetails($periodType, $periodVal);
+        $start = $periodDetails['start'];
+        $end = $periodDetails['end'];
+        $targetMonths = $periodDetails['months'];
+
+        $comparisonData = [];
+
+        $salesDeptIds = Department::where('company_id', $companyId)
+            ->whereRaw('LOWER(name) LIKE ?', ['%Sales%'])
+            ->pluck('id');
+
+        $targetRoleBaseNames = [
+            'branch_admin',
+            'branch_manager',
+            'cheif_operating_officer',
+            'chief_business_officer'
+        ];
+
+        if ($scope === 'all_branches') {
+            foreach ($branches as $branch) {
+                $target = (float) \App\Models\SalesTarget::where('branch_id', $branch->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.branch_id', $branch->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $branch->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        } elseif ($scope === 'particular_branch') {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function($q) use ($selectedBranchId) {
+                    $q->where('branch_id', $selectedBranchId)
+                      ->orWhereHas('branches', fn($bq) => $bq->where('branches.id', $selectedBranchId));
+                })
+                ->where(function($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = \App\Models\Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) \App\Models\SalesTarget::where('user_id', $user->id)
+                    ->where('branch_id', $selectedBranchId)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->where('leads.branch_id', $selectedBranchId)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $user->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        } else {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = \App\Models\Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) \App\Models\SalesTarget::where('user_id', $user->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $user->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        }
+
+        usort($comparisonData, fn($a, $b) => $b['difference'] <=> $a['difference']);
+
+        return view('pages.reports.crm.sales-comparison', compact(
+            'periodType',
+            'scope',
+            'branches',
+            'selectedBranchId',
+            'selectedMonth',
+            'selectedQuarter',
+            'selectedYear',
+            'comparisonData'
+        ));
+    }
+
+    public function exportSalesComparison(Request $request): Response
+    {
+        $companyId = $this->visibility->companyIdFor() ?: 1;
+
+        $periodType = $request->query('period_type', 'month');
+        $scope = $request->query('scope', 'all_branches');
+
+        $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+
+        $selectedBranchId = $request->query('branch_id');
+        if (!$selectedBranchId) {
+            $selectedBranchId = auth()->user()->branch_id ?: ($branches->first()?->id ?? null);
+        }
+
+        $selectedMonth = $request->query('month', date('Y-m'));
+        $currentQuarter = date('Y') . '-Q' . ceil(date('m') / 3);
+        $selectedQuarter = $request->query('quarter', $currentQuarter);
+        $selectedYear = $request->query('year', date('Y'));
+
+        $periodVal = $selectedMonth;
+        if ($periodType === 'quarter') {
+            $periodVal = $selectedQuarter;
+        } elseif ($periodType === 'year') {
+            $periodVal = $selectedYear;
+        }
+
+        $periodDetails = $this->resolvePeriodDetails($periodType, $periodVal);
+        $start = $periodDetails['start'];
+        $end = $periodDetails['end'];
+        $targetMonths = $periodDetails['months'];
+
+        $comparisonData = [];
+
+        $salesDeptIds = Department::where('company_id', $companyId)
+            ->whereRaw('LOWER(name) LIKE ?', ['%Sales%'])
+            ->pluck('id');
+
+        $targetRoleBaseNames = [
+            'branch_admin',
+            'branch_manager',
+            'cheif_operating_officer',
+            'chief_business_officer'
+        ];
+
+        if ($scope === 'all_branches') {
+            foreach ($branches as $branch) {
+                $target = (float) \App\Models\SalesTarget::where('branch_id', $branch->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.branch_id', $branch->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'Label' => $branch->name,
+                    'Target' => $target,
+                    'Actual' => $actual,
+                    'Difference' => $actual - $target,
+                ];
+            }
+        } elseif ($scope === 'particular_branch') {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function($q) use ($selectedBranchId) {
+                    $q->where('branch_id', $selectedBranchId)
+                      ->orWhereHas('branches', fn($bq) => $bq->where('branches.id', $selectedBranchId));
+                })
+                ->where(function($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = \App\Models\Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) \App\Models\SalesTarget::where('user_id', $user->id)
+                    ->where('branch_id', $selectedBranchId)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->where('leads.branch_id', $selectedBranchId)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'Label' => $user->name,
+                    'Target' => $target,
+                    'Actual' => $actual,
+                    'Difference' => $actual - $target,
+                ];
+            }
+        } else {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = \App\Models\Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) \App\Models\SalesTarget::where('user_id', $user->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) \App\Models\LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'Label' => $user->name,
+                    'Target' => $target,
+                    'Actual' => $actual,
+                    'Difference' => $actual - $target,
+                ];
+            }
+        }
+
+        usort($comparisonData, fn($a, $b) => $b['Difference'] <=> $a['Difference']);
+
+        $html = view('pages.reports.crm.sales-comparison-export', [
+            'rows' => $comparisonData,
+            'periodType' => $periodType,
+            'periodValue' => $periodVal,
+            'scope' => $scope,
+        ])->render();
+
+        $fileName = 'crm_sales_comparison_' . now()->format('Y_m_d_His') . '.xls';
+
+        return response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ]);
+    }
+
+    private function resolvePeriodDetails(string $periodType, string $periodValue): array
+    {
+        $start = null;
+        $end = null;
+        $months = [];
+
+        if ($periodType === 'month') {
+            $carbon = Carbon::parse($periodValue . '-01');
+            $start = $carbon->copy()->startOfMonth();
+            $end = $carbon->copy()->endOfMonth();
+            $months[] = $periodValue;
+        } elseif ($periodType === 'quarter') {
+            [$year, $q] = explode('-Q', $periodValue);
+            $q = (int) $q;
+            $monthStart = ($q - 1) * 3 + 1;
+            
+            $start = Carbon::create($year, $monthStart, 1)->startOfDay();
+            $end = $start->copy()->addMonths(2)->endOfMonth();
+            
+            for ($i = 0; $i < 3; $i++) {
+                $months[] = $start->copy()->addMonths($i)->format('Y-m');
+            }
+        } elseif ($periodType === 'year') {
+            $start = Carbon::create((int) $periodValue, 1, 1)->startOfDay();
+            $end = Carbon::create((int) $periodValue, 12, 31)->endOfDay();
+            
+            for ($i = 1; $i <= 12; $i++) {
+                $months[] = sprintf('%04d-%02d', (int) $periodValue, $i);
+            }
+        }
+
+        return [
+            'start' => $start,
+            'end' => $end,
+            'months' => $months
+        ];
     }
 }
