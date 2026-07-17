@@ -21,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class SuperAdminDashboardController extends ApiController
 {
@@ -84,9 +85,9 @@ class SuperAdminDashboardController extends ApiController
         $sourceTotal  = 0;
         foreach (Lead::sourceOptions() as $key => $label) {
             $count = (clone $base())
-                ->where(function($q) use ($key, $label) {
+                ->where(function ($q) use ($key, $label) {
                     $q->where('lead_source_id', $key)
-                      ->orWhere('lead_source', $label);
+                        ->orWhere('lead_source', $label);
                 })
                 ->count();
             $sourceTotal += $count;
@@ -137,9 +138,9 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
@@ -418,7 +419,7 @@ class SuperAdminDashboardController extends ApiController
             if ($effectiveBranchId) {
                 $branchObj = \App\Models\Branch::find($effectiveBranchId);
                 $targetName = $branchObj ? $branchObj->name : 'Branch';
-                
+
                 $userIds = \App\Models\User::where('branch_id', $effectiveBranchId)->pluck('id');
                 $target = (float) \App\Models\SalesTarget::whereIn('user_id', $userIds)->sum('target_amount');
                 $isIndividual = false;
@@ -433,11 +434,11 @@ class SuperAdminDashboardController extends ApiController
 
         $achievedQuery = \App\Models\LeadProductPayment::query();
         if ($targetUserId) {
-            $achievedQuery->whereHas('lead', function($q) use ($targetUserId) {
+            $achievedQuery->whereHas('lead', function ($q) use ($targetUserId) {
                 $q->where('assigned_to', $targetUserId);
             });
         } elseif (isset($effectiveBranchId) && $effectiveBranchId) {
-            $achievedQuery->whereHas('lead', function($q) use ($effectiveBranchId) {
+            $achievedQuery->whereHas('lead', function ($q) use ($effectiveBranchId) {
                 $q->where('branch_id', $effectiveBranchId);
             });
         }
@@ -548,10 +549,31 @@ class SuperAdminDashboardController extends ApiController
         // ── Resolve dates ──────────────────────────────────────────
         [$dateFrom, $dateTo] = $this->resolveDates($request);
 
+
+
         $branchId = $request->branch_id;
         $userId   = $request->user_id;
         $stage    = $request->stage;
         $source   = $request->source;
+
+        [$prevFrom, $prevTo, $comparisonLabel] = $this->resolvePreviousPeriod(
+            $request->quick_date,
+            $dateFrom,
+            $dateTo
+        );
+
+        $prevBase = function () use ($request, $branchId, $userId, $stage, $source, $prevFrom, $prevTo) {
+            $query = Lead::query();
+            $this->visibility->applyLeadVisibility($query, $request->user());
+
+            return $query
+                ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+                ->when($userId, fn($q) => $q->where('assigned_to', $userId))
+                ->when($stage, fn($q) => $q->where('lead_status', $stage))
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
+                ->when($prevFrom, fn($q) => $q->whereDate('lead_date', '>=', $prevFrom))
+                ->when($prevTo, fn($q) => $q->whereDate('lead_date', '<=', $prevTo));
+        };
 
         // ── Base query factory ─────────────────────────────────────
         $base = function () use ($request, $branchId, $userId, $stage, $source, $dateFrom, $dateTo) {
@@ -577,6 +599,22 @@ class SuperAdminDashboardController extends ApiController
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
+        $prevTotalLeads    = (clone $prevBase())->count();
+        $prevWonLeads      = (clone $prevBase())->where('lead_status', 'won')->count();
+        $prevLostLeads     = (clone $prevBase())->where('lead_status', 'lost')->count();
+        $prevActiveLeads   = $prevTotalLeads - $prevWonLeads - $prevLostLeads;
+        $prevPipelineValue = (float)(clone $prevBase())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
+        $prevWonValue      = (float)(clone $prevBase())->where('lead_status', 'won')->sum('deal_value');
+        $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
+        $prevConvRate      = $prevTotalLeads > 0 ? round($prevWonLeads / $prevTotalLeads * 100, 1) : 0.0;
+
+        $prevLeadIds = (clone $prevBase())->pluck('id');
+
+        $prevTotalProductValue = (float) LeadProduct::whereIn('lead_id', $prevLeadIds)->sum('total_price');
+        $prevTotalPaid         = (float) LeadProductPayment::whereIn('lead_id', $prevLeadIds)->sum('amount');
+        $prevTotalPending      = $prevTotalProductValue - $prevTotalPaid;
+        $prevConvertedValue    = (float) LeadProduct::whereIn('lead_id', $prevLeadIds)->where('product_status', 'converted')->sum('total_price');
+
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
         $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
@@ -588,9 +626,9 @@ class SuperAdminDashboardController extends ApiController
         $sourceTotal  = 0;
         foreach (Lead::sourceOptions() as $key => $label) {
             $count = (clone $base())
-                ->where(function($q) use ($key, $label) {
+                ->where(function ($q) use ($key, $label) {
                     $q->where('lead_source_id', $key)
-                      ->orWhere('lead_source', $label);
+                        ->orWhere('lead_source', $label);
                 })
                 ->count();
             $sourceTotal += $count;
@@ -641,9 +679,9 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
-                  ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
@@ -862,6 +900,23 @@ class SuperAdminDashboardController extends ApiController
                 'conversion_rate'   => $convRate,
             ],
 
+            'trends' => [
+                'comparison_label'    => $comparisonLabel,
+                'total_leads'         => $this->buildTrend((float) $totalLeads,    (float) $prevTotalLeads,    true),
+                'active_leads'        => $this->buildTrend((float) $activeLeads,   (float) $prevActiveLeads,   true),
+                'won_leads'           => $this->buildTrend((float) $wonLeads,      (float) $prevWonLeads,      true),
+                'lost_leads'          => $this->buildTrend((float) $lostLeads,     (float) $prevLostLeads,     false),
+                'pipeline_value'      => $this->buildTrend($pipelineValue,          $prevPipelineValue,          true),
+                'won_value'           => $this->buildTrend($wonValue,               $prevWonValue,               true),
+                'conversion_rate'     => $this->buildPointsTrend($convRate,         $prevConvRate,               true),
+                'high_priority'       => $this->buildTrend((float) $highPriority,  (float) $prevHighPriority,  false),
+                // Payment Financials cards:
+                'total_product_value' => $this->buildTrend($totalProductValue, $prevTotalProductValue, true),
+                'amount_paid'         => $this->buildTrend($totalPaid,          $prevTotalPaid,          true),
+                'amount_pending'      => $this->buildTrend($totalPending,       $prevTotalPending,       false),
+                'converted_value'     => $this->buildTrend($convertedValue,     $prevConvertedValue,     true),
+            ],
+
             'financials' => [
                 'total_product_value'  => $totalProductValue,
                 'amount_paid'          => $totalPaid,
@@ -933,5 +988,110 @@ class SuperAdminDashboardController extends ApiController
         $statuses = ['new', 'hot', 'warm', 'cold', 'converted', 'lost'];
 
         return view('pages.dashboard.leads.admin-product-wise-dashboard', compact('products', 'branches', 'users', 'sources', 'statuses', 'apiToken'));
+    }
+
+    private function resolvePreviousPeriod(?string $quickDate, ?string $dateFrom, ?string $dateTo): array
+    {
+        if ($quickDate) {
+            return match ($quickDate) {
+                'today' => [
+                    now()->subDay()->toDateString(),
+                    now()->subDay()->toDateString(),
+                    'vs Yesterday',
+                ],
+                'week' => [
+                    now()->subWeek()->startOfWeek()->toDateString(),
+                    now()->subWeek()->endOfWeek()->toDateString(),
+                    'vs Previous Week',
+                ],
+                'month' => [
+                    now()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+                    now()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+                    'vs Previous Month',
+                ],
+                'quarter' => [
+                    now()->subQuarter()->startOfQuarter()->toDateString(),
+                    now()->subQuarter()->endOfQuarter()->toDateString(),
+                    'vs Previous Quarter',
+                ],
+                'year' => [
+                    now()->subYear()->startOfYear()->toDateString(),
+                    now()->subYear()->endOfYear()->toDateString(),
+                    'vs Previous Year',
+                ],
+                default => [null, null, 'vs Previous Period'],
+            };
+        }
+
+        if ($dateFrom && $dateTo) {
+            $from = Carbon::parse($dateFrom);
+            $to   = Carbon::parse($dateTo);
+            $days = $from->diffInDays($to) + 1;
+
+            return [
+                $from->copy()->subDays($days)->toDateString(),
+                $from->copy()->subDay()->toDateString(),
+                'vs Previous Period',
+            ];
+        }
+
+        // No date filter active at all (shouldn't normally happen — mobile always
+        // defaults quick_date to 'month') — fall back to month-over-month so the
+        // chips still have a meaningful baseline instead of going blank.
+        return [
+            now()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+            now()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+            'vs Previous Month',
+        ];
+    }
+
+    private function buildTrend(float $current, float $previous, bool $higherIsBetter): array
+    {
+        if ($previous == 0.0 && $current == 0.0) {
+            return [
+                'current'          => $current,
+                'previous'         => $previous,
+                'change_percent'   => 0.0,
+                'direction'        => 'flat',
+                'higher_is_better' => $higherIsBetter,
+            ];
+        }
+
+        if ($previous == 0.0) {
+            // Nothing existed in the previous period but there's data now —
+            // a percent change is mathematically undefined, not "infinite%".
+            return [
+                'current'          => $current,
+                'previous'         => $previous,
+                'change_percent'   => null,
+                'direction'        => 'new',
+                'higher_is_better' => $higherIsBetter,
+            ];
+        }
+
+        $changePercent = round((($current - $previous) / $previous) * 100, 1);
+        $direction     = $changePercent > 0 ? 'up' : ($changePercent < 0 ? 'down' : 'flat');
+
+        return [
+            'current'          => $current,
+            'previous'         => $previous,
+            'change_percent'   => $changePercent,
+            'direction'        => $direction,
+            'higher_is_better' => $higherIsBetter,
+        ];
+    }
+
+    private function buildPointsTrend(float $current, float $previous, bool $higherIsBetter): array
+    {
+        $changePoints = round($current - $previous, 1);
+        $direction    = $changePoints > 0 ? 'up' : ($changePoints < 0 ? 'down' : 'flat');
+
+        return [
+            'current'          => $current,
+            'previous'         => $previous,
+            'change_points'    => $changePoints,
+            'direction'        => $direction,
+            'higher_is_better' => $higherIsBetter,
+        ];
     }
 }

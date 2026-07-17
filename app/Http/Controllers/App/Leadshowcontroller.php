@@ -78,21 +78,33 @@ class LeadShowController extends Controller
             new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
         ]
     )]
+
     public function storeCall(Request $request, Lead $lead): JsonResponse
     {
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
 
         $data = $request->validate([
-            'called_at'        => ['required', 'date'],
-            'call_type'        => ['required', 'in:outgoing,incoming,missed'],
-            'duration_minutes' => ['nullable', 'integer', 'min:0'],
-            'outcome'          => ['required'],
-            'notes'            => ['nullable', 'string', 'max:1000'],
-            'next_follow_up'   => ['nullable', 'date', 'after_or_equal:today'],
+            // call_type / duration_minutes / client-supplied called_at are no
+            // longer required — web dropped them from the schema. Kept nullable
+            // here only so older app builds mid-rollout don't hard-fail.
+            'call_type'                => ['nullable', 'in:outgoing,incoming,missed'],
+            'duration_minutes'         => ['nullable', 'integer', 'min:0'],
+            'outcome'                  => ['required'],
+            // Matches the key the Flutter form already sends today
+            // (outcome_subcategory_id) — no app-side payload change needed.
+            'outcome_subcategory_id'   => ['required'],
+            'notes'                    => ['nullable', 'string', 'max:1000'],
+            'next_follow_up'           => ['nullable', 'date', 'after_or_equal:today'],
         ]);
 
-        $data['lead_id'] = $lead->id;
-        $data['user_id'] = auth()->id();
+        $data['lead_id']             = $lead->id;
+        // Server time, not client time — same as web. Avoids device-clock/
+        // timezone drift landing in call history.
+        $data['called_at']           = now();
+        $data['outcome_subcategory'] = $data['outcome_subcategory_id'];
+        unset($data['outcome_subcategory_id']);
+        $data['user_id']             = $request->user()->id;
+        $data['company_id']          = $lead->company_id;
 
         $call = LeadCallUpdate::create($data);
 
@@ -1009,17 +1021,17 @@ class LeadShowController extends Controller
     private function formatCall(LeadCallUpdate $call): array
     {
         return [
-            'id'               => $call->id,
-            'called_at'        => $call->called_at?->toIso8601String(),
-            'call_type'        => $call->call_type,
-            'call_type_label'  => $call->call_type_label,
-            'duration_minutes' => $call->duration_minutes,
-            'outcome'          => $call->outcome,
-            'outcome_label'    => $call->outcome_label,
-            'outcome_color'    => $call->outcome_color,
-            'notes'            => $call->notes,
-            'next_follow_up'   => $call->next_follow_up?->toDateString(),
-            'user'             => $call->user ? ['id' => $call->user->id, 'name' => $call->user->name] : null,
+            'id'                  => $call->id,
+            'called_at'           => $call->called_at?->toIso8601String(),
+            'call_type'           => $call->call_type,
+            'call_type_label'     => $call->call_type_label,
+            'duration_minutes'    => $call->duration_minutes,
+            'outcome'             => $call->outCome?->name ?? $call->outcome,
+            'outcome_label'       => $call->outComeSubCategory?->name ?? $call->outcome_subcategory,
+            'outcome_color'       => $call->outcome_color,
+            'notes'               => $call->notes,
+            'next_follow_up'      => $call->next_follow_up?->toDateString(),
+            'user'                => $call->user ? ['id' => $call->user->id, 'name' => $call->user->name] : null,
         ];
     }
 

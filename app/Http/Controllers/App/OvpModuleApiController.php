@@ -10,11 +10,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use App\Services\NotificationService;
 
 class OvpModuleApiController extends Controller
 {
     private const OVP_TL_ROLE_KEYS = ['customer_support_team_tl'];
     private const OVP_EXECUTIVE_ROLE_KEYS = ['customer_support_team_executive'];
+
+    public function __construct(private readonly NotificationService $notifications)
+    {
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -99,14 +106,21 @@ class OvpModuleApiController extends Controller
             'success' => true,
             'message' => 'OVP item allocated to executive successfully.',
             'data'    => $this->formatInitiation($productionInitiation->fresh([
-                'lead', 'lead.branch', 'lead.assignedTo', 'leadProduct',
-                'department', 'ovpAllocatedTo', 'ovpAllocatedBy', 'reviewedBy',
+                'lead',
+                'lead.branch',
+                'lead.assignedTo',
+                'leadProduct',
+                'department',
+                'ovpAllocatedTo',
+                'ovpAllocatedBy',
+                'reviewedBy',
             ]), $user),
         ]);
     }
 
     public function review(Request $request, ProductionInitiation $productionInitiation): JsonResponse
     {
+        
         $user = auth()->user();
 
         if (!$this->canReview($productionInitiation, $user)) {
@@ -117,9 +131,26 @@ class OvpModuleApiController extends Controller
             'decision' => ['required', 'in:approval,rejected'],
         ]);
 
+        // Was missing entirely — mirrors web's prepareOvpCustomFormData() call.
+        // Validates required OVP fields and stores custom_form_data, exactly
+        // like the web controller. On reject, the existing value is kept
+        // untouched (same as web).
+        try {
+            $customFormData = $validated['decision'] === 'approval'
+                ? $this->prepareOvpCustomFormData($request, $productionInitiation)
+                : ($productionInitiation->custom_form_data ?? []);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please fill all required fields.',
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
         $productionInitiation->update([
             'status'                          => $validated['decision'] === 'approval' ? 'approved' : 'rejected',
             'ovp_allocation_status'           => 'submitted',
+            'custom_form_data'                => $customFormData,
             'reviewed_at'                     => Carbon::now(),
             'reviewed_by'                     => $user->id,
             'production_approval_status'      => $validated['decision'] === 'approval' ? 'pending' : null,
@@ -127,14 +158,49 @@ class OvpModuleApiController extends Controller
             'production_approval_reviewed_by' => null,
         ]);
 
+        if (($validated['decision'] ?? null) === 'approval') {
+            $companyId = $productionInitiation->company_id;
+            $branchId = $productionInitiation->loadMissing('lead')->lead?->branch_id;
+
+            // withoutGlobalScopes() — otherwise this candidate pool would silently
+            // shrink to the ACTING user's own branch whenever they happen to be a
+            // branch_admin, which is the wrong axis of scoping here (see core doc).
+            $reviewers = User::withoutGlobalScopes()
+                ->where('is_active', true)
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->get()
+                ->filter(fn(User $u) => $u->hasCrmPermission('production_approval_module.menuview'));
+
+            $reviewers = $this->notifications->filterByBranchVisibility($reviewers, $branchId);
+
+            $this->notifications->notifyMany($reviewers, 'crm', 'production_approval_pending', [
+                'title' => 'Production Approval Pending',
+                'message' => ($productionInitiation->product_name ?? 'A production item') . ' is awaiting your production approval.',
+                'detail' => $productionInitiation->company_name ?? $productionInitiation->lead?->company_name,
+                'action_url' => route('production-approvals.index', ['bucket' => 'pending']),
+                'priority' => 'high',
+                'request_type' => 'production_approval',
+                'request_id' => $productionInitiation->id,
+                'actor_name' => auth()->user()?->name,
+                'status' => 'pending',
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => $validated['decision'] === 'approval'
                 ? 'OVP item approved.'
                 : 'OVP item rejected.',
             'data'    => $this->formatInitiation($productionInitiation->fresh([
-                'lead', 'lead.branch', 'lead.assignedTo', 'leadProduct',
-                'department', 'ovpAllocatedTo', 'ovpAllocatedBy', 'reviewedBy',
+                'lead',
+                'lead.branch',
+                'lead.assignedTo',
+                'leadProduct',
+                'department',
+                'ovpAllocatedTo',
+                'ovpAllocatedBy',
+                'reviewedBy',
+                'product.ovpFormFields',
             ]), $user),
         ]);
     }
@@ -162,30 +228,181 @@ class OvpModuleApiController extends Controller
         $receivedAmount = $leadProduct ? (float) $leadProduct->amount_paid  : 0.0;
 
         return [
-            'id'                  => $i->id,
-            'product_name'        => $i->product_name ?? $i->lead?->productName ?? '',
-            'total_working_days'  => $i->total_working_days ?? 0,
-            'department'          => $i->department?->name ?? '',
-            'company'             => $i->lead?->company_name ?? '',
-            'contact_name'        => $i->lead?->contact_name ?? '',
-            'status'              => $i->status,
-            'bucket'              => $this->resolveBucket($i),
+            'id'                    => $i->id,
+            'product_name'          => $i->product_name ?? $i->lead?->productName ?? '',
+            'total_working_days'    => $i->total_working_days ?? 0,
+            'department'            => $i->department?->name ?? '',
+            'company'               => $i->lead?->company_name ?? '',
+            'contact_name'          => $i->lead?->contact_name ?? '',
+            'status'                => $i->status,
+            'bucket'                => $this->resolveBucket($i),
             'ovp_allocation_status' => $i->ovp_allocation_status,
-            'allocated_to'        => $i->ovpAllocatedTo ? ['id' => $i->ovpAllocatedTo->id, 'name' => $i->ovpAllocatedTo->name] : null,
-            'allocated_by'        => $i->ovpAllocatedBy ? ['id' => $i->ovpAllocatedBy->id, 'name' => $i->ovpAllocatedBy->name] : null,
-            'allocated_at'        => $i->ovp_allocated_at?->toIso8601String(),
-            'reviewed_by'         => $i->reviewedBy ? ['id' => $i->reviewedBy->id, 'name' => $i->reviewedBy->name] : null,
-            'reviewed_at'         => $i->reviewed_at?->toIso8601String(),
-            'total_amount'        => $totalAmount,
-            'received_amount'     => $receivedAmount,
-            'pending_amount'      => max(0, $totalAmount - $receivedAmount),
-            'sales_person'        => $i->lead?->assignedTo?->name ?? '',
-            'branch'              => $i->lead?->branch?->name ?? '',
-            'can_review'          => $this->canReview($i, $user),
-            'can_allocate'        => $this->canAllocate($i, $user),
-            'created_at'          => $i->created_at?->toIso8601String(),
-            'is_overdue'          => $this->isOverdue($i),
+            'allocated_to'          => $i->ovpAllocatedTo ? ['id' => $i->ovpAllocatedTo->id, 'name' => $i->ovpAllocatedTo->name] : null,
+            'allocated_by'          => $i->ovpAllocatedBy ? ['id' => $i->ovpAllocatedBy->id, 'name' => $i->ovpAllocatedBy->name] : null,
+            'allocated_at'          => $i->ovp_allocated_at?->toIso8601String(),
+            'reviewed_by'           => $i->reviewedBy ? ['id' => $i->reviewedBy->id, 'name' => $i->reviewedBy->name] : null,
+            'reviewed_at'           => $i->reviewed_at?->toIso8601String(),
+            'total_amount'          => $totalAmount,
+            'received_amount'       => $receivedAmount,
+            'pending_amount'        => max(0, $totalAmount - $receivedAmount),
+            'sales_person'          => $i->lead?->assignedTo?->name ?? '',
+            'branch'                => $i->lead?->branch?->name ?? '',
+            'can_review'            => $this->canReview($i, $user),
+            'can_allocate'          => $this->canAllocate($i, $user),
+            'created_at'            => $i->created_at?->toIso8601String(),
+            'is_overdue'            => $this->isOverdue($i),
+            // New — the two fields the Flutter app was missing entirely.
+            'ovp_form_schema'       => $this->ovpFormSchemaFor($i),
+            'custom_form_data'      => $i->custom_form_data ?? [],
         ];
+    }
+
+    /**
+     * Same shape/filtering as web's inline $ovpSchema block in ovp-index.blade.php
+     * and ProductOvpFormController::schema() — is_active + use_in_ovp only,
+     * ordered by sort_order then id.
+     */
+    private function ovpFormSchemaFor(ProductionInitiation $i): array
+    {
+        $fields = $i->product?->ovpFormFields
+            ? $i->product->ovpFormFields
+            ->where('is_active', true)
+            ->where('use_in_ovp', true)
+            ->sortBy(['sort_order', 'id'])
+            ->values()
+            : collect();
+
+        return $fields->map(fn($field) => [
+            'id'                => $field->id,
+            'label'             => $field->label,
+            'field_name'        => $field->field_name,
+            'field_type'        => $field->field_type,
+            'placeholder'       => $field->placeholder,
+            'help_text'         => $field->help_text,
+            'default_value'     => $field->default_value,
+            'is_required'       => $field->is_required,
+            'options'           => $field->options ?? [],
+            'validation_rules'  => $field->validation_rules ?? [],
+        ])->all();
+    }
+
+    /**
+     * Direct port of web OvpModuleController::prepareOvpCustomFormData() —
+     * same validation rules per field_type, same file storage disk/path, same
+     * "preserve entries for fields not in the current OVP schema" behavior.
+     */
+    private function prepareOvpCustomFormData(Request $request, ProductionInitiation $productionInitiation): array
+    {
+        $product = $productionInitiation->product;
+        $fields = $product?->ovpFormFields()
+            ->where('is_active', true)
+            ->where('use_in_ovp', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get() ?? collect();
+
+        if ($fields->isEmpty()) {
+            return $productionInitiation->custom_form_data ?? [];
+        }
+
+        $rules = [];
+        foreach ($fields as $field) {
+            $fieldKey = 'custom_fields.' . $field->field_name;
+            $fileKey  = 'custom_files.' . $field->field_name;
+            $baseRules = $field->is_required ? ['required'] : ['nullable'];
+
+            switch ($field->field_type) {
+                case 'number':
+                    $rules[$fieldKey] = array_merge($baseRules, ['numeric']);
+                    if (($field->validation_rules['min'] ?? null) !== null) {
+                        $rules[$fieldKey][] = 'min:' . $field->validation_rules['min'];
+                    }
+                    if (($field->validation_rules['max'] ?? null) !== null) {
+                        $rules[$fieldKey][] = 'max:' . $field->validation_rules['max'];
+                    }
+                    break;
+                case 'checkbox':
+                    $rules[$fieldKey] = array_merge($baseRules, ['array']);
+                    $rules[$fieldKey . '.*'] = ['string'];
+                    break;
+                case 'select':
+                case 'radio':
+                    $allowed = collect($field->options ?? [])->pluck('value')->filter()->all();
+                    $rules[$fieldKey] = array_merge($baseRules, ['string'], $allowed ? ['in:' . implode(',', $allowed)] : []);
+                    break;
+                case 'date':
+                    $rules[$fieldKey] = array_merge($baseRules, ['date']);
+                    break;
+                case 'file':
+                    $rules[$fileKey] = array_merge($baseRules, ['file', 'max:10240']);
+                    break;
+                default:
+                    $rules[$fieldKey] = array_merge($baseRules, ['string', 'max:5000']);
+                    break;
+            }
+        }
+
+        Validator::make($request->all(), $rules)->validate();
+
+        $existingEntries = collect($productionInitiation->custom_form_data ?? [])->keyBy('field_name');
+        $ovpFieldNames = $fields->pluck('field_name')->filter()->values()->all();
+        $customValues = (array) $request->input('custom_fields', []);
+        $stored = [];
+
+        foreach ($fields as $field) {
+            $fieldName = $field->field_name;
+
+            if ($field->field_type === 'file') {
+                $uploadedFile = $request->file('custom_files.' . $fieldName);
+
+                if ($uploadedFile) {
+                    $path = $uploadedFile->store('production-initiations/custom-fields', 'public');
+                    $stored[] = [
+                        'field_id'   => $field->id,
+                        'field_name' => $fieldName,
+                        'label'      => $field->label,
+                        'type'       => $field->field_type,
+                        'value'      => [
+                            'path' => $path,
+                            'name' => $uploadedFile->getClientOriginalName(),
+                            'url'  => Storage::disk('public')->url($path),
+                        ],
+                    ];
+                    continue;
+                }
+
+                if ($existingEntries->has($fieldName)) {
+                    $stored[] = $existingEntries->get($fieldName);
+                }
+
+                continue;
+            }
+
+            $value = $customValues[$fieldName] ?? null;
+
+            if (is_array($value)) {
+                $value = array_values(array_filter($value, fn($item) => $item !== null && $item !== ''));
+            }
+
+            if ($value === null || $value === '' || $value === []) {
+                continue;
+            }
+
+            $stored[] = [
+                'field_id'   => $field->id,
+                'field_name' => $fieldName,
+                'label'      => $field->label,
+                'type'       => $field->field_type,
+                'value'      => $value,
+            ];
+        }
+
+        $preservedEntries = $existingEntries
+            ->reject(fn($entry, $fieldName) => in_array((string) $fieldName, $ovpFieldNames, true))
+            ->values()
+            ->all();
+
+        return array_merge($preservedEntries, $stored);
     }
 
     private function resolveBucket(ProductionInitiation $i): ?string

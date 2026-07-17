@@ -21,6 +21,7 @@ use App\Models\LeadProduct;
 use App\Models\DesignSettingTarget;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use App\Services\NotificationService;
 
 class ProjectApiController extends Controller
 {
@@ -37,6 +38,8 @@ class ProjectApiController extends Controller
         'team_lead_digital_marketing',
         'software_team_leader',
     ];
+
+    public function __construct(private readonly NotificationService $notifications) {}
 
     // ─────────────────────────────────────────────────────────────────────────
     //  GET /mobile/projects/dashboard
@@ -393,6 +396,23 @@ class ProjectApiController extends Controller
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
+        $this->notifications->notifyMany(
+            User::query()->whereIn('id', $selectedTlIds)->where('is_active', true)->get(),
+            'projects',
+            'project_tl_allocated',
+            [
+                'title' => 'New Project Allocation',
+                'message' => 'You were allocated as TL for ' . ($productionInitiation->product_name ?? 'a project') . '.',
+                'detail' => $productionInitiation->company_name ?? $productionInitiation->lead?->company_name,
+                'action_url' => route('projects.show', $productionInitiation),
+                'priority' => 'medium',
+                'request_type' => 'project_allocation',
+                'request_id' => $productionInitiation->id,
+                'actor_name' => $user->name,
+                'status' => 'allocated',
+            ]
+        );
+
         return response()->json(['success' => true, 'message' => 'Project allocated to TL successfully.']);
     }
 
@@ -435,6 +455,23 @@ class ProjectApiController extends Controller
             ...$this->summarizeTlEmployeeAllocations($tlAllocations->all()),
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
+
+        $this->notifications->notifyMany(
+            User::query()->whereIn('id', $selectedEmployeeIds)->where('is_active', true)->get(),
+            'projects',
+            'project_employee_allocated',
+            [
+                'title' => 'New Project Allocation',
+                'message' => 'You were assigned to ' . ($productionInitiation->product_name ?? 'a project') . '.',
+                'detail' => $productionInitiation->company_name ?? $productionInitiation->lead?->company_name,
+                'action_url' => route('projects.show', $productionInitiation),
+                'priority' => 'medium',
+                'request_type' => 'project_allocation',
+                'request_id' => $productionInitiation->id,
+                'actor_name' => $user->name,
+                'status' => 'allocated',
+            ]
+        );
 
         return response()->json(['success' => true, 'message' => 'Employees allocated successfully.']);
     }

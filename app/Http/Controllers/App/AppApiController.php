@@ -11,14 +11,7 @@ class AppApiController extends Controller
 {
     public function reminderList(Request $request)
     {
-        $userId =  1;
-
-        // if (!$userId) {
-        //     return response()->json([
-        //         'status' => false,
-        //         'message' => 'user_id is required'
-        //     ], 400);
-        // }
+        $userId = $request->user()->id;
 
         $reminders = LeadReminder::where('user_id', $userId)
             ->orderBy('remind_at', 'asc')
@@ -42,9 +35,9 @@ class AppApiController extends Controller
             });
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Reminder list fetched successfully',
-            'data' => $reminders
+            'data'    => $reminders,
         ]);
     }
 }

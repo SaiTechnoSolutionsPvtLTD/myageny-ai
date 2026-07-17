@@ -21,12 +21,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
+use App\Services\NotificationService;
 
 #[OA\Tag(name: "Leads", description: "Lead management endpoints for mobile app")]
 
 class LeadController extends Controller
 {
-    public function __construct(private readonly DataVisibilityService $visibility) {}
+    public function __construct(private readonly DataVisibilityService $visibility, private readonly NotificationService $notifications) {}
 
     // =========================================================================
     // INDEX — List all leads with filters + pagination
@@ -376,11 +377,46 @@ class LeadController extends Controller
 
         $lead->update(['lead_status' => $request->lead_status]);
 
+        $this->maybeNotifyHighValueConversion($lead->fresh());
+
         return response()->json([
             'status'       => true,
             'message'      => "Lead status updated to {$lead->status_label}.",
             'lead_status'  => $lead->lead_status,
             'status_label' => $lead->status_label,
+        ]);
+    }
+
+    private function maybeNotifyHighValueConversion(Lead $lead): void
+    {
+        $statusKey = str((string) $lead->status_label)->lower()->replace(' ', '_')->value();
+        if ($statusKey !== 'won') {
+            return;
+        }
+
+        $threshold = (float) config('crm.high_value_lead_threshold', 500000);
+        if ((float) $lead->deal_value < $threshold) {
+            return;
+        }
+
+        $recipients = User::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->when($lead->company_id, fn($q) => $q->where('company_id', $lead->company_id))
+            ->get()
+            ->filter(fn(User $u) => $u->hasAdminLikeRole());
+
+        $recipients = $this->notifications->filterByBranchVisibility($recipients, $lead->branch_id);
+
+        $this->notifications->notifyMany($recipients, 'crm', 'high_value_lead_converted', [
+            'title' => 'High-Value Lead Converted',
+            'message' => $lead->company_name . ' converted with a deal value of ' . $lead->formatted_deal_value . '.',
+            'detail' => 'Assigned to ' . ($lead->assignedTo?->name ?? 'Unassigned'),
+            'action_url' => route('leads.show', $lead),
+            'priority' => 'high',
+            'request_type' => 'lead_conversion',
+            'request_id' => $lead->id,
+            'actor_name' => auth()->user()?->name,
+            'status' => 'won',
         ]);
     }
 

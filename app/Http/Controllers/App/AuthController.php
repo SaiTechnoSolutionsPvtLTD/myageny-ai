@@ -327,6 +327,7 @@ class AuthController extends Controller
             'dashboard_route' => $mobileRoute,
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
+            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
             'branch' => $user->branch ? [
                 'id'                       => $user->branch->id,
                 'name'                     => $user->branch->name,
@@ -338,7 +339,6 @@ class AuthController extends Controller
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),
             'profile_photo'   => $user->photo ?? null,
-
             'employee' => $emp ? [
                 'employee_id'     => $emp->id,
                 'mobile'          => $emp->mobile,

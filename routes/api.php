@@ -34,6 +34,8 @@ use App\Http\Controllers\App\ProductionInitiationApiController;
 use App\Http\Controllers\App\ProjectApiController;
 use App\Http\Controllers\App\ReportApiController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\App\AppMenuController;
+use App\Http\Controllers\App\NotificationApiController as MobileNotificationApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -136,7 +138,8 @@ Route::patch('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']
 */
 Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(function () {
     Route::get('dashboard', [MobileDashboardController::class, 'index'])->name('dashboard');
-
+    Route::get('menu', [AppMenuController::class, 'index'])->name('menu');
+    Route::get('modules', [AppMenuController::class, 'modules'])->name('modules');
     Route::prefix('hrms')->name('hrms.')->group(function () {
         Route::get('dashboard',         [DashboardApiController::class,  'index'])->name('dashboard');
         Route::get('employees/meta',    [EmployeeApiController::class,    'meta'])->name('employees.meta');
@@ -292,6 +295,11 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('{productionInitiation}/content-calendar-data', [ProjectApiController::class, 'fetchContentCalendarData'])
             ->name('mobile.projects.content-calendar-data');
     });
+
+    Route::get('notifications', [MobileNotificationApiController::class, 'index']);
+    Route::get('notifications/unread-count', [MobileNotificationApiController::class, 'unreadCount']);
+    Route::post('notifications/{notificationId}/read', [MobileNotificationApiController::class, 'markAsRead']);
+    Route::post('notifications/read-all', [MobileNotificationApiController::class, 'markAllAsRead']);
 });
 
 /*

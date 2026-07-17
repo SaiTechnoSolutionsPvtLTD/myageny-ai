@@ -7,9 +7,12 @@ use App\Models\ProductionInitiation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use App\Services\NotificationService;
 
 class ProductionApprovalApiController extends Controller
 {
+    public function __construct(private readonly NotificationService $notifications) {}
+
     public function index(Request $request): JsonResponse
     {
         $initiations = ProductionInitiation::query()
@@ -71,6 +74,25 @@ class ProductionApprovalApiController extends Controller
             'project_allocated_at'             => null,
             'project_allocated_by'             => null,
         ]);
+
+        $this->notifications->notify(
+            $productionInitiation->initiatedBy,
+            'crm',
+            $validated['decision'] === 'approval' ? 'production_approval_approved' : 'production_approval_rejected',
+            [
+                'title' => $validated['decision'] === 'approval' ? 'Production Approved' : 'Production Approval Rejected',
+                'message' => $validated['decision'] === 'approval'
+                    ? 'Your production request was approved.'
+                    : 'Your production request was rejected.',
+                'detail' => $productionInitiation->production_approval_remarks,
+                'action_url' => route('projects.show', $productionInitiation),
+                'priority' => 'medium',
+                'request_type' => 'production_approval',
+                'request_id' => $productionInitiation->id,
+                'actor_name' => auth()->user()?->name,
+                'status' => $validated['decision'] === 'approval' ? 'approved' : 'rejected',
+            ]
+        );
 
         return response()->json([
             'success' => true,

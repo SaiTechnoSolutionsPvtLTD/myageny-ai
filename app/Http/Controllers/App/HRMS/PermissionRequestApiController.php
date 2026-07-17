@@ -9,13 +9,16 @@ use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Models\UserMapping;
 use App\Services\HrmsApprovalNotificationService;
+use App\Services\HrmsApprovalHierarchyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class PermissionRequestApiController extends Controller
 {
+    public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
     // ── GET /api/mobile/hrms/permission-requests ──────────────────────────────
     public function index(Request $request): JsonResponse
     {
@@ -35,7 +38,7 @@ class PermissionRequestApiController extends Controller
             'success' => true,
             'data'    => [
                 'permission_requests' => $permissionRequests->map(
-                    fn ($pr) => $this->mapPermissionRequest($pr)
+                    fn($pr) => $this->mapPermissionRequest($pr)
                 ),
                 'pagination' => [
                     'current_page' => $permissionRequests->currentPage(),
@@ -54,18 +57,22 @@ class PermissionRequestApiController extends Controller
         $user = $request->user();
 
         $pendingApprovals = PermissionApproval::with([
-            'permissionRequest.user', 'permissionRequest.employee',
-            'approver', 'actionedBy',
+            'permissionRequest.user',
+            'permissionRequest.employee',
+            'approver',
+            'actionedBy',
         ])
             ->where('status', PermissionApproval::STATUS_PENDING)
-            ->whereHas('permissionRequest', fn ($q) =>
+            ->whereHas(
+                'permissionRequest',
+                fn($q) =>
                 $q->where('status', PermissionRequest::STATUS_PENDING)
             )
             ->oldest()
             ->get()
-            ->filter(fn (PermissionApproval $a) => $this->canActOnApproval($a, $user))
+            ->filter(fn(PermissionApproval $a) => $this->canActOnApproval($a, $user))
             ->values()
-            ->map(fn ($a) => $this->mapPendingApproval($a));
+            ->map(fn($a) => $this->mapPendingApproval($a));
 
         $myStats = [
             'total'    => PermissionRequest::where('user_id', $user->id)->count(),
@@ -76,7 +83,7 @@ class PermissionRequestApiController extends Controller
 
         $approvalChain = $this->approvalChainFor($user)
             ->values()
-            ->map(fn (User $u, int $i) => [
+            ->map(fn(User $u, int $i) => [
                 'order' => $i + 1,
                 'name'  => $u->name,
                 'email' => $u->email,
@@ -99,18 +106,22 @@ class PermissionRequestApiController extends Controller
         $user = $request->user();
 
         $approvals = PermissionApproval::with([
-            'permissionRequest.user', 'permissionRequest.employee',
-            'approver', 'actionedBy',
+            'permissionRequest.user',
+            'permissionRequest.employee',
+            'approver',
+            'actionedBy',
         ])
             ->where('status', PermissionApproval::STATUS_PENDING)
-            ->whereHas('permissionRequest', fn ($q) =>
+            ->whereHas(
+                'permissionRequest',
+                fn($q) =>
                 $q->where('status', PermissionRequest::STATUS_PENDING)
             )
             ->oldest()
             ->get()
-            ->filter(fn (PermissionApproval $a) => $this->canActOnApproval($a, $user))
+            ->filter(fn(PermissionApproval $a) => $this->canActOnApproval($a, $user))
             ->values()
-            ->map(fn ($a) => $this->mapPendingApproval($a));
+            ->map(fn($a) => $this->mapPendingApproval($a));
 
         return response()->json([
             'success' => true,
@@ -127,13 +138,14 @@ class PermissionRequestApiController extends Controller
         $user = $request->user();
 
         $approvals = PermissionApproval::with([
-            'permissionRequest.user', 'permissionRequest.employee',
+            'permissionRequest.user',
+            'permissionRequest.employee',
         ])
             ->where('actioned_by', $user->id)
             ->latest('actioned_at')
             ->limit(20)
             ->get()
-            ->map(fn ($a) => $this->mapHandledApproval($a));
+            ->map(fn($a) => $this->mapHandledApproval($a));
 
         return response()->json([
             'success' => true,
@@ -145,8 +157,11 @@ class PermissionRequestApiController extends Controller
     public function show(Request $request, PermissionRequest $permissionRequest): JsonResponse
     {
         $permissionRequest->load([
-            'user.roles', 'employee.role', 'employee.department',
-            'approvals.approver.roles', 'approvals.actionedBy.roles',
+            'user.roles',
+            'employee.role',
+            'employee.department',
+            'approvals.approver.roles',
+            'approvals.actionedBy.roles',
         ]);
 
         if (! $this->canViewPermissionRequest($permissionRequest, $request->user())) {
@@ -155,7 +170,7 @@ class PermissionRequestApiController extends Controller
 
         $user            = $request->user();
         $approvalActions = $permissionRequest->approvals
-            ->mapWithKeys(fn (PermissionApproval $a) => [
+            ->mapWithKeys(fn(PermissionApproval $a) => [
                 $a->id => $this->canActOnApproval($a, $user),
             ]);
 
@@ -196,7 +211,8 @@ class PermissionRequestApiController extends Controller
                 'from_time'       => $validated['from_time'],
                 'to_time'         => $validated['to_time'],
                 'total_minutes'   => $this->calculateTotalMinutes(
-                    $validated['from_time'], $validated['to_time']
+                    $validated['from_time'],
+                    $validated['to_time']
                 ),
                 'reason'          => $validated['reason'],
                 'status'          => PermissionRequest::STATUS_PENDING,
@@ -347,7 +363,7 @@ class PermissionRequestApiController extends Controller
 
         if ($withApprovals && $pr->relationLoaded('approvals')) {
             $data['approvals'] = $pr->approvals
-                ->map(fn ($a) => $this->mapApproval($a))
+                ->map(fn($a) => $this->mapApproval($a))
                 ->values();
         }
 
@@ -418,27 +434,9 @@ class PermissionRequestApiController extends Controller
             ->all();
     }
 
-    private function approvalChainFor(User $requester): \Illuminate\Support\Collection
+    private function approvalChainFor(User $requester): Collection
     {
-        $chain   = collect();
-        $visited = collect([$requester->id]);
-        $current = $requester;
-
-        while ($current) {
-            $manager = UserMapping::with('manager.roles')
-                ->where('user_id', $current->id)
-                ->first()?->manager;
-
-            if (! $manager || ! $manager->is_active || $manager->isSuperAdmin() || $visited->contains($manager->id)) {
-                break;
-            }
-
-            $chain->push($manager);
-            $visited->push($manager->id);
-            $current = $manager;
-        }
-
-        return $chain;
+        return $this->approvalHierarchy->approvalChainFor($requester);
     }
 
     private function canViewPermissionRequest(PermissionRequest $pr, User $user): bool
@@ -447,10 +445,11 @@ class PermissionRequestApiController extends Controller
             return true;
         }
 
-        return $pr->approvals->contains(fn (PermissionApproval $a) =>
+        return $pr->approvals->contains(
+            fn(PermissionApproval $a) =>
             (int) $a->approver_user_id === (int) $user->id
-            || (int) $a->actioned_by   === (int) $user->id
-            || $this->canActOnApproval($a, $user)
+                || (int) $a->actioned_by   === (int) $user->id
+                || $this->canActOnApproval($a, $user)
         );
     }
 
@@ -458,19 +457,32 @@ class PermissionRequestApiController extends Controller
     {
         $pr = $approval->permissionRequest;
         if (! $pr || ! $pr->isPending())                                              return false;
-        if ($approval->status !== PermissionApproval::STATUS_PENDING
-            || $pr->current_step !== $approval->step_key)                             return false;
+        if (
+            $approval->status !== PermissionApproval::STATUS_PENDING
+            || $pr->current_step !== $approval->step_key
+        )                             return false;
         if ((int) $pr->user_id === (int) $user->id)                                  return false;
         if ($user->isSystemAdmin())                                                    return true;
+
+        // Was missing — matches web PermissionRequestController::canActOnApproval()
+        // and mobile's own LeaveRequestApiController::canActOnApproval().
+        if (
+            $pr->user?->company_id && $user->company_id
+            && (int) $pr->user->company_id !== (int) $user->company_id
+        ) {
+            return false;
+        }
+
         return (int) $approval->approver_user_id === (int) $user->id;
     }
 
     private function resolveEmployee(User $user): ?EmployeeOnboarding
     {
         return EmployeeOnboarding::query()
-            ->where(fn ($q) => $q
-                ->where('portal_user_id', $user->id)
-                ->orWhere('email', $user->email)
+            ->where(
+                fn($q) => $q
+                    ->where('portal_user_id', $user->id)
+                    ->orWhere('email', $user->email)
             )
             ->latest()
             ->first();
