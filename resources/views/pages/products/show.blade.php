@@ -162,6 +162,14 @@
                         <span class="pm-meta-label">Sort Order</span>
                         <span>{{ $product->sort_order }}</span>
                     </div>
+                    <div class="pm-meta-row">
+                        <span class="pm-meta-label">Renewal Product</span>
+                        <span>{{ $product->is_this_renewal_product ? 'Yes' : 'No' }}</span>
+                    </div>
+                    <div class="pm-meta-row">
+                        <span class="pm-meta-label">Budget Approval Needed</span>
+                        <span>{{ $product->is_budget_approval_needed ? 'Yes' : 'No' }}</span>
+                    </div>
                 </div>
 
                 {{-- Feature list from attributes --}}

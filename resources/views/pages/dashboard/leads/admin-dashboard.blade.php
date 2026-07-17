@@ -1284,7 +1284,7 @@ function renderTeamPerf(team) {
         return '<tr>' +
             '<td><div class="da-rank" style="background:' + mc + '20;color:' + mc + '">' + (i+1) + '</div></td>' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
-            '<div class="da-member-av" style="background:' + mc + '">' + u.user_name.charAt(0).toUpperCase() + '</div>' +
+            '<div class="da-member-av" style="background:' + mc + '">' + (u.user_name ? u.user_name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div style="font-size:12px;font-weight:700;color:var(--da-text)">' + u.user_name + '</div>' +
             '<div style="font-size:10px;color:var(--da-muted)">' + (u.role || 'Staff') + '</div></div></div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:6px"><div style="height:100%;width:' + tpct + '%;background:' + mc + ';border-radius:2px"></div></div></td>' +
@@ -1344,7 +1344,7 @@ function renderReminders(r) {
             '<div class="da-rem-tags">' +
             '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' +
             new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + (overdue ? ' (Overdue)' : '') + '</span>' +
-            '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1) + '</span>' +
+            '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + (rem.priority ? (rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1)) : '—') + '</span>' +
             '</div></div></div>';
     }).join('');
     document.getElementById('daReminderBody').innerHTML = html;
@@ -1359,7 +1359,7 @@ function renderRecentLeads(leads) {
         var ac  = avColor(l.id);
         return '<tr onclick="window.location=\'' + LEAD_BASE + '/' + l.id + '\'">' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
-            '<div class="da-lead-co-av" style="background:' + ac + '">' + l.company_name.charAt(0).toUpperCase() + '</div>' +
+            '<div class="da-lead-co-av" style="background:' + ac + '">' + (l.company_name ? l.company_name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div class="da-lead-name">' + l.company_name + '</div><div class="da-lead-contact">' + l.contact_name + '</div></div></div></td>' +
             '<td style="font-family:monospace">' + l.mobile_number + '</td>' +
             '<td>' + l.source_label + '</td>' +

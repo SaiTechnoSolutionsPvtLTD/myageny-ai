@@ -56,6 +56,8 @@ class ProductionInitiation extends Model
         'content_calendar_sheet_url',
         'content_calendar_approved',
         'content_calendar_remarks',
+        'lead_budget_amount',
+        'budget_amount_type',
     ];
 
     protected $casts = [
@@ -73,6 +75,7 @@ class ProductionInitiation extends Model
         'employee_allocated_at' => 'datetime',
         'project_allocated_employee_user_ids' => 'array',
         'content_calendar_approved' => 'boolean',
+        'lead_budget_amount' => 'float',
     ];
 
     public function lead(): BelongsTo

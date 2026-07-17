@@ -326,6 +326,7 @@ Route::middleware(['auth'])->group(function () {
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
     Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
+    Route::post('employee-onboarding/{employee_onboarding}/update-photo', [EmployeeOnboardingController::class, 'updatePhoto'])->name('employee-onboarding.update-photo');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
@@ -588,6 +589,11 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     Route::get('/api/products-search', [QuotationController::class, 'productsApi'])->middleware('can:quotations.create')->name('api.products.search');
 
     Route::post('/ai/summarize', [AiController::class, 'summarize'])->name('ai.summarize');
+
+    // Support Ticket Routes
+    Route::get('/support', [\App\Http\Controllers\SupportController::class, 'index'])->name('support.index');
+    Route::post('/support', [\App\Http\Controllers\SupportController::class, 'store'])->name('support.store');
+    Route::post('/support/{ticket}/update-status', [\App\Http\Controllers\SupportController::class, 'updateStatus'])->name('support.update-status');
 
 
 //     Route::prefix('products')->name('products.')->middleware(['auth'])->group(function () {

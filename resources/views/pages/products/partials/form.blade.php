@@ -115,6 +115,21 @@
             @enderror
         </div>
 
+        <div class="pm-field">
+            <label class="pm-label">Is this product budget approval needed? <span class="pm-req" style="color: #dc2626;">*</span></label>
+            <div style="display: flex; gap: 20px; align-items: center; margin-top: 6px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                    <input type="radio" name="is_budget_approval_needed" value="1" @checked((bool) old('is_budget_approval_needed', $isEdit ? $product->is_budget_approval_needed : false)) style="accent-color: #fe5f04;"> Yes
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                    <input type="radio" name="is_budget_approval_needed" value="0" @checked(!((bool) old('is_budget_approval_needed', $isEdit ? $product->is_budget_approval_needed : false))) style="accent-color: #fe5f04;"> No
+                </label>
+            </div>
+            @error('is_budget_approval_needed')
+                <span class="pm-error" style="color: #dc2626; font-size: 11px; margin-top: 2px; display: block;">{{ $message }}</span>
+            @enderror
+        </div>
+
 
         @isset($departments)
         <div class="pm-field">

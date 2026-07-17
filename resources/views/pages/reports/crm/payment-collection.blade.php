@@ -77,6 +77,49 @@
     .crm-pay-tabs { width: 100%; flex-wrap: wrap; }
     .crm-pay-quick-filters { gap: 6px; }
 }
+/* Styling Select2 to match the design system */
+.select2-container--default .select2-selection--single.pay-select2-selection {
+    height: auto;
+    padding: 6px 4px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default .select2-selection--single.pay-select2-selection .select2-selection__rendered {
+    color: #0f172a;
+    padding-left: 8px;
+    padding-right: 20px;
+}
+.select2-container--default .select2-selection--single.pay-select2-selection .select2-selection__arrow {
+    height: 100%;
+    right: 8px;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default.select2-container--focus .select2-selection--single.pay-select2-selection,
+.select2-container--default.select2-container--open .select2-selection--single.pay-select2-selection {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+    background: #fff;
+}
+.select2-dropdown {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 9px 12px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #22c55e;
+    color: #fff;
+}
 </style>
 @endpush
 
@@ -187,7 +230,7 @@
                     </div>
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="customer_id">Customer</label>
-                        <select id="customer_id" name="customer_id" class="crm-pay-select">
+                        <select id="customer_id" name="customer_id" class="crm-pay-select select2">
                             <option value="">All Customers</option>
                             @foreach($customers as $customer)
                                 <option value="{{ $customer->id }}" @selected((string) request('customer_id') === (string) $customer->id)>
@@ -465,6 +508,20 @@
             scales: { y: { beginAtZero: true, ticks: { callback: (value) => currency(value) } } }
         }
     });
+    // Initialize Select2 with custom layout matching select fields
+    if (window.jQuery && window.jQuery.fn.select2) {
+        const $customerSelect = $('#customer_id');
+        if ($customerSelect.hasClass('select2-hidden-accessible')) {
+            $customerSelect.select2('destroy');
+        }
+        $customerSelect.select2({
+            allowClear: true,
+            placeholder: "Search Customer",
+            width: '100%'
+        });
+        $customerSelect.next('.select2-container').find('.select2-selection--single').addClass('pay-select2-selection');
+    }
+
     // ── Quick Date Preset Buttons ──────────────────────────────────────────
     (() => {
         const fmtDate = (d) => d.toISOString().slice(0, 10);

@@ -22,6 +22,7 @@ class OvpModuleController extends Controller
 
     private const OVP_EXECUTIVE_ROLE_KEYS = [
         'customer_support_team_executive',
+        'senior_customer_success_team_executive',
     ];
 
     public function index(Request $request): View
@@ -282,10 +283,12 @@ class OvpModuleController extends Controller
             return $candidates
                 ->filter(function (User $candidate) {
                     $isSelfTlOption = (int) $candidate->id === (int) auth()->id() && $this->isTlScopedUser($candidate);
+                    $isSeniorExec = $this->hasAnyRoleKey($candidate, ['senior_customer_success_team_executive']);
 
                     return ! $candidate->hasAdminLikeRole()
-                        && (! $this->isTlScopedUser($candidate) || $isSelfTlOption)
+                        && (! $this->isTlScopedUser($candidate) || $isSelfTlOption || $isSeniorExec)
                         && ($isSelfTlOption
+                            || $isSeniorExec
                             || $this->hasAnyRoleKey($candidate, self::OVP_EXECUTIVE_ROLE_KEYS)
                             || $candidate->hasExecutiveLikeRole());
                 })

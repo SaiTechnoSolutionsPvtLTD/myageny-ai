@@ -84,30 +84,19 @@ class InterMigration extends Command
 
             $existing = $this->findExistingTarget($sourceRow, $prepared['attributes'], $companyId);
             $action = $existing ? 'updated' : 'created';
-            $userAction = $this->findExistingUserByEmail($prepared['attributes']['email']) ? 'reused' : 'created';
+            $userAction = 'skipped';
 
             if (! $this->option('dry-run')) {
-                $userAction = DB::transaction(function () use ($existing, $prepared, $branch, $companyId) {
-                    $userResult = $this->syncPortalUser(
-                        $prepared['attributes'],
-                        $prepared['role'],
-                        $branch,
-                        $companyId
-                    );
-
-                    $prepared['attributes']['portal_user_id'] = $userResult['user']->id;
+                DB::transaction(function () use ($existing, $prepared, $companyId) {
+                    $prepared['attributes']['portal_user_id'] = null;
                     $prepared['attributes']['role_id'] = $prepared['role']?->id;
                     $prepared['attributes']['department_id'] = $prepared['department']?->id;
 
                     if ($existing) {
                         $existing->update($prepared['attributes']);
-
-                        return $userResult['action'];
+                    } else {
+                        InternJoiningForm::create($prepared['attributes']);
                     }
-
-                    InternJoiningForm::create($prepared['attributes']);
-
-                    return $userResult['action'];
                 });
             }
 

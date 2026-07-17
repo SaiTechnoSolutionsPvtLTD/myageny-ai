@@ -41,52 +41,82 @@ class CstAllocationController extends Controller
     {
         $currentUser = $request->user();
 
-        // 1. Fetch leads that have at least one converted product
-        $leads = Lead::with([
+        // 1. Query leads that have at least one converted product and payment progress >= 40%
+        $leadsQuery = Lead::with([
             'products' => function($q) {
                 $q->where('product_status', '=', 'converted');
             },
             'customerSupportTl',
             'customerSupportExecutive'
-        ])->get();
+        ])
+        ->whereHas('products', function($q) {
+            $q->where('product_status', '=', 'converted');
+        })
+        ->select('leads.*')
+        ->selectSub(function($q) {
+            $q->from('lead_products')
+                ->whereColumn('lead_id', 'leads.id')
+                ->where('product_status', 'converted')
+                ->whereNull('deleted_at')
+                ->selectRaw('COALESCE(SUM(total_price), 0)');
+        }, 'payment_total_price')
+        ->selectSub(function($q) {
+            $q->from('lead_products')
+                ->whereColumn('lead_id', 'leads.id')
+                ->where('product_status', 'converted')
+                ->whereNull('deleted_at')
+                ->selectRaw('COALESCE(SUM(amount_paid), 0)');
+        }, 'payment_amount_paid')
+        ->whereRaw('
+            (
+                SELECT COALESCE(SUM(amount_paid), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            ) >= 0.4 * (
+                SELECT COALESCE(SUM(total_price), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            )
+        ')
+        ->whereRaw('
+            (
+                SELECT COALESCE(SUM(total_price), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            ) > 0
+        ');
 
-        // 2. Filter in PHP: leads with overall payment progress >= 40%
-        $eligibleLeads = $leads->filter(function($lead) {
-            if ($lead->products->isEmpty()) {
-                return false;
-            }
-
-            $totalPrice = $lead->products->sum('total_price');
-            if ($totalPrice <= 0) return false;
-
-            $totalPaid = $lead->products->sum('amount_paid');
-            $progress = ($totalPaid / $totalPrice) * 100;
-
-            $lead->payment_progress_pct = round($progress, 1);
-            $lead->payment_total_price = $totalPrice;
-            $lead->payment_amount_paid = $totalPaid;
-
-            return $progress >= 40;
-        });
-
-        // 3. Apply Filters (Branch, Product, CST User)
+        // 2. Apply Filters in SQL (Branch, Product, CST User)
         $fBranch = $request->get('branch_id');
         $fProduct = $request->get('product_id');
         $fCstUser = $request->get('cst_user_id');
 
         if ($fBranch) {
-            $eligibleLeads = $eligibleLeads->where('branch_id', $fBranch);
+            $leadsQuery->where('branch_id', $fBranch);
         }
         if ($fProduct) {
-            $eligibleLeads = $eligibleLeads->filter(function($lead) use ($fProduct) {
-                return $lead->products->contains('product_id', $fProduct);
+            $leadsQuery->whereHas('products', function($q) use ($fProduct) {
+                $q->where('product_status', '=', 'converted')
+                  ->where('product_id', $fProduct);
             });
         }
         if ($fCstUser) {
-            $eligibleLeads = $eligibleLeads->filter(function($lead) use ($fCstUser) {
-                return $lead->customer_support_executive_id == $fCstUser || $lead->customer_support_tl_id == $fCstUser;
+            $leadsQuery->where(function($q) use ($fCstUser) {
+                $q->where('customer_support_executive_id', $fCstUser)
+                  ->orWhere('customer_support_tl_id', $fCstUser);
             });
         }
+
+        $eligibleLeads = $leadsQuery->get();
+
+        // 3. Set computed attributes on eligible leads
+        $eligibleLeads->each(function($lead) {
+            $totalPrice = (float) $lead->payment_total_price;
+            $totalPaid = (float) $lead->payment_amount_paid;
+            $progress = $totalPrice > 0 ? ($totalPaid / $totalPrice) * 100 : 0;
+
+            $lead->payment_progress_pct = round($progress, 1);
+        });
 
         // 4. Partition based on assignment state and role visibility
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();

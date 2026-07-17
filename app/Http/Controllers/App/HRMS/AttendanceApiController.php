@@ -29,6 +29,42 @@ class AttendanceApiController extends Controller
         ));
     }
 
+    private function shouldFilterByBranch(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if (! $this->canViewAllAttendance()) {
+            return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isSystemAdmin()) {
+            return false;
+        }
+
+        if ($user->isCompanyAdmin()) {
+            return false;
+        }
+
+        $keys = collect($user->roleKeys()->all());
+        $exemptRoles = [
+            'company_admin',
+            'coo',
+            'cbo',
+            'cheif_operating_officer',
+            'chief_operating_officer',
+            'chief_business_officer',
+        ];
+
+        if ($keys->intersect($exemptRoles)->isNotEmpty()) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function currentEmployee(): ?EmployeeOnboarding
     {
         $user = auth()->user();
@@ -62,6 +98,13 @@ class AttendanceApiController extends Controller
             $employeeQuery->whereKey($currentEmployee->id);
         }
 
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+            $employeeQuery->whereHas('portalUser', function ($q) use ($branchIds) {
+                $q->whereIn('branch_id', $branchIds);
+            });
+        }
+
         $employees = $employeeQuery
             ->orderBy('name')
             ->get(['id', 'employee_id', 'name', 'status', 'photograph'])
@@ -77,9 +120,18 @@ class AttendanceApiController extends Controller
             return $employees->values();
         }
 
-        $interns = InternJoiningForm::query()
+        $internQuery = InternJoiningForm::query()
             ->active()
-            ->whereNotNull('name')
+            ->whereNotNull('name');
+
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+            $internQuery->whereHas('portalUser', function ($q) use ($branchIds) {
+                $q->whereIn('branch_id', $branchIds);
+            });
+        }
+
+        $interns = $internQuery
             ->orderBy('name')
             ->get(['id', 'intern_id', 'name', 'photograph'])
             ->map(fn (InternJoiningForm $i) => [
@@ -310,6 +362,20 @@ class AttendanceApiController extends Controller
                      $attendance->employee_id === $currentEmployee->id;
 
             if (! $isOwn) {
+                return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
+            }
+        }
+
+        if ($this->canViewAllAttendance() && $this->shouldFilterByBranch()) {
+            $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendance) {
+                if ($attendance->attendee_type === 'employee') {
+                    return $attendee['attendee_type'] === 'employee' && $attendee['id'] === $attendance->employee_id;
+                } else {
+                    return $attendee['attendee_type'] === 'intern' && $attendee['id'] === $attendance->intern_joining_form_id;
+                }
+            });
+
+            if (! $isAccessible) {
                 return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
             }
         }

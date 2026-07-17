@@ -582,6 +582,16 @@
                                         <div class="ps-text-block">No dynamic OVP form details available for this project.</div>
                                     </div>
                                 @endforelse
+                                @if(auth()->user()->canViewBudgetApprovalDetails() && $projectItem->lead_budget_amount)
+                                    <div class="ps-detail">
+                                        <div class="ps-label">Lead Budget Amount</div>
+                                        <div class="ps-value" style="color: #166534;">₹{{ number_format($projectItem->lead_budget_amount, 2) }}</div>
+                                    </div>
+                                    <div class="ps-detail">
+                                        <div class="ps-label">Budget Amount Type</div>
+                                        <div class="ps-value">{{ $projectItem->budget_amount_type }}</div>
+                                    </div>
+                                @endif
                                 <div class="ps-detail ps-full">
                                     <div class="ps-label">Production Approval Remarks</div>
                                     <div class="ps-text-block">{{ $projectItem->production_approval_remarks ?: 'No production approval remarks provided.' }}</div>

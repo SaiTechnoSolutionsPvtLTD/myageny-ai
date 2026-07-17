@@ -4,6 +4,34 @@
 
 @push('styles')
     @include('pages.hrms.employee_onboarding.styles')
+    <style>
+        .avatar-container {
+            margin-top: -38px;
+            display: inline-block;
+        }
+        .eob-avatar {
+            margin-top: 0 !important;
+            position: relative !important;
+            cursor: pointer;
+        }
+        .avatar-upload-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+            border-radius: 16px;
+        }
+        .eob-avatar:hover .avatar-upload-overlay {
+            opacity: 1 !important;
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -13,9 +41,14 @@
             <div class="eob-title">Employee Onboarding Profile</div>
             <div class="eob-breadcrumb">HRMS > Employee Onboarding > {{ $employee->name }}</div>
         </div>
+        @php
+            $isHrOrAdmin = auth()->user()?->isHrOrAdmin();
+        @endphp
         <div class="eob-actions">
-            <a href="{{ route('employee-onboarding.edit', $employee) }}" class="eob-btn eob-btn-primary">Edit</a>
-            <a href="{{ route('employee-onboarding.index') }}" class="eob-btn eob-btn-ghost">Back</a>
+            @if($isHrOrAdmin)
+                <a href="{{ route('employee-onboarding.edit', $employee) }}" class="eob-btn eob-btn-primary">Edit</a>
+                <a href="{{ route('employee-onboarding.index') }}" class="eob-btn eob-btn-ghost">Back</a>
+            @endif
         </div>
     </div>
 
@@ -29,13 +62,24 @@
                 <div class="eob-profile">
                     <div class="eob-profile-banner"></div>
                     <div class="eob-profile-body">
-                        <div class="eob-avatar">
-                            @if($employee->photograph)
-                                <img src="{{ asset('storage/' . $employee->photograph) }}" alt="{{ $employee->name }}">
-                            @else
-                                {{ strtoupper(substr($employee->name, 0, 2)) }}
-                            @endif
-                        </div>
+                        <form action="{{ route('employee-onboarding.update-photo', $employee) }}" method="POST" enctype="multipart/form-data" id="photo-upload-form" class="avatar-container">
+                            @csrf
+                            <div class="eob-avatar" onclick="document.getElementById('photo-input').click()">
+                                @if($employee->photograph)
+                                    <img src="{{ asset('storage/' . $employee->photograph) }}" alt="{{ $employee->name }}">
+                                @else
+                                    {{ strtoupper(substr($employee->name, 0, 2)) }}
+                                @endif
+                                
+                                <div class="avatar-upload-overlay">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                </div>
+                            </div>
+                            <input type="file" id="photo-input" name="photograph" accept="image/*" style="display: none;" onchange="document.getElementById('photo-upload-form').submit()">
+                        </form>
                         <div class="eob-profile-name">{{ $employee->name }}</div>
                         <div class="eob-profile-mail">{{ $employee->email }}</div>
                         <div style="margin-top:14px;">

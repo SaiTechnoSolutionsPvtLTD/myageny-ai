@@ -236,7 +236,17 @@
 
     <div class="pa-body">
         @if(session('success'))
-            <div class="pa-flash success">{{ session('success') }}</div>
+            <div class="pa-flash success" style="margin-bottom: 20px;">{{ session('success') }}</div>
+        @endif
+
+        @if($errors->any())
+            <div class="pa-flash rejected" style="margin-bottom: 20px;">
+                <ul style="margin: 0; padding-left: 20px;">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
         @endif
 
         @php
@@ -402,6 +412,11 @@
                                 <tr>
                                     <td>
                                         <div class="pa-product">{{ $item->product_name }}</div>
+                                        @if(auth()->user()->canViewBudgetApprovalDetails() && $item->lead_budget_amount)
+                                            <div style="font-size: 11px; font-weight: 700; color: #166534; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: #e9f9ee; border-radius: 4px; border: 1px solid #bce6c7;">
+                                                💰 Budget: ₹{{ number_format($item->lead_budget_amount, 2) }} ({{ $item->budget_amount_type }})
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>
                                         {{ $displayCompany }}
@@ -424,6 +439,7 @@
                                                 data-action="{{ route('production-approvals.review', $item) }}"
                                                 data-approval-remarks="{{ $item->production_approval_remarks }}"
                                                 data-custom-form='@json($item->custom_form_data ?? [])'
+                                                data-is-budget-approval-needed="{{ optional($item->product)->is_budget_approval_needed ? 1 : 0 }}"
                                             >
                                                 Review
                                             </button>
@@ -460,6 +476,30 @@
                     <div class="pa-review-layout">
                         <div class="pa-custom-panel">
                             <div id="pa-custom-form-wrap" class="pa-custom-list"></div>
+                        </div>
+
+                        <div class="pa-remarks-panel" id="pa-budget-panel" style="display: none;">
+                            <label class="pa-label" style="color: #111827; margin-bottom: 8px; display: block; font-weight: 900;">Budget Approval Details</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div style="display:flex; flex-direction:column; gap:6px;">
+                                    <label class="pa-label" for="pa-budget-amount">Lead Budget Amount <span style="color: #dc2626;">*</span></label>
+                                    <input type="number" id="pa-budget-amount" name="lead_budget_amount" min="0" step="0.01" class="pa-input" placeholder="Enter budget amount">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:6px;">
+                                    <label class="pa-label" for="pa-budget-type">Budget Amount Type <span style="color: #dc2626;">*</span></label>
+                                    <select id="pa-budget-type" name="budget_amount_type" class="pa-input">
+                                        <option value="">— Select type —</option>
+                                        <option value="Daily">Daily</option>
+                                        <option value="Weekly">Weekly</option>
+                                        <option value="Monthly">Monthly</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px; display:none;" id="pa-budget-custom-wrap">
+                                <label class="pa-label" for="pa-budget-custom">Custom Budget Type <span style="color: #dc2626;">*</span></label>
+                                <input type="text" id="pa-budget-custom" name="budget_amount_type_custom" class="pa-input" placeholder="Type custom budget type">
+                            </div>
                         </div>
 
                         <div class="pa-remarks-panel">
@@ -541,11 +581,39 @@ document.addEventListener('DOMContentLoaded', function () {
         }).join('');
     }
 
+    const budgetPanel = document.getElementById('pa-budget-panel');
+    const budgetAmount = document.getElementById('pa-budget-amount');
+    const budgetType = document.getElementById('pa-budget-type');
+    const budgetCustom = document.getElementById('pa-budget-custom');
+    const budgetCustomWrap = document.getElementById('pa-budget-custom-wrap');
+
+    budgetType.addEventListener('change', function () {
+        if (this.value === 'custom') {
+            budgetCustomWrap.style.display = 'block';
+            if (decisionInput.value === 'approval') {
+                budgetCustom.setAttribute('required', 'required');
+            }
+        } else {
+            budgetCustomWrap.style.display = 'none';
+            budgetCustom.removeAttribute('required');
+        }
+    });
+
     function openModal(button) {
         form.action = button.dataset.action || '';
         approvalRemarksInput.value = button.dataset.approvalRemarks || '';
         renderCustomFormData(JSON.parse(button.dataset.customForm || '[]'));
         decisionInput.value = '';
+
+        const isBudgetNeeded = button.dataset.isBudgetApprovalNeeded === '1';
+        form.dataset.isBudgetApprovalNeeded = button.dataset.isBudgetApprovalNeeded;
+
+        if (isBudgetNeeded) {
+            budgetPanel.style.display = 'block';
+        } else {
+            budgetPanel.style.display = 'none';
+        }
+
         modal.classList.add('is-open');
     }
 
@@ -553,6 +621,12 @@ document.addEventListener('DOMContentLoaded', function () {
         modal.classList.remove('is-open');
         form.reset();
         decisionInput.value = '';
+        form.removeAttribute('data-is-budget-approval-needed');
+        budgetPanel.style.display = 'none';
+        budgetCustomWrap.style.display = 'none';
+        budgetAmount.removeAttribute('required');
+        budgetType.removeAttribute('required');
+        budgetCustom.removeAttribute('required');
         renderCustomFormData([]);
     }
 
@@ -575,6 +649,20 @@ document.addEventListener('DOMContentLoaded', function () {
     form.querySelectorAll('[data-decision]').forEach(function (button) {
         button.addEventListener('click', function () {
             decisionInput.value = button.dataset.decision || '';
+
+            if (button.dataset.decision === 'rejected') {
+                budgetAmount.removeAttribute('required');
+                budgetType.removeAttribute('required');
+                budgetCustom.removeAttribute('required');
+            } else {
+                if (form.dataset.isBudgetApprovalNeeded === '1') {
+                    budgetAmount.setAttribute('required', 'required');
+                    budgetType.setAttribute('required', 'required');
+                    if (budgetType.value === 'custom') {
+                        budgetCustom.setAttribute('required', 'required');
+                    }
+                }
+            }
         });
     });
 });

@@ -54,7 +54,7 @@ class EmployeeOnboardingController extends Controller
 
     public function index(Request $request): View
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $employees = EmployeeOnboarding::query()
             ->with(['role', 'department', 'sourceIntern'])
@@ -84,7 +84,7 @@ class EmployeeOnboardingController extends Controller
 
     public function create(): View
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         return view('pages.hrms.employee_onboarding.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
@@ -98,7 +98,7 @@ class EmployeeOnboardingController extends Controller
 
     public function store(StoreEmployeeOnboardingRequest $request): RedirectResponse
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $validated = $request->validated();
 
@@ -127,7 +127,11 @@ class EmployeeOnboardingController extends Controller
 
     public function show(EmployeeOnboarding $employee_onboarding): View
     {
-        $this->authorizeEmployeeDataAccess();
+        $user = auth()->user();
+        $isOwnProfile = $user && (int) $employee_onboarding->portal_user_id === (int) $user->id;
+        $isHrOrAdmin = $user && $user->isHrOrAdmin();
+
+        abort_unless($isHrOrAdmin || $isOwnProfile, 403, 'Unauthorized.');
 
         $employee_onboarding->load([
             'educations',
@@ -151,7 +155,7 @@ class EmployeeOnboardingController extends Controller
 
     public function edit(EmployeeOnboarding $employee_onboarding): View
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $employee_onboarding->load([
             'educations',
@@ -178,7 +182,7 @@ class EmployeeOnboardingController extends Controller
 
     public function update(UpdateEmployeeOnboardingRequest $request, EmployeeOnboarding $employee_onboarding): RedirectResponse
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $validated = $request->validated();
 
@@ -206,7 +210,7 @@ class EmployeeOnboardingController extends Controller
 
     public function destroy(EmployeeOnboarding $employee_onboarding): RedirectResponse
     {
-        $this->authorizeEmployeeDataAccess();
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $employeeName = $employee_onboarding->name;
 
@@ -562,9 +566,38 @@ class EmployeeOnboardingController extends Controller
 
     public function getGeneratedId(Request $request): \Illuminate\Http\JsonResponse
     {
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
+
         $branchId = $request->query('branch_id');
         $employeeId = $this->generateNextEmployeeId($branchId ? (int) $branchId : null);
         return response()->json(['employee_id' => $employeeId]);
+    }
+
+    public function updatePhoto(Request $request, EmployeeOnboarding $employee_onboarding): RedirectResponse
+    {
+        $user = auth()->user();
+        $isOwnProfile = $user && (int) $employee_onboarding->portal_user_id === (int) $user->id;
+        $isHrOrAdmin = $user && $user->isHrOrAdmin();
+
+        abort_unless($isHrOrAdmin || $isOwnProfile, 403, 'Unauthorized action.');
+
+        $request->validate([
+            'photograph' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        if ($request->hasFile('photograph')) {
+            $this->deleteStoredFile($employee_onboarding->photograph);
+            $employee_onboarding->photograph = $request->file('photograph')->store(self::FILE_DIRECTORY, 'public');
+            $employee_onboarding->save();
+
+            $portalUser = $employee_onboarding->portalUser;
+            if ($portalUser) {
+                $portalUser->photo = $employee_onboarding->photograph;
+                $portalUser->save();
+            }
+        }
+
+        return back()->with('success', 'Profile photo updated successfully.');
     }
 
     private function generateNextEmployeeId(?int $branchId = null): string

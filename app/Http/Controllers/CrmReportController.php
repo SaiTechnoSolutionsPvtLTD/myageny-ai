@@ -217,8 +217,12 @@ class CrmReportController extends Controller
     public function productWise(Request $request): View
     {
         $query = $this->buildProductWiseQuery($request);
+        
+        // Clone query BEFORE running paginate to avoid builder mutation limits/offsets
+        $analyticsQuery = clone $query;
+        $analyticsRows = $analyticsQuery->get();
+        
         $reportRows = $query->paginate(20)->withQueryString();
-        $analyticsRows = (clone $query)->get();
 
         $summary = [
             'rows' => $analyticsRows->count(),
@@ -335,11 +339,17 @@ class CrmReportController extends Controller
     public function paymentCollection(Request $request): View
     {
         $query = $this->buildPaymentCollectionQuery($request);
-        $reportRows = $query->paginate(20)->withQueryString();
-        $analyticsRows = (clone $query)->get();
+        
+        // Clone query BEFORE running paginate to avoid builder mutation limits/offsets
+        $analyticsQuery = clone $query;
+        $analyticsRows = $analyticsQuery->get();
+        
+        $totalCount = $analyticsRows->count();
+        // Dynamically paginate to total count to show all rows, avoiding hardcoding page limit
+        $reportRows = $query->paginate(max(1, $totalCount))->withQueryString();
 
         $summary = [
-            'rows' => $analyticsRows->count(),
+            'rows' => $totalCount,
             'total_amount' => (float) $analyticsRows->sum('total_amount'),
             'received_amount' => (float) $analyticsRows->sum('received_amount'),
             'outstanding_amount' => (float) $analyticsRows->sum('outstanding_amount'),

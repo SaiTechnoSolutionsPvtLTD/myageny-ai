@@ -744,15 +744,46 @@
             </div>
         </div>
         @endif
+
     </nav>
 
-    <div class="user-profile">
-        <div class="user-avatar-v">{{ strtoupper(substr(Auth::user()->name, 0, 1)) }}</div>
-        <div class="user-info">
-            <span class="user-name">{{ Auth::user()->name }}</span>
-            <span class="user-role">{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}</span>
+    <div class="sidebar-footer">
+        {{-- Support Option (Visible to everyone) --}}
+        <a href="{{ route('support.index') }}" class="support-card {{ request()->routeIs('support.*') ? 'active' : '' }}">
+            <div class="support-icon-wrapper">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+            </div>
+            <span>Support Portal</span>
+        </a>
+
+        {{-- User Profile Card --}}
+        <div class="user-profile-card">
+            <div class="user-profile-details">
+                <div class="user-avatar-v">
+                    {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
+                    <span class="user-status-dot"></span>
+                </div>
+                <div class="user-info">
+                    <span class="user-name" title="{{ Auth::user()->name }}">{{ Auth::user()->name }}</span>
+                    <span class="user-role-badge" title="{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}">{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}</span>
+                </div>
+            </div>
+            <div class="user-profile-actions">
+                <!-- Sign Out Action -->
+                <button type="button" class="profile-action-btn logout-btn" onclick="confirmLogout()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span>Sign Out</span>
+                </button>
+            </div>
         </div>
-        <img src="{{ asset('images/42_3166.svg') }}" alt="Selector">
     </div>
- @include('layouts.logout_btn')
+
+    @include('layouts.logout_btn')
 </aside>

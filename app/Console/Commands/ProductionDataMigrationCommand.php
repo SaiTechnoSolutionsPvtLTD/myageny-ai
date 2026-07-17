@@ -13,8 +13,8 @@ class ProductionDataMigrationCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'app:production-data-migration 
-                            {--dry-run : Preview changes without persisting} 
+    protected $signature = 'app:production-data-migration
+                            {--dry-run : Preview changes without persisting}
                             {--limit= : Limit the number of records migrated for testing}';
 
     /**
@@ -114,6 +114,24 @@ class ProductionDataMigrationCommand extends Command
                     ->where('leadproductid', $legacyLp->id)
                     ->first();
 
+                // Check if this lead product has already been initiated in the production_initiations table
+                $existingInitiation = DB::connection('mysql')->table('production_initiations')
+                    ->where('lead_product_id', $newLeadProductId)
+                    ->first();
+
+                if ($existingInitiation) {
+                    // Store mapping so updates can still be resolved if needed
+                    if ($legacyProduction && $legacyProduction->project_id) {
+                        $this->projectIdToNewIdMap[$legacyProduction->project_id] = $existingInitiation->id;
+                    }
+                    $this->leadIdToNewIdMap[$legacyLp->leadid] = $existingInitiation->id;
+
+                    $skippedCount++;
+                    DB::connection('mysql')->rollBack();
+                    $bar->advance();
+                    continue;
+                }
+
                 // 4. Map user allocations if production record exists
                 $mappedTlUserId = null;
                 $mappedExecutiveUserId = null;
@@ -158,7 +176,7 @@ class ProductionDataMigrationCommand extends Command
                 }
 
                 $productId = $this->mapProductId($legacyLp->productname);
-                
+
                 // Fallback to name from mysql2 products table
                 $productRecord = DB::connection('mysql2')->table('products')->where('id', $legacyLp->productname)->first();
                 $productName = $productNameFromProduction ?: ($productRecord ? $productRecord->productname : 'Unknown Product');
@@ -315,6 +333,20 @@ class ProductionDataMigrationCommand extends Command
                     $mappedUserId = $this->mapUserId($legacyUpdate->user_id) ?? 1;
                     $updateType = $this->mapUpdateType($legacyUpdate->update_type);
 
+                    // Check if this project update already exists in target DB
+                    $alreadyExists = DB::connection('mysql')->table('project_updates')
+                        ->where('production_initiation_id', $newProdInitId)
+                        ->where('content', $legacyUpdate->prod_update)
+                        ->where('created_at', $legacyUpdate->created_at ?: now())
+                        ->exists();
+
+                    if ($alreadyExists) {
+                        $updatesSkippedCount++;
+                        DB::connection('mysql')->rollBack();
+                        $updateBar->advance();
+                        continue;
+                    }
+
                     $projectUpdateData = [
                         'production_initiation_id' => $newProdInitId,
                         'type' => $updateType,
@@ -423,7 +455,7 @@ class ProductionDataMigrationCommand extends Command
     }
 
     /**
-     * Get or migrate legacy lead to active database
+     * Get legacy lead from active database (already migrated)
      */
     private function getOrMigrateLead($legacyLeadId)
     {
@@ -456,42 +488,11 @@ class ProductionDataMigrationCommand extends Command
             return $existingLead->id;
         }
 
-        // Migrate and insert new lead
-        $assignedUserId = $this->mapUserId($legacyLead->assigned_to) ?? 1;
-
-        // Resolve source and status
-        $sourceName = $legacyLead->LeadSource ?? 'Online';
-        $sourceRecord = DB::connection('mysql')->table('lead_sources')->where('name', $sourceName)->first();
-        $sourceId = $sourceRecord ? $sourceRecord->id : 1;
-
-        $statusName = $legacyLead->Status ?? 'New';
-        $statusRecord = DB::connection('mysql')->table('lead_statuses')->where('name', $statusName)->first();
-        $statusId = $statusRecord ? $statusRecord->id : 1;
-
-        $newLeadId = DB::connection('mysql')->table('leads')->insertGetId([
-            'company_name' => $legacyLead->CompanyName ?: 'NA',
-            'company_id' => 1,
-            'contact_name' => $legacyLead->ClientName ?: 'NA',
-            'lead_date' => $legacyLead->EntryDate,
-            'mobile_number' => $legacyLead->MobileNumber,
-            'email' => $legacyLead->EmailID,
-            'lead_source' => $sourceName,
-            'lead_source_id' => $sourceId,
-            'lead_status' => $statusId,
-            'remarks' => $legacyLead->Remarks,
-            'branch_id' => 1,
-            'assigned_to' => $assignedUserId,
-            'created_by' => 1,
-            'created_at' => $legacyLead->created_at ?: now(),
-            'updated_at' => $legacyLead->updated_at ?: now(),
-        ]);
-
-        $this->leadIdMap[$legacyLeadId] = $newLeadId;
-        return $newLeadId;
+        return null;
     }
 
     /**
-     * Get or migrate legacy lead product to active database
+     * Get legacy lead product from active database (already migrated)
      */
     private function getOrMigrateLeadProduct($legacyLpId, $newLeadId)
     {
@@ -508,12 +509,14 @@ class ProductionDataMigrationCommand extends Command
             return null;
         }
 
-        $productId = $this->mapProductId($legacyLp->productname);
+        // Get legacy product name
+        $productRecord = DB::connection('mysql2')->table('products')->where('id', $legacyLp->productname)->first();
+        $productName = $productRecord ? $productRecord->productname : 'Unknown Product';
 
-        // Check if lead product already exists in target DB
+        // Check if lead product already exists in target DB by lead_id and product_name
         $existingLp = DB::connection('mysql')->table('lead_products')
             ->where('lead_id', $newLeadId)
-            ->where('product_id', $productId)
+            ->where('product_name', $productName)
             ->first();
 
         if ($existingLp) {
@@ -521,34 +524,7 @@ class ProductionDataMigrationCommand extends Command
             return $existingLp->id;
         }
 
-        $productRecord = DB::connection('mysql2')->table('products')->where('id', $legacyLp->productname)->first();
-        $productName = $productRecord ? $productRecord->productname : 'Unknown Product';
-
-        $statusName = $legacyLp->status ?? 'converted';
-        $statusRecord = DB::connection('mysql')->table('lead_statuses')->where('name', $statusName)->first();
-        $statusId = $statusRecord ? $statusRecord->id : 1;
-
-        // Insert new lead product
-        $newLpId = DB::connection('mysql')->table('lead_products')->insertGetId([
-            'company_id' => 1,
-            'lead_id' => $newLeadId,
-            'product_id' => $productId,
-            'product_name' => $productName,
-            'unit_price' => $legacyLp->totalcost ?? 0,
-            'quantity' => 1,
-            'amount_paid' => $legacyLp->receivedcost ?? 0,
-            'payment_status' => (strtolower($statusName) === 'converted' || $legacyLp->pendingcost <= 0) ? 'paid' : 'pending',
-            'payment_date' => $legacyLp->paymentdate,
-            'created_at' => $legacyLp->created_at ?: now(),
-            'updated_at' => $legacyLp->updated_at ?: now(),
-            'product_status' => $legacyLp->status ?? 'converted',
-            'lead_status_id' => $statusId,
-            'remarks' => $legacyLp->producttype,
-            'created_by' => 1,
-        ]);
-
-        $this->leadProductIdMap[$legacyLpId] = $newLpId;
-        return $newLpId;
+        return null;
     }
 
     /**

@@ -19,7 +19,7 @@ class ProductionApprovalController extends Controller
                 'department:id,name',
                 'reviewedBy:id,name',
                 'productionApprovalReviewedBy:id,name',
-                'product:id,product_name',
+                'product:id,product_name,is_budget_approval_needed',
             ])
             ->whereIn('status', ['approval', 'approved'])
             ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject']);
@@ -111,12 +111,23 @@ class ProductionApprovalController extends Controller
     {
         abort_unless($this->canReview($productionInitiation), 403);
 
-        $validated = $request->validate([
+        $rules = [
             'decision' => ['required', 'in:approval,rejected'],
             'production_approval_remarks' => ['required', 'string', 'max:5000'],
-        ]);
+        ];
 
-        $productionInitiation->update([
+        $product = $productionInitiation->product;
+        if ($product && $product->is_budget_approval_needed && $request->input('decision') === 'approval') {
+            $rules['lead_budget_amount'] = ['required', 'numeric', 'min:0'];
+            $rules['budget_amount_type'] = ['required', 'string', 'max:255'];
+            if ($request->input('budget_amount_type') === 'custom') {
+                $rules['budget_amount_type_custom'] = ['required', 'string', 'max:255'];
+            }
+        }
+
+        $validated = $request->validate($rules);
+
+        $updateData = [
             'production_approval_status' => $validated['decision'],
             'production_approval_remarks' => trim($validated['production_approval_remarks']),
             'production_approval_reviewed_at' => Carbon::now(),
@@ -124,7 +135,18 @@ class ProductionApprovalController extends Controller
             'project_allocation_status' => $validated['decision'] === 'approval' ? 'allocation_pending' : null,
             'project_allocated_at' => null,
             'project_allocated_by' => null,
-        ]);
+        ];
+
+        if ($product && $product->is_budget_approval_needed && $validated['decision'] === 'approval') {
+            $updateData['lead_budget_amount'] = $validated['lead_budget_amount'];
+            if ($validated['budget_amount_type'] === 'custom') {
+                $updateData['budget_amount_type'] = $validated['budget_amount_type_custom'];
+            } else {
+                $updateData['budget_amount_type'] = $validated['budget_amount_type'];
+            }
+        }
+
+        $productionInitiation->update($updateData);
 
         return redirect()
             ->route('production-approvals.index', ['bucket' => $validated['decision'] === 'approval' ? 'approval' : 'rejected'])

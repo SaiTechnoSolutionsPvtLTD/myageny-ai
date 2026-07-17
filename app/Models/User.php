@@ -440,6 +440,7 @@ class User extends Authenticatable
             'design_team_lead',
             'team_lead_digital_marketing',
             'software_team_leader',
+            'human_resource'
         ])->isNotEmpty()) {
             return true;
         }
@@ -465,6 +466,36 @@ class User extends Authenticatable
             'chief_business_officer',
             'development_project_coordinator'
         ])->isNotEmpty();
+    }
+
+    public function canViewBudgetApprovalDetails(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+
+        if ($keys->intersect([
+            'company_admin',
+            'coo',
+            'cbo',
+            'cheif_operating_officer',
+            'chief_operating_officer',
+            'chief_business_officer'
+        ])->isNotEmpty()) {
+            return true;
+        }
+
+        if ($this->belongsToDigitalMarketingDepartment() && $this->hasTlLikeRole()) {
+            return true;
+        }
+
+        if ($keys->contains(fn($k) => Str::contains($k, ['digital_marketing']) && Str::contains($k, ['tl', 'lead', 'leader']))) {
+            return true;
+        }
+
+        return false;
     }
 
     public function canAccessProjectsModule(): bool
@@ -497,7 +528,19 @@ class User extends Authenticatable
             && ! $this->isSuperAdmin();
     }
 
-    private function roleKeys(): \Illuminate\Support\Collection
+    /**
+     * Check if the user is HR or Admin.
+     */
+    public function isHrOrAdmin(): bool
+    {
+        return $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
+            || $this->hasAdminLikeRole()
+            || $this->hasHrLikeRole()
+            || $this->belongsToHrDepartment();
+    }
+
+    public function roleKeys(): \Illuminate\Support\Collection
     {
         $roles = $this->resolvedRoles();
 
