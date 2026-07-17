@@ -280,10 +280,59 @@
 .hrms-stats{
     display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;
 }
-.hrms-stat-card{padding:20px 22px}
-.hrms-stat-label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#989898}
-.hrms-stat-value{margin-top:10px;font-size:30px;font-weight:800;color:#121212;line-height:1}
-.hrms-stat-meta{margin-top:8px;font-size:12px;color:#7d7d7d}
+.hrms-stat-card{
+    padding:20px 22px;
+    position:relative;
+    overflow:hidden;
+    color:#fff !important;
+    border:none !important;
+    border-radius:20px !important;
+    box-shadow:0 10px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.05) !important;
+    transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    min-height:130px;
+}
+.hrms-stat-card:hover{
+    transform:translateY(-4px);
+    box-shadow:0 20px 25px -5px rgba(0,0,0,0.15),0 10px 10px -5px rgba(0,0,0,0.08) !important;
+}
+.hrms-stat-label{
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:rgba(255,255,255,0.9) !important;
+}
+.hrms-stat-value{
+    margin-top:10px;
+    font-size:32px;
+    font-weight:900;
+    color:#fff !important;
+    line-height:1;
+}
+.hrms-stat-meta{
+    margin-top:8px;
+    font-size:12px;
+    color:rgba(255,255,255,0.8) !important;
+    font-weight:500;
+}
+.hrms-stat-icon-wrapper {
+    position:absolute;
+    top:16px;
+    right:16px;
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    background:rgba(255,255,255,0.22);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#fff;
+    font-size:16px;
+    backdrop-filter:blur(4px);
+}
 .hrms-panels{
     display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;
 }
@@ -655,32 +704,38 @@
         @if(! $selfServiceMode)
         <!-- Key Metrics -->
         <section class="hrms-stats">
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-people-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Profile' : 'People' }}</div>
                 <div class="hrms-stat-value">{{ $stats['employees_total'] }}</div>
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Your HRMS profile' : (($stats['employee_count'] ?? 0) . ' Emp / ' . ($stats['interns_total'] ?? 0) . ' Int') }}</div>
             </div>
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-check-fill"></i></span>
                 <div class="hrms-stat-label">Present Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_present'] }}</div>
                 <div class="hrms-stat-meta">Marked present</div>
             </div>
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-clock-fill"></i></span>
                 <div class="hrms-stat-label">Late Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_late'] }}</div>
                 <div class="hrms-stat-meta">Late arrivals @if(($stats['today_early'] ?? 0) > 0) / Early: {{ $stats['today_early'] }} @endif</div>
             </div>
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-x-fill"></i></span>
                 <div class="hrms-stat-label">Absent Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_absent'] }}</div>
                 <div class="hrms-stat-meta">Not present</div>
             </div>
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #4c1d95 0%, #8b5cf6 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-backpack-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Latest Payslip' : 'Interns' }}</div>
                 <div class="hrms-stat-value">{{ $selfServiceMode ? (optional(optional($stats['latest_payroll_item'] ?? null)->payroll)->salary_month?->format('M Y') ?: 'N/A') : $stats['interns_total'] }}</div>
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? optional(optional($stats['latest_payroll_item'] ?? null)->payroll)->salary_month?->format('M Y') ?: 'Not available' : 'Intern workforce' }}</div>
             </div>
-            <div class="hrms-card hrms-stat-card">
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #831843 0%, #db2777 100%);">
+                <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-dash-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Latest Net Salary' : 'Resigned Employees' }}</div>
                 <div class="hrms-stat-value">{{ $selfServiceMode ? number_format((float) optional($stats['latest_payroll_item'] ?? null)->net_salary, 2) : $stats['employees_pending'] }}</div>
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Rs '.number_format((float) optional($stats['latest_payroll_item'] ?? null)->net_salary, 2) : 'No longer active' }}</div>
@@ -703,7 +758,7 @@
                         <span class="hrms-celebration-chip">🎂 Birthdays</span>
                         <div class="hrms-birthday-grid">
                             @forelse($stats['today_birthdays'] as $employee)
-                            <div class="hrms-birthday-card">
+                            <div class="hrms-birthday-card" style="border-left: 4px solid #fe5f04; background: linear-gradient(90deg, #fffcf9 0%, #ffffff 100%);">
                                 <div class="hrms-birthday-avatar">
                                     {{ strtoupper(substr($employee->name, 0, 1)) }}
                                 </div>
@@ -722,7 +777,7 @@
                         <span class="hrms-celebration-chip" style="background:#fff1f7;color:#be185d;border-color:#fbcfe8;">💍 Wedding Anniversaries</span>
                         <div class="hrms-birthday-grid">
                             @forelse($stats['today_anniversaries'] as $employee)
-                            <div class="hrms-birthday-card">
+                            <div class="hrms-birthday-card" style="border-left: 4px solid #ec4899; background: linear-gradient(90deg, #fffcfb 0%, #ffffff 100%);">
                                 <div class="hrms-birthday-avatar" style="background:#ec4899;box-shadow:0 10px 18px rgba(236,72,153,.18);">
                                     {{ strtoupper(substr($employee->name, 0, 1)) }}
                                 </div>
@@ -741,7 +796,7 @@
                         <span class="hrms-celebration-chip" style="background:#eef6ff;color:#1d4ed8;border-color:#bfdbfe;">🏆 Work Anniversaries</span>
                         <div class="hrms-birthday-grid">
                             @forelse($stats['today_work_anniversaries'] as $employee)
-                            <div class="hrms-birthday-card">
+                            <div class="hrms-birthday-card" style="border-left: 4px solid #3b82f6; background: linear-gradient(90deg, #fffcfc 0%, #ffffff 100%);">
                                 <div class="hrms-birthday-avatar" style="background:#3b82f6;box-shadow:0 10px 18px rgba(59,130,246,.18);">
                                     {{ strtoupper(substr($employee->name, 0, 1)) }}
                                 </div>

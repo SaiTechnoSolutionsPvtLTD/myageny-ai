@@ -41,92 +41,100 @@ class CstAllocationController extends Controller
     {
         $currentUser = $request->user();
 
-        // 1. Fetch leads that have at least one converted product
-        $leads = Lead::with([
+        // 1. Query leads that have at least one converted product and payment progress >= 40%
+        $leadsQuery = Lead::with([
             'products' => function($q) {
                 $q->where('product_status', '=', 'converted');
             },
             'customerSupportTl',
             'customerSupportExecutive'
-        ])->get();
+        ])
+        ->whereHas('products', function($q) {
+            $q->where('product_status', '=', 'converted');
+        })
+        ->select('leads.*')
+        ->selectSub(function($q) {
+            $q->from('lead_products')
+                ->whereColumn('lead_id', 'leads.id')
+                ->where('product_status', 'converted')
+                ->whereNull('deleted_at')
+                ->selectRaw('COALESCE(SUM(total_price), 0)');
+        }, 'payment_total_price')
+        ->selectSub(function($q) {
+            $q->from('lead_products')
+                ->whereColumn('lead_id', 'leads.id')
+                ->where('product_status', 'converted')
+                ->whereNull('deleted_at')
+                ->selectRaw('COALESCE(SUM(amount_paid), 0)');
+        }, 'payment_amount_paid')
+        ->whereRaw('
+            (
+                SELECT COALESCE(SUM(amount_paid), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            ) >= 0.4 * (
+                SELECT COALESCE(SUM(total_price), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            )
+        ')
+        ->whereRaw('
+            (
+                SELECT COALESCE(SUM(total_price), 0)
+                FROM lead_products
+                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
+            ) > 0
+        ');
 
-        // 2. Filter in PHP: leads with overall payment progress >= 40%
-        $eligibleLeads = $leads->filter(function($lead) {
-            if ($lead->products->isEmpty()) {
-                return false;
-            }
-            
-            $totalPrice = $lead->products->sum('total_price');
-            if ($totalPrice <= 0) return false;
-            
-            $totalPaid = $lead->products->sum('amount_paid');
-            $progress = ($totalPaid / $totalPrice) * 100;
-            
-            $lead->payment_progress_pct = round($progress, 1);
-            $lead->payment_total_price = $totalPrice;
-            $lead->payment_amount_paid = $totalPaid;
-            
-            return $progress >= 40;
-        });
-
-        // 3. Apply Filters (Branch, Product, TL)
+        // 2. Apply Filters in SQL (Branch, Product, CST User)
         $fBranch = $request->get('branch_id');
         $fProduct = $request->get('product_id');
-        $fTl = $request->get('tl_id');
+        $fCstUser = $request->get('cst_user_id');
 
         if ($fBranch) {
-            $eligibleLeads = $eligibleLeads->where('branch_id', $fBranch);
+            $leadsQuery->where('branch_id', $fBranch);
         }
         if ($fProduct) {
-            $eligibleLeads = $eligibleLeads->filter(function($lead) use ($fProduct) {
-                return $lead->products->contains('product_id', $fProduct);
+            $leadsQuery->whereHas('products', function($q) use ($fProduct) {
+                $q->where('product_status', '=', 'converted')
+                  ->where('product_id', $fProduct);
             });
         }
-        if ($fTl) {
-            $eligibleLeads = $eligibleLeads->where('customer_support_tl_id', $fTl);
+        if ($fCstUser) {
+            $leadsQuery->where(function($q) use ($fCstUser) {
+                $q->where('customer_support_executive_id', $fCstUser)
+                  ->orWhere('customer_support_tl_id', $fCstUser);
+            });
         }
 
-        // 4. Partition based on assignment state and role visibility
-        $isSupportTl = $currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole();
-        $isSupportExec = $currentUser->hasCustomerSupportLikeRole() && !$currentUser->hasTlLikeRole();
-        $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $eligibleLeads = $leadsQuery->get();
+
+        // 3. Set computed attributes on eligible leads
+        $eligibleLeads->each(function($lead) {
+            $totalPrice = (float) $lead->payment_total_price;
+            $totalPaid = (float) $lead->payment_amount_paid;
+            $progress = $totalPrice > 0 ? ($totalPaid / $totalPrice) * 100 : 0;
+
+            $lead->payment_progress_pct = round($progress, 1);
+        });
 
         // 4. Partition based on assignment state and role visibility
-        $isSupportTl = $currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole();
-        $isSupportExec = $currentUser->hasCustomerSupportLikeRole() && !$currentUser->hasTlLikeRole();
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
 
-        if ($isSupportTl && !$isAdmin) {
-            // For Support TL:
-            // - Pending: Lead allocated to this TL, but no executive is assigned yet.
-            // - Completed: Lead allocated to this TL, and an executive is assigned.
-            $pendingLeads = $eligibleLeads
-                ->where('customer_support_tl_id', $currentUser->id)
-                ->whereNull('customer_support_executive_id');
-
-            $completedLeads = $eligibleLeads
-                ->where('customer_support_tl_id', $currentUser->id)
-                ->whereNotNull('customer_support_executive_id');
-        } elseif ($isSupportExec && !$isAdmin) {
-            // For Support Executive:
-            // - Pending: none (they do not allocate).
-            // - Completed: Lead allocated to them.
+        if ($isAdmin) {
+            $pendingLeads = $eligibleLeads->whereNull('customer_support_executive_id');
+            $completedLeads = $eligibleLeads->whereNotNull('customer_support_executive_id');
+        } else {
             $pendingLeads = collect();
             $completedLeads = $eligibleLeads->where('customer_support_executive_id', $currentUser->id);
-        } else {
-            // For Admins:
-            // - Pending: No Support TL assigned.
-            // - Completed: Support TL assigned.
-            $pendingLeads = $eligibleLeads->whereNull('customer_support_tl_id');
-            $completedLeads = $eligibleLeads->whereNotNull('customer_support_tl_id');
         }
 
         // Paginate both collections separately (so pagination links don't conflict)
         $pendingLeadsPaginated = self::paginateCollection($pendingLeads, 15, 'page_pending');
         $completedLeadsPaginated = self::paginateCollection($completedLeads, 15, 'page_completed');
 
-        // 5. Retrieve active support TLs and Executives for assignment dropdowns
-        $supportTls = User::where('user_status', '=', 'active')
+        // 5. Retrieve active support Users for assignment dropdowns
+        $cstUsers = User::where('user_status', '=', 'active')
             ->where(function($query) {
                 $query->whereHas('roles.department', function($q) {
                     $q->where('name', 'like', '%customer support%')
@@ -135,34 +143,7 @@ class CstAllocationController extends Controller
                 })->orWhereHas('employeeOnboarding', function($q) {
                     $q->where('department_id', 5);
                 });
-            })->where(function($query) {
-                $query->whereHas('roles', function($q) {
-                    $q->where('name', 'like', '%tl%')
-                      ->orWhere('name', 'like', '%leader%')
-                      ->orWhere('name', 'like', '%manager%');
-                })->orWhere('designation', 'like', '%TL%')
-                  ->orWhere('designation', 'like', '%Leader%')
-                  ->orWhere('designation', 'like', '%Manager%');
-            })->get(['id', 'name']);
-
-        $supportExecutives = User::where('user_status', '=', 'active')
-            ->where(function($query) {
-                $query->whereHas('roles.department', function($q) {
-                    $q->where('name', 'like', '%customer support%')
-                      ->orWhere('name', 'like', '%customer success%')
-                      ->orWhere('id', 5);
-                })->orWhereHas('employeeOnboarding', function($q) {
-                    $q->where('department_id', 5);
-                });
-            })->where(function($query) {
-                $query->whereHas('roles', function($q) {
-                    $q->where('name', 'like', '%executive%')
-                      ->orWhere('name', 'like', '%intern%')
-                      ->orWhere('name', 'like', '%agent%');
-                })->orWhere('designation', 'like', '%Executive%')
-                  ->orWhere('designation', 'like', '%Agent%')
-                  ->orWhere('designation', 'like', '%Intern%');
-            })->get(['id', 'name']);
+            })->orderBy('name')->get(['id', 'name']);
 
         // Fetch Branches and Products for filter bars
         $branches = $this->visibility->visibleBranches($currentUser);
@@ -173,11 +154,9 @@ class CstAllocationController extends Controller
         return view('pages.dashboard.cst-allocation', [
             'pendingLeads'      => $pendingLeadsPaginated,
             'completedLeads'    => $completedLeadsPaginated,
-            'supportTls'        => $supportTls,
-            'supportExecutives' => $supportExecutives,
+            'cstUsers'          => $cstUsers,
             'branches'          => $branches,
             'products'          => $products,
-            'isSupportTl'       => $isSupportTl,
             'isAdmin'           => $isAdmin
         ]);
     }
@@ -188,35 +167,28 @@ class CstAllocationController extends Controller
     public function allocateTl(Request $request, Lead $lead): RedirectResponse
     {
         $currentUser = Auth::user();
-        $isSupportTl = $currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole();
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
 
         // Verify authorization
-        if (!$isAdmin && !$isSupportTl) {
+        if (!$isAdmin) {
             abort(403, 'Unauthorized action.');
         }
 
         $request->validate([
-            'customer_support_tl_id' => 'required_without:self_allocate|nullable|exists:users,id',
-            'self_allocate'          => 'nullable|boolean'
+            'cst_user_id' => 'required|exists:users,id',
         ]);
 
-        $tlId = $request->boolean('self_allocate') && $isSupportTl
-            ? $currentUser->id
-            : $request->customer_support_tl_id;
-
-        if (!$tlId) {
-            return back()->with('error', 'Please select a Customer Support TL.');
-        }
+        $userId = $request->cst_user_id;
 
         $lead->update([
-            'customer_support_tl_id'       => $tlId,
+            'customer_support_tl_id'        => $userId,
+            'customer_support_executive_id' => $userId,
             'customer_support_allocated_at' => now()
         ]);
 
-        $tlUser = User::find($tlId);
+        $user = User::find($userId);
 
-        return back()->with('success', "Lead successfully allocated to Support TL: <strong>{$tlUser->name}</strong>.");
+        return back()->with('success', "Lead successfully allocated to Support User: <strong>{$user->name}</strong>.");
     }
 
     /**
@@ -225,24 +197,27 @@ class CstAllocationController extends Controller
     public function allocateExecutive(Request $request, Lead $lead): RedirectResponse
     {
         $currentUser = Auth::user();
-        $isSupportTl = $currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole();
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
 
-        // Verify authorization (only allocated TL or Admin can allocate executive)
-        if (!$isAdmin && (!$isSupportTl || $lead->customer_support_tl_id !== $currentUser->id)) {
-            abort(403, 'Unauthorized action. Only the assigned Support TL can allocate executives.');
+        // Verify authorization
+        if (!$isAdmin) {
+            abort(403, 'Unauthorized action.');
         }
 
         $request->validate([
-            'customer_support_executive_id' => 'required|exists:users,id'
+            'cst_user_id' => 'required|exists:users,id'
         ]);
+
+        $userId = $request->cst_user_id;
 
         $lead->update([
-            'customer_support_executive_id' => $request->customer_support_executive_id
+            'customer_support_tl_id'        => $userId,
+            'customer_support_executive_id' => $userId,
+            'customer_support_allocated_at' => now()
         ]);
 
-        $execUser = User::find($request->customer_support_executive_id);
+        $user = User::find($userId);
 
-        return back()->with('success', "Lead successfully allocated to Executive: <strong>{$execUser->name}</strong>.");
+        return back()->with('success', "Lead successfully allocated to Support User: <strong>{$user->name}</strong>.");
     }
 }

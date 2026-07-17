@@ -6,28 +6,6 @@
 
 <form method="POST" action="{{ route('logout') }}" id="logoutForm">
     @csrf
-    <button
-        type="button"
-        onclick="confirmLogout()"
-        style="
-            display: flex; align-items: center; gap: 8px;
-            padding: 8px 12px; width: 100%; border-radius: 10px;
-            background: none; border: none; cursor: pointer;
-            font-family: inherit; font-size: 14px; color: #9e9e9e;
-            transition: all 0.2s ease; text-align: left;
-        "
-        onmouseover="this.style.backgroundColor='#fff0e6'; this.style.color='#fe5f04';"
-        onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9e9e9e';"
-    >
-        {{-- Logout Icon --}}
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
-             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        <span>Sign Out</span>
-    </button>
 </form>
 
 {{-- Logout Confirmation Modal --}}

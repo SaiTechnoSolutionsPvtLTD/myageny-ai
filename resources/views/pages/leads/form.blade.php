@@ -144,7 +144,7 @@
                         <label class="lf-label">Assigned To <span class="lf-req">*</span></label>
                         <div class="lf-iw">
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            <select name="assigned_to" class="lf-sel {{ $errors->has('assigned_to') ? 'err' : '' }}" required>
+                            <select name="assigned_to" class="lf-sel select2 {{ $errors->has('assigned_to') ? 'err' : '' }}" required>
                                 <option value="">— Unassigned —</option>
                                 @foreach($users as $user)
                                 <option value="{{ $user->id }}" {{ $old('assigned_to') == $user->id ? 'selected' : '' }}>
@@ -410,3 +410,22 @@
     </div>{{-- /lf-right --}}
 
 </div>{{-- /lf-grid --}}
+
+@push('scripts')
+<script>
+$(document).ready(function() {
+    if (window.jQuery && window.jQuery.fn.select2) {
+        const $assignedTo = $('select[name="assigned_to"]');
+        if ($assignedTo.hasClass('select2-hidden-accessible')) {
+            $assignedTo.select2('destroy');
+        }
+        $assignedTo.select2({
+            placeholder: "— Select Assigned To —",
+            allowClear: true,
+            width: '100%'
+        });
+        $assignedTo.next('.select2-container').find('.select2-selection--single').addClass('lf-select2-selection');
+    }
+});
+</script>
+@endpush

@@ -155,7 +155,10 @@ protected static function booted()
     // ── Accessors ─────────────────────────────────────────────────────
     public function getAmountPaidAttribute(): float
     {
-        return max(0, (float) $this->payments()->sum('amount'));
+        if ($this->relationLoaded('payments')) {
+            return max(0, (float) $this->payments->sum('amount'));
+        }
+        return (float) ($this->attributes['amount_paid'] ?? 0);
     }
 
     public function getAmountPendingAttribute(): float

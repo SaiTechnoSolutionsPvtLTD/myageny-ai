@@ -41,6 +41,9 @@
 .pjd-pill { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid transparent; text-transform:uppercase; letter-spacing:.06em; }
 .pjd-pill.pending { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
 .pjd-pill.allocated { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
+.pjd-pill.status-ontrack { color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; }
+.pjd-pill.status-hold { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
+.pjd-pill.status-delivered { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
 .pjd-money { font-weight:800; color:#0f172a; white-space:nowrap; }
 .pjd-money.received { color:#15803d; }
 .pjd-money.balance { color:#c2410c; }
@@ -746,16 +749,7 @@
                     </div>
                     <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
                 </div>
-                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Allocation Pending</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-person-fill-exclamation"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>{{ $allocationPendingCount ?? 0 }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Projects awaiting TL and coordinator assignment.</div>
-                </div>
+
             </section>
 
             <section class="pjd-card">
@@ -775,6 +769,7 @@
                                         <th>Project Name</th>
                                         <th>Delivery Date</th>
                                         <th>Allocated Person</th>
+                                        <th>Status</th>
                                         <th>Total Project Value</th>
                                         <th>Received Amount</th>
                                         <th>Pending Amount</th>
@@ -792,6 +787,18 @@
                                             <td>
                                                 {{ $project->allocated_person_label }}
                                                 <div class="pjd-meta">{{ $project->department?->name ?: 'No department' }}</div>
+                                            </td>
+                                            <td>
+                                                @php
+                                                    $statusVal = $project->project_execution_status ?: 'ontrack';
+                                                    $statusLabels = [
+                                                        'ontrack' => 'Onboard',
+                                                        'hold' => 'Hold',
+                                                        'delivered' => 'Delivered'
+                                                    ];
+                                                    $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
+                                                @endphp
+                                                <span class="pjd-pill status-{{ $statusVal }}">{{ $statusLabel }}</span>
                                             </td>
                                             <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
                                             <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
@@ -880,6 +887,7 @@
                                         <tr>
                                             <th>Project</th>
                                             <th>Allocated To</th>
+                                            <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -890,6 +898,18 @@
                                                     <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
                                                 </td>
                                                 <td>{{ $project->allocated_person_label }}</td>
+                                                <td>
+                                                    @php
+                                                        $statusVal = $project->project_execution_status ?: 'ontrack';
+                                                        $statusLabels = [
+                                                            'ontrack' => 'Onboard',
+                                                            'hold' => 'Hold',
+                                                            'delivered' => 'Delivered'
+                                                        ];
+                                                        $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
+                                                    @endphp
+                                                    <span class="pjd-pill status-{{ $statusVal }}">{{ $statusLabel }}</span>
+                                                </td>
                                             </tr>
                                         @endforeach
                                     </tbody>

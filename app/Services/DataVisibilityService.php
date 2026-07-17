@@ -85,7 +85,7 @@ class DataVisibilityService
             ->filter()
             ->map(fn (string $name) => $this->roleKey($name));
 
-        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin'])->isNotEmpty()) {
+        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'])->isNotEmpty()) {
             return RoleMapping::ACCESS_COMPANY;
         }
 
@@ -179,7 +179,7 @@ class DataVisibilityService
         $visibleIds = $this->visibleUserIds($user);
         $companyId = $this->companyIdFor($user);
 
-        return User::query()
+        $users = User::query()
             ->with('roles')
             ->where('is_active', true)
             ->where(function (Builder $query) {
@@ -224,6 +224,14 @@ class DataVisibilityService
             ->when($visibleIds !== null, fn (Builder $query) => $query->whereIn('id', $visibleIds))
             ->orderBy('name')
             ->get();
+
+        if ($user && !$users->contains('id', $user->id)) {
+            $user->loadMissing('roles');
+            $users->push($user);
+            $users = $users->sortBy('name')->values();
+        }
+
+        return $users;
     }
 
     public function canAssignTo(int|string|null $userId, ?User $actor = null): bool
@@ -473,8 +481,8 @@ class DataVisibilityService
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin'], true);
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
         });
     }
 

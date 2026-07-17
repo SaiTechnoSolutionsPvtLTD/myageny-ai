@@ -591,32 +591,45 @@ class QuotationController extends Controller
 
     private function quotationSettingsFor(Quotation $quotation): array
     {
-        $branchId = auth()->user()?->branch_id
+        $branchId = $quotation->lead?->branch_id
+            ?? auth()->user()?->branch_id
             ?? $quotation->lead?->createdBy?->branch_id;
 
-        $settings = QuotationSetting::where('branch_id', $branchId)->get();
+        $branchSettings = QuotationSetting::where('branch_id', $branchId)->get();
+        $globalSettings = QuotationSetting::whereNull('branch_id')->get();
+
+        $getVal = function($key) use ($branchSettings, $globalSettings) {
+            $val = $branchSettings->where('key', $key)->first()?->value
+                ?? $globalSettings->where('key', $key)->first()?->value
+                ?? QuotationSetting::$defaults[$key] ?? null;
+
+            if (is_string($val) && str_starts_with($val, '/storage/')) {
+                return substr($val, 9);
+            }
+            return $val;
+        };
 
         return [
-            'logo' => $settings->where('key', 'logo')->first()?->value,
-            'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
-            'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
-            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
-            'prefix' => $settings->where('key', 'prefix')->first()?->value,
-            'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
-            'terms' => $settings->where('key', 'terms')->first()?->value,
-            'company_address' => $settings->where('key', 'company_address')->first()?->value,
-            'company_name' => $settings->where('key', 'company_name')->first()?->value,
-            'company_phone' => $settings->where('key', 'company_phone')->first()?->value,
-            'company_email' => $settings->where('key', 'company_email')->first()?->value,
-            'company_gstin' => $settings->where('key', 'company_gstin')->first()?->value,
-            'bank_name' => $settings->where('key', 'bank_name')->first()?->value,
-            'bank_account' => $settings->where('key', 'bank_account')->first()?->value,
-            'bank_ifsc' => $settings->where('key', 'bank_ifsc')->first()?->value,
-            'watermark_text' => $settings->where('key', 'watermark_text')->first()?->value,
-            'signature' => $settings->where('key', 'signature')->first()?->value,
-            'account_name' => $settings->where('key', 'account_name')->first()?->value,
-            'bank_branch' => $settings->where('key', 'bank_branch')->first()?->value,
-            'bank_upi' => $settings->where('key', 'bank_upi')->first()?->value,
+            'logo' => $getVal('logo'),
+            'theme_color' => $getVal('theme_color') ?? '#fe5f04',
+            'secondary_color' => $getVal('secondary_color') ?? '#fe5f04',
+            'header_text_color' => $getVal('header_text_color') ?? '#ffffff',
+            'prefix' => $getVal('prefix') ?? 'QUO-',
+            'number_padding' => $getVal('number_padding') ?? 5,
+            'terms' => $getVal('terms'),
+            'company_address' => $getVal('company_address') ?? '',
+            'company_name' => $getVal('company_name') ?? '',
+            'company_phone' => $getVal('company_phone') ?? '',
+            'company_email' => $getVal('company_email') ?? '',
+            'company_gstin' => $getVal('company_gstin') ?? '',
+            'bank_name' => $getVal('bank_name') ?? '',
+            'bank_account' => $getVal('bank_account') ?? '',
+            'bank_ifsc' => $getVal('bank_ifsc') ?? '',
+            'watermark_text' => $getVal('watermark_text') ?? '',
+            'signature' => $getVal('signature'),
+            'account_name' => $getVal('account_name') ?? '',
+            'bank_branch' => $getVal('bank_branch') ?? '',
+            'bank_upi' => $getVal('bank_upi') ?? '',
         ];
     }
 

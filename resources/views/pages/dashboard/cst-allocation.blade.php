@@ -197,11 +197,11 @@
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:180px;">
-                    <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">Support TL</label>
-                    <select name="tl_id" style="padding:9px 12px; border:1px solid var(--cst-border); border-radius:10px; font-size:13px; background:#fafafa;">
-                        <option value="">All Support TLs</option>
-                        @foreach($supportTls as $tl)
-                            <option value="{{ $tl->id }}" {{ request('tl_id') == $tl->id ? 'selected' : '' }}>{{ $tl->name }}</option>
+                    <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">CST User</label>
+                    <select name="cst_user_id" style="padding:9px 12px; border:1px solid var(--cst-border); border-radius:10px; font-size:13px; background:#fafafa;">
+                        <option value="">All CST Users</option>
+                        @foreach($cstUsers as $u)
+                            <option value="{{ $u->id }}" {{ request('cst_user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -226,7 +226,7 @@
         {{-- Tab 1: Allocation Pending --}}
         <div id="panelPending" class="tab-panel active">
             <div class="allocation-panel">
-                <h4>📋 Leads Awaiting Support TL Assignment</h4>
+                <h4>📋 Leads Awaiting Customer Support Assignment</h4>
                 <div class="table-wrap">
                     <table class="cs-table">
                         <thead>
@@ -245,7 +245,7 @@
                                     <td>
                                         <strong><a href="/leads/{{ $lead->id }}" style="color:var(--cst-orange);text-decoration:none;">{{ $lead->company_name ?: ($lead->contact_name ?: 'N/A') }}</a></strong>
                                     </td>
-                                    <td>{{ $lead->assignedToUser?->name ?: 'Unassigned' }}</td>
+                                    <td>{{ $lead->assignedTo?->name ?: 'Unassigned' }}</td>
                                     <td>
                                         <div class="products-list-container" style="cursor:pointer;" onclick="toggleAllProducts(this)">
                                             @foreach($lead->products->take(3) as $lp)
@@ -277,14 +277,9 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isSupportTl)
-                                                <button class="btn-action btn-primary" onclick="openAllocateExecModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '', '{{ $lead->customer_support_tl_id ?: auth()->id() }}')">
-                                                    👥 Assign Executive
-                                                </button>
-                                            @endif
                                             @if($isAdmin)
-                                                <button class="btn-action btn-primary" onclick="openAllocateTlModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}')">
-                                                    👤 Allocate TL
+                                                <button class="btn-action btn-primary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}')">
+                                                    👥 Allocate CST User
                                                 </button>
                                             @endif
                                         </div>
@@ -311,14 +306,14 @@
         {{-- Tab 2: Allocation Completed --}}
         <div id="panelCompleted" class="tab-panel">
             <div class="allocation-panel">
-                <h4>📋 Allocated Customer Support Team Leads</h4>
+                <h4>📋 Allocated Customer Support Leads</h4>
                 <div class="table-wrap">
                     <table class="cs-table">
                         <thead>
                             <tr>
                                 <th>Lead Account</th>
-                                <th>Assigned Support TL</th>
-                                <th>Assigned CS Executive</th>
+                                <th>Sales Representative</th>
+                                <th>Assigned CS User</th>
                                 <th>Converted Products</th>
                                 <th>Progress</th>
                                 <th style="text-align:right;">Actions</th>
@@ -330,17 +325,15 @@
                                     <td>
                                         <strong><a href="/leads/{{ $lead->id }}" style="color:var(--cst-purple);text-decoration:none;">{{ $lead->company_name ?: ($lead->contact_name ?: 'N/A') }}</a></strong>
                                     </td>
-                                    <td>
-                                        <span class="cst-badge badge-assigned">👑 {{ $lead->customerSupportTl?->name }}</span>
-                                        <div style="font-size:10px;color:var(--cst-muted);margin-top:2px;">
-                                            Allocated: {{ $lead->customer_support_allocated_at ? \Carbon\Carbon::parse($lead->customer_support_allocated_at)->format('d M Y') : '—' }}
-                                        </div>
-                                    </td>
+                                    <td>{{ $lead->assignedTo?->name ?: 'Unassigned' }}</td>
                                     <td>
                                         @if($lead->customerSupportExecutive)
                                             <span class="cst-badge badge-assigned">👤 {{ $lead->customerSupportExecutive->name }}</span>
+                                            <div style="font-size:10px;color:var(--cst-muted);margin-top:2px;">
+                                                Allocated: {{ $lead->customer_support_allocated_at ? \Carbon\Carbon::parse($lead->customer_support_allocated_at)->format('d M Y') : '—' }}
+                                            </div>
                                         @else
-                                            <span class="cst-badge badge-unassigned">⏳ Pending Assignment</span>
+                                            <span class="cst-badge badge-unassigned">⏳ Unassigned</span>
                                         @endif
                                     </td>
                                     <td>
@@ -370,14 +363,9 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isAdmin || ($isSupportTl && $lead->customer_support_tl_id === auth()->id()))
-                                                <button class="btn-action btn-primary" onclick="openAllocateExecModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '{{ $lead->customer_support_executive_id }}', '{{ $lead->customer_support_tl_id }}')">
-                                                    👥 Assign Executive
-                                                </button>
-                                            @endif
                                             @if($isAdmin)
-                                                <button class="btn-action btn-secondary" onclick="openAllocateTlModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '{{ $lead->customer_support_tl_id }}')">
-                                                    Re-allocate TL
+                                                <button class="btn-action btn-secondary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '{{ $lead->customer_support_executive_id }}')">
+                                                    Re-allocate CS User
                                                 </button>
                                             @endif
                                         </div>
@@ -403,62 +391,30 @@
     </div>
 </div>
 
-{{-- MODAL 1: ALLOCATE TL --}}
-<div id="modalAllocateTl" class="modal-layer">
+{{-- MODAL: ALLOCATE CST USER --}}
+<div id="modalAllocateCst" class="modal-layer">
     <div class="modal-box">
         <div class="modal-title">
-            <span>Allocate Customer Support TL</span>
-            <button class="modal-close" onclick="closeModal('modalAllocateTl')">&times;</button>
+            <span>Allocate Customer Support User</span>
+            <button class="modal-close" onclick="closeModal('modalAllocateCst')">&times;</button>
         </div>
-        <form id="formAllocateTl" method="POST" action="">
+        <form id="formAllocateCst" method="POST" action="">
             @csrf
             <div class="modal-body">
                 <div style="font-size:13px;color:var(--cst-muted);margin-bottom:8px;">
-                    Assigning TL for Account: <strong id="tlModalLeadName" style="color:var(--cst-text);"></strong>
+                    Assigning CS User for Account: <strong id="cstModalLeadName" style="color:var(--cst-text);"></strong>
                 </div>
-                <label for="modal_tl_id">Select Support TL</label>
-                <select name="customer_support_tl_id" id="modal_tl_id" required>
-                    <option value="">-- Choose Support Team Lead --</option>
-                    @foreach($supportTls as $tl)
-                        <option value="{{ $tl->id }}">{{ $tl->name }}</option>
+                <label for="modal_cst_user_id">Select CS User</label>
+                <select name="cst_user_id" id="modal_cst_user_id" required>
+                    <option value="">-- Choose Customer Support User --</option>
+                    @foreach($cstUsers as $u)
+                        <option value="{{ $u->id }}">{{ $u->name }}</option>
                     @endforeach
                 </select>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-action btn-secondary" onclick="closeModal('modalAllocateTl')">Cancel</button>
+                <button type="button" class="btn-action btn-secondary" onclick="closeModal('modalAllocateCst')">Cancel</button>
                 <button type="submit" class="btn-action btn-primary">Allocate Lead</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-{{-- MODAL 2: ALLOCATE EXECUTIVE --}}
-<div id="modalAllocateExec" class="modal-layer">
-    <div class="modal-box">
-        <div class="modal-title">
-            <span>Assign Support Executive</span>
-            <button class="modal-close" onclick="closeModal('modalAllocateExec')">&times;</button>
-        </div>
-        <form id="formAllocateExec" method="POST" action="">
-            @csrf
-            <div class="modal-body">
-                <div style="font-size:13px;color:var(--cst-muted);margin-bottom:8px;">
-                    Account: <strong id="execModalLeadName" style="color:var(--cst-text);"></strong>
-                </div>
-                <label for="modal_exec_tl_id">Assigned Support TL</label>
-                <select id="modal_exec_tl_id" disabled style="padding:10px 12px; border:1px solid var(--cst-border); border-radius:10px; font-size:13px; outline:none; background:#e5e7eb; cursor:not-allowed; margin-bottom:12px; width:100%;">
-                    @foreach($supportTls as $tl)
-                        <option value="{{ $tl->id }}">{{ $tl->name }}</option>
-                    @endforeach
-                </select>
-                <label for="modal_exec_id">Select Support Agent</label>
-                <select name="customer_support_executive_id" id="modal_exec_id" required>
-                    <option value="">-- Choose Support Agent --</option>
-                </select>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-action btn-secondary" onclick="closeModal('modalAllocateExec')">Cancel</button>
-                <button type="submit" class="btn-action btn-primary">Assign Executive</button>
             </div>
         </form>
     </div>
@@ -468,30 +424,6 @@
 
 @push('scripts')
 <script>
-// TL to Executives mappings
-const tlMappedExecutives = {
-    @foreach($supportTls as $tl)
-        "{{ $tl->id }}": [
-            @foreach(\App\Models\UserMapping::where('manager_id', $tl->id)->pluck('user_id') as $mId)
-                "{{ (int) $mId }}",
-            @endforeach
-        ],
-    @endforeach
-};
-
-const supportAgentsMaster = {
-    tl: [
-        @foreach($supportTls as $tl)
-            { id: "{{ $tl->id }}", name: "{{ addslashes($tl->name) }}" },
-        @endforeach
-    ],
-    executives: [
-        @foreach($supportExecutives as $exec)
-            { id: "{{ $exec->id }}", name: "{{ addslashes($exec->name) }}" },
-        @endforeach
-    ]
-};
-
 function switchTab(btn, panelId) {
     // Tabs UI
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -506,68 +438,16 @@ function switchTab(btn, panelId) {
     document.getElementById('active_tab_field').value = tabName;
 }
 
-function openAllocateTlModal(leadId, leadName, currentTlId = '') {
-    const modal = document.getElementById('modalAllocateTl');
-    const form = document.getElementById('formAllocateTl');
-    const nameSpan = document.getElementById('tlModalLeadName');
-    const select = document.getElementById('modal_tl_id');
+function openAllocateCstModal(leadId, leadName, currentUserId = '') {
+    const modal = document.getElementById('modalAllocateCst');
+    const form = document.getElementById('formAllocateCst');
+    const nameSpan = document.getElementById('cstModalLeadName');
+    const select = document.getElementById('modal_cst_user_id');
 
     form.action = `{{ url('/') }}/cst-allocation/${leadId}/allocate-tl`;
     nameSpan.textContent = leadName;
-    select.value = currentTlId;
+    select.value = currentUserId;
 
-    modal.classList.add('open');
-}
-
-function openAllocateExecModal(leadId, leadName, currentExecId = '', tlId = '') {
-    const modal = document.getElementById('modalAllocateExec');
-    const form = document.getElementById('formAllocateExec');
-    const nameSpan = document.getElementById('execModalLeadName');
-    const selectTl = document.getElementById('modal_exec_tl_id');
-    const selectExec = document.getElementById('modal_exec_id');
-
-    form.action = `{{ url('/') }}/cst-allocation/${leadId}/allocate-executive`;
-    nameSpan.textContent = leadName;
-    selectTl.value = tlId || '{{ auth()->id() }}';
-
-    // Clear dropdown and rebuild dynamically
-    selectExec.innerHTML = '';
-    const activeTlId = tlId || '{{ auth()->id() }}';
-
-    // 1. Add default option
-    const defOpt = document.createElement('option');
-    defOpt.value = '';
-    defOpt.textContent = '-- Choose Support Agent --';
-    selectExec.appendChild(defOpt);
-
-    // 2. Add TL option (Self-Allocation option)
-    const tlObj = supportAgentsMaster.tl.find(t => String(t.id) === String(activeTlId));
-    if (tlObj) {
-        const tlGroup = document.createElement('optgroup');
-        tlGroup.label = 'Support Team Lead (Self-Allocation)';
-        const tlOpt = document.createElement('option');
-        tlOpt.value = tlObj.id;
-        tlOpt.textContent = `${tlObj.name} (TL)`;
-        tlGroup.appendChild(tlOpt);
-        selectExec.appendChild(tlGroup);
-    }
-
-    // 3. Add mapped Executives
-    const mappedIds = tlMappedExecutives[activeTlId] || [];
-    const filteredExecs = supportAgentsMaster.executives.filter(e => mappedIds.map(String).includes(String(e.id)));
-    if (filteredExecs.length > 0) {
-        const execGroup = document.createElement('optgroup');
-        execGroup.label = 'Support Executives';
-        filteredExecs.forEach(exec => {
-            const execOpt = document.createElement('option');
-            execOpt.value = exec.id;
-            execOpt.textContent = exec.name;
-            execGroup.appendChild(execOpt);
-        });
-        selectExec.appendChild(execGroup);
-    }
-
-    selectExec.value = currentExecId;
     modal.classList.add('open');
 }
 

@@ -19,14 +19,17 @@ class DailyAttendance extends Model
             }
 
             $user = auth()->user();
-            if ($user && $user->isBranchAdmin() && $user->branch_id) {
-                $builder->where(function ($query) use ($user) {
-                    $query->whereHas('employee.portalUser', function ($q) use ($user) {
-                        $q->where('branch_id', $user->branch_id);
-                    })->orWhereHas('intern.portalUser', function ($q) use ($user) {
-                        $q->where('branch_id', $user->branch_id);
+            if ($user && $user->isBranchAdmin()) {
+                $branchIds = $user->getMyBranchIds();
+                if (!empty($branchIds)) {
+                    $builder->where(function ($query) use ($branchIds) {
+                        $query->whereHas('employee.portalUser', function ($q) use ($branchIds) {
+                            $q->whereIn('branch_id', $branchIds);
+                        })->orWhereHas('intern.portalUser', function ($q) use ($branchIds) {
+                            $q->whereIn('branch_id', $branchIds);
+                        });
                     });
-                });
+                }
             }
         });
     }

@@ -111,6 +111,7 @@ class ProjectScheduleHistoryTest extends TestCase
             $table->decimal('amount', 12, 2)->default(0);
             $table->date('payment_date')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('production_initiations', function ($table) {

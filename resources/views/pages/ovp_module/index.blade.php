@@ -135,6 +135,141 @@
     .ovp-topbar { height:auto; padding:16px 18px; align-items:flex-start; flex-direction:column; }
     .ovp-body { padding:18px 16px 24px; }
 }
+
+/* Select2 Premium Overrides */
+.select2-container {
+    width: 100% !important;
+}
+.select2-container--open {
+    z-index: 9999999 !important;
+}
+.ovp-filter-bar .select2-container--default .select2-selection--single {
+    height: 40px !important;
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    display: flex !important;
+    align-items: center !important;
+}
+.ovp-filter-bar .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 38px !important;
+    padding-left: 12px !important;
+    padding-right: 32px !important;
+    font-size: 13px !important;
+    color: #111827 !important;
+    font-weight: 500 !important;
+}
+.ovp-filter-bar .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 38px !important;
+    right: 10px !important;
+}
+.ovp-filter-bar .select2-container--default.select2-container--focus .select2-selection--single,
+.ovp-filter-bar .select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59,130,246,.12) !important;
+    outline: none !important;
+}
+.select2-dropdown {
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 34px rgba(15,23,42,.08) !important;
+    background: #fff !important;
+}
+.select2-results__option {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    color: #111827 !important;
+    background-color: #fff !important;
+}
+.select2-container--default .select2-results__option--selected {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+.select2-search--dropdown {
+    padding: 8px !important;
+    background-color: #fff !important;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #dbe1e8 !important;
+    border-radius: 8px !important;
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+    outline: none !important;
+    color: #111827 !important;
+    background: #fff !important;
+}
+.ovp-select-wrap:has(.select2-container)::after {
+    display: none !important;
+}
+
+/* Accordion Filter Bar */
+.ovp-filter-accordion {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    box-shadow: 0 12px 34px rgba(15,23,42,.04);
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: all .2s ease;
+}
+.ovp-accordion-header {
+    width: 100%;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    font-weight: 800;
+    color: #111827;
+    font-size: 14px;
+    text-align: left;
+}
+.ovp-accordion-header:hover {
+    background: #fafafa;
+}
+.ovp-accordion-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: 13px;
+    color: #374151;
+}
+.ovp-accordion-arrow {
+    font-size: 14px;
+    color: #6b7280;
+    transition: transform .2s ease;
+}
+.ovp-filter-accordion.is-active .ovp-accordion-arrow {
+    transform: rotate(180deg);
+}
+.ovp-accordion-body {
+    padding: 0 24px 24px;
+    border-top: 1px solid #f3f4f6;
+}
+.ovp-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 800;
+    margin-left: 8px;
+    border: 1px solid #bfdbfe;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
 </style>
 @endpush
 
@@ -154,6 +289,115 @@
         @if(session('success'))
             <div class="ovp-flash success">{{ session('success') }}</div>
         @endif
+
+        @php
+            $hasActiveFilters = request()->filled('start_date') || 
+                                request()->filled('end_date') || 
+                                request()->filled('product_id') || 
+                                request()->filled('status') || 
+                                request()->filled('user_id') || 
+                                request()->filled('company_id') || 
+                                request()->filled('department_id');
+        @endphp
+
+        {{-- Filter Accordion --}}
+        <div class="ovp-filter-accordion {{ $hasActiveFilters ? 'is-active' : '' }}">
+            <button type="button" class="ovp-accordion-header">
+                <span class="ovp-accordion-title">
+                    <i class="bi bi-funnel-fill" style="color: #3b82f6;"></i> FILTER OPTIONS
+                    @if($hasActiveFilters)
+                        <span class="ovp-filter-badge">Active</span>
+                    @endif
+                </span>
+                <span class="ovp-accordion-arrow">
+                    <i class="bi bi-chevron-down"></i>
+                </span>
+            </button>
+            <div class="ovp-accordion-body" style="{{ $hasActiveFilters ? 'display: block;' : 'display: none;' }}">
+                <div class="ovp-filter-bar" style="padding-top: 20px;">
+                    <form method="GET" action="{{ route('ovp-module.index') }}" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; align-items:flex-end;">
+                        <input type="hidden" name="bucket" value="{{ $selectedBucket }}">
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Start Date</label>
+                            <input type="date" name="start_date" value="{{ request('start_date') }}" class="ovp-input" style="padding:9px 12px;">
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">End Date</label>
+                            <input type="date" name="end_date" value="{{ request('end_date') }}" class="ovp-input" style="padding:9px 12px;">
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Product</label>
+                            <div class="ovp-select-wrap">
+                                <select name="product_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Products</option>
+                                    @foreach($products as $p)
+                                        <option value="{{ $p->id }}" {{ request('product_id') == $p->id ? 'selected' : '' }}>{{ $p->product_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Status</label>
+                            <div class="ovp-select-wrap">
+                                <select name="status" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Statuses</option>
+                                    <option value="ovp_pending" {{ request('status') == 'ovp_pending' ? 'selected' : '' }}>OVP Pending</option>
+                                    <option value="initiated" {{ request('status') == 'initiated' ? 'selected' : '' }}>Initiated</option>
+                                    <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
+                                    <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
+                                    <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">OVP Executive</label>
+                            <div class="ovp-select-wrap">
+                                <select name="user_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Executives</option>
+                                    @foreach($users as $u)
+                                        <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Company</label>
+                            <div class="ovp-select-wrap">
+                                <select name="company_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Companies</option>
+                                    @foreach($companies as $c)
+                                        <option value="{{ $c->id }}" {{ request('company_id') == $c->id ? 'selected' : '' }}>{{ $c->company_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Department</label>
+                            <div class="ovp-select-wrap">
+                                <select name="department_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Departments</option>
+                                    @foreach($departments as $d)
+                                        <option value="{{ $d->id }}" {{ request('department_id') == $d->id ? 'selected' : '' }}>{{ $d->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:10px; grid-column: 1 / -1; justify-content: flex-end; margin-top:4px;">
+                            <button type="submit" class="ovp-btn approve" style="padding:10px 20px; font-size:13px; font-weight:800;">Apply Filters</button>
+                            <a href="{{ route('ovp-module.index', ['bucket' => $selectedBucket]) }}" class="ovp-btn" style="padding:10px 20px; font-size:13px; font-weight:800; text-decoration:none; line-height:18px;">Reset</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
 
         <section class="ovp-grid">
             @foreach($cards as $key => $card)
@@ -250,11 +494,10 @@
                                         : [];
                                     $allocationStatus = strtolower((string) ($item->ovp_allocation_status ?: ($item->ovp_allocated_to ? 'allocated' : 'allocation_pending')));
                                 @endphp
-                                <tr class="ovp-row" data-href="{{ $item->lead_id ? route('leads.show', $item->lead_id) : '#' }}">
-                                    <td>
-                                        <div class="ovp-product">{{ $item->product_name }}</div>
-                                        <div class="ovp-meta">Working days: {{ $item->total_working_days }}</div>
-                                    </td>
+                                 <tr class="ovp-row" data-href="{{ $item->lead_id ? route('leads.show', $item->lead_id) : '#' }}">
+                                     <td>
+                                         <div class="ovp-product">{{ $item->product_name }}</div>
+                                     </td>
                                     <td>{{ $item->department?->name ?: 'No department' }}</td>
                                     <td>{{ $item->lead?->company_name ?: ($item->lead?->contact_name ?: 'No lead') }}</td>
                                     <td><span class="ovp-status-pill {{ $statusBucket }}">{{ ucfirst(str_replace('_', ' ', $statusBucket)) }}</span></td>
@@ -422,6 +665,16 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Accordion Toggle
+    if (window.jQuery) {
+        window.jQuery('.ovp-accordion-header').on('click', function() {
+            const $accordion = window.jQuery(this).closest('.ovp-filter-accordion');
+            const $body = $accordion.find('.ovp-accordion-body');
+            $accordion.toggleClass('is-active');
+            $body.slideToggle(200);
+        });
+    }
+
     const modal = document.getElementById('ovp-review-modal');
     const form = document.getElementById('ovp-review-form');
     const allocationModal = document.getElementById('ovp-allocation-modal');

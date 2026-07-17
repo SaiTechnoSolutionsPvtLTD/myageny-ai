@@ -18,7 +18,7 @@
         ],
         [
             'key' => 'projects',
-            'title' => 'Projects',
+            'title' => 'Production',
             'description' => 'Projects, tasks, time tracking, and project workflows.',
             'icon' => 'bi-diagram-3-fill',
             'permission' => 'modules_menu.projects',

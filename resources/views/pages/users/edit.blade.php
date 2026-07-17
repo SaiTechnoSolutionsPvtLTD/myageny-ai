@@ -130,6 +130,24 @@
                             </div>
                         </div>
 
+                        {{-- Additional Branches (Multi-Select) --}}
+                        @php
+                            $userBranchIds = $user->branches->pluck('id')->toArray();
+                        @endphp
+                        <div class="ufrm-form-group" style="margin-top: 15px;">
+                            <label class="ufrm-label">Additional Branches (Multiple Select)</label>
+                            <div style="max-height: 150px; overflow-y: auto; border: 1px solid #dbe1e8; border-radius: 12px; padding: 12px; background: #fafafa; display: grid; gap: 8px;">
+                                @foreach($branches as $branch)
+                                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; font-weight: 500; cursor: pointer;">
+                                        <input type="checkbox" name="branches[]" value="{{ $branch->id }}" {{ in_array($branch->id, old('branches', $userBranchIds)) ? 'checked' : '' }} style="width: 16px; height: 16px; accent-color: #2563eb;">
+                                        {{ $branch->name }}
+                                    </label>
+                                @endforeach
+                            </div>
+                            <small style="color: #6b7280; font-size: 11px; margin-top: 4px; display: block;">Select additional branches this user can access (e.g. for Branch Manager, etc.).</small>
+                            @error('branches')<div class="ufrm-error">{{ $message }}</div>@enderror
+                        </div>
+
                         <div class="ufrm-toggle-row">
                             <div>
                                 <div class="ufrm-toggle-label">Account Active</div>

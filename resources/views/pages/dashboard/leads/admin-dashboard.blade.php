@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Super Admin Dashboard')
+@section('title', auth()->user()->isSuperAdmin() ? 'Super Admin Dashboard' : 'Dashboard')
 
 @push('styles')
 <style>
@@ -404,7 +404,7 @@
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </div>
             <div>
-                <div class="da-page-title">Super Admin Dashboard</div>
+                <div class="da-page-title">{{ auth()->user()->isSuperAdmin() ? 'Super Admin Dashboard' : 'Dashboard' }}</div>
                 <div class="da-page-sub">myAgenci.ai · {{ $today ?? '' }} · Live via API</div>
             </div>
         </div>
@@ -530,7 +530,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 8; $i++)
+                @for($i = 0; $i < 7; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -1107,22 +1107,20 @@ function renderKpis(k, filters) {
     };
 
     var kpis = [
-        { accent:'orange', val:k.total_leads,    label:'Total Leads',     sub:'All in scope',
+        { accent:'orange', val:k.total_leads,    label:'Overall Leads Count', sub:'All in scope',
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
-        { accent:'blue',   val:k.active_leads,   label:'Active Leads',    sub:'Excl. Won & Lost',
-          svg:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
-        { accent:'green',  val:k.won_leads,      label:'Won',             sub:fmtL(k.won_value) + ' value',
+        { accent:'blue',   val:k.won_leads,      label:'Active Customers', sub:'Converted leads count',
+          svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' },
+        { accent:'green',  val:k.converted_products_count, label:'Converted Products', sub:'Total Converted Products',
           svg:'<polyline points="20 6 9 17 4 12"/>' },
-        { accent:'red',    val:k.lost_leads,     label:'Lost',            sub:'Review needed',
-          svg:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' },
-        { accent:'purple', val:fmtL(k.pipeline_value), label:'Pipeline Value', sub:'Active deals',
+        { accent:'purple', val:fmtL(k.upcoming_amount), label:'Upcoming Amount', sub:'Products without converted',
           svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
-        { accent:'teal',   val:fmtL(k.won_value),      label:'Won Value',      sub:'Closed revenue',
+        { accent:'teal',   val:fmtL(k.converted_value), label:'Converted Value',  sub:'Total products value',
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
-        { accent:'amber',  val:k.conversion_rate + '%', label:'Conversion Rate', sub:'Won ÷ Total leads',
+        { accent:'amber',  val:k.converted_percentage + '%', label:'Converted Percentage', sub:'Converted ÷ Total Products',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
-        { accent:'rose',   val:k.high_priority,  label:'High Priority',   sub:'Active, needs action',
-          svg:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' },
+        { accent:'rose',   val:k.followups_count,  label:'Followups Count',   sub:'Today\'s reminders count',
+          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
     ];
 
     var html = kpis.map(function(kpi) {
@@ -1286,7 +1284,7 @@ function renderTeamPerf(team) {
         return '<tr>' +
             '<td><div class="da-rank" style="background:' + mc + '20;color:' + mc + '">' + (i+1) + '</div></td>' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
-            '<div class="da-member-av" style="background:' + mc + '">' + u.user_name.charAt(0).toUpperCase() + '</div>' +
+            '<div class="da-member-av" style="background:' + mc + '">' + (u.user_name ? u.user_name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div style="font-size:12px;font-weight:700;color:var(--da-text)">' + u.user_name + '</div>' +
             '<div style="font-size:10px;color:var(--da-muted)">' + (u.role || 'Staff') + '</div></div></div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:6px"><div style="height:100%;width:' + tpct + '%;background:' + mc + ';border-radius:2px"></div></div></td>' +
@@ -1346,7 +1344,7 @@ function renderReminders(r) {
             '<div class="da-rem-tags">' +
             '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' +
             new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + (overdue ? ' (Overdue)' : '') + '</span>' +
-            '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1) + '</span>' +
+            '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + (rem.priority ? (rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1)) : '—') + '</span>' +
             '</div></div></div>';
     }).join('');
     document.getElementById('daReminderBody').innerHTML = html;
@@ -1361,7 +1359,7 @@ function renderRecentLeads(leads) {
         var ac  = avColor(l.id);
         return '<tr onclick="window.location=\'' + LEAD_BASE + '/' + l.id + '\'">' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
-            '<div class="da-lead-co-av" style="background:' + ac + '">' + l.company_name.charAt(0).toUpperCase() + '</div>' +
+            '<div class="da-lead-co-av" style="background:' + ac + '">' + (l.company_name ? l.company_name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div class="da-lead-name">' + l.company_name + '</div><div class="da-lead-contact">' + l.contact_name + '</div></div></div></td>' +
             '<td style="font-family:monospace">' + l.mobile_number + '</td>' +
             '<td>' + l.source_label + '</td>' +

@@ -102,6 +102,10 @@
 .cs-badge-paid     { background:#ecfdf5; color:#065f46; }
 .cs-badge-partial  { background:#fffbeb; color:#92400e; }
 .cs-badge-pending  { background:#fef2f2; color:#991b1b; }
+.cs-badge-onboard  { background:#eff6ff; color:#1d4ed8; text-transform:uppercase; }
+.cs-badge-ontrack  { background:#eff6ff; color:#1d4ed8; text-transform:uppercase; }
+.cs-badge-hold     { background:#fffbeb; color:#92400e; text-transform:uppercase; }
+.cs-badge-delivered{ background:#ecfdf5; color:#065f46; text-transform:uppercase; }
 
 @media(max-width:1024px) {
     .dashboard-grid   { grid-template-columns:1fr; }
@@ -257,6 +261,34 @@
                         </thead>
                         <tbody id="upsellDealsTableBody">
                             <tr><td colspan="4" style="text-align:center;color:var(--cs-muted);">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- Delivery Planned Projects --}}
+            <div class="dashboard-panel dashboard-grid-full">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <h4 id="deliverySectionTitle" style="color:var(--cs-text);font-weight:800;font-size:15px;margin:0;">Delivery Planned Projects</h4>
+                    <span class="cs-badge cs-badge-paid" id="deliverySectionBadge" style="border-radius:12px; padding:4px 12px; font-weight:700;">Planned</span>
+                </div>
+                <p style="font-size:12px;color:var(--cs-muted);margin:0 0 10px 0;">Projects with planned delivery dates in this period.</p>
+                <div class="table-wrap">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th>Project Name</th>
+                                <th>Delivery Date</th>
+                                <th>Allocated Person</th>
+                                <th>Status</th>
+                                <th style="text-align:right;">Total Project Value</th>
+                                <th style="text-align:right;">Received Amount</th>
+                                <th style="text-align:right;">Pending Amount</th>
+                                <th style="text-align:center;">View</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deliveryPlannedTableBody">
+                            <tr><td colspan="8" style="text-align:center;color:var(--cs-muted);">Loading delivery planned projects...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -503,6 +535,44 @@ function renderDashboard(data) {
                 <td style="text-align:center;">${row.created_at}</td>
             </tr>
         `).join('');
+    }
+
+    // 4.1 Delivery Planned Projects Table
+    const deliveryTitleEl = document.getElementById('deliverySectionTitle');
+    const deliveryBadgeEl = document.getElementById('deliverySectionBadge');
+    if (deliveryTitleEl) deliveryTitleEl.textContent = data.delivery_title || 'Delivery Planned Projects';
+    if (deliveryBadgeEl) deliveryBadgeEl.textContent = `${data.delivery_projects ? data.delivery_projects.length : 0} ${data.delivery_badge || 'Planned'}`;
+
+    const deliveryTbody = document.getElementById('deliveryPlannedTableBody');
+    if (!data.delivery_projects || data.delivery_projects.length === 0) {
+        deliveryTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--cs-muted);">No delivery scheduled in this period.</td></tr>`;
+    } else {
+        deliveryTbody.innerHTML = data.delivery_projects.map(row => {
+            let statusClass = 'cs-badge-onboard';
+            const s = row.status.toLowerCase();
+            if (s === 'hold') statusClass = 'cs-badge-hold';
+            else if (s === 'delivered') statusClass = 'cs-badge-delivered';
+            else if (s === 'ontrack') statusClass = 'cs-badge-ontrack';
+
+            return `
+                <tr>
+                    <td>
+                        <strong>${row.product_name}</strong>
+                        <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">${row.company_name}</div>
+                    </td>
+                    <td>${row.delivery_date}</td>
+                    <td>
+                        ${row.allocated_person}
+                        <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">${row.allocated_department}</div>
+                    </td>
+                    <td><span class="cs-badge ${statusClass}">${row.status}</span></td>
+                    <td style="text-align:right;font-weight:600;">${fmt(row.total_value)}</td>
+                    <td style="text-align:right;color:var(--cs-emerald);font-weight:600;">${fmt(row.received_amount)}</td>
+                    <td style="text-align:right;color:var(--cs-rose);font-weight:600;">${fmt(row.pending_amount)}</td>
+                    <td style="text-align:center;"><a href="/projects-details/${row.id}" style="color:var(--cs-orange);text-decoration:none;font-weight:700;">Open</a></td>
+                </tr>
+            `;
+        }).join('');
     }
 
     // 5. Renewal Deals Table tab rendering

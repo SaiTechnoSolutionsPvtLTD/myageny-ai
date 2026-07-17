@@ -78,7 +78,7 @@ class ProductService
             'base_price', 'tax_type', 'tax_value',
             'discount_type', 'discount_value',
             'description', 'status', 'sort_order', 'assigned_to',
-            'count_wise_report',
+            'count_wise_report', 'is_this_renewal_product', 'is_budget_approval_needed',
         ]));
     }
 

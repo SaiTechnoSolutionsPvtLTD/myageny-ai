@@ -10,7 +10,7 @@ class SalesTarget extends Model
 {
     use HasFactory, BelongsToCompany;
 
-    protected $fillable = ['user_id', 'target_amount', 'company_id'];
+    protected $fillable = ['user_id', 'target_amount', 'company_id', 'target_month', 'branch_id'];
 
     /**
      * Target belongs to one User.
@@ -18,5 +18,13 @@ class SalesTarget extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Target belongs to one Branch.
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

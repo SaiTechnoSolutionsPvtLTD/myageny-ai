@@ -163,6 +163,7 @@ class AttendanceController extends Controller
             $employee = $this->activeEmployeesQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
+                'company_id' => $employee->company_id,
                 'employee_id' => $employee->id,
                 'attendee_type' => 'employee',
                 'intern_joining_form_id' => null,
@@ -184,6 +185,7 @@ class AttendanceController extends Controller
             $intern = $this->activeInternsQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
+                'company_id' => $intern->company_id,
                 'employee_id' => null,
                 'attendee_type' => 'intern',
                 'intern_joining_form_id' => $intern->id,
@@ -243,6 +245,14 @@ class AttendanceController extends Controller
             return back()->withErrors(['attendee_key' => 'Please select a valid employee or intern.'])->withInput();
         }
 
+        $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
+            return $attendee['attendee_type'] === $attendeeType && $attendee['id'] === $attendeeId;
+        });
+
+        if (! $isAccessible) {
+            return back()->withErrors(['attendee_key' => 'Please select a valid employee or intern.'])->withInput();
+        }
+
         $attendance = DailyAttendance::query()
             ->where('attendee_type', $attendeeType)
             ->when($attendeeType === 'employee',
@@ -293,6 +303,14 @@ class AttendanceController extends Controller
         [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
 
         if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
+            return response()->json(['found' => false]);
+        }
+
+        $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
+            return $attendee['attendee_type'] === $attendeeType && $attendee['id'] === $attendeeId;
+        });
+
+        if (! $isAccessible) {
             return response()->json(['found' => false]);
         }
 
@@ -639,6 +657,42 @@ class AttendanceController extends Controller
         ));
     }
 
+    private function shouldFilterByBranch(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if (! $this->canViewAllAttendance()) {
+            return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isSystemAdmin()) {
+            return false;
+        }
+
+        if ($user->isCompanyAdmin()) {
+            return false;
+        }
+
+        $keys = collect($user->roleKeys()->all());
+        $exemptRoles = [
+            'company_admin',
+            'coo',
+            'cbo',
+            'cheif_operating_officer',
+            'chief_operating_officer',
+            'chief_business_officer',
+        ];
+
+        if ($keys->intersect($exemptRoles)->isNotEmpty()) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function currentEmployee(): ?EmployeeOnboarding
     {
         $user = auth()->user();
@@ -711,22 +765,40 @@ class AttendanceController extends Controller
 
     private function activeEmployeesQuery(): Builder
     {
-        return EmployeeOnboarding::query()
+        $query = EmployeeOnboarding::query()
             ->active()
             ->where(function (Builder $query) {
                 $query->whereNull('portal_user_id')
                     ->orWhereHas('portalUser', fn (Builder $userQuery) => $userQuery->where('is_active', true));
             });
+
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+            $query->whereHas('portalUser', function ($q) use ($branchIds) {
+                $q->whereIn('branch_id', $branchIds);
+            });
+        }
+
+        return $query;
     }
 
     private function activeInternsQuery(): Builder
     {
-        return InternJoiningForm::query()
+        $query = InternJoiningForm::query()
             ->active()
             ->where(function (Builder $query) {
                 $query->whereNull('portal_user_id')
                     ->orWhereHas('portalUser', fn (Builder $userQuery) => $userQuery->where('is_active', true));
             });
+
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+            $query->whereHas('portalUser', function ($q) use ($branchIds) {
+                $q->whereIn('branch_id', $branchIds);
+            });
+        }
+
+        return $query;
     }
 
     private function parseAttendeeKey(string $attendeeKey): array

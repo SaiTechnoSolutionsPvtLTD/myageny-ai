@@ -253,16 +253,42 @@
             </div>
         </div>
 
+        {{-- Filter Card --}}
+        <div class="st-card">
+            <form method="GET" action="{{ route('settings.sales-targets.index') }}" id="filterForm" style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+                <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px;">
+                    <label style="font-size:11px; font-weight:800; color:#9e9e9e; text-transform:uppercase; letter-spacing:0.5px;">Select Month</label>
+                    <input type="month" name="month" value="{{ $selectedMonth }}" class="st-target-input" style="width:100%;" onchange="document.getElementById('filterForm').submit()">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px;">
+                    <label style="font-size:11px; font-weight:800; color:#9e9e9e; text-transform:uppercase; letter-spacing:0.5px;">Select Branch</label>
+                    <select name="branch_id" class="st-target-input" style="width:100%;" onchange="document.getElementById('filterForm').submit()">
+                        @foreach($branches as $branch)
+                            <option value="{{ $branch->id }}" @selected($branch->id == $selectedBranchId)>{{ $branch->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="st-btn st-btn-ghost" style="height:38px;">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+
         {{-- Allocation Form Card --}}
         <div class="st-card">
             <form method="POST" action="{{ route('settings.sales-targets.store') }}">
                 @csrf
+                <input type="hidden" name="month" value="{{ $selectedMonth }}">
+                <input type="hidden" name="branch_id" value="{{ $selectedBranchId }}">
 
                 <div class="st-head" style="margin-bottom:20px;">
                     <div>
-                        <div class="st-section-title">Sales Target Amounts</div>
+                        <div class="st-section-title">Sales Target Amounts for {{ \Carbon\Carbon::parse($selectedMonth . '-01')->format('F Y') }}</div>
                         <p class="st-section-sub" style="margin-bottom:0;">
-                            Specify target amount values for each representative. Set to 0.00 for no target.
+                            Specify target amount values for each representative in the selected branch. Set to 0.00 for no target.
                         </p>
                     </div>
                     <div class="st-actions">

@@ -102,10 +102,11 @@ class UserController extends Controller
             $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
         }
 
-        $data['password'] = Hash::make($data['password']);
-        unset($data['password_confirmation'], $data['role']);
+        $selectedBranches = $data['branches'] ?? [];
+        unset($data['password_confirmation'], $data['role'], $data['branches']);
 
         $user = User::create($data);
+        $user->branches()->sync($selectedBranches);
 
         // Assign role via Spatie
         if ($roleName) {
@@ -182,9 +183,12 @@ class UserController extends Controller
         } else {
             unset($data['password']);
         }
-        unset($data['password_confirmation'], $data['role']);
+
+        $selectedBranches = $data['branches'] ?? [];
+        unset($data['password_confirmation'], $data['role'], $data['branches']);
 
         $user->update($data);
+        $user->branches()->sync($selectedBranches);
 
         // Sync role
         if ($roleName) {

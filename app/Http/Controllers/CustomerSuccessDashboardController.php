@@ -171,9 +171,10 @@ class CustomerSuccessDashboardController extends Controller
                     'leads.company_name',
                     'leads.contact_name',
                     'leads.customer_support_tl_id',
-                    'leads.customer_support_executive_id'
+                    'leads.customer_support_executive_id',
+                    'products.is_this_renewal_product'
                 ])
-                ->where('products.count_wise_report', true)
+                ->where(fn($q) => $q->where('products.count_wise_report', true)->orWhere('products.is_this_renewal_product', true))
                 ->where($applySupportScope)
                 ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
                 ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
@@ -335,8 +336,10 @@ class CustomerSuccessDashboardController extends Controller
                 ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
                 ->join('products', 'products.id', '=', 'lead_products.product_id')
                 ->where($applySupportScope)
+                ->whereIn('lead_products.created_by', $supportUserIds)
                 ->where('lead_products.product_status', '=', 'converted')
                 ->where('products.count_wise_report', '!=', true)
+                ->where('products.is_this_renewal_product', '!=', true)
                 ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
                 ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
                 ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']));
@@ -444,6 +447,92 @@ class CustomerSuccessDashboardController extends Controller
                 ];
             }
 
+            // 6. Current Month Delivery Projects (for payment followup)
+            $deliveryProjects = ProductionInitiation::query()
+                ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+                ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+                ->leftJoin('departments', 'departments.id', '=', 'production_initiations.department_id')
+                ->select([
+                    'production_initiations.id',
+                    'production_initiations.product_name',
+                    'production_initiations.project_delivery_date',
+                    'production_initiations.project_execution_status',
+                    'production_initiations.project_allocated_employee_user_ids',
+                    'production_initiations.project_allocated_tl_user_ids',
+                    'lead_products.total_price',
+                    'lead_products.amount_paid',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'departments.name as department_name'
+                ])
+                ->where($applySupportScope)
+                ->whereRaw('LOWER(departments.name) LIKE ?', ['%development%'])
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->whereBetween('production_initiations.project_delivery_date', [$fromDate->toDateString(), $toDate->toDateString()])
+                ->orderBy('production_initiations.project_delivery_date')
+                ->get();
+
+            $deliveryProjectsData = [];
+            foreach ($deliveryProjects as $dp) {
+                // Find allocated person label (TL or Employee)
+                $employeeIds = is_array($dp->project_allocated_employee_user_ids)
+                    ? $dp->project_allocated_employee_user_ids
+                    : json_decode($dp->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+                
+                $tlIds = is_array($dp->project_allocated_tl_user_ids)
+                    ? $dp->project_allocated_tl_user_ids
+                    : json_decode($dp->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+
+                $allocatedNames = [];
+                $allocatedDept = '';
+
+                if (!empty($employeeIds)) {
+                    $employees = User::whereIn('id', $employeeIds)->with('employeeOnboarding.department')->get();
+                    $allocatedNames = $employees->pluck('name')->toArray();
+                    $depts = $employees->map(fn($e) => $e->employeeOnboarding?->department?->name)->filter()->unique()->toArray();
+                    $allocatedDept = implode(', ', $depts);
+                } elseif (!empty($tlIds)) {
+                    $tls = User::whereIn('id', $tlIds)->with('employeeOnboarding.department')->get();
+                    $allocatedNames = $tls->pluck('name')->toArray();
+                    $depts = $tls->map(fn($t) => $t->employeeOnboarding?->department?->name)->filter()->unique()->toArray();
+                    $allocatedDept = implode(', ', $depts);
+                }
+
+                $allocatedPersonLabel = !empty($allocatedNames) ? implode(', ', $allocatedNames) : 'Not allocated';
+
+                $price = (float) $dp->total_price;
+                $paid = (float) $dp->amount_paid;
+                $pending = max(0, $price - $paid);
+
+                $deliveryProjectsData[] = [
+                    'id' => $dp->id,
+                    'product_name' => $dp->product_name,
+                    'company_name' => $dp->company_name ?: ($dp->contact_name ?: 'N/A'),
+                    'delivery_date' => $dp->project_delivery_date ? Carbon::parse($dp->project_delivery_date)->format('d M Y') : '—',
+                    'allocated_person' => $allocatedPersonLabel,
+                    'allocated_department' => $allocatedDept ?: ($dp->department_name ?: '—'),
+                    'status' => strtoupper((string) ($dp->project_execution_status ?: 'onboard')),
+                    'total_value' => $price,
+                    'received_amount' => $paid,
+                    'pending_amount' => $pending,
+                ];
+            }
+
+            $deliverySectionTitle = 'Delivery Planned Projects';
+            $deliverySectionBadge = 'Planned';
+            if ($fromDate && $toDate) {
+                if ($fromDate->format('Y-m') === $toDate->format('Y-m')) {
+                    $monthName = $fromDate->format('F Y');
+                    $deliverySectionTitle = "{$monthName} Delivery Planned Projects";
+                    $deliverySectionBadge = "Planned in {$fromDate->format('M Y')}";
+                } else {
+                    $deliverySectionTitle = "Delivery Planned Projects ({$fromDate->format('d M Y')} - {$toDate->format('d M Y')})";
+                    $deliverySectionBadge = "Planned in Range";
+                }
+            }
+
             return response()->json([
                 'status' => true,
                 'data'   => [
@@ -472,6 +561,9 @@ class CustomerSuccessDashboardController extends Controller
                     ],
                     'daily_trend'          => $trendData,
                     'user_performance'     => $userStats,
+                    'delivery_projects'    => $deliveryProjectsData,
+                    'delivery_title'       => $deliverySectionTitle,
+                    'delivery_badge'       => $deliverySectionBadge,
                 ]
             ]);
 
@@ -499,6 +591,9 @@ class CustomerSuccessDashboardController extends Controller
             'upsells'              => ['count' => 0, 'value' => 0, 'items' => []],
             'daily_trend'          => [],
             'user_performance'     => [],
+            'delivery_projects'    => [],
+            'delivery_title'       => 'Delivery Planned Projects',
+            'delivery_badge'       => 'Planned',
         ];
     }
 }
