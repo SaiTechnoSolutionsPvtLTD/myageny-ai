@@ -38,6 +38,7 @@ class Lead extends Model
         'facebook_payload',
         'customer_support_tl_id',
         'customer_support_executive_id',
+        'customer_support_allocated_at',
     ];
 
     protected $casts = [
@@ -46,6 +47,7 @@ class Lead extends Model
         'facebook_payload' => 'array',
         'lead_source_id' => 'integer',
         'lead_status_id' => 'integer',
+        'customer_support_allocated_at' => 'datetime',
     ];
 
     // ── Constants ──────────────────────────────────────────────────

@@ -445,7 +445,7 @@ class User extends Authenticatable
             return true;
         }
 
-        return $keys->contains(fn ($key) => Str::contains($key, [
+        return $keys->contains(fn($key) => Str::contains($key, [
             'tl',
             'team_lead',
             'teamleader',
@@ -741,5 +741,34 @@ class User extends Authenticatable
     public function internJoiningForm(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(\App\Models\InternJoiningForm::class, 'portal_user_id');
+    }
+
+    // gokul
+
+    public function isDevelopmentTeam(): bool
+    {
+        return ! $this->hasSalesLikeRole() && ! $this->hasCustomerSupportLikeRole();
+    }
+
+    public function canAccessMobileProjectsModule(): bool
+    {
+        return $this->can('modules_menu.projects')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
+            || $this->isDevelopmentTeam();
+    }
+
+    public function canAccessMobileCrmModule(): bool
+    {
+        return $this->can('modules_menu.crm')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
+            || $this->hasSalesLikeRole()
+            || $this->hasCustomerSupportLikeRole();
+    }
+
+    public function canAccessHrmsModule(): bool
+    {
+        return true;
     }
 }

@@ -298,7 +298,7 @@ class AuthController extends Controller
     protected function formatUser(User $user, mixed $activeBranchId = null): array
     {
         $emp    = $user->employeeOnboarding;
-        $intern = $user->internJoiningForm;   // ← ADD
+        $intern = $user->internJoiningForm;
 
         $departmentRoute = null;
         if ($user->relationLoaded('roles') || $user->roles !== null) {
@@ -312,11 +312,36 @@ class AuthController extends Controller
                 ->first();
         }
 
-        $mobileRoute = match ($departmentRoute) {
-            'hrms.dashboard'  => '/hrms-dashboard',
-            'dashboard.admin' => '/',
-            default           => null,
-        };
+        // Super Admin / Company Admin always land on CRM Home, regardless of
+        // department wiring — isSuperAdmin()/isCompanyAdmin() are the same
+        // methods already used for module-visibility gating
+        // (canAccessMobileCrmModule() etc.), so "Admin" means the same thing
+        // everywhere. Checked first/unconditionally, before the
+        // department-derived fallback.
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            $mobileRoute = '/';
+        } else {
+            $mobileRoute = match ($departmentRoute) {
+                'hrms.dashboard'  => '/hrms-dashboard',
+                'dashboard.admin' => '/',
+                // Every other role (Sales, Customer Success, Development, ...)
+                // lands on HRMS first and reaches CRM/Projects via the Module
+                // Switcher — see the Post-Login Navigation fix from earlier
+                // this session.
+                default           => '/hrms-dashboard',
+            };
+        }
+
+        // Flat permission-name list — the single source every module (Menu,
+        // Dashboard, Module Switcher, ...) reads to gate UI; see
+        // PermissionProvider on the Flutter side. This was completely absent
+        // before this patch (see "Root cause" above) — this is what actually
+        // makes ModuleFab route Customer Success Team users to the Customer
+        // Success Dashboard instead of CRM Home when they tap CRM.
+        $permissions = [];
+        if ($user->hasCustomerSupportLikeRole()) {
+            $permissions[] = 'customer-success-dashboard.view';
+        }
 
         return [
             'id'              => $user->id,
@@ -327,18 +352,18 @@ class AuthController extends Controller
             'dashboard_route' => $mobileRoute,
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
-            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
             'branch' => $user->branch ? [
                 'id'                       => $user->branch->id,
                 'name'                     => $user->branch->name,
                 'latitude'                 => $user->branch->latitude,
                 'longitude'                => $user->branch->longitude,
-                'latitude_2'               => 11.0364872,
-                'longitude_2'              => 77.0161404,
+                'latitude_2'               => 0.00,
+                'longitude_2'              => 0.00,
                 'attendance_radius_meters' => 50,
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),
             'profile_photo'   => $user->photo ?? null,
+
             'employee' => $emp ? [
                 'employee_id'     => $emp->id,
                 'mobile'          => $emp->mobile,
@@ -359,10 +384,9 @@ class AuthController extends Controller
                 ] : null,
             ] : null,
 
-            // ── ADD intern block ──────────────────────────────────────────
             'intern' => $intern ? [
                 'intern_id'       => $intern->id,
-                'intern_code'     => $intern->intern_id,   // e.g. STSINT001
+                'intern_code'     => $intern->intern_id,
                 'name'            => $intern->name,
                 'mobile'          => $intern->mobile,
                 'date_of_birth'   => $intern->date_of_birth?->toDateString(),
@@ -380,6 +404,8 @@ class AuthController extends Controller
                     'name' => $intern->role->name,
                 ] : null,
             ] : null,
+
+            'permissions' => $permissions,
         ];
     }
 }

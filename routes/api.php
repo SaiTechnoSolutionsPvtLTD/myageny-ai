@@ -36,6 +36,8 @@ use App\Http\Controllers\App\ReportApiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\App\AppMenuController;
 use App\Http\Controllers\App\NotificationApiController as MobileNotificationApiController;
+use App\Http\Controllers\App\CstAllocationApiController;
+use App\Http\Controllers\App\CustomerSuccessDashboardApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -295,6 +297,14 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('{productionInitiation}/content-calendar-data', [ProjectApiController::class, 'fetchContentCalendarData'])
             ->name('mobile.projects.content-calendar-data');
     });
+
+    Route::get('/cst-allocation', [CstAllocationApiController::class, 'index']);
+    Route::get('/cst-allocation/filters', [CstAllocationApiController::class, 'filters']);
+    Route::post('/cst-allocation/{lead}/allocate-tl', [CstAllocationApiController::class, 'allocateTl']);
+    Route::post('/cst-allocation/{lead}/allocate-executive', [CstAllocationApiController::class, 'allocateExecutive']);
+
+    Route::get('/customer-success/data', [CustomerSuccessDashboardApiController::class, 'data']);
+    Route::get('/customer-success/filters', [CustomerSuccessDashboardApiController::class, 'filters']);
 
     Route::get('notifications', [MobileNotificationApiController::class, 'index']);
     Route::get('notifications/unread-count', [MobileNotificationApiController::class, 'unreadCount']);
