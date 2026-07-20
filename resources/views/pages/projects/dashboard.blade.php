@@ -107,7 +107,18 @@
                 <div class="pjd-title">{{ $pageTitle }}</div>
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
-            <div class="pjd-chip" style="background:#f0fdf4; border-color:#bbf7d0; color:#166534;">Designing Team</div>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                @if($isAdminLike ?? false)
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
+                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:160px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
+                            <option value="production" @selected(($selectedDashboard ?? 'design') === 'production')>Production</option>
+                            <option value="design" @selected(($selectedDashboard ?? 'design') === 'design')>Designing</option>
+                        </select>
+                    </div>
+                @endif
+                <div class="pjd-chip" style="background:#f0fdf4; border-color:#bbf7d0; color:#166534;">Designing Team</div>
+            </div>
         </div>
 
         <div class="pjd-body">
@@ -643,6 +654,15 @@
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                @if($isAdminLike ?? false)
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
+                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:160px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
+                            <option value="production" @selected(($selectedDashboard ?? 'production') === 'production')>Production</option>
+                            <option value="design" @selected(($selectedDashboard ?? 'production') === 'design')>Designing</option>
+                        </select>
+                    </div>
+                @endif
                 @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
                     <button type="button" class="pjd-btn pjd-btn-primary" data-open-update-modal>Add Production Update</button>
                 @endif

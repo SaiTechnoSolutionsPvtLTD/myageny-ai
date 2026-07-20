@@ -791,6 +791,9 @@
         .module-card--projects .module-card__icon {
             background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
         }
+        .module-card--cst .module-card__icon {
+            background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+        }
         @keyframes moduleFabFloat {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }

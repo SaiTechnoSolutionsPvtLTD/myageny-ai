@@ -33,6 +33,9 @@
         || request()->routeIs('settings.holiday-calendars.*');
     $hrmsSelfService = auth()->user()?->isHrmsAttendanceOnlyUser();
     $canAccessProjectsModule = auth()->user()?->canAccessProjectsModule();
+    $isDesigningDashboardActive = auth()->user()?->belongsToDesigningDepartment()
+        || ($isDesigningDashboard ?? false)
+        || (auth()->user()?->hasAdminLikeRole() && session('selected_dashboard_type') === 'design');
 
     // OVP Module & Production Approvals Sidebar Counts
     $ovpNewCount = 0;
@@ -108,7 +111,13 @@
             <div class="nav-title">PROJECTS</div>
             <div class="nav-items">
                 @if($canAccessProjectsModule)
-                <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.dashboard') ? 'active' : '' }}">
+                @php
+                    $dashboardUrl = route('projects.dashboard');
+                    if (auth()->user()?->hasAdminLikeRole()) {
+                        $dashboardUrl .= $isDesigningDashboardActive ? '?dashboard_type=design' : '?dashboard_type=production';
+                    }
+                @endphp
+                <a href="{{ $dashboardUrl }}" class="nav-item {{ request()->routeIs('projects.dashboard') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.dashboard'))
                         <div class="active-indicator"></div>
                     @endif
@@ -123,7 +132,7 @@
                     </div>
                 </a>
 
-                @if(auth()->user()?->belongsToDesigningDepartment() || auth()->user()?->belongsToDigitalMarketingDepartment())
+                @if($isDesigningDashboardActive || auth()->user()?->belongsToDigitalMarketingDepartment())
                 <a href="{{ route('projects.my-accounts') }}" class="nav-item {{ request()->routeIs('projects.my-accounts') || request()->routeIs('projects.my-accounts.show') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.my-accounts') || request()->routeIs('projects.my-accounts.show'))
                         <div class="active-indicator"></div>
@@ -140,6 +149,7 @@
                 </a>
                 @endif
 
+                @if(!$isDesigningDashboardActive && !auth()->user()?->belongsToDigitalMarketingDepartment())
                 <a href="{{ route('projects.index') }}" class="nav-item {{ request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate'))
                         <div class="active-indicator"></div>
@@ -154,6 +164,7 @@
                         <span>All Projects</span>
                     </div>
                 </a>
+                @endif
 
                 <a href="{{ route('projects.timesheets') }}" class="nav-item {{ request()->routeIs('projects.timesheets') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.timesheets'))

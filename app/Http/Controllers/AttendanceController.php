@@ -365,7 +365,7 @@ class AttendanceController extends Controller
         $statusFilter = $validated['status'] ?? '';
         $loginTimingFilter = $validated['login_timing'] ?? '';
         $attendeeTypeFilter = $validated['attendee_type'] ?? '';
-        $sortBy = $validated['sort_by'] ?? 'attendance_date';
+        $sortBy = $validated['sort_by'] ?? 'employee_id';
         $sortDir = $validated['sort_dir'] ?? 'asc';
         $accessibleAttendees = $this->accessibleAttendees();
         $selectedDates = collect(CarbonPeriod::create($selectedFromDate, $selectedToDate))
@@ -573,7 +573,7 @@ class AttendanceController extends Controller
             'overall_working_hours' => ($record['overall_working_hours'] ?? '99:99:99') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
             'login_location' => $this->normalizeValue($record['login_location']) . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
             'attendance_photo' => (($record['attendance_photo_url'] ?? null) ? '0' : '1') . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
-            default => ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
+            default => $this->normalizeValue($record['employee_id']) . '|' . ($record['attendance_date'] ?? '') . '|' . $this->normalizeValue($record['employee_name']),
         };
     }
 

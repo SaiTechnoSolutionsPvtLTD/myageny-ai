@@ -42,25 +42,25 @@ class BranchAdminScopingTest extends TestCase
         $branchSql = Branch::query()->toSql();
 
         // Lead
-        $this->assertStringContainsString('"leads"."branch_id" = ?', $leadSql);
+        $this->assertStringContainsString('"leads"."branch_id" in (?)', $leadSql);
 
         // EmployeeOnboarding
-        $this->assertStringContainsString('exists (select * from "users" where "employee_onboardings"."portal_user_id" = "users"."id" and "branch_id" = ?', $employeeSql);
+        $this->assertStringContainsString('exists (select * from "users" where "employee_onboardings"."portal_user_id" = "users"."id" and "branch_id" in (?)', $employeeSql);
 
         // InternJoiningForm
-        $this->assertStringContainsString('exists (select * from "users" where "intern_joining_forms"."portal_user_id" = "users"."id" and "branch_id" = ?', $internSql);
+        $this->assertStringContainsString('exists (select * from "users" where "intern_joining_forms"."portal_user_id" = "users"."id" and "branch_id" in (?)', $internSql);
 
         // DailyAttendance
-        $this->assertStringContainsString('"branch_id" = ?', $attendanceSql);
+        $this->assertStringContainsString('"branch_id" in (?)', $attendanceSql);
 
         // Quotation
-        $this->assertStringContainsString('exists (select * from "leads" where "quotations"."lead_id" = "leads"."id" and "branch_id" = ?', $quotationSql);
+        $this->assertStringContainsString('exists (select * from "leads" where "quotations"."lead_id" = "leads"."id" and "branch_id" in (?)', $quotationSql);
 
         // QuotationSetting
-        $this->assertStringContainsString('"quotation_settings"."branch_id" = ?', $settingSql);
+        $this->assertStringContainsString('"quotation_settings"."branch_id" in (?)', $settingSql);
 
         // Branch
-        $this->assertStringContainsString('"branches"."id" = ?', $branchSql);
+        $this->assertStringContainsString('"branches"."id" in (?)', $branchSql);
         
         // Assert DataVisibilityService gives them ACCESS_COMPANY level so they see all executives in their branch
         $visibilityService = app(\App\Services\DataVisibilityService::class);

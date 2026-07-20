@@ -660,13 +660,13 @@ class InternJoiningFormController extends Controller
     {
         $branchCode = null;
         if ($branchId) {
-            $branchCode = Branch::where('id', $branchId)->value('code');
+            $branchCode = Branch::withoutGlobalScopes()->where('id', $branchId)->value('code');
         }
 
         $prefix = $branchCode ?: self::EMPLOYEE_ID_PREFIX;
         $prefix = trim((string) $prefix);
 
-        $employeeIds = EmployeeOnboarding::query()
+        $employeeIds = EmployeeOnboarding::withoutGlobalScopes()
             ->where('employee_id', 'like', $prefix . '%')
             ->pluck('employee_id');
 

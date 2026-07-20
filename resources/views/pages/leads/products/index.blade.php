@@ -267,8 +267,8 @@
                     <label class="lpd-label" for="product_status">Product Status</label>
                     <select id="product_status" name="product_status" class="lpd-select">
                         <option value="">All Product Status</option>
-                        @foreach(\App\Models\LeadProduct::PRODUCT_STATUSES as $key => $label)
-                            <option value="{{ $key }}" @selected(request('product_status') === $key)>{{ $label }}</option>
+                        @foreach($statusOptions as $statusOption)
+                            <option value="{{ $statusOption->id }}" @selected((string) request('product_status') === (string) $statusOption->id)>{{ $statusOption->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -410,7 +410,7 @@
                                     <td>
                                         <span class="lpd-badge" style="background:{{ $productStatus['bg'] }};color:{{ $productStatus['text'] }};border-color:{{ $productStatus['border'] }};">
                                             <span class="lpd-dot" style="background:{{ $productStatus['dot'] }};"></span>
-                                            {{ \App\Models\LeadProduct::PRODUCT_STATUSES[$leadProduct->product_status] ?? ucfirst((string) $leadProduct->product_status) }}
+                                            {{ $leadProduct->status_label }}
                                         </span>
                                     </td>
                                     <td><span class="lpd-money" style="color:#15803d;">Rs {{ number_format((float) $leadProduct->amount_paid, 2) }}</span></td>
