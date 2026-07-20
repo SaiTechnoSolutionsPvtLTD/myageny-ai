@@ -71,7 +71,13 @@ class LeadController extends Controller
         }
 
         if ($request->filled('lead_status')) {
-            $query->where('lead_status_id', $request->lead_status);
+            $statusId = $request->lead_status;
+            $query->where(function ($q) use ($statusId) {
+                $q->where('lead_status_id', $statusId)
+                  ->orWhereHas('products', function ($pq) use ($statusId) {
+                      $pq->where('lead_status_id', $statusId);
+                  });
+            });
         }
 
         if ($request->filled('priority')) {
@@ -145,7 +151,7 @@ class LeadController extends Controller
         }
 
         $query = LeadProduct::query()
-            ->with(['lead.branch', 'lead.assignedTo', 'product'])
+            ->with(['lead.branch', 'lead.assignedTo', 'product', 'leadStatus'])
             ->whereHas('lead')
             ->latest('created_at');
 
@@ -179,7 +185,12 @@ class LeadController extends Controller
         }
 
         if ($request->filled('product_status')) {
-            $query->where('product_status', $request->product_status);
+            $statusVal = $request->product_status;
+            if (is_numeric($statusVal)) {
+                $query->where('lead_status_id', (int) $statusVal);
+            } else {
+                $query->where('product_status', $statusVal);
+            }
         }
 
         if ($request->filled('product_id')) {
@@ -225,6 +236,7 @@ class LeadController extends Controller
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
         $products = $productOptions->get(['id', 'package_name', 'product_name']);
+        $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
         $filterPanelOpen =
             $request->filled('lead_id')
             || $request->filled('mobile_number')
@@ -245,6 +257,7 @@ class LeadController extends Controller
             'defaultFromDate' => $defaultFromDate,
             'defaultToDate' => $defaultToDate,
             'filterPanelOpen' => $filterPanelOpen,
+            'statusOptions' => $statusOptions,
         ]);
     }
 

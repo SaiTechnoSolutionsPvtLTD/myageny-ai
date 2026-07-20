@@ -189,6 +189,11 @@
     font-size: 13px;
 }
 
+.ticket-subject-link:hover {
+    color: #fe5f04 !important;
+    text-decoration: underline;
+}
+
 /* Modals */
 .support-modal {
     position: fixed;
@@ -390,8 +395,22 @@
                         <tr>
                             <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
-                                <div><strong>{{ $ticket->subject }}</strong></div>
+                                <div>
+                                    <a href="javascript:void(0)" class="ticket-subject-link"
+                                       data-ticket-id="{{ $ticket->id }}"
+                                       data-subject="{{ $ticket->subject }}"
+                                       data-creator="{{ $ticket->creator?->name ?? '-' }}"
+                                       data-assigned="{{ $ticket->assignedTo?->name ?? '-' }}"
+                                       data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
+                                       data-status="{{ $ticket->status }}"
+                                       data-remark="{{ $ticket->remark ?? '' }}"
+                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
+                                        {{ $ticket->subject }}
+                                    </a>
+                                </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
                             <td>{{ $ticket->creator?->name }}</td>
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
@@ -455,8 +474,22 @@
                         <tr>
                             <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
-                                <div><strong>{{ $ticket->subject }}</strong></div>
+                                <div>
+                                    <a href="javascript:void(0)" class="ticket-subject-link"
+                                       data-ticket-id="{{ $ticket->id }}"
+                                       data-subject="{{ $ticket->subject }}"
+                                       data-creator="{{ $ticket->creator?->name ?? '-' }}"
+                                       data-assigned="{{ $ticket->assignedTo?->name ?? '-' }}"
+                                       data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
+                                       data-status="{{ $ticket->status }}"
+                                       data-remark="{{ $ticket->remark ?? '' }}"
+                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
+                                        {{ $ticket->subject }}
+                                    </a>
+                                </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
                             <td>{{ $ticket->assignedTo?->name }}</td>
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
@@ -566,9 +599,94 @@
             </div>
             <div class="support-modal-footer">
                 <button type="button" class="btn-secondary" onclick="closeUpdateModal()">Cancel</button>
-                <button type="submit" class="btn-submit">Update Ticket</button>
+                <button type="button" class="btn-submit" onclick="showConfirmModal()">Update Ticket</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- VIEW TICKET MODAL -->
+<div id="viewTicketModal" class="support-modal">
+    <div class="support-modal-content" style="width: 700px;">
+        <div class="support-modal-header">
+            <h3 class="support-modal-title" id="vt_subject_title">Ticket Details</h3>
+            <button type="button" class="support-modal-close" onclick="closeViewModal()">&times;</button>
+        </div>
+        <div class="support-modal-body" style="padding: 28px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 16px;">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Ticket ID</div>
+                    <div id="vt_id" style="font-size: 16px; font-weight: 800; color: #fe5f04; margin-top: 4px;">#123</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px; text-align: right;">Status</div>
+                    <div style="margin-top: 4px;">
+                        <span class="status-badge" id="vt_status">Pending</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">From</div>
+                    <div id="vt_from" style="font-size: 14px; font-weight: 700; color: #111827; margin-top: 4px;">John Doe</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">To</div>
+                    <div id="vt_to" style="font-size: 14px; font-weight: 700; color: #111827; margin-top: 4px;">Jane Smith</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Date Created</div>
+                <div id="vt_date" style="font-size: 14px; color: #1f2937; margin-top: 4px;">17 Jul 2026, 12:00 PM</div>
+            </div>
+
+            <div style="margin-bottom: 24px; background: #f8fafc; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Message</div>
+                <div id="vt_message" style="font-size: 14px; color: #334155; line-height: 1.6; word-break: break-word;"></div>
+            </div>
+
+            <div style="margin-bottom: 24px;" id="vt_attachment_section">
+                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</div>
+                <div style="margin-top: 6px;">
+                    <a id="vt_attachment_link" href="#" target="_blank" style="color: #fe5f04; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="bi bi-file-earmark-arrow-down" style="font-size: 18px;"></i> View Attached File
+                    </a>
+                    <span id="vt_no_attachment" class="text-gray" style="font-size: 14px; color: #9ca3af;">No attachment provided</span>
+                </div>
+            </div>
+
+            <div style="padding-top: 20px; border-top: 1px dashed #e5e7eb;" id="vt_remark_section">
+                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Resolution Remarks</div>
+                <div id="vt_remark" style="font-size: 14px; color: #475569; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 14px 18px; line-height: 1.5; font-style: italic; display: block;">
+                    No remarks yet.
+                </div>
+            </div>
+        </div>
+        <div class="support-modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeViewModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIRMATION MODAL -->
+<div id="confirmUpdateModal" class="support-modal" style="z-index: 2100;">
+    <div class="support-modal-content" style="width: 450px;">
+        <div class="support-modal-header" style="background: #fffbeb; border-bottom: 1px solid #fef3c7;">
+            <h3 class="support-modal-title" style="color: #b45309; display: flex; align-items: center; gap: 8px;">
+                <i class="bi bi-exclamation-triangle-fill"></i> Confirm Update
+            </h3>
+            <button type="button" class="support-modal-close" onclick="closeConfirmModal()">&times;</button>
+        </div>
+        <div class="support-modal-body" style="padding: 24px; text-align: center;">
+            <p style="font-size: 15px; font-weight: 700; color: #1f2937; margin: 0 0 10px;">Are you sure you want to update this ticket?</p>
+            <p style="font-size: 13px; color: #6b7280; margin: 0; line-height: 1.5;">An email notification will be sent to the creator with the updated status and remarks.</p>
+        </div>
+        <div class="support-modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+            <button type="button" class="btn-submit" id="btn-confirm-submit" style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);">Yes, Update</button>
+        </div>
     </div>
 </div>
 
@@ -655,16 +773,122 @@
         modal.classList.remove('show');
     }
 
+    function openViewModal(ticket) {
+        document.getElementById('vt_id').innerText = '#' + ticket.id;
+        document.getElementById('vt_subject_title').innerText = ticket.subject;
+        document.getElementById('vt_from').innerText = ticket.creator_name;
+        document.getElementById('vt_to').innerText = ticket.assigned_to_name;
+        document.getElementById('vt_date').innerText = ticket.created_at;
+        document.getElementById('vt_message').innerHTML = ticket.message;
+
+        // Status Badge
+        const statusBadge = document.getElementById('vt_status');
+        statusBadge.innerText = ticket.status;
+        statusBadge.className = 'status-badge ' + ticket.status;
+
+        // Attachment section
+        const attachmentLink = document.getElementById('vt_attachment_link');
+        const noAttachment = document.getElementById('vt_no_attachment');
+        if (ticket.attachment_path) {
+            attachmentLink.href = ticket.attachment_path;
+            attachmentLink.style.display = 'inline-flex';
+            noAttachment.style.display = 'none';
+        } else {
+            attachmentLink.style.display = 'none';
+            noAttachment.style.display = 'inline';
+        }
+
+        // Remarks section
+        const remarkEl = document.getElementById('vt_remark');
+        if (ticket.remark) {
+            remarkEl.innerText = ticket.remark;
+        } else {
+            remarkEl.innerText = 'No remarks yet';
+        }
+
+        const modal = document.getElementById('viewTicketModal');
+        modal.classList.add('show');
+    }
+
+    function closeViewModal() {
+        const modal = document.getElementById('viewTicketModal');
+        modal.classList.remove('show');
+    }
+
+    function showConfirmModal() {
+        // Validate form fields are filled (status is required)
+        const statusField = document.getElementById('ticket_status');
+        if (!statusField.value) {
+            statusField.reportValidity();
+            return;
+        }
+        
+        const modal = document.getElementById('confirmUpdateModal');
+        modal.classList.add('show');
+    }
+
+    function closeConfirmModal() {
+        const modal = document.getElementById('confirmUpdateModal');
+        modal.classList.remove('show');
+    }
+
     // Close modals on clicking background wrapper
     window.addEventListener('click', function(e) {
         const createModal = document.getElementById('createTicketModal');
         const updateModal = document.getElementById('updateStatusModal');
+        const viewModal = document.getElementById('viewTicketModal');
+        const confirmModal = document.getElementById('confirmUpdateModal');
         if (e.target === createModal) {
             closeCreateModal();
         }
         if (e.target === updateModal) {
             closeUpdateModal();
         }
+        if (e.target === viewModal) {
+            closeViewModal();
+        }
+        if (e.target === confirmModal) {
+            closeConfirmModal();
+        }
+    });
+
+    // Add confirmation click listener
+    document.addEventListener('DOMContentLoaded', function() {
+        const btnConfirmSubmit = document.getElementById('btn-confirm-submit');
+        if (btnConfirmSubmit) {
+            btnConfirmSubmit.addEventListener('click', function() {
+                document.getElementById('updateStatusForm').submit();
+            });
+        }
+    });
+
+    // Add click listeners to subject links once DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.ticket-subject-link').forEach(function(link) {
+            link.addEventListener('click', function() {
+                const ticketId = this.getAttribute('data-ticket-id');
+                const subject = this.getAttribute('data-subject');
+                const creator = this.getAttribute('data-creator');
+                const assigned = this.getAttribute('data-assigned');
+                const createdAt = this.getAttribute('data-created-at');
+                const status = this.getAttribute('data-status');
+                const remark = this.getAttribute('data-remark');
+                const attachment = this.getAttribute('data-attachment');
+                const messageHtml = document.getElementById('ticket-msg-' + ticketId).innerHTML;
+
+                openViewModal({
+                    id: ticketId,
+                    subject: subject,
+                    creator_name: creator,
+                    assigned_to_name: assigned,
+                    created_at: createdAt,
+                    status: status,
+                    remark: remark,
+                    attachment_path: attachment,
+                    message: messageHtml
+                });
+            });
+        });
     });
 
     // Form submission confirmation prompt

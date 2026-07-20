@@ -462,7 +462,10 @@ class User extends Authenticatable
             'admin',
             'company_admin',
             'branch_admin',
+            'coo',
+            'cbo',
             'cheif_operating_officer',
+            'chief_operating_officer',
             'chief_business_officer',
             'development_project_coordinator'
         ])->isNotEmpty();
@@ -504,6 +507,14 @@ class User extends Authenticatable
             || $this->hasAdminLikeRole()
             || $this->hasTlLikeRole()
             || $this->hasExecutiveLikeRole();
+    }
+
+    public function canAccessCstModule(): bool
+    {
+        return $this->isCompanyAdmin()
+            || $this->hasAdminLikeRole()
+            || $this->belongsToCustomerSupportDepartment()
+            || $this->hasCustomerSupportLikeRole();
     }
 
     public function isExecutiveHrmsUser(): bool

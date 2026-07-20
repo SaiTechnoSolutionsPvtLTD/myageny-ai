@@ -314,13 +314,7 @@ class AttendanceApiController extends Controller
 
             return true;
         })
-        ->sortBy(fn (array $rec) => sprintf(
-            '%s|%s|%s|%s',
-            $rec['attendance_status'] === 'absent' ? '1' : '0',
-            $rec['attendee_type'] === 'intern' ? '0' : '1',
-            $rec['login_time'] ?? '23:59:59',
-            $this->normalize($rec['employee_name'])
-        ))
+        ->sortBy(fn (array $rec) => $this->normalize($rec['employee_id']) . '|' . $this->normalize($rec['employee_name']), options: SORT_NATURAL)
         ->values();
 
         // ── Paginate ─────────────────────────────────────────────────────────

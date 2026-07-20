@@ -24,6 +24,14 @@
             'permission' => 'modules_menu.projects',
             'url' => route('projects.dashboard'),
         ],
+        [
+            'key' => 'cst',
+            'title' => 'CST',
+            'description' => 'Customer Success Team dashboard, metrics, and renewals.',
+            'icon' => 'bi-chat-left-heart-fill',
+            'accessor' => 'canAccessCstModule',
+            'url' => route('dashboard.customer-success'),
+        ],
     ];
 @endphp
 

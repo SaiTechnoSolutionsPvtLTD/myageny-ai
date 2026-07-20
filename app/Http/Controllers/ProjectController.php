@@ -40,8 +40,15 @@ class ProjectController extends Controller
     public function dashboard(Request $request): View
     {
         $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+        $selectedDashboard = $request->query('dashboard_type');
+        if ($selectedDashboard) {
+            session(['selected_dashboard_type' => $selectedDashboard]);
+        } else {
+            $selectedDashboard = session('selected_dashboard_type', 'production');
+        }
 
-        if ($user->belongsToDesigningDepartment()) {
+        if ($user->belongsToDesigningDepartment() || ($isAdminLike && $selectedDashboard === 'design')) {
             $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
 
             // Get visible Designing projects
@@ -115,6 +122,11 @@ class ProjectController extends Controller
                     ->unique()
                     ->values()
                     ->toArray();
+                $userIds = array_merge($userIds, $teamMemberIds);
+            } elseif ($isAdminLike) {
+                $teamMemberIds = User::whereHas('roles.department', function ($q) use ($designDeptId) {
+                    $q->where('id', $designDeptId);
+                })->pluck('id')->toArray();
                 $userIds = array_merge($userIds, $teamMemberIds);
             }
 
@@ -306,6 +318,8 @@ class ProjectController extends Controller
 
             return view('pages.projects.dashboard', [
                 'isDesigningDashboard' => true,
+                'isAdminLike'         => $isAdminLike,
+                'selectedDashboard'   => $selectedDashboard,
                 'stats'               => $stats,
                 'designProjects'      => $designProjects,
                 'todayPlannedTasks'   => $todayPlannedTasks,
@@ -432,6 +446,8 @@ class ProjectController extends Controller
         $sixMonthsRevenue = array_values($lastSixMonths);
 
         return view('pages.projects.dashboard', [
+            'isAdminLike' => $isAdminLike,
+            'selectedDashboard' => $selectedDashboard,
             'stats' => $stats,
             'allocationPendingCount' => $allocationPendingProjects,
             'dashboardFilters' => $dashboardFilters,
@@ -447,6 +463,7 @@ class ProjectController extends Controller
             'canQuickAddProductionUpdate' => $canQuickAddProductionUpdate,
             'quickUpdateProjects' => $quickUpdateProjects,
             'developmentProductWiseStats' => $developmentProductWiseStats,
+            'highlightedProductionInitiations' => [],
             'paymentStats' => $paymentStats,
             'sixMonthsRevenue' => $sixMonthsRevenue,
         ]);
@@ -455,22 +472,46 @@ class ProjectController extends Controller
     public function timesheets(Request $request): View
     {
         $user = auth()->user();
-        $assignedProjects = $this->timesheetProjectsQuery($user)
-            ->get()
-            ->map(function (ProductionInitiation $project) {
-                $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
+        $isAdminLike = $user->hasAdminLikeRole();
 
-                return $project;
-            });
+        $allUsers = $isAdminLike ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) : collect();
+        $departments = $isAdminLike ? \App\Models\Department::orderBy('name')->get(['id', 'name']) : collect();
+
+        if ($isAdminLike) {
+            $assignedProjects = ProductionInitiation::query()
+                ->with($this->projectRelations())
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->latest('production_approval_reviewed_at')
+                ->get()
+                ->map(function (ProductionInitiation $project) {
+                    $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
+
+                    return $project;
+                });
+        } else {
+            $assignedProjects = $this->timesheetProjectsQuery($user)
+                ->get()
+                ->map(function (ProductionInitiation $project) {
+                    $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
+
+                    return $project;
+                });
+        }
+
         $timesheetFilters = [
             'filter_date' => trim((string) $request->query('filter_date', '')),
             'filter_lead_id' => trim((string) $request->query('filter_lead_id', '')),
             'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
             'filter_status' => trim((string) $request->query('filter_status', '')),
+            'filter_user_id' => trim((string) $request->query('filter_user_id', '')),
+            'filter_department_id' => trim((string) $request->query('filter_department_id', '')),
         ];
+
         $timesheets = ProjectTimesheet::query()
-            ->with(['project' => fn ($query) => $query->with($this->projectRelations())])
-            ->where('user_id', $user->id)
+            ->with(['project' => fn ($query) => $query->with($this->projectRelations()), 'user'])
+            ->when(!$isAdminLike, function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
             ->when($timesheetFilters['filter_date'] !== '', function ($query) use ($timesheetFilters) {
                 try {
                     $query->whereDate('timesheet_date', Carbon::parse($timesheetFilters['filter_date'])->toDateString());
@@ -489,6 +530,14 @@ class ProjectController extends Controller
             ->when($timesheetFilters['filter_status'] !== '', function ($query) use ($timesheetFilters) {
                 $query->where('status', $timesheetFilters['filter_status']);
             })
+            ->when($isAdminLike && $timesheetFilters['filter_user_id'] !== '', function ($query) use ($timesheetFilters) {
+                $query->where('user_id', (int) $timesheetFilters['filter_user_id']);
+            })
+            ->when($isAdminLike && $timesheetFilters['filter_department_id'] !== '', function ($query) use ($timesheetFilters) {
+                $query->whereHas('project', function ($q) use ($timesheetFilters) {
+                    $q->where('department_id', (int) $timesheetFilters['filter_department_id']);
+                });
+            })
             ->latest('created_at')
             ->latest('timesheet_date')
             ->get();
@@ -498,6 +547,9 @@ class ProjectController extends Controller
             'timesheets' => $timesheets,
             'timesheetFilters' => $timesheetFilters,
             'today' => Carbon::today()->toDateString(),
+            'isAdminLike' => $isAdminLike,
+            'allUsers' => $allUsers,
+            'departments' => $departments,
         ]);
     }
 
@@ -551,7 +603,11 @@ class ProjectController extends Controller
             ],
         ]);
 
-        $project = $this->timesheetProjectsQuery($user)
+        $projectQuery = $user->hasAdminLikeRole()
+            ? ProductionInitiation::query()->whereIn('production_approval_status', ['approval', 'approved'])
+            : $this->timesheetProjectsQuery($user);
+
+        $project = $projectQuery
             ->whereKey($validated['production_initiation_id'])
             ->firstOrFail();
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
@@ -655,7 +711,7 @@ class ProjectController extends Controller
     public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): RedirectResponse
     {
         $user = auth()->user();
-        if ($timesheet->user_id !== $user->id && !$user->hasRole('super admin')) {
+        if ($timesheet->user_id !== $user->id && !$user->hasAdminLikeRole()) {
             abort(403);
         }
 

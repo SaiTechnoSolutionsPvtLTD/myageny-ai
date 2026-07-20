@@ -54,7 +54,7 @@
 .pts-status-select.completed { color:#15803d; background-color:#f0fdf4; border-color:#bbf7d0; }
 .pts-status-select.pending { color:#b45309; background-color:#fff7ed; border-color:#fed7aa; }
 .pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; padding:16px; box-shadow:0 10px 28px rgba(15,23,42,.04); }
-.pts-filter-form { display:grid; grid-template-columns: repeat(4, 1fr) auto; gap:16px; align-items:end; }
+.pts-filter-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; align-items:end; }
 .pts-filter-group { display:grid; gap:7px; }
 .pts-filter-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .pts-reset-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:13px; font-weight:800; text-decoration:none; }
@@ -183,9 +183,35 @@
                     </select>
                 </div>
 
+                @if($isAdminLike ?? false)
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Department</label>
+                        <select name="filter_department_id" class="pts-select">
+                            <option value="">All Departments</option>
+                            @foreach($departments as $dept)
+                                <option value="{{ $dept->id }}" @selected(($timesheetFilters['filter_department_id'] ?? '') === (string) $dept->id)>
+                                    {{ $dept->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Employee</label>
+                        <select name="filter_user_id" class="pts-select select2" data-placeholder="All Employees">
+                            <option value="">All Employees</option>
+                            @foreach($allUsers as $u)
+                                <option value="{{ $u->id }}" @selected(($timesheetFilters['filter_user_id'] ?? '') === (string) $u->id)>
+                                    {{ $u->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                @endif
+
                 <div class="pts-filter-actions">
-                    <button type="submit" class="pts-btn pts-btn-primary">Filter</button>
-                    <a href="{{ route('projects.timesheets') }}" class="pts-reset-btn">Reset</a>
+                    <button type="submit" class="pts-btn pts-btn-primary" style="min-height:44px;">Filter</button>
+                    <a href="{{ route('projects.timesheets') }}" class="pts-reset-btn" style="min-height:44px; display:inline-flex; align-items:center;">Reset</a>
                 </div>
             </form>
         </section>
@@ -205,6 +231,9 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
+                                    @if($isAdminLike ?? false)
+                                        <th>Employee</th>
+                                    @endif
                                     <th>Project</th>
                                     <th>Delivery Date</th>
                                     <th>Status</th>
@@ -227,6 +256,12 @@
                                     @endphp
                                     <tr>
                                         <td>{{ optional($timesheet->timesheet_date)->format('d M Y') ?: 'No date' }}</td>
+                                        @if($isAdminLike ?? false)
+                                            <td>
+                                                <div style="font-weight:700;">{{ $timesheet->user?->name ?? 'Unknown' }}</div>
+                                                <div class="pts-meta">{{ $timesheet->user?->designation ?? '' }}</div>
+                                            </td>
+                                        @endif
                                         <td>
                                             <div class="pts-project">{{ $timesheet->project?->product_name ?: 'Project removed' }}</div>
                                             <div class="pts-meta">{{ $timesheet->project?->company_name ?: ($timesheet->project?->lead?->company_name ?: 'No company') }}</div>
@@ -746,6 +781,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 allowClear: true,
             });
             $filterLead.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+        }
+
+        const filterUserSelect = document.querySelector('select[name="filter_user_id"]');
+        if (filterUserSelect) {
+            const $filterUser = window.jQuery(filterUserSelect);
+            if ($filterUser.hasClass('select2-hidden-accessible')) {
+                $filterUser.select2('destroy');
+            }
+            $filterUser.select2({
+                width: '100%',
+                placeholder: 'All Employees',
+                allowClear: true,
+            });
+            $filterUser.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
         }
     }
 

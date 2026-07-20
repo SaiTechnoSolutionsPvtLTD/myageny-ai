@@ -121,6 +121,32 @@ class SupportController extends Controller
             'remark' => $request->remark,
         ]);
 
+        // Send email to the ticket creator
+        try {
+            $creator = $ticket->creator;
+            $updater = Auth::user();
+
+            if ($creator && !empty($creator->email) && filter_var($creator->email, FILTER_VALIDATE_EMAIL)) {
+                Mail::send('emails.support_ticket_updated', [
+                    'ticket' => $ticket,
+                    'creator' => $creator,
+                    'updater' => $updater,
+                ], function ($message) use ($ticket, $creator) {
+                    $message->to($creator->email, $creator->name)
+                        ->subject('Support Ticket Updated: ' . $ticket->subject);
+                });
+            }
+        } catch (\Throwable $exception) {
+            Log::error('Support Ticket update email send failed.', [
+                'ticket_id' => $ticket->id,
+                'error' => $exception->getMessage(),
+            ]);
+            // We still proceed even if email fails, but notify the user
+            return redirect()
+                ->route('support.index')
+                ->with('success', 'Ticket status updated successfully, but email notification could not be sent.');
+        }
+
         return redirect()
             ->route('support.index')
             ->with('success', 'Ticket status and remark updated successfully.');
