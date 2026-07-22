@@ -4,11 +4,8 @@ return [
 
     // ── CRM ──────────────────────────────────────────────────────────────
     'crm' => [
-        // Mirrors sidebar.blade.php's implicit CRM state: anyone who isn't
-        // restricted to HRMS attendance-only self-service. (There's no
-        // explicit "canAccessCrmModule()" on User — this is the closest
-        // faithful equivalent using the one self-service flag the web
-        // sidebar itself keys off; flag if a stricter rule exists.)
+        'label' => 'CRM',
+        'order' => 10,
         'gate' => ['require_method' => 'canAccessMobileCrmModule'],
         'items' => [
             ['key' => 'dashboard',      'label' => 'Dashboard',      'section' => 'CRM', 'order' => 10],
@@ -21,20 +18,25 @@ return [
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
             ['key' => 'production_approvals',  'label' => 'Production Approvals',  'section' => 'OVP & PRODUCTION', 'order' => 90, 'permission' => 'production_approval_module.menuview'],
             ['key' => 'notifications',   'label' => 'Notifications',  'section' => 'CRM', 'order' => 15],
-            [
-                'key' => 'cst_allocation',
-                'label' => 'CST Allocation',
-                'section' => 'OVP & PRODUCTION',
-                'order' => 95,
-                'permission' => null
-            ],
             ['key' => 'profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 100],
+        ],
+    ],
+
+    'cst' => [
+        'label' => 'CST',
+        'order' => 40,
+        'gate' => ['require_method' => 'canAccessMobileCstModule'],
+        'items' => [
+            ['key' => 'cst.dashboard', 'label' => 'Dashboard', 'section' => 'CST', 'order' => 10],
+            ['key' => 'cst_allocation', 'label' => 'CST Allocation', 'section' => 'CST', 'order' => 20, 'permission' => null],
+            ['key' => 'cst.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 30],
         ],
     ],
 
     // ── Projects (promoted from a nested CRM group to its own module) ──────
     'projects' => [
-        // Same canAccessProjectsModule() gate as before — exact reuse.
+        'label' => 'Projects',
+        'order' => 20,
         'gate' => ['require_method' => 'canAccessMobileProjectsModule'],
         'items' => [
             ['key' => 'projects.dashboard', 'label' => 'Dashboard',          'section' => 'PROJECTS', 'order' => 10],
@@ -60,6 +62,8 @@ return [
 
     // ── HRMS (NEW) ───────────────────────────────────────────────────────
     'hrms' => [
+        'label' => 'HRMS',
+        'order' => 30,
         'gate' => null,
         'items' => [
             // Dashboard + Attendance: no forbid_method — matches sidebar.blade.php,

@@ -774,7 +774,14 @@ class User extends Authenticatable
         return $this->can('modules_menu.crm')
             || $this->isSuperAdmin()
             || $this->isCompanyAdmin()
-            || $this->hasSalesLikeRole()
+            || $this->hasSalesLikeRole();
+    }
+
+    public function canAccessMobileCstModule(): bool
+    {
+        return $this->can('modules_menu.cst')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
             || $this->hasCustomerSupportLikeRole();
     }
 

@@ -72,7 +72,7 @@ class AttendanceApiController extends Controller
         return EmployeeOnboarding::query()
             ->where(function ($query) use ($user) {
                 $query->where('portal_user_id', $user?->id)
-                      ->orWhere('email', $user?->email);
+                    ->orWhere('email', $user?->email);
             })
             ->active()
             ->latest('id')
@@ -108,12 +108,13 @@ class AttendanceApiController extends Controller
         $employees = $employeeQuery
             ->orderBy('name')
             ->get(['id', 'employee_id', 'name', 'status', 'photograph'])
-            ->map(fn (EmployeeOnboarding $e) => [
+            ->map(fn(EmployeeOnboarding $e) => [
                 'id'           => $e->id,
-                'attendee_type'=> 'employee',
+                'attendee_type' => 'employee',
                 'display_id'   => (string) $e->employee_id,
                 'name'         => $e->name,
                 'photo_url'    => $e->photograph ? asset('storage/' . $e->photograph) : null,
+                'select_key'   => 'employee:' . $e->id,
             ]);
 
         if (! $this->canViewAllAttendance()) {
@@ -134,16 +135,17 @@ class AttendanceApiController extends Controller
         $interns = $internQuery
             ->orderBy('name')
             ->get(['id', 'intern_id', 'name', 'photograph'])
-            ->map(fn (InternJoiningForm $i) => [
+            ->map(fn(InternJoiningForm $i) => [
                 'id'           => $i->id,
-                'attendee_type'=> 'intern',
+                'attendee_type' => 'intern',
                 'display_id'   => (string) ($i->intern_id ?: 'INT-' . $i->id),
                 'name'         => $i->name,
                 'photo_url'    => $i->photograph ? asset('storage/' . $i->photograph) : null,
+                'select_key'   => 'intern:' . $i->id,
             ]);
 
         return $employees->concat($interns)
-            ->sortBy(fn (array $a) => strtolower(trim($a['name'])))
+            ->sortBy(fn(array $a) => strtolower(trim($a['name'])))
             ->values();
     }
 
@@ -172,6 +174,78 @@ class AttendanceApiController extends Controller
     private function normalize(?string $value): string
     {
         return strtolower(trim((string) $value));
+    }
+
+    /**
+     * Mirrors AttendanceController::parseAttendeeKey() — 'employee:12' →
+     * ['employee', 12]. Used by lookup/store/storeCheckout below.
+     */
+    private function parseAttendeeKey(string $attendeeKey): array
+    {
+        $parts = explode(':', $attendeeKey, 2);
+
+        return [
+            $parts[0] ?? '',
+            isset($parts[1]) ? (int) $parts[1] : 0,
+        ];
+    }
+
+    /** Mirrors AttendanceController::calculateWorkingHours(). */
+    private function calculateWorkingHours(string $attendanceDate, string $loginTime, ?string $logoutTime): ?string
+    {
+        if (! $logoutTime || ! $loginTime) {
+            return null;
+        }
+
+        $loginAt  = Carbon::parse($attendanceDate . ' ' . $loginTime);
+        $logoutAt = Carbon::parse($attendanceDate . ' ' . $logoutTime);
+        $seconds  = (int) max($loginAt->diffInSeconds($logoutAt, false), 0);
+
+        return sprintf(
+            '%02d:%02d:%02d',
+            floor($seconds / 3600),
+            floor(($seconds % 3600) / 60),
+            $seconds % 60
+        );
+    }
+
+    /** Mirrors AttendanceController::leaveCategoryLabel(). */
+    private function leaveCategoryLabel(?string $leaveCategory): ?string
+    {
+        return match ($leaveCategory) {
+            'paid' => 'Paid Leave',
+            'lop' => 'Loss of Pay',
+            'half_day' => 'Half Day Leave',
+            default => null,
+        };
+    }
+
+    /** Mirrors AttendanceController::leaveSessionLabel(). */
+    private function leaveSessionLabel(?string $leaveSession): ?string
+    {
+        return match ($leaveSession) {
+            'first_half' => 'First Half',
+            'second_half' => 'Second Half',
+            default => null,
+        };
+    }
+
+    /** Mirrors AttendanceController::buildLeaveLabel(). */
+    private function buildLeaveLabel(?string $leaveCategory, ?string $leaveSession): ?string
+    {
+        $categoryLabel = $this->leaveCategoryLabel($leaveCategory);
+
+        if (! $categoryLabel) {
+            return null;
+        }
+
+        if ($leaveCategory !== 'half_day') {
+            return $categoryLabel;
+        }
+
+        $sessionLabel = $this->leaveSessionLabel($leaveSession);
+
+        return $sessionLabel ? $categoryLabel . ' - ' . $sessionLabel : $categoryLabel;
     }
 
     // ── API endpoints ────────────────────────────────────────────────────────
@@ -241,31 +315,31 @@ class AttendanceApiController extends Controller
                 if ($accessibleEmployeeIds->isNotEmpty()) {
                     $query->orWhere(function ($q) use ($accessibleEmployeeIds) {
                         $q->where('attendee_type', 'employee')
-                          ->whereIn('employee_id', $accessibleEmployeeIds);
+                            ->whereIn('employee_id', $accessibleEmployeeIds);
                     });
                 }
                 if ($accessibleInternIds->isNotEmpty()) {
                     $query->orWhere(function ($q) use ($accessibleInternIds) {
                         $q->where('attendee_type', 'intern')
-                          ->whereIn('intern_joining_form_id', $accessibleInternIds);
+                            ->whereIn('intern_joining_form_id', $accessibleInternIds);
                     });
                 }
             })
             ->orderBy('login_time')
             ->get();
 
-        $attendanceRecords = $attendanceCollection->map(fn (DailyAttendance $a) => $this->formatRecord($a));
+        $attendanceRecords = $attendanceCollection->map(fn(DailyAttendance $a) => $this->formatRecord($a));
 
         // ── Build absent records ─────────────────────────────────────────────
         $presentKeys = $attendanceRecords
-            ->map(fn (array $r) => $r['attendee_type'] . ':' . $this->normalize($r['employee_id']))
+            ->map(fn(array $r) => $r['attendee_type'] . ':' . $this->normalize($r['employee_id']))
             ->filter()->unique()->values();
 
         $absentRecords = $accessibleAttendees
             ->reject(function (array $attendee) use ($presentKeys) {
                 return $presentKeys->contains($attendee['attendee_type'] . ':' . $this->normalize($attendee['display_id']));
             })
-            ->map(fn (array $attendee) => $this->absentRecord($attendee, $selectedDate));
+            ->map(fn(array $attendee) => $this->absentRecord($attendee, $selectedDate));
 
         // ── Stats ────────────────────────────────────────────────────────────
         $stats = [
@@ -294,13 +368,17 @@ class AttendanceApiController extends Controller
             $loginTimingFilter,
             $attendeeTypeFilter,
         ) {
-            if ($employeeNameFilter !== '' &&
-                ! str_contains($this->normalize($rec['employee_name']), $this->normalize($employeeNameFilter))) {
+            if (
+                $employeeNameFilter !== '' &&
+                ! str_contains($this->normalize($rec['employee_name']), $this->normalize($employeeNameFilter))
+            ) {
                 return false;
             }
 
-            if ($employeeIdFilter !== '' &&
-                ! str_contains($this->normalize((string) ($rec['employee_id'] ?? '')), $this->normalize($employeeIdFilter))) {
+            if (
+                $employeeIdFilter !== '' &&
+                ! str_contains($this->normalize((string) ($rec['employee_id'] ?? '')), $this->normalize($employeeIdFilter))
+            ) {
                 return false;
             }
 
@@ -314,8 +392,8 @@ class AttendanceApiController extends Controller
 
             return true;
         })
-        ->sortBy(fn (array $rec) => $this->normalize($rec['employee_id']) . '|' . $this->normalize($rec['employee_name']), options: SORT_NATURAL)
-        ->values();
+            ->sortBy(fn(array $rec) => $this->normalize($rec['employee_id']) . '|' . $this->normalize($rec['employee_name']), options: SORT_NATURAL)
+            ->values();
 
         // ── Paginate ─────────────────────────────────────────────────────────
         $total = $records->count();
@@ -352,8 +430,8 @@ class AttendanceApiController extends Controller
         if (! $this->canViewAllAttendance()) {
             $currentEmployee = $this->currentEmployee();
             $isOwn = $currentEmployee &&
-                     $attendance->attendee_type === 'employee' &&
-                     $attendance->employee_id === $currentEmployee->id;
+                $attendance->attendee_type === 'employee' &&
+                $attendance->employee_id === $currentEmployee->id;
 
             if (! $isOwn) {
                 return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
@@ -382,6 +460,298 @@ class AttendanceApiController extends Controller
         ]);
     }
 
+    /**
+     * GET /mobile/hrms/attendance/attendees
+     *
+     * List of employees + interns the caller may manage attendance for
+     * (branch-scoped, same set as the web "Employee / Intern" picker on the
+     * Manual Check-In / Checkout / Mark Leave forms). HR/Admin only — mirrors
+     * AttendanceController::create()'s abort_unless() guard.
+     */
+    public function attendees(): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Attendees fetched successfully.',
+            'data'    => $this->accessibleAttendees()->values(),
+        ]);
+    }
+
+    /**
+     * GET /mobile/hrms/attendance/lookup?attendee_key=employee:12&attendance_date=2026-07-22
+     *
+     * Auto-fills the existing check-in/out time for an attendee+date pair —
+     * mirrors AttendanceController::lookupAttendance(), used by both the
+     * Manual Check-In/Leave and Manual Checkout forms so HR never has to
+     * guess an existing login time. HR/Admin only.
+     */
+    public function lookup(Request $request): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        $validated = $request->validate([
+            'attendee_key'    => ['required', 'string'],
+            'attendance_date' => ['required', 'date'],
+        ]);
+
+        [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
+
+        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
+            return response()->json(['status' => true, 'data' => ['found' => false]]);
+        }
+
+        $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
+            return $attendee['attendee_type'] === $attendeeType && $attendee['id'] === $attendeeId;
+        });
+
+        if (! $isAccessible) {
+            return response()->json(['status' => true, 'data' => ['found' => false]]);
+        }
+
+        $attendance = DailyAttendance::query()
+            ->where('attendee_type', $attendeeType)
+            ->when(
+                $attendeeType === 'employee',
+                fn($query) => $query->where('employee_id', $attendeeId),
+                fn($query) => $query->where('intern_joining_form_id', $attendeeId)
+            )
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->first();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'found'          => (bool) $attendance,
+                'login_time'     => $attendance?->login_time ? Carbon::createFromFormat('H:i:s', $attendance->login_time)->format('H:i') : '',
+                'logout_time'    => $attendance?->logout_time ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('H:i') : '',
+                'status'         => $attendance?->attendance_status,
+                'leave_category' => $attendance?->leave_category,
+                'leave_session'  => $attendance?->leave_session,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /mobile/hrms/attendance
+     *
+     * Manual Check-In (attendance_status=present) or Mark Leave
+     * (attendance_status=leave) — mirrors AttendanceController::store()
+     * exactly (validation, per-date uniqueness, leave category/session
+     * rules, working-hours calc). HR/Admin only.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        $validated = $request->validate([
+            'attendee_key'      => ['required', 'string'],
+            'attendance_date'   => ['required', 'date'],
+            'login_time'        => ['nullable', 'date_format:H:i'],
+            'logout_time'       => ['nullable', 'date_format:H:i', 'after:login_time'],
+            'attendance_status' => ['required', 'in:present,leave'],
+            'leave_category'    => ['nullable', 'in:paid,lop,half_day'],
+            'leave_session'     => ['nullable', 'in:first_half,second_half'],
+            'remarks'           => ['nullable', 'string', 'max:1000'],
+        ], [
+            'logout_time.after' => 'Out time must be after in time.',
+        ]);
+
+        if ($validated['attendance_status'] === 'present') {
+            $request->validate([
+                'login_time' => ['required', 'date_format:H:i'],
+            ]);
+        }
+
+        if ($validated['attendance_status'] === 'leave') {
+            $request->validate([
+                'leave_category' => ['required', 'in:paid,lop,half_day'],
+            ]);
+
+            if (($validated['leave_category'] ?? null) === 'half_day') {
+                $request->validate([
+                    'leave_session' => ['required', 'in:first_half,second_half'],
+                ]);
+            }
+        }
+
+        [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
+
+        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
+            return response()->json(['status' => false, 'message' => 'Please select a valid employee or intern.'], 422);
+        }
+
+        $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
+            return $attendee['attendee_type'] === $attendeeType && $attendee['id'] === $attendeeId;
+        });
+
+        if (! $isAccessible) {
+            return response()->json(['status' => false, 'message' => 'Please select a valid employee or intern.'], 422);
+        }
+
+        if ($attendeeType === 'employee') {
+            $duplicate = DailyAttendance::query()
+                ->where('attendee_type', 'employee')
+                ->where('employee_id', $attendeeId)
+                ->whereDate('attendance_date', $validated['attendance_date'])
+                ->exists();
+
+            if ($duplicate) {
+                return response()->json(['status' => false, 'message' => 'Attendance is already entered for this employee on the selected date.'], 422);
+            }
+
+            $employee = EmployeeOnboarding::query()->active()->find($attendeeId);
+
+            if (! $employee) {
+                return response()->json(['status' => false, 'message' => 'Employee not found.'], 404);
+            }
+
+            $attendanceAttributes = [
+                'company_id'             => $employee->company_id,
+                'employee_id'            => $employee->id,
+                'attendee_type'          => 'employee',
+                'intern_joining_form_id' => null,
+                'employee_name'          => $employee->name,
+                'attendance_photo'       => $employee->photograph ? 'storage/' . $employee->photograph : '',
+            ];
+        } else {
+            $duplicate = DailyAttendance::query()
+                ->where('attendee_type', 'intern')
+                ->where('intern_joining_form_id', $attendeeId)
+                ->whereDate('attendance_date', $validated['attendance_date'])
+                ->exists();
+
+            if ($duplicate) {
+                return response()->json(['status' => false, 'message' => 'Attendance is already entered for this intern on the selected date.'], 422);
+            }
+
+            $intern = InternJoiningForm::query()->active()->find($attendeeId);
+
+            if (! $intern) {
+                return response()->json(['status' => false, 'message' => 'Intern not found.'], 404);
+            }
+
+            $attendanceAttributes = [
+                'company_id'             => $intern->company_id,
+                'employee_id'            => null,
+                'attendee_type'          => 'intern',
+                'intern_joining_form_id' => $intern->id,
+                'employee_name'          => $intern->name,
+                'attendance_photo'       => $intern->photograph ? 'storage/' . $intern->photograph : '',
+            ];
+        }
+
+        $workingHours = $this->calculateWorkingHours(
+            $validated['attendance_date'],
+            $validated['login_time'] ?? '',
+            $validated['logout_time'] ?? null
+        );
+
+        $attendance = DailyAttendance::create(array_merge($attendanceAttributes, [
+            'login_location'   => $validated['attendance_status'] === 'leave' ? 'Manual HR Leave Entry' : 'Manual HR Entry',
+            'login_latitude'   => 0,
+            'login_longitude'  => 0,
+            'login_time'       => filled($validated['login_time'] ?? null)
+                ? Carbon::createFromFormat('H:i', $validated['login_time'])->format('H:i:s')
+                : '00:00:00',
+            'logout_location'  => filled($validated['logout_time'] ?? null) ? 'Manual HR Entry' : null,
+            'logout_latitude'  => filled($validated['logout_time'] ?? null) ? 0 : null,
+            'logout_longitude' => filled($validated['logout_time'] ?? null) ? 0 : null,
+            'logout_time'      => filled($validated['logout_time'] ?? null)
+                ? Carbon::createFromFormat('H:i', $validated['logout_time'])->format('H:i:s')
+                : null,
+            'overall_working_hours' => $validated['attendance_status'] === 'leave' ? null : $workingHours,
+            'attendance_date'   => $validated['attendance_date'],
+            'attendance_status' => $validated['attendance_status'],
+            'leave_category'    => $validated['attendance_status'] === 'leave' ? ($validated['leave_category'] ?? null) : null,
+            'leave_session'     => $validated['attendance_status'] === 'leave' ? ($validated['leave_session'] ?? null) : null,
+            'remarks'           => $validated['remarks'] ?? null,
+        ]));
+
+        return response()->json([
+            'status'  => true,
+            'message' => $validated['attendance_status'] === 'leave'
+                ? 'Leave entry created successfully.'
+                : 'Attendance entry created successfully.',
+            'data'    => $this->formatRecord($attendance),
+        ], 201);
+    }
+
+    /**
+     * POST /mobile/hrms/attendance/checkout
+     *
+     * Manual Checkout — backfills a logout time for an existing check-in
+     * that never got one. Mirrors AttendanceController::storeCheckout().
+     * HR/Admin only.
+     */
+    public function storeCheckout(Request $request): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        $validated = $request->validate([
+            'attendee_key'    => ['required', 'string'],
+            'attendance_date' => ['required', 'date'],
+            'logout_time'     => ['required', 'date_format:H:i'],
+            'remarks'         => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
+
+        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
+            return response()->json(['status' => false, 'message' => 'Please select a valid employee or intern.'], 422);
+        }
+
+        $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
+            return $attendee['attendee_type'] === $attendeeType && $attendee['id'] === $attendeeId;
+        });
+
+        if (! $isAccessible) {
+            return response()->json(['status' => false, 'message' => 'Please select a valid employee or intern.'], 422);
+        }
+
+        $attendance = DailyAttendance::query()
+            ->where('attendee_type', $attendeeType)
+            ->when(
+                $attendeeType === 'employee',
+                fn($query) => $query->where('employee_id', $attendeeId),
+                fn($query) => $query->where('intern_joining_form_id', $attendeeId)
+            )
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->first();
+
+        if (! $attendance) {
+            return response()->json(['status' => false, 'message' => 'No check-in record found for the selected attendee and date.'], 422);
+        }
+
+        $loginTime = Carbon::createFromFormat('H:i:s', $attendance->login_time)->format('H:i');
+
+        if ($validated['logout_time'] <= $loginTime) {
+            return response()->json(['status' => false, 'message' => 'Out time must be after in time.'], 422);
+        }
+
+        $workingHours = $this->calculateWorkingHours(
+            $validated['attendance_date'],
+            $loginTime,
+            $validated['logout_time']
+        );
+
+        $attendance->update([
+            'logout_location'       => 'Manual HR Checkout',
+            'logout_latitude'       => 0,
+            'logout_longitude'      => 0,
+            'logout_time'           => Carbon::createFromFormat('H:i', $validated['logout_time'])->format('H:i:s'),
+            'overall_working_hours' => $workingHours,
+            'remarks'               => isset($validated['remarks']) ? $validated['remarks'] : null,
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Checkout time updated successfully.',
+            'data'    => $this->formatRecord($attendance->fresh(['employee', 'intern'])),
+        ]);
+    }
+
     // ── Private formatters ───────────────────────────────────────────────────
 
     private function formatRecord(DailyAttendance $a): array
@@ -401,6 +771,9 @@ class AttendanceApiController extends Controller
             'attendee_type'         => $isIntern ? 'intern' : 'employee',
             'attendance_date'       => optional($a->attendance_date)->format('Y-m-d'),
             'attendance_status'     => strtolower((string) ($a->attendance_status ?? 'present')),
+            'leave_category'        => $a->leave_category,
+            'leave_session'         => $a->leave_session,
+            'leave_label'           => $this->buildLeaveLabel($a->leave_category, $a->leave_session),
             'login_time'            => $a->login_time,
             'logout_time'           => $a->logout_time,
             'overall_working_hours' => $a->overall_working_hours,
@@ -427,6 +800,9 @@ class AttendanceApiController extends Controller
             'attendee_type'         => $attendee['attendee_type'],
             'attendance_date'       => $date,
             'attendance_status'     => 'absent',
+            'leave_category'        => null,
+            'leave_session'         => null,
+            'leave_label'           => null,
             'login_time'            => null,
             'logout_time'           => null,
             'overall_working_hours' => null,

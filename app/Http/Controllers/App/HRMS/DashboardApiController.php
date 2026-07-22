@@ -21,6 +21,8 @@ use Illuminate\Http\Request;
 
 class DashboardApiController extends Controller
 {
+    private const EARLY_LOGIN_BEFORE = '09:00:00';
+
     public function index(Request $request): JsonResponse
     {
         if (! $this->canViewOrganizationDashboard()) {
@@ -50,18 +52,23 @@ class DashboardApiController extends Controller
             $exitRequest = null;
         }
 
-        // ── Basic counts ──────────────────────────────────────────────────────
-        $employees_total    = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_ACTIVE)->count();
+        // ── Basic counts + today's attendance stats ────────────────────────────
+        // Mirrors web DashboardController::organizationAttendanceStatsForDate():
+        // employees_total/attendance figures combine BOTH EmployeeOnboarding and
+        // InternJoiningForm records, and absent is "no attendance record today"
+        // rather than a naive subtraction — matching web exactly.
+        $attendanceStats = $this->organizationAttendanceStatsForDate($today);
+
+        $employees_total    = $attendanceStats['total_employees'];
         $employees_pending  = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED)->count();
         $employees_verified = $employees_total;
-        $interns_total      = $this->internStatusQuery(InternJoiningForm::STATUS_ACTIVE)->count();
+        $interns_total      = $attendanceStats['intern_count'];
 
-        // ── Today's attendance stats ──────────────────────────────────────────
-        $today_attendance = $this->activeEmployeeAttendanceForDate($today);
-        $today_present    = $today_attendance->where('attendance_status', 'present')->count();
-        $today_leave      = $today_attendance->where('attendance_status', 'leave')->count();
-        $today_late       = $this->lateAttendanceCount($today_attendance);
-        $today_absent     = max(0, $employees_total - $today_present - $today_leave);
+        $today_present = $attendanceStats['present_count'];
+        $today_leave   = $attendanceStats['leave_count'];
+        $today_late    = $attendanceStats['late_count'];
+        $today_early   = $attendanceStats['early_count'];
+        $today_absent  = $attendanceStats['absent_count'];
 
         // ── Department-wise employee count and salary ─────────────────────────
         $department_stats = Department::select(
@@ -221,6 +228,8 @@ class DashboardApiController extends Controller
                     'present' => $today_present,
                     'late'    => $today_late,
                     'absent'  => $today_absent,
+                    'leave'   => $today_leave,
+                    'early'   => $today_early,
                     'total'   => $employees_total,
                 ],
 
@@ -307,7 +316,10 @@ class DashboardApiController extends Controller
             : collect();
 
         $presentCount = $todayAttendance->where('attendance_status', 'present')->count();
-        $lateCount    = $todayAttendance->where('attendance_status', 'late')->count();
+        // 'attendance_status' never literally stores 'late' — it's derived from
+        // login_time vs. grace time. Mirrors web's selfServiceDashboard(), which
+        // calls this same lateAttendanceCount() helper (not a status filter).
+        $lateCount    = $this->lateAttendanceCount($todayAttendance);
         $leaveCount   = $todayAttendance->where('attendance_status', 'leave')->count();
         $absentToday  = $employee && ($presentCount + $lateCount + $leaveCount) === 0 ? 1 : 0;
 
@@ -400,7 +412,7 @@ class DashboardApiController extends Controller
             'data'    => [
                 'employee_id'   => $employee?->id,
                 'employee_name' => $employee?->name,
-                'role'          => optional($employee?->role)->name,
+                'role'          => optional($employee?->role)->display_name,
                 'department'    => optional($employee?->department)->name,
                 'joining_date'  => optional($employee?->joining_date)->toDateString(),
                 'gross_salary'  => $employee?->gross_salary,
@@ -718,6 +730,114 @@ class DashboardApiController extends Controller
             ->where('attendance_status', 'present')
             ->filter(fn (DailyAttendance $attendance) => filled($attendance->login_time) && $attendance->login_time > $graceLoginTime)
             ->count();
+    }
+
+    /**
+     * Mirrors web DashboardController::organizationAttendanceStatsForDate()
+     * exactly: combines EmployeeOnboarding + InternJoiningForm into one
+     * population, and computes present/leave/late/early from attendance rows
+     * across both, with absent = people who have no attendance record today
+     * at all (not a naive present/leave subtraction).
+     */
+    private function organizationAttendanceStatsForDate(Carbon $date): array
+    {
+        $employees = $this->employeeQueryForDashboard()
+            ->whereNotNull('name')
+            ->get(['id']);
+
+        $interns = $this->internQueryForDashboard()
+            ->whereNotNull('name')
+            ->get(['id']);
+
+        $employeeIds = $employees->pluck('id');
+        $internIds   = $interns->pluck('id');
+
+        if ($employeeIds->isEmpty() && $internIds->isEmpty()) {
+            return [
+                'total_employees' => 0,
+                'employee_count'  => 0,
+                'intern_count'    => 0,
+                'present_count'   => 0,
+                'leave_count'     => 0,
+                'absent_count'    => 0,
+                'late_count'      => 0,
+                'early_count'     => 0,
+            ];
+        }
+
+        $attendanceRows = DailyAttendance::query()
+            ->whereDate('attendance_date', $date)
+            ->where(function ($query) use ($employeeIds, $internIds) {
+                if ($employeeIds->isNotEmpty()) {
+                    $query->orWhere(function ($employeeQuery) use ($employeeIds) {
+                        $employeeQuery->where('attendee_type', 'employee')
+                            ->whereIn('employee_id', $employeeIds);
+                    });
+                }
+
+                if ($internIds->isNotEmpty()) {
+                    $query->orWhere(function ($internQuery) use ($internIds) {
+                        $internQuery->where('attendee_type', 'intern')
+                            ->whereIn('intern_joining_form_id', $internIds);
+                    });
+                }
+            })
+            ->get();
+
+        $presentKeys = $attendanceRows
+            ->filter(function (DailyAttendance $attendance) {
+                return ($attendance->attendee_type === 'employee' && filled($attendance->employee_id))
+                    || ($attendance->attendee_type === 'intern' && filled($attendance->intern_joining_form_id));
+            })
+            ->map(function (DailyAttendance $attendance) {
+                $entityId = $attendance->attendee_type === 'intern'
+                    ? $attendance->intern_joining_form_id
+                    : $attendance->employee_id;
+
+                return $attendance->attendee_type . ':' . $entityId;
+            })
+            ->unique();
+
+        $totalPeople = $employees->count() + $interns->count();
+
+        return [
+            'total_employees' => $totalPeople,
+            'employee_count'  => $employees->count(),
+            'intern_count'    => $interns->count(),
+            'present_count'   => $attendanceRows->where('attendance_status', 'present')->count(),
+            'leave_count'     => $attendanceRows->where('attendance_status', 'leave')->count(),
+            'absent_count'    => max(0, $totalPeople - $presentKeys->count()),
+            'late_count'      => $attendanceRows
+                ->where('attendance_status', 'present')
+                ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'late')
+                ->count(),
+            'early_count' => $attendanceRows
+                ->where('attendance_status', 'present')
+                ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'early')
+                ->count(),
+        ];
+    }
+
+    private function resolveLoginTiming(?string $loginTime): ?string
+    {
+        if (! $loginTime) {
+            return null;
+        }
+
+        if ($loginTime <= self::EARLY_LOGIN_BEFORE) {
+            return 'early';
+        }
+
+        if ($loginTime > $this->graceLoginTime()) {
+            return 'late';
+        }
+
+        return 'on-time';
+    }
+
+    private function graceLoginTime(): string
+    {
+        return (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
     }
 
     private function canViewOrganizationDashboard(): bool

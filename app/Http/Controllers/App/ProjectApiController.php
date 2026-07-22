@@ -292,7 +292,7 @@ class ProjectApiController extends Controller
 
         $updatesQuery = $productionInitiation->projectUpdates()->with('createdBy:id,name');
 
-        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update'], true)) {
+        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
             $updatesQuery->where('type', $selectedUpdateType);
         } else {
             $selectedUpdateType = '';
@@ -317,7 +317,7 @@ class ProjectApiController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'project'              => $this->serializeProjectDetail($productionInitiation, $projectDeliveryDate),
+                'project'              => $this->serializeProjectDetail($productionInitiation, $projectDeliveryDate, $user),
                 'can_allocate'         => $this->canAllocateTl($productionInitiation, $user),
                 'can_allocate_employees' => $this->canAllocateEmployees($productionInitiation, $user),
                 'can_manage_schedule'  => $this->canManageProjectSchedule($productionInitiation, $user),
@@ -336,11 +336,9 @@ class ProjectApiController extends Controller
                 'update_counts'        => $projectUpdateCounts,
                 'selected_update_type' => $selectedUpdateType,
                 'selected_update_date' => $selectedUpdateDate,
-                'project'                       => $this->serializeProjectDetail($productionInitiation, $projectDeliveryDate),
-                'can_allocate'                  => $this->canAllocateTl($productionInitiation, $user),
-                'can_allocate_employees'        => $this->canAllocateEmployees($productionInitiation, $user),
-                'can_manage_schedule'           => $this->canManageProjectSchedule($productionInitiation, $user),
-                'can_approve_content_calendar'  => $user->belongsToDesigningDepartment(),
+                'can_approve_content_calendar' => $this->isContentCalendarDept($productionInitiation)
+                    && $user->belongsToDesigningDepartment()
+                    && ! $productionInitiation->content_calendar_approved,
             ],
         ]);
     }
@@ -495,22 +493,17 @@ class ProjectApiController extends Controller
 
         $oldDeliveryDate = $productionInitiation->project_delivery_date;
         $oldStatus       = $productionInitiation->project_execution_status;
-
         $newDeliveryDate = $validated['project_delivery_date'] ?: null;
         $newStatus       = $validated['project_execution_status'];
 
         $changes = [];
-
         $oldDateStr = $oldDeliveryDate ? Carbon::parse($oldDeliveryDate)->toDateString() : 'None';
         $newDateStr = $newDeliveryDate ? Carbon::parse($newDeliveryDate)->toDateString() : 'None';
-
         if ($oldDateStr !== $newDateStr) {
             $changes[] = "Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$newDateStr}</strong>";
         }
-
         if ($oldStatus !== $newStatus) {
-            $changes[] = 'Project Status updated from <strong>' . ucfirst($oldStatus ?: 'None')
-                . '</strong> to <strong>' . ucfirst($newStatus) . '</strong>';
+            $changes[] = 'Project Status updated from <strong>' . ucfirst($oldStatus ?: 'None') . '</strong> to <strong>' . ucfirst($newStatus) . '</strong>';
         }
 
         $productionInitiation->update([
@@ -518,7 +511,7 @@ class ProjectApiController extends Controller
             'project_execution_status' => $newStatus,
         ]);
 
-        if ($changes !== []) {
+        if (count($changes) > 0) {
             $productionInitiation->projectUpdates()->create([
                 'type'       => 'schedule_history',
                 'content'    => implode('<br>', $changes),
@@ -532,36 +525,29 @@ class ProjectApiController extends Controller
     public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): JsonResponse
     {
         $user = auth()->user();
-
         if ($timesheet->user_id !== $user->id && ! $user->hasRole('super admin')) {
             return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
         }
 
-        $validated = $request->validate([
-            'status' => ['required', 'string', 'in:pending,completed'],
-        ]);
-
+        $validated = $request->validate(['status' => ['required', 'string', 'in:pending,completed']]);
         $timesheet->update(['status' => $validated['status']]);
 
         return response()->json([
             'success' => true,
             'message' => 'Timesheet status updated successfully.',
-            'data'    => $this->serializeTimesheet($timesheet->fresh()),
+            'data' => $this->serializeTimesheet($timesheet),
         ]);
     }
 
     public function storeQuickUpdate(Request $request): JsonResponse
     {
         $user = auth()->user();
-
-        if (! $this->canQuickAddProductionUpdate($user)) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless($this->canQuickAddProductionUpdate($user), 403);
 
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
-            'type'                     => ['required', 'in:production_update,meeting_update,weekly_update'],
-            'content'                  => ['required', 'string'],
+            'type' => ['required', 'in:production_update,meeting_update,weekly_update'],
+            'content' => ['required', 'string'],
         ]);
 
         $productionInitiation = $this->visibleProjectsQuery($user)
@@ -569,22 +555,19 @@ class ProjectApiController extends Controller
             ->get()
             ->first(fn(ProductionInitiation $project) => $this->isDevelopmentProject($project));
 
-        if (! $productionInitiation) {
-            return response()->json(['success' => false, 'message' => 'Project not found.'], 404);
-        }
+        abort_unless($productionInitiation, 404);
 
         $update = $productionInitiation->projectUpdates()->create([
-            'type'       => $validated['type'],
-            'content'    => $validated['content'],
+            'type' => $validated['type'],
+            'content' => $validated['content'],
             'created_by' => $user->id,
         ]);
-
         $update->load('createdBy:id,name');
 
         return response()->json([
             'success' => true,
-            'message' => 'Update added successfully.',
-            'data'    => $this->serializeUpdate($update),
+            'message' => 'Project update added successfully.',
+            'data' => $this->serializeUpdate($update),
         ], 201);
     }
 
@@ -632,6 +615,7 @@ class ProjectApiController extends Controller
 
         $filters = [
             'filter_date'       => trim((string) $request->query('filter_date', '')),
+            'filter_lead_id'     => trim((string) $request->query('filter_lead_id', '')),
             'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
             'filter_status'     => trim((string) $request->query('filter_status', '')),
         ];
@@ -645,18 +629,18 @@ class ProjectApiController extends Controller
                 } catch (\Throwable) {
                 }
             })
+            ->when($filters['filter_lead_id'] !== '', function ($q) use ($filters) {
+                $q->whereHas('project', function ($sq) use ($filters) {
+                    $sq->where('lead_id', (int) $filters['filter_lead_id']);
+                });
+            })
             ->when($filters['filter_project_id'] !== '', function ($q) use ($filters) {
                 $q->where('production_initiation_id', (int) $filters['filter_project_id']);
             })
-            ->when($filters['filter_status'] === 'completed', function ($q) {
-                $q->whereNotNull('project_delivery_date')
-                    ->whereDate('project_delivery_date', '<=', Carbon::today()->toDateString());
-            })
-            ->when($filters['filter_status'] === 'pending', function ($q) {
-                $q->where(function ($sq) {
-                    $sq->whereNull('project_delivery_date')
-                        ->orWhereDate('project_delivery_date', '>', Carbon::today()->toDateString());
-                });
+            // Fixed: filter by the model's own `status` column (matches web),
+            // not a delivery-date comparison.
+            ->when($filters['filter_status'] !== '', function ($q) use ($filters) {
+                $q->where('status', $filters['filter_status']);
             })
             ->latest('created_at')
             ->latest('timesheet_date')
@@ -666,10 +650,12 @@ class ProjectApiController extends Controller
             'success' => true,
             'data' => [
                 'assigned_projects' => $assignedProjects->map(fn($p) => [
-                    'id'                       => $p->id,
-                    'product_name'             => $p->product_name,
-                    'company_name'             => $p->company_name,
-                    'timesheet_delivery_date'  => $p->timesheet_delivery_date,
+                    'id'                      => $p->id,
+                    'product_name'            => $p->product_name,
+                    'company_name'            => $p->company_name,
+                    'lead_id'                 => $p->lead_id,
+                    'department'              => $p->department?->name,
+                    'timesheet_delivery_date' => $p->timesheet_delivery_date,
                 ])->values(),
                 'timesheets' => $timesheets->map(fn($ts) => $this->serializeTimesheet($ts))->values(),
                 'filters'    => $filters,
@@ -688,19 +674,15 @@ class ProjectApiController extends Controller
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
             'timesheet_date'           => ['required', 'date'],
+            'status'                   => ['required', 'string', 'in:pending,completed'],
+            'project_type'             => ['nullable', 'string', 'in:recurring,onetime'],
             'poster_count'             => ['nullable', 'integer', 'min:0', 'max:100000'],
             'video_count'              => ['nullable', 'integer', 'min:0', 'max:100000'],
-            'day_closing_update'       => [
-                'required',
-                'string',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    $lines = collect(preg_split('/\R/', (string) $value))
-                        ->map(fn($l) => trim($l))->filter();
-                    if ($lines->count() < 5) {
-                        $fail('Please add at least 5 task lines in the day closing update.');
-                    }
-                },
-            ],
+            'committed_posters'        => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'committed_videos'         => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'waiting_posters'          => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'waiting_videos'           => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'day_closing_update'       => ['nullable', 'string'],
         ]);
 
         $project = $this->timesheetProjectsQuery($user)
@@ -708,37 +690,79 @@ class ProjectApiController extends Controller
             ->firstOrFail();
 
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
+        $isOnetime = ($validated['project_type'] ?? '') === 'onetime';
 
-        $exists = ProjectTimesheet::query()
-            ->where('production_initiation_id', $project->id)
-            ->where('user_id', $user->id)
-            ->whereDate('timesheet_date', $timesheetDate)
-            ->exists();
+        // Mirrors web: day closing update required unless the project is
+        // Design/DM AND project_type is 'recurring'.
+        $deptName = strtolower((string) $project->department?->name);
+        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
+        $isRecurring = ($validated['project_type'] ?? 'recurring') === 'recurring';
+        $dayClosingRequired = !$isDesignOrDm || !$isRecurring;
 
-        if ($exists) {
+        if ($dayClosingRequired && trim((string) ($validated['day_closing_update'] ?? '')) === '') {
             return response()->json([
                 'success' => false,
-                'message' => 'Timesheet already exists for this project on the selected date.',
-                'errors'  => ['production_initiation_id' => ['Timesheet already exists for this project on the selected date.']],
+                'message' => 'The day closing update is required.',
+                'errors'  => ['day_closing_update' => ['The day closing update is required.']],
             ], 422);
         }
+        if (filled($validated['day_closing_update'] ?? null)) {
+            $lines = collect(preg_split('/\R/', (string) $validated['day_closing_update']))
+                ->map(fn($l) => trim($l))->filter();
+            if ($lines->count() < 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please add at least 5 task lines in the day closing update.',
+                    'errors'  => ['day_closing_update' => ['Please add at least 5 task lines in the day closing update.']],
+                ], 422);
+            }
+        }
 
-        $timesheet = ProjectTimesheet::create([
-            'company_id'               => $project->company_id,
+        $payload = [
+            'status'             => $validated['status'],
+            'project_type'       => $validated['project_type'] ?? null,
+            'poster_count'       => $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0),
+            'video_count'        => $isOnetime ? 0 : (int) ($validated['video_count'] ?? 0),
+            'committed_posters'  => $isOnetime ? 0 : (int) ($validated['committed_posters'] ?? 0),
+            'committed_videos'   => $isOnetime ? 0 : (int) ($validated['committed_videos'] ?? 0),
+            'waiting_posters'    => $isOnetime ? 0 : (int) ($validated['waiting_posters'] ?? 0),
+            'waiting_videos'     => $isOnetime ? 0 : (int) ($validated['waiting_videos'] ?? 0),
+            'day_closing_update' => $validated['day_closing_update'] ?? '',
+        ];
+
+        // Upsert — matches web (edit today's entry instead of hard-rejecting).
+        $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
+            ->where('user_id', $user->id)
+            ->whereDate('timesheet_date', $timesheetDate)
+            ->first();
+
+        if ($timesheet) {
+            $timesheet->update($payload);
+            $statusCode = 200;
+        } else {
+            $timesheet = ProjectTimesheet::create(array_merge($payload, [
+                'company_id'               => $project->company_id,
+                'production_initiation_id' => $project->id,
+                'user_id'                  => $user->id,
+                'timesheet_date'           => $timesheetDate,
+                'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
+            ]));
+            $statusCode = 201;
+        }
+
+        \App\Models\ProjectUpdate::create([
             'production_initiation_id' => $project->id,
-            'user_id'                  => $user->id,
-            'timesheet_date'           => $timesheetDate,
-            'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
-            'poster_count'             => (int) ($validated['poster_count'] ?? 0),
-            'video_count'              => (int) ($validated['video_count'] ?? 0),
-            'day_closing_update'       => $validated['day_closing_update'],
+            'type'       => 'timesheet',
+            'content'    => 'Timesheet Date: ' . Carbon::parse($timesheetDate)->format('d M Y')
+                . "\nUpdate:\n" . ($payload['day_closing_update'] ?: '(none)'),
+            'created_by' => $user->id,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Timesheet saved successfully.',
             'data'    => $this->serializeTimesheet($timesheet),
-        ], 201);
+        ], $statusCode);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -782,10 +806,14 @@ class ProjectApiController extends Controller
         ];
     }
 
-    private function serializeProjectDetail(ProductionInitiation $p, ?Carbon $deliveryDate): array
+    private function serializeProjectDetail(ProductionInitiation $p, ?Carbon $deliveryDate, ?User $user = null): array
     {
 
         $deptName = strtolower(trim((string) ($p->department?->name ?? '')));
+
+        // Mirrors web's Blade gate exactly: `auth()->user()->canViewBudgetApprovalDetails()
+        // && $projectItem->lead_budget_amount` (pages/projects/show.blade.php).
+        $canViewBudget = ($user?->canViewBudgetApprovalDetails() ?? false) && $p->lead_budget_amount;
 
         return array_merge($this->serializeProjectSummary($p), [
             'lead_id'             => $p->lead?->id,
@@ -794,6 +822,7 @@ class ProjectApiController extends Controller
             'mobile'              => $p->lead?->mobile_number,
             'sales_person'        => $p->lead?->assignedTo?->name,
             'sales_email'         => $p->lead?->assignedTo?->email,
+            'sales_person_role'   => $p->lead?->assignedTo?->designation,
             'initiated_on'        => $p->created_at,
             'allocated_by'        => $p->projectAllocatedBy?->name,
             'allocated_on'        => $p->project_allocated_at,
@@ -807,11 +836,37 @@ class ProjectApiController extends Controller
             'attachment'          => $p->attachment_name ?? null,
             'ovp_approved_by'     => $p->reviewedBy?->name,
             'ovp_approved_on'     => $p->ovp_reviewed_at ?? null,
-            'content_calendar_sheet_url'  => $p->content_calendar_sheet_url,
-            'content_calendar_approved'   => (bool) $p->content_calendar_approved,
-            'content_calendar_remarks'    => $p->content_calendar_remarks,
-            'is_content_calendar_dept'    => in_array($deptName, ['designing', 'digital marketing'], true),
+            // Dynamic OVP form fields collected at lead/product stage — raw
+            // pass-through of the same JSON column web reads directly
+            // ($productionInitiation->custom_form_data), so the Flutter side
+            // renders whatever labels/values/file entries exist per project
+            // rather than the backend guessing a fixed schema.
+            'custom_form_data'    => $p->custom_form_data ?? [],
+            'production_approval_remarks' => $p->production_approval_remarks ?? null,
+            // Budget fields: null unless the viewing user passes
+            // canViewBudgetApprovalDetails() AND an amount was actually
+            // recorded — same double gate the web Blade uses.
+            'lead_budget_amount'  => $canViewBudget ? $p->lead_budget_amount : null,
+            'budget_amount_type'  => $canViewBudget ? $p->budget_amount_type : null,
+            'content_calendar_sheet_url' => $p->content_calendar_sheet_url ?? null,
+            'content_calendar_approved'  => (bool) ($p->content_calendar_approved ?? false),
+            'content_calendar_remarks'   => $p->content_calendar_remarks ?? null,
+            'is_content_calendar_dept'   => $this->isContentCalendarDept($p),
+            // Web only lets non-Designing-department users edit the sheet
+            // URL (Designing dept gets a read-only "Open Sheet" link and
+            // approves instead) — see the @if(belongsToDesigningDepartment())
+            // branch in show.blade.php around the cc-sheet-form.
+            'can_edit_content_calendar_sheet' => ! ($user?->belongsToDesigningDepartment() ?? false),
         ]);
+    }
+
+    private function isContentCalendarDept(ProductionInitiation $productionInitiation): bool
+    {
+        return in_array(
+            strtolower(trim((string) ($productionInitiation->department?->name ?? ''))),
+            ['designing', 'digital marketing'],
+            true
+        );
     }
 
     private function serializeUpdate(ProjectUpdate $u): array
@@ -832,14 +887,21 @@ class ProjectApiController extends Controller
             'production_initiation_id' => $ts->production_initiation_id,
             'project_name'          => $ts->project?->product_name,
             'company_name'          => $ts->project?->company_name,
+            'lead_id'               => $ts->project?->lead_id,
             'timesheet_date'        => $ts->timesheet_date?->toDateString(),
             'project_delivery_date' => $ts->project_delivery_date?->toDateString(),
+            'status'                => $ts->status,
+            'project_type'          => $ts->project_type,
             'poster_count'          => (int) $ts->poster_count,
             'video_count'           => (int) $ts->video_count,
+            'committed_posters'     => (int) $ts->committed_posters,
+            'committed_videos'      => (int) $ts->committed_videos,
+            'waiting_posters'       => (int) $ts->waiting_posters,
+            'waiting_videos'        => (int) $ts->waiting_videos,
             'day_closing_update'    => $ts->day_closing_update,
             'submitted_at'          => $ts->created_at?->toDateTimeString(),
-            'is_completed'          => $ts->project_delivery_date
-                && $ts->project_delivery_date->lte(Carbon::today()),
+            // Fixed: read the real status column instead of comparing dates.
+            'is_completed'          => $ts->status === 'completed',
         ];
     }
 
@@ -1389,10 +1451,10 @@ class ProjectApiController extends Controller
     public function myAccounts(Request $request): JsonResponse
     {
         $user = auth()->user();
-
-        if (! ($user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment())) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless(
+            $user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment(),
+            403
+        );
 
         $projectQuery = ProductionInitiation::query()
             ->whereIn('production_approval_status', ['approval', 'approved'])
@@ -1417,12 +1479,11 @@ class ProjectApiController extends Controller
         $leads = Lead::whereIn('id', $leadIds)
             ->orderBy('company_name')
             ->get()
-            ->map(function (Lead $lead) {
+            ->map(function ($lead) {
                 $projects = ProductionInitiation::where('lead_id', $lead->id)->get();
 
                 $totalPosters = 0;
-                $totalVideos  = 0;
-
+                $totalVideos = 0;
                 foreach ($projects as $project) {
                     if (is_array($project->custom_form_data)) {
                         foreach ($project->custom_form_data as $field) {
@@ -1437,45 +1498,40 @@ class ProjectApiController extends Controller
                 }
 
                 $completedPosters = (int) ProjectTimesheet::whereIn('production_initiation_id', $projects->pluck('id'))->sum('poster_count');
-                $pendingPosters   = max(0, $totalPosters - $completedPosters);
-
                 $completedVideos = (int) ProjectTimesheet::whereIn('production_initiation_id', $projects->pluck('id'))->sum('video_count');
-                $pendingVideos   = max(0, $totalVideos - $completedVideos);
-
-                $renewalsCount = LeadProduct::where('lead_id', $lead->id)
-                    ->whereHas('product', fn($q) => $q->where('count_wise_report', true))
-                    ->count();
 
                 return [
-                    'id'                => $lead->id,
-                    'company_name'      => $lead->company_name,
-                    'contact_name'      => $lead->contact_name,
-                    'mobile_number'     => $lead->mobile_number,
-                    'email'             => $lead->email,
-                    'renewals_count'    => $renewalsCount,
-                    'total_posters'     => $totalPosters,
+                    'id' => $lead->id,
+                    'company_name' => $lead->company_name ?: 'No Company Name',
+                    'contact_name' => $lead->contact_name,
+                    'mobile_number' => $lead->mobile_number,
+                    'email' => $lead->email,
+                    'renewals_count' => LeadProduct::where('lead_id', $lead->id)
+                        ->whereHas('product', fn($q) => $q->where('count_wise_report', true))
+                        ->count(),
+                    'total_posters' => $totalPosters,
                     'completed_posters' => $completedPosters,
-                    'pending_posters'   => $pendingPosters,
-                    'total_videos'      => $totalVideos,
-                    'completed_videos'  => $completedVideos,
-                    'pending_videos'    => $pendingVideos,
+                    'pending_posters' => max(0, $totalPosters - $completedPosters),
+                    'total_videos' => $totalVideos,
+                    'completed_videos' => $completedVideos,
+                    'pending_videos' => max(0, $totalVideos - $completedVideos),
                 ];
             })
             ->values();
 
         return response()->json([
             'success' => true,
-            'data'    => [
+            'data' => [
                 'leads' => $leads,
                 'stats' => [
-                    'total_accounts'    => $leads->count(),
-                    'total_renewals'    => $leads->sum('renewals_count'),
-                    'total_posters'     => $leads->sum('total_posters'),
+                    'total_accounts' => $leads->count(),
+                    'total_renewals' => $leads->sum('renewals_count'),
+                    'total_posters' => $leads->sum('total_posters'),
                     'completed_posters' => $leads->sum('completed_posters'),
-                    'pending_posters'   => $leads->sum('pending_posters'),
-                    'total_videos'      => $leads->sum('total_videos'),
-                    'completed_videos'  => $leads->sum('completed_videos'),
-                    'pending_videos'    => $leads->sum('pending_videos'),
+                    'pending_posters' => $leads->sum('pending_posters'),
+                    'total_videos' => $leads->sum('total_videos'),
+                    'completed_videos' => $leads->sum('completed_videos'),
+                    'pending_videos' => $leads->sum('pending_videos'),
                 ],
             ],
         ]);
@@ -1484,10 +1540,10 @@ class ProjectApiController extends Controller
     public function showMyAccount(Lead $lead): JsonResponse
     {
         $user = auth()->user();
-
-        if (! ($user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment())) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless(
+            $user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment(),
+            403
+        );
 
         $renewals = LeadProduct::where('lead_id', $lead->id)
             ->whereHas('product', fn($q) => $q->where('count_wise_report', true))
@@ -1498,25 +1554,19 @@ class ProjectApiController extends Controller
             ->whereIn('lead_product_id', $renewals->pluck('id'))
             ->with(['department', 'timesheets', 'leadProduct.product'])
             ->get()
-            ->map(function (ProductionInitiation $project) use ($user) {
+            ->map(function ($project) {
                 $startDateCustom = null;
-                $endDateCustom   = null;
-
+                $endDateCustom = null;
                 if (is_array($project->custom_form_data)) {
                     foreach ($project->custom_form_data as $field) {
                         $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
                         $value = trim((string) ($field['value'] ?? ''));
-                        if ($label === 'start date') {
-                            $startDateCustom = $value;
-                        } elseif ($label === 'end date') {
-                            $endDateCustom = $value;
-                        }
+                        if ($label === 'start date') $startDateCustom = $value;
+                        elseif ($label === 'end date') $endDateCustom = $value;
                     }
                 }
 
-                $start = $startDateCustom
-                    ? Carbon::parse($startDateCustom)->startOfDay()
-                    : ($project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at));
+                $start = $startDateCustom ? Carbon::parse($startDateCustom)->startOfDay() : ($project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at));
                 $project->start_date = $start ? Carbon::parse($start)->startOfDay() : null;
 
                 $end = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : $this->projectDeliveryDate($project);
@@ -1527,7 +1577,7 @@ class ProjectApiController extends Controller
                     && $project->project_execution_status !== 'delivered';
 
                 $project->onboarded_posters = 0;
-                $project->onboarded_videos  = 0;
+                $project->onboarded_videos = 0;
                 if (is_array($project->custom_form_data)) {
                     foreach ($project->custom_form_data as $field) {
                         $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
@@ -1540,92 +1590,80 @@ class ProjectApiController extends Controller
                 }
 
                 $project->delivered_posters = (int) $project->timesheets->sum('poster_count');
-                $project->delivered_videos  = (int) $project->timesheets->sum('video_count');
-
-                $project->allocated_names = $this->allocatedEmployees(
-                    $project,
-                    $this->shouldLimitToAssignedProjects($user) ? $user : null
-                )->pluck('name')->implode(', ') ?: 'Pending';
+                $project->delivered_videos = (int) $project->timesheets->sum('video_count');
+                $project->allocated_names = $this->allocatedEmployees($project)->pluck('name')->implode(', ') ?: 'Pending';
 
                 return $project;
             });
 
-        $rows = collect();
+        $tableRows = collect();
         foreach ($renewals as $renewal) {
             $renewalProjects = $projects->where('lead_product_id', $renewal->id);
-
             if ($renewalProjects->isNotEmpty()) {
                 foreach ($renewalProjects as $project) {
-                    $rows->push([
-                        'renewal_id'   => $renewal->id,
+                    $tableRows->push([
+                        'renewal_id' => $renewal->id,
                         'renewal_name' => $renewal->product?->product_name ?: ($renewal->product_name ?: '—'),
-                        'has_project'  => true,
-                        'project'      => [
-                            'id'                       => $project->id,
-                            'product_name'             => $project->product_name,
-                            'department'               => $project->department?->name,
-                            'start_date'               => $project->start_date?->toDateString(),
-                            'project_delivery_date'    => $project->project_delivery_date?->toDateString(),
-                            'allocated_names'          => $project->allocated_names,
-                            'onboarded_posters'        => $project->onboarded_posters,
-                            'onboarded_videos'         => $project->onboarded_videos,
-                            'delivered_posters'        => $project->delivered_posters,
-                            'delivered_videos'         => $project->delivered_videos,
+                        'has_project' => true,
+                        'project' => [
+                            'id' => $project->id,
+                            'product_name' => $project->product_name,
+                            'department' => $project->department?->name,
+                            'start_date' => $project->start_date?->toDateString(),
+                            'project_delivery_date' => $project->project_delivery_date?->toDateString(),
+                            'allocated_names' => $project->allocated_names,
+                            'onboarded_posters' => $project->onboarded_posters,
+                            'onboarded_videos' => $project->onboarded_videos,
+                            'delivered_posters' => $project->delivered_posters,
+                            'delivered_videos' => $project->delivered_videos,
                             'project_execution_status' => $project->project_execution_status,
-                            'is_overdue'               => $project->is_overdue,
+                            'is_overdue' => $project->is_overdue,
                         ],
                     ]);
                 }
             } else {
-                $rows->push([
-                    'renewal_id'   => $renewal->id,
+                $tableRows->push([
+                    'renewal_id' => $renewal->id,
                     'renewal_name' => $renewal->product?->product_name ?: ($renewal->product_name ?: '—'),
-                    'has_project'  => false,
-                    'project'      => null,
+                    'has_project' => false,
+                    'project' => null,
                 ]);
             }
         }
 
-        $totalPosters     = $projects->sum('onboarded_posters');
+        $totalPosters = $projects->sum('onboarded_posters');
         $completedPosters = $projects->sum('delivered_posters');
-        $pendingPosters   = max(0, $totalPosters - $completedPosters);
-        $overduePosters   = $projects->filter(fn($p) => $p->is_overdue)
-            ->sum(fn($p) => max(0, $p->onboarded_posters - $p->delivered_posters));
-
-        $totalVideos     = $projects->sum('onboarded_videos');
+        $totalVideos = $projects->sum('onboarded_videos');
         $completedVideos = $projects->sum('delivered_videos');
-        $pendingVideos   = max(0, $totalVideos - $completedVideos);
-        $overdueVideos   = $projects->filter(fn($p) => $p->is_overdue)
-            ->sum(fn($p) => max(0, $p->onboarded_videos - $p->delivered_videos));
 
         return response()->json([
             'success' => true,
-            'data'    => [
+            'data' => [
                 'lead' => [
-                    'id'                    => $lead->id,
-                    'company_name'          => $lead->company_name,
-                    'contact_name'          => $lead->contact_name,
-                    'mobile_number'         => $lead->mobile_number,
-                    'email'                 => $lead->email,
-                    'lead_source'           => $lead->lead_source,
-                    'lead_status'           => $lead->lead_status,
-                    'status_color'          => $lead->status_color,
-                    'priority_color'        => $lead->priority_color,
-                    'priority_label'        => $lead->priority_label,
-                    'formatted_deal_value'  => $lead->formatted_deal_value,
+                    'id' => $lead->id,
+                    'company_name' => $lead->company_name ?: 'Account Details',
+                    'contact_name' => $lead->contact_name,
+                    'mobile_number' => $lead->mobile_number,
+                    'email' => $lead->email,
+                    'lead_source' => $lead->source_label ?? $lead->lead_source,
+                    'lead_status' => null,
+                    'status_color' => $lead->status_color,
+                    'priority_color' => $lead->priority_color,
+                    'priority_label' => $lead->priority_label,
+                    'formatted_deal_value' => $lead->formatted_deal_value,
                 ],
                 'stats' => [
-                    'total_renewals'    => $renewals->count(),
-                    'total_posters'     => $totalPosters,
+                    'total_renewals' => $renewals->count(),
+                    'total_posters' => $totalPosters,
                     'completed_posters' => $completedPosters,
-                    'pending_posters'   => $pendingPosters,
-                    'overdue_posters'   => $overduePosters,
-                    'total_videos'      => $totalVideos,
-                    'completed_videos'  => $completedVideos,
-                    'pending_videos'    => $pendingVideos,
-                    'overdue_videos'    => $overdueVideos,
+                    'pending_posters' => max(0, $totalPosters - $completedPosters),
+                    'overdue_posters' => $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_posters - $p->delivered_posters)),
+                    'total_videos' => $totalVideos,
+                    'completed_videos' => $completedVideos,
+                    'pending_videos' => max(0, $totalVideos - $completedVideos),
+                    'overdue_videos' => $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_videos - $p->delivered_videos)),
                 ],
-                'table_rows' => $rows->values(),
+                'table_rows' => $tableRows,
             ],
         ]);
     }
@@ -1633,17 +1671,13 @@ class ProjectApiController extends Controller
     public function designingDashboard(Request $request): JsonResponse
     {
         $user = auth()->user();
-
-        if (! $user->belongsToDesigningDepartment()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless($user->belongsToDesigningDepartment(), 403);
 
         $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
 
         $designProjects = $this->visibleProjectsQuery($user)
             ->where('department_id', $designDeptId)
             ->get();
-
         $designProjects->load('timesheets');
 
         $totalPosters = 0;
@@ -1657,9 +1691,8 @@ class ProjectApiController extends Controller
 
         foreach ($designProjects as $project) {
             $posterCountCustom = 0;
-            $videoCountCustom  = 0;
-            $endDateCustom     = null;
-
+            $videoCountCustom = 0;
+            $endDateCustom = null;
             if (is_array($project->custom_form_data)) {
                 foreach ($project->custom_form_data as $field) {
                     $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
@@ -1675,101 +1708,83 @@ class ProjectApiController extends Controller
             }
 
             $projectPostersDelivered = (int) $project->timesheets->sum('poster_count');
-            $projectVideosDelivered  = (int) $project->timesheets->sum('video_count');
-
+            $projectVideosDelivered = (int) $project->timesheets->sum('video_count');
             $projectPostersPending = max(0, $posterCountCustom - $projectPostersDelivered);
-            $projectVideosPending  = max(0, $videoCountCustom - $projectVideosDelivered);
+            $projectVideosPending = max(0, $videoCountCustom - $projectVideosDelivered);
 
-            $totalPosters     += $posterCountCustom;
-            $totalVideos      += $videoCountCustom;
+            $totalPosters += $posterCountCustom;
+            $totalVideos += $videoCountCustom;
             $completedPosters += $projectPostersDelivered;
-            $completedVideos  += $projectVideosDelivered;
-            $pendingPosters   += $projectPostersPending;
-            $pendingVideos    += $projectVideosPending;
+            $completedVideos += $projectVideosDelivered;
+            $pendingPosters += $projectPostersPending;
+            $pendingVideos += $projectVideosPending;
 
             $end = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : $this->projectDeliveryDate($project);
             $isOverdue = $end && $end->isPast() && ($projectPostersPending > 0 || $projectVideosPending > 0);
-
             if ($isOverdue) {
                 $overduePosters += $projectPostersPending;
-                $overdueVideos  += $projectVideosPending;
+                $overdueVideos += $projectVideosPending;
             }
         }
 
+        $isTl = $this->shouldLimitToAssignedProjects($user);
         $userIds = [$user->id];
-        if ($this->shouldLimitToAssignedProjects($user)) {
-            $teamMemberIds = $designProjects
-                ->flatMap(fn($project) => Arr::wrap($project->project_allocated_employee_user_ids))
-                ->map(fn($id) => (int) $id)
-                ->filter()
-                ->unique()
-                ->values()
-                ->toArray();
-            $userIds = array_merge($userIds, $teamMemberIds);
+        if ($isTl) {
+            $userIds = array_merge($userIds, $designProjects
+                ->flatMap(fn($p) => Arr::wrap($p->project_allocated_employee_user_ids))
+                ->map(fn($id) => (int) $id)->filter()->unique()->values()->toArray());
         }
 
         $userPosterTarget = (int) DesignSettingTarget::whereIn('user_id', $userIds)
-            ->whereRaw('LOWER(product_type) = ?', ['poster'])
-            ->where('is_active', true)
-            ->sum('daily_target');
+            ->whereRaw('LOWER(product_type) = ?', ['poster'])->where('is_active', true)->sum('daily_target');
         $userVideoTarget = (int) DesignSettingTarget::whereIn('user_id', $userIds)
-            ->whereRaw('LOWER(product_type) = ?', ['video'])
-            ->where('is_active', true)
-            ->sum('daily_target');
+            ->whereRaw('LOWER(product_type) = ?', ['video'])->where('is_active', true)->sum('daily_target');
 
         $stats = [
             'daily_target_posters' => $userPosterTarget,
-            'daily_target_videos'  => $userVideoTarget,
-            'overdue_posters'      => $overduePosters,
-            'overdue_videos'       => $overdueVideos,
-            'total_accounts'       => $designProjects->count(),
-            'total_posters'        => $totalPosters,
-            'total_videos'         => $totalVideos,
-            'completed_posters'    => $completedPosters,
-            'completed_videos'     => $completedVideos,
-            'pending_posters'      => max(0, $pendingPosters - $overduePosters),
-            'pending_videos'       => max(0, $pendingVideos - $overdueVideos),
+            'daily_target_videos' => $userVideoTarget,
+            'overdue_posters' => $overduePosters,
+            'overdue_videos' => $overdueVideos,
+            'total_accounts' => $designProjects->count(),
+            'total_posters' => $totalPosters,
+            'total_videos' => $totalVideos,
+            'completed_posters' => $completedPosters,
+            'completed_videos' => $completedVideos,
+            'pending_posters' => max(0, $pendingPosters - $overduePosters),
+            'pending_videos' => max(0, $pendingVideos - $overdueVideos),
         ];
 
         $filterAccountId = trim((string) $request->query('project_id', ''));
-        $filterDate       = trim((string) $request->query('date', Carbon::today()->toDateString()));
-        $filterStatus     = trim((string) $request->query('status', ''));
+        $filterDate = trim((string) $request->query('date', Carbon::today()->toDateString()));
+        $filterStatus = trim((string) $request->query('status', ''));
 
         $filteredProjects = $designProjects;
-
         if ($filterAccountId !== '') {
             $filteredProjects = $filteredProjects->where('id', (int) $filterAccountId);
         }
-
         if ($filterStatus !== '') {
             $filteredProjects = $filteredProjects->filter(function ($project) use ($filterStatus) {
                 $deliveryDate = $this->projectDeliveryDate($project);
                 $isOverdue = $deliveryDate && $deliveryDate->isPast() && $project->project_execution_status !== 'delivered';
-
                 return match ($filterStatus) {
                     'waiting_approval' => ! $project->content_calendar_approved,
-                    'inprogress'       => in_array($project->project_execution_status, ['ontrack', 'hold'], true),
-                    'waiting_review'   => strtolower(trim((string) $project->production_approval_status)) === 'approval',
-                    'completed'        => $project->project_execution_status === 'delivered',
-                    'overdue'          => $isOverdue,
-                    default            => true,
+                    'inprogress' => in_array($project->project_execution_status, ['ontrack', 'hold'], true),
+                    'waiting_review' => strtolower(trim((string) $project->production_approval_status)) === 'approval',
+                    'completed' => $project->project_execution_status === 'delivered',
+                    'overdue' => $isOverdue,
+                    default => true,
                 };
             });
         }
 
-        $isTl = $this->shouldLimitToAssignedProjects($user);
-        $teamMembers = $isTl ? $this->availableTeamMembers($user) : collect();
-
         $today = Carbon::today()->startOfDay();
 
-        $todayPlannedTasks = $filteredProjects->map(function ($project) use ($filterDate, $today, $user) {
+        $tasks = $filteredProjects->map(function ($project) use ($filterDate, $today, $user) {
             $timesheetQuery = ProjectTimesheet::where('production_initiation_id', $project->id)
                 ->whereDate('timesheet_date', $filterDate);
-
             if ($this->shouldLimitToEmployeeProjects($user)) {
                 $timesheetQuery->where('user_id', $user->id);
             }
-
             $timesheet = $timesheetQuery->first();
 
             $startDateCustom = null;
@@ -1777,98 +1792,77 @@ class ProjectApiController extends Controller
             $tenureCustom = null;
             $posterCountCustom = 0;
             $videoCountCustom = 0;
-
             if (is_array($project->custom_form_data)) {
                 foreach ($project->custom_form_data as $field) {
                     $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
                     $value = trim((string) ($field['value'] ?? ''));
-                    if ($label === 'start date') {
-                        $startDateCustom = $value;
-                    } elseif ($label === 'end date') {
-                        $endDateCustom = $value;
-                    } elseif ($label === 'tenure') {
-                        $tenureCustom = strtolower($value);
-                    } elseif ($label === 'number of posters' || $label === 'number of poster') {
-                        $posterCountCustom = (int) $value;
-                    } elseif ($label === 'number of videos' || $label === 'number of video') {
-                        $videoCountCustom = (int) $value;
-                    }
+                    if ($label === 'start date') $startDateCustom = $value;
+                    elseif ($label === 'end date') $endDateCustom = $value;
+                    elseif ($label === 'tenure') $tenureCustom = strtolower($value);
+                    elseif ($label === 'number of posters' || $label === 'number of poster') $posterCountCustom = (int) $value;
+                    elseif ($label === 'number of videos' || $label === 'number of video') $videoCountCustom = (int) $value;
                 }
             }
 
             $start = $startDateCustom ? Carbon::parse($startDateCustom)->startOfDay() : ($project->production_approval_reviewed_at ?: ($project->project_allocated_at ?: $project->created_at));
             $start = $start ? Carbon::parse($start)->startOfDay() : null;
-
             $end = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : $this->projectDeliveryDate($project);
             $end = $end ? Carbon::parse($end)->startOfDay() : null;
 
             $targetDate = Carbon::parse($filterDate)->startOfDay();
-
             $deliveredPosters = (int) $project->timesheets->sum('poster_count');
-            $deliveredVideos  = (int) $project->timesheets->sum('video_count');
+            $deliveredVideos = (int) $project->timesheets->sum('video_count');
             $remainingPosters = max(0, $posterCountCustom - $deliveredPosters);
-            $remainingVideos  = max(0, $videoCountCustom - $deliveredVideos);
+            $remainingVideos = max(0, $videoCountCustom - $deliveredVideos);
 
             $referenceDate = $end && $end->gte($today) ? $today : $targetDate;
             $remainingDays = $end ? max(1, (int) $referenceDate->diffInDays($end) + 1) : 1;
 
-            $perDayPosters = (int) ceil($remainingPosters / $remainingDays);
-            $perDayVideos  = (int) ceil($remainingVideos  / $remainingDays);
-
             $committedPosters = $timesheet ? (int) $timesheet->committed_posters : 0;
-            $committedVideos  = $timesheet ? (int) $timesheet->committed_videos  : 0;
-            $waitingPosters   = $timesheet ? (int) $timesheet->waiting_posters   : 0;
-            $waitingVideos    = $timesheet ? (int) $timesheet->waiting_videos    : 0;
-            $completedPostersT = $timesheet ? (int) $timesheet->poster_count    : 0;
-            $completedVideosT  = $timesheet ? (int) $timesheet->video_count     : 0;
-
-            $isOverdue = $end && $end->lt($today) && ($remainingPosters > 0 || $remainingVideos > 0);
+            $committedVideos = $timesheet ? (int) $timesheet->committed_videos : 0;
 
             return [
                 'production_initiation_id' => $project->id,
-                'product_name'             => $project->product_name,
-                'company_name'             => $project->company_name ?: ($project->lead?->company_name ?: 'No Company'),
-                'account_name'             => $project->product_name . ' (' . ($project->company_name ?: ($project->lead?->company_name ?: 'No Company')) . ')',
-                'committed_posters'        => $committedPosters,
-                'committed_videos'         => $committedVideos,
-                'waiting_posters'          => $waitingPosters,
-                'waiting_videos'           => $waitingVideos,
-                'completed_posters'        => $completedPostersT,
-                'completed_videos'         => $completedVideosT,
-                'start_date'               => $start ? $start->toDateString() : null,
-                'end_date'                 => $end ? $end->toDateString() : null,
-                'tenure'                   => ucfirst($tenureCustom ?: 'daily'),
-                'day_closing_update'       => $timesheet ? $timesheet->day_closing_update : '',
-                'pending_posters'          => $remainingPosters,
-                'pending_videos'           => $remainingVideos,
-                'remaining_days'           => $remainingDays,
-                'per_day_posters'          => $perDayPosters,
-                'per_day_videos'           => $perDayVideos,
-                'is_overdue'               => $isOverdue,
+                'product_name' => $project->product_name,
+                'company_name' => $project->company_name ?: ($project->lead?->company_name ?: 'No Company'),
+                'account_name' => $project->product_name . ' (' . ($project->company_name ?: ($project->lead?->company_name ?: 'No Company')) . ')',
+                'committed_posters' => $committedPosters,
+                'committed_videos' => $committedVideos,
+                'waiting_posters' => $timesheet ? (int) $timesheet->waiting_posters : 0,
+                'waiting_videos' => $timesheet ? (int) $timesheet->waiting_videos : 0,
+                'completed_posters' => $timesheet ? (int) $timesheet->poster_count : 0,
+                'completed_videos' => $timesheet ? (int) $timesheet->video_count : 0,
+                'start_date' => $start ? $start->format('d M Y') : null,
+                'end_date' => $end ? $end->format('d M Y') : null,
+                'tenure' => ucfirst($tenureCustom ?: 'daily'),
+                'day_closing_update' => $timesheet ? $timesheet->day_closing_update : '',
+                'pending_posters' => $remainingPosters,
+                'pending_videos' => $remainingVideos,
+                'remaining_days' => $remainingDays,
+                'per_day_posters' => (int) ceil($remainingPosters / $remainingDays),
+                'per_day_videos' => (int) ceil($remainingVideos / $remainingDays),
+                'is_overdue' => $end && $end->lt($today) && ($remainingPosters > 0 || $remainingVideos > 0),
             ];
         })
-            ->filter(fn($task) => ((int) $task['committed_posters'] > 0 || (int) $task['committed_videos'] > 0))
+            ->filter(fn($t) => $t['committed_posters'] > 0 || $t['committed_videos'] > 0)
             ->values();
 
-        $overdueTasksList  = $todayPlannedTasks->filter(fn($t) => $t['is_overdue'])->values();
-        $todayPlannedTasks = $todayPlannedTasks->filter(fn($t) => ! $t['is_overdue'])->values();
+        $overdueTasksList = $tasks->filter(fn($t) => $t['is_overdue'])->values();
+        $todayPlannedTasks = $tasks->filter(fn($t) => ! $t['is_overdue'])->values();
 
         return response()->json([
             'success' => true,
-            'data'    => [
+            'data' => [
                 'stats' => $stats,
-                'design_projects' => $designProjects->map(fn($p) => [
-                    'id' => $p->id,
-                    'product_name' => $p->product_name,
-                ])->values(),
+                'design_projects' => $designProjects->map(fn($p) => ['id' => $p->id, 'product_name' => $p->product_name])->values(),
                 'today_planned_tasks' => $todayPlannedTasks,
-                'overdue_tasks_list'  => $overdueTasksList,
-                'is_tl'        => $isTl,
-                'team_members' => $teamMembers->values(),
+                'overdue_tasks_list' => $overdueTasksList,
+                'is_tl' => $isTl,
+                'team_members' => $isTl ? $this->availableTeamMembers($user) : [],
                 'filters' => [
                     'project_id' => $filterAccountId,
-                    'date'       => $filterDate,
-                    'status'     => $filterStatus,
+                    'date' => $filterDate,
+                    'status' => $filterStatus,
                 ],
             ],
         ]);
@@ -1877,41 +1871,34 @@ class ProjectApiController extends Controller
     public function updatePlannedTask(Request $request): JsonResponse
     {
         $user = auth()->user();
-
-        if (! $user->belongsToDesigningDepartment()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless($user->belongsToDesigningDepartment(), 403);
 
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
-            'timesheet_date'    => ['required', 'date'],
+            'timesheet_date' => ['required', 'date'],
             'committed_posters' => ['required', 'integer', 'min:0', 'max:100000'],
-            'committed_videos'  => ['required', 'integer', 'min:0', 'max:100000'],
-            'waiting_posters'   => ['required', 'integer', 'min:0', 'max:100000'],
-            'waiting_videos'    => ['required', 'integer', 'min:0', 'max:100000'],
-            'poster_count'      => ['required', 'integer', 'min:0', 'max:100000'], // Completed Posters
-            'video_count'       => ['required', 'integer', 'min:0', 'max:100000'], // Completed Videos
+            'committed_videos' => ['required', 'integer', 'min:0', 'max:100000'],
+            'waiting_posters' => ['required', 'integer', 'min:0', 'max:100000'],
+            'waiting_videos' => ['required', 'integer', 'min:0', 'max:100000'],
+            'poster_count' => ['required', 'integer', 'min:0', 'max:100000'],
+            'video_count' => ['required', 'integer', 'min:0', 'max:100000'],
             'day_closing_update' => ['nullable', 'string'],
         ]);
 
         if (($validated['poster_count'] + $validated['waiting_posters']) > $validated['committed_posters']) {
             return response()->json([
                 'success' => false,
-                'message' => 'The sum of Completed Posters (' . $validated['poster_count'] . ') and Waiting Posters (' . $validated['waiting_posters'] . ') cannot exceed Committed Posters (' . $validated['committed_posters'] . ').',
+                'message' => "Completed + Waiting posters cannot exceed Committed posters ({$validated['committed_posters']}).",
             ], 422);
         }
-
         if (($validated['video_count'] + $validated['waiting_videos']) > $validated['committed_videos']) {
             return response()->json([
                 'success' => false,
-                'message' => 'The sum of Completed Videos (' . $validated['video_count'] . ') and Waiting Videos (' . $validated['waiting_videos'] . ') cannot exceed Committed Videos (' . $validated['committed_videos'] . ').',
+                'message' => "Completed + Waiting videos cannot exceed Committed videos ({$validated['committed_videos']}).",
             ], 422);
         }
 
-        $project = $this->visibleProjectsQuery($user)
-            ->whereKey($validated['production_initiation_id'])
-            ->firstOrFail();
-
+        $project = $this->visibleProjectsQuery($user)->whereKey($validated['production_initiation_id'])->firstOrFail();
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
 
         $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
@@ -1919,63 +1906,48 @@ class ProjectApiController extends Controller
             ->whereDate('timesheet_date', $timesheetDate)
             ->first();
 
-        $dayClosingUpdate = $validated['day_closing_update'] ?? '';
-        if ($timesheet) {
-            $dayClosingUpdate = $dayClosingUpdate ?: $timesheet->day_closing_update;
-        }
-
-        $lines = collect(preg_split('/\R/', (string) $dayClosingUpdate))
-            ->map(fn(string $line) => trim($line))
-            ->filter();
-
-        if ($lines->count() < 5) {
-            $paddedLines = $lines->toArray();
-            while (count($paddedLines) < 5) {
-                $paddedLines[] = '';
-            }
-            $dayClosingUpdate = implode("\n", $paddedLines);
-        }
-
         $payload = [
-            'committed_posters'  => $validated['committed_posters'],
-            'committed_videos'   => $validated['committed_videos'],
-            'waiting_posters'    => $validated['waiting_posters'],
-            'waiting_videos'     => $validated['waiting_videos'],
-            'poster_count'       => $validated['poster_count'],
-            'video_count'        => $validated['video_count'],
-            'day_closing_update' => $dayClosingUpdate,
+            'committed_posters' => $validated['committed_posters'],
+            'committed_videos' => $validated['committed_videos'],
+            'waiting_posters' => $validated['waiting_posters'],
+            'waiting_videos' => $validated['waiting_videos'],
+            'poster_count' => $validated['poster_count'],
+            'video_count' => $validated['video_count'],
+            'day_closing_update' => $validated['day_closing_update'] ?: ($timesheet?->day_closing_update ?? ''),
         ];
 
         if ($timesheet) {
             $timesheet->update($payload);
         } else {
-            ProjectTimesheet::create($payload + [
-                'company_id'               => $project->company_id,
+            $timesheet = ProjectTimesheet::create($payload + [
+                'company_id' => $project->company_id,
                 'production_initiation_id' => $project->id,
-                'user_id'                  => $user->id,
-                'timesheet_date'           => $timesheetDate,
-                'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
+                'user_id' => $user->id,
+                'timesheet_date' => $timesheetDate,
+                'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
             ]);
         }
 
-        return response()->json(['success' => true, 'message' => 'Planned task details updated successfully.']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Planned task details updated successfully.',
+            'data' => $this->serializeTimesheet($timesheet),
+        ]);
     }
 
     public function allocateDailyTask(Request $request): JsonResponse
     {
         $user = auth()->user();
-
-        if (! $user->belongsToDesigningDepartment()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        abort_unless($user->belongsToDesigningDepartment(), 403);
 
         $validated = $request->validate([
             'assigned_user_id' => ['required', 'integer', 'exists:users,id'],
-            'timesheet_date'    => ['required', 'date'],
-            'allocations'       => ['required', 'array'],
+            'timesheet_date' => ['required', 'date'],
+            'allocations' => ['required', 'array'],
             'allocations.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
-            'allocations.*.committed_posters'        => ['required', 'integer', 'min:0', 'max:100000'],
-            'allocations.*.committed_videos'         => ['required', 'integer', 'min:0', 'max:100000'],
+            'allocations.*.committed_posters' => ['required', 'integer', 'min:0', 'max:100000'],
+            'allocations.*.committed_videos' => ['required', 'integer', 'min:0', 'max:100000'],
+            'allocations.*.selected' => ['nullable'],
         ]);
 
         $isTl = $this->shouldLimitToAssignedProjects($user);
@@ -1985,51 +1957,40 @@ class ProjectApiController extends Controller
             return response()->json(['success' => false, 'message' => 'You can only allocate tasks to yourself.'], 403);
         }
 
-        $allocations = collect($validated['allocations']);
+        // Mobile sends only the chosen allocations already (no 'selected' key at
+        // all, unlike web's checkbox-based full list) — treat absence of the key
+        // as "selected", same effective result either way.
+        $allocations = collect($validated['allocations'])->filter(function ($a) {
+            if (! array_key_exists('selected', $a)) return true;
+            return in_array($a['selected'], ['1', 1, true], true);
+        });
 
         if ($allocations->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'Please select at least one account/project to allocate tasks.'], 422);
         }
 
         $posterTarget = (int) DesignSettingTarget::where('user_id', $assignedUserId)
-            ->whereRaw('LOWER(product_type) = ?', ['poster'])
-            ->where('is_active', true)
-            ->value('daily_target');
-
+            ->whereRaw('LOWER(product_type) = ?', ['poster'])->where('is_active', true)->value('daily_target');
         $videoTarget = (int) DesignSettingTarget::where('user_id', $assignedUserId)
-            ->whereRaw('LOWER(product_type) = ?', ['video'])
-            ->where('is_active', true)
-            ->value('daily_target');
+            ->whereRaw('LOWER(product_type) = ?', ['video'])->where('is_active', true)->value('daily_target');
 
         foreach ($allocations as $alloc) {
             $committedPosters = (int) $alloc['committed_posters'];
-            $committedVideos  = (int) $alloc['committed_videos'];
-
+            $committedVideos = (int) $alloc['committed_videos'];
             if ($committedPosters > 0 && $committedPosters < $posterTarget) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Committed posters cannot be less than your daily target of {$posterTarget}.",
-                ], 422);
+                return response()->json(['success' => false, 'message' => "Committed posters cannot be less than your daily target of {$posterTarget}."], 422);
             }
-
             if ($committedVideos > 0 && $committedVideos < $videoTarget) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Committed videos cannot be less than your daily target of {$videoTarget}.",
-                ], 422);
+                return response()->json(['success' => false, 'message' => "Committed videos cannot be less than your daily target of {$videoTarget}."], 422);
             }
         }
 
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
 
         foreach ($allocations as $alloc) {
-            $projId = (int) $alloc['production_initiation_id'];
+            $project = $this->visibleProjectsQuery($user)->whereKey((int) $alloc['production_initiation_id'])->firstOrFail();
             $committedPosters = (int) $alloc['committed_posters'];
-            $committedVideos  = (int) $alloc['committed_videos'];
-
-            $project = $this->visibleProjectsQuery($user)
-                ->whereKey($projId)
-                ->firstOrFail();
+            $committedVideos = (int) $alloc['committed_videos'];
 
             $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
                 ->where('user_id', $assignedUserId)
@@ -2037,24 +1998,21 @@ class ProjectApiController extends Controller
                 ->first();
 
             if ($timesheet) {
-                $timesheet->update([
-                    'committed_posters' => $committedPosters,
-                    'committed_videos'  => $committedVideos,
-                ]);
+                $timesheet->update(['committed_posters' => $committedPosters, 'committed_videos' => $committedVideos]);
             } else {
                 ProjectTimesheet::create([
-                    'company_id'               => $project->company_id,
+                    'company_id' => $project->company_id,
                     'production_initiation_id' => $project->id,
-                    'user_id'                  => $assignedUserId,
-                    'timesheet_date'           => $timesheetDate,
-                    'project_delivery_date'    => $this->projectDeliveryDate($project)?->toDateString(),
-                    'committed_posters'        => $committedPosters,
-                    'committed_videos'         => $committedVideos,
-                    'waiting_posters'          => 0,
-                    'waiting_videos'           => 0,
-                    'poster_count'             => 0,
-                    'video_count'              => 0,
-                    'day_closing_update'       => '',
+                    'user_id' => $assignedUserId,
+                    'timesheet_date' => $timesheetDate,
+                    'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
+                    'committed_posters' => $committedPosters,
+                    'committed_videos' => $committedVideos,
+                    'waiting_posters' => 0,
+                    'waiting_videos' => 0,
+                    'poster_count' => 0,
+                    'video_count' => 0,
+                    'day_closing_update' => '',
                 ]);
             }
         }
@@ -2074,21 +2032,10 @@ class ProjectApiController extends Controller
             ], 422);
         }
 
-        $validated = $request->validate([
-            'content_calendar_sheet_url' => ['nullable', 'url', 'max:2000'],
-        ]);
+        $validated = $request->validate(['content_calendar_sheet_url' => ['nullable', 'url', 'max:2000']]);
+        $productionInitiation->update(['content_calendar_sheet_url' => $validated['content_calendar_sheet_url'] ?: null]);
 
-        $productionInitiation->update([
-            'content_calendar_sheet_url' => $validated['content_calendar_sheet_url'] ?: null,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Content Calendar Google Sheet URL updated successfully.',
-            'data'    => [
-                'content_calendar_sheet_url' => $productionInitiation->content_calendar_sheet_url,
-            ],
-        ]);
+        return response()->json(['success' => true, 'message' => 'Content Calendar Google Sheet URL updated successfully.']);
     }
 
     public function approveContentCalendar(Request $request, ProductionInitiation $productionInitiation): JsonResponse
@@ -2097,33 +2044,19 @@ class ProjectApiController extends Controller
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
 
         if (! $user->belongsToDesigningDepartment()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only members of the Designing department can approve the Content Calendar.',
-            ], 403);
+            return response()->json(['success' => false, 'message' => 'Only members of the Designing department can approve the Content Calendar.'], 403);
         }
-
         if ($productionInitiation->content_calendar_approved) {
             return response()->json(['success' => false, 'message' => 'Content Calendar is already approved.'], 422);
         }
 
-        $validated = $request->validate([
-            'remarks' => ['required', 'string', 'max:2000'],
-        ]);
-
+        $validated = $request->validate(['remarks' => ['required', 'string', 'min:3', 'max:5000']]);
         $productionInitiation->update([
             'content_calendar_approved' => true,
-            'content_calendar_remarks'  => $validated['remarks'],
+            'content_calendar_remarks' => $validated['remarks'],
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Content Calendar approved successfully with remarks.',
-            'data'    => [
-                'content_calendar_approved' => true,
-                'content_calendar_remarks'  => $productionInitiation->content_calendar_remarks,
-            ],
-        ]);
+        return response()->json(['success' => true, 'message' => 'Content Calendar approved successfully with remarks.']);
     }
 
     public function fetchContentCalendarData(Request $request, ProductionInitiation $productionInitiation): JsonResponse
@@ -2132,28 +2065,20 @@ class ProjectApiController extends Controller
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
 
         $rawUrl = (string) ($productionInitiation->content_calendar_sheet_url ?? '');
-
         if (empty($rawUrl)) {
             return response()->json(['error' => 'No sheet URL configured for this project.'], 422);
         }
 
         $csvUrl = $this->buildGoogleSheetCsvUrl($rawUrl);
-
         if (! $csvUrl) {
             return response()->json(['error' => 'Invalid Google Sheets URL. Please reconfigure.'], 422);
         }
 
         try {
-            $response = Http::timeout(20)
-                ->withHeaders(['Accept' => 'text/csv,text/plain,*/*'])
-                ->get($csvUrl);
-
+            $response = Http::timeout(20)->withHeaders(['Accept' => 'text/csv,text/plain,*/*'])->get($csvUrl);
             if (! $response->successful()) {
-                return response()->json([
-                    'error' => 'Google Sheet fetch failed (HTTP ' . $response->status() . '). Make sure the sheet is publicly accessible.',
-                ], 502);
+                return response()->json(['error' => 'Google Sheet fetch failed (HTTP ' . $response->status() . '). Make sure the sheet is publicly accessible.'], 502);
             }
-
             return response()->json(['csv' => $response->body()]);
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Server error: ' . $e->getMessage()], 500);
@@ -2167,20 +2092,17 @@ class ProjectApiController extends Controller
         if (str_contains($raw, 'output=csv') || str_contains($raw, 'format=csv')) {
             return $raw;
         }
-
         if (preg_match('#^(https://docs\.google\.com/spreadsheets/d/e/[A-Za-z0-9_-]+)/pub(html)?(\?.*)?$#', $raw, $m)) {
             return $m[1] . '/pub?output=csv';
         }
-
         if (preg_match('#/spreadsheets/d/([A-Za-z0-9_-]+)#', $raw, $m)) {
             $sheetId = $m[1];
-            $gid     = '0';
+            $gid = '0';
             if (preg_match('/[?&]gid=([0-9]+)/', $raw, $gm)) {
                 $gid = $gm[1];
             }
             return 'https://docs.google.com/spreadsheets/d/' . $sheetId . '/export?format=csv&gid=' . $gid;
         }
-
         return null;
     }
 }

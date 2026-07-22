@@ -10,11 +10,32 @@ use Illuminate\Http\Request;
 
 class EmployeeApiController extends Controller
 {
+    // Mirrors EmployeeOnboardingController::DOCUMENT_LABELS, minus
+    // photograph/signature — those two are rendered as the profile photo /
+    // signature image, never listed in the "Document Uploads" section on
+    // web (see employee-show.blade.php's @continue for those two fields).
+    private const DOCUMENT_LABELS = [
+        'document_10th_marksheet' => '10th Marksheet',
+        'document_12th_marksheet' => '12th Marksheet',
+        'document_consolidated_marksheet' => 'Consolidated Marksheet',
+        'document_course_completion_certificate' => 'Course Completion Certificate',
+        'document_degree_certificate' => 'Degree Certificate',
+        'document_provisional_certificate' => 'Provisional Certificate',
+        'document_tc' => 'TC',
+        'document_aadhaar_card' => 'Aadhaar Card',
+        'document_pan_card' => 'Pan Card',
+        'document_voter_id' => 'Voter ID',
+        'document_driving_licence' => 'Driving Licence',
+        'document_experience_certificate' => 'Experience Certificate & Relieving Letter',
+        'document_salary_slips' => 'Last 3 Salary Slips / Salary Certificate',
+        'document_bank_passbook' => 'Bank Passbook',
+    ];
+
     // ── GET /api/mobile/hrms/employees ────────────────────────────────────────
     public function index(Request $request): JsonResponse
     {
         $query = EmployeeOnboarding::query()
-            ->with(['role', 'department'])
+            ->with(['role', 'department', 'sourceIntern'])
             ->when($request->search, function ($q) use ($request) {
                 $s = trim((string) $request->search);
                 $q->where(function ($sub) use ($s) {
@@ -56,6 +77,12 @@ class EmployeeApiController extends Controller
             'educations',
             'employments',
             'familyDetails',
+            'sourceIntern',
+            'creator',
+            'updater',
+            'portalUser.branch',
+            'portalUser.roles',
+            'portalUser.managerMappings.manager',
         ])->findOrFail($id);
 
         return response()->json([
@@ -71,7 +98,12 @@ class EmployeeApiController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $statuses = ['pending', 'verified', 'rejected'];
+        // Mirrors EmployeeOnboarding::STATUS_ACTIVE / STATUS_RESIGNED exactly —
+        // these are the only two values the `status` column ever holds (see
+        // employee-index.blade.php's filter <select>). The previous list
+        // here (pending/verified/rejected) never matched a real row, so the
+        // mobile status filter silently returned nothing.
+        $statuses = [EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED];
 
         return response()->json([
             'success' => true,
@@ -96,12 +128,27 @@ class EmployeeApiController extends Controller
             'status'         => $e->status,
             'avatar_initial' => strtoupper(substr($e->name, 0, 1)),
             'created_at'     => optional($e->created_at)->format('d M Y'),
+
+            // Mirrors the remaining employee-index.blade.php table columns
+            // (DOB, Employee Type) plus the "Employee" cell's sub-line,
+            // which shows either the father's name or a converted-from-
+            // intern note.
+            'date_of_birth'  => optional($e->date_of_birth)->format('d M Y') ?? '',
+            'employee_type'  => $e->employee_type === 'non_billable' ? 'non_billable' : 'billable',
+            'father_name'    => $e->father_name ?? '',
+            'converted_from_intern' => $e->sourceIntern
+                ? ($e->sourceIntern->intern_id ?: $e->sourceIntern->name)
+                : null,
+            'photograph_url' => $e->photograph ? asset('storage/' . $e->photograph) : null,
         ];
     }
 
     // ── Private: detail shape (full) ──────────────────────────────────────────
     private function mapDetail(EmployeeOnboarding $e): array
     {
+        $portalUser = $e->portalUser;
+        $portalManager = $portalUser?->managerMappings?->first()?->manager;
+
         return [
             // Identity
             'id'                       => $e->id,
@@ -112,13 +159,25 @@ class EmployeeApiController extends Controller
             'role'                     => optional($e->role)->display_name ?? optional($e->role)->name,
             'department'               => optional($e->department)->name,
             'status'                   => $e->status,
+            'employee_type'            => $e->employee_type === 'non_billable' ? 'non_billable' : 'billable',
             'avatar_initial'           => strtoupper(substr($e->name, 0, 1)),
+            'photograph_url'           => $e->photograph ? asset('storage/' . $e->photograph) : null,
+
+            // Source — mirrors the "Source" row on employee-show.blade.php
+            // (either "Direct Employee Onboarding" or a link to the intern
+            // this employee was converted from).
+            'source_intern' => $e->sourceIntern ? [
+                'id'        => $e->sourceIntern->id,
+                'intern_id' => $e->sourceIntern->intern_id ?: $e->sourceIntern->name,
+                'name'      => $e->sourceIntern->name,
+            ] : null,
 
             // Personal
             'father_name'              => $e->father_name             ?? '',
             'date_of_birth'            => optional($e->date_of_birth)->format('d M Y') ?? '',
             'blood_group'              => $e->blood_group             ?? '',
             'marital_status'           => $e->marital_status          ?? '',
+            'date_of_marriage'         => optional($e->date_of_marriage)->format('d M Y') ?? '',
             'aadhaar_card_no'          => $e->aadhaar_card_no         ?? '',
             'pan_card_no'              => $e->pan_card_no             ?? '',
             'correspondence_address'   => $e->correspondence_address  ?? '',
@@ -129,18 +188,69 @@ class EmployeeApiController extends Controller
             'emergency_relation'       => $e->emergency_relation       ?? '',
             'emergency_contact_no'     => $e->emergency_contact_no     ?? '',
 
-            // Salary
-            'gross_salary'             => $e->gross_salary             ? (float) $e->gross_salary : null,
-            'net_salary'               => $e->net_salary               ? (float) $e->net_salary   : null,
-            'salary_payment_mode'      => $e->salary_payment_mode      ?? '',
-            'pf_enabled'               => (bool) ($e->pf_enabled       ?? false),
-            'esi_enabled'              => (bool) ($e->esi_enabled       ?? false),
+            // Portal account — mirrors the "Employee Portal Account" card.
+            'portal_account' => [
+                'email'         => $portalUser?->email ?? '',
+                'branch'        => $portalUser?->branch?->name ?? '',
+                'department'    => optional($e->department)->name ?? '',
+                'role'          => optional($e->role)->display_name ?? optional($e->role)->name ?? '',
+                'tl_mapping'    => $portalManager?->name ?? '',
+                'account_status'=> $portalUser ? ($portalUser->is_active ? 'Active' : 'Inactive') : '',
+            ],
 
-            // Bank
+            // Professional reference — mirrors the "Professional Reference" card.
+            'professional_reference' => [
+                'name'              => $e->reference_name ?? '',
+                'organization_name' => $e->reference_organization_name ?? '',
+                'designation'       => $e->reference_designation ?? '',
+                'contact_no'        => $e->reference_contact_no ?? '',
+                'mail_id'           => $e->reference_mail_id ?? '',
+            ],
+
+            // Salary — full breakdown, mirrors the "Employee Salaries" card
+            // exactly. `gross_salary`/`net_salary` kept at top level too
+            // (existing keys other clients may already read).
+            'joining_date'              => optional($e->joining_date)->format('d M Y') ?? '',
+            'salary_effective_from'     => optional($e->salary_effective_from)->format('d M Y') ?? '',
+            'gross_salary'               => $e->gross_salary !== null ? (float) $e->gross_salary : null,
+            'net_salary'                 => $e->net_salary !== null ? (float) $e->net_salary : null,
+            'salary_payment_mode'      => $e->salary_payment_mode      ?? '',
+            'basic_salary'               => $e->basic_salary !== null ? (float) $e->basic_salary : null,
+            'hra'                        => $e->hra !== null ? (float) $e->hra : null,
+            'special_allowance'          => $e->special_allowance !== null ? (float) $e->special_allowance : null,
+            'other_allowance'            => $e->other_allowance !== null ? (float) $e->other_allowance : null,
+            'pf_enabled'               => (bool) ($e->pf_enabled       ?? false),
+            'uan_no'                     => $e->uan_no ?? '',
+            'pf_account_no'              => $e->pf_account_no ?? '',
+            'pf_employee_contribution'   => $e->pf_employee_contribution !== null ? (float) $e->pf_employee_contribution : null,
+            'pf_employer_contribution'   => $e->pf_employer_contribution !== null ? (float) $e->pf_employer_contribution : null,
+            'esi_enabled'              => (bool) ($e->esi_enabled       ?? false),
+            'esi_no'                     => $e->esi_no ?? '',
+            'esi_employee_contribution'  => $e->esi_employee_contribution !== null ? (float) $e->esi_employee_contribution : null,
+            'esi_employer_contribution'  => $e->esi_employer_contribution !== null ? (float) $e->esi_employer_contribution : null,
+            'professional_tax'           => $e->professional_tax !== null ? (float) $e->professional_tax : null,
+            'tds_amount'                 => $e->tds_amount !== null ? (float) $e->tds_amount : null,
+            'loan_deduction'             => $e->loan_deduction !== null ? (float) $e->loan_deduction : null,
+            'other_deduction'            => $e->other_deduction !== null ? (float) $e->other_deduction : null,
+            'total_deduction'            => $e->total_deduction !== null ? (float) $e->total_deduction : null,
+            'deduction_notes'            => $e->deduction_notes ?? '',
+
+            // Bank — `bank_ifsc` kept for backward compatibility (previously
+            // pointed at a non-existent column and was always null); the
+            // model column is bank_ifsc_code.
             'bank_name'                => $e->bank_name                ?? '',
+            'bank_account_name'          => $e->bank_account_name ?? '',
             'bank_account_no'          => $e->bank_account_no          ?? '',
-            'bank_ifsc'                => $e->bank_ifsc                 ?? '',
+            'bank_ifsc'                => $e->bank_ifsc_code            ?? '',
             'bank_branch'              => $e->bank_branch               ?? '',
+
+            // Documents — mirrors the "Document Uploads" card (labels +
+            // direct storage URLs so the app can view/download).
+            'documents' => collect(self::DOCUMENT_LABELS)->map(fn ($label, $field) => [
+                'field' => $field,
+                'label' => $label,
+                'url'   => $e->{$field} ? asset('storage/' . $e->{$field}) : null,
+            ])->values(),
 
             // Relations
             'educations'  => $e->educations->map(fn ($ed) => [
@@ -167,6 +277,9 @@ class EmployeeApiController extends Controller
                 'mobile_no'    => $f->mobile_no      ?? '',
             ])->values(),
 
+            // Audit
+            'created_by' => $e->creator?->name ?? 'System',
+            'updated_by' => $e->updater?->name ?? 'System',
             'created_at' => optional($e->created_at)->format('d M Y'),
         ];
     }

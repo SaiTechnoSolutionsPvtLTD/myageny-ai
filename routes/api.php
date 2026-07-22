@@ -149,9 +149,20 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('employees/{id}',    [EmployeeApiController::class,    'show'])->name('employees.show');
 
         Route::get('interns',      [InternApiController::class, 'index'])->name('interns.index');
+        // Static segment before the {id} wildcard below — same rule as
+        // employees/meta above.
+        Route::get('interns/meta', [InternApiController::class, 'meta'])->name('interns.meta');
         Route::get('interns/{id}', [InternApiController::class, 'show'])->name('interns.show');
 
-        Route::get('attendance',      [AttendanceApiController::class, 'index'])->name('attendance.index');
+        Route::get('attendance',            [AttendanceApiController::class, 'index'])->name('attendance.index');
+
+        // ── Manual Check-In / Mark Leave / Checkout (HR/Admin only) ──────────
+        // Static segments MUST come before the {id} wildcard below.
+        Route::get('attendance/attendees',  [AttendanceApiController::class, 'attendees'])->name('attendance.attendees');
+        Route::get('attendance/lookup',     [AttendanceApiController::class, 'lookup'])->name('attendance.lookup');
+        Route::post('attendance',           [AttendanceApiController::class, 'store'])->name('attendance.store');
+        Route::post('attendance/checkout',  [AttendanceApiController::class, 'storeCheckout'])->name('attendance.checkout.store');
+
         Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');
 
         Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');

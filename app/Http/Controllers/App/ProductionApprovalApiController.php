@@ -15,17 +15,43 @@ class ProductionApprovalApiController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $initiations = ProductionInitiation::query()
+        $user = auth()->user();
+
+        $query = ProductionInitiation::query()
             ->with([
                 'lead:id,company_name,contact_name',
                 'department:id,name',
                 'reviewedBy:id,name',
                 'productionApprovalReviewedBy:id,name',
+                'product:id,product_name,is_budget_approval_needed',
             ])
             ->whereIn('status', ['approval', 'approved'])
-            ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject'])
-            ->latest()
-            ->get();
+            ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject']);
+
+        // Filters — mirrors web ProductionApprovalController::index() exactly.
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->query('start_date'));
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->query('end_date'));
+        }
+        if ($request->filled('product_id')) {
+            $query->where('product_id', $request->query('product_id'));
+        }
+        if ($request->filled('status')) {
+            $query->where('production_approval_status', $request->query('status'));
+        }
+        if ($request->filled('user_id')) {
+            $query->where('production_approval_reviewed_by', $request->query('user_id'));
+        }
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->query('company_id'));
+        }
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->query('department_id'));
+        }
+
+        $initiations = $query->latest()->get();
 
         $buckets = [
             'pending'  => ['items' => [], 'count' => 0],
@@ -37,7 +63,8 @@ class ProductionApprovalApiController extends Controller
             $bucket = $this->resolveBucket((string) $initiation->production_approval_status);
             if (! $bucket) continue;
 
-            $buckets[$bucket]['items'][] = $this->formatItem($initiation);
+            $buckets[$bucket]['items'][] = $this->formatItem($initiation, $user);
+
             $buckets[$bucket]['count']++;
         }
 
@@ -50,8 +77,36 @@ class ProductionApprovalApiController extends Controller
                     'approval' => $buckets['approval']['count'],
                     'rejected' => $buckets['rejected']['count'],
                 ],
+                'filters' => $this->filterOptions(),
             ],
         ]);
+    }
+
+    /**
+     * Dropdown data for the mobile filter sheet — same four lists web's
+     * ProductionApprovalController::index() passes into the Blade view.
+     */
+    private function filterOptions(): array
+    {
+        return [
+            'products' => \App\Models\Product::orderBy('product_name')
+                ->get(['id', 'product_name'])
+                ->map(fn($p) => ['id' => $p->id, 'name' => $p->product_name])
+                ->all(),
+            'departments' => \App\Models\Department::orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
+                ->all(),
+            'users' => \App\Models\User::where('user_status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                ->all(),
+            'companies' => \App\Models\Company::orderBy('company_name')
+                ->get(['id', 'company_name'])
+                ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
+                ->all(),
+        ];
     }
 
     public function review(Request $request, ProductionInitiation $productionInitiation): JsonResponse
@@ -60,12 +115,27 @@ class ProductionApprovalApiController extends Controller
             return response()->json(['success' => false, 'message' => 'You are not allowed to review this item.'], 403);
         }
 
-        $validated = $request->validate([
+        $rules = [
             'decision'                    => ['required', 'in:approval,rejected'],
             'production_approval_remarks' => ['required', 'string', 'max:5000'],
-        ]);
+        ];
 
-        $productionInitiation->update([
+        // Budget approval — mirrors web ProductionApprovalController::review()
+        // exactly: only required when the product needs it AND the decision
+        // is an approval (rejecting never needs budget details).
+        $product = $productionInitiation->product;
+        $needsBudget = $product && $product->is_budget_approval_needed && $request->input('decision') === 'approval';
+        if ($needsBudget) {
+            $rules['lead_budget_amount'] = ['required', 'numeric', 'min:0'];
+            $rules['budget_amount_type'] = ['required', 'string', 'max:255'];
+            if ($request->input('budget_amount_type') === 'custom') {
+                $rules['budget_amount_type_custom'] = ['required', 'string', 'max:255'];
+            }
+        }
+
+        $validated = $request->validate($rules);
+
+        $updateData = [
             'production_approval_status'       => $validated['decision'],
             'production_approval_remarks'      => trim($validated['production_approval_remarks']),
             'production_approval_reviewed_at'  => Carbon::now(),
@@ -73,7 +143,16 @@ class ProductionApprovalApiController extends Controller
             'project_allocation_status'        => $validated['decision'] === 'approval' ? 'allocation_pending' : null,
             'project_allocated_at'             => null,
             'project_allocated_by'             => null,
-        ]);
+        ];
+
+        if ($needsBudget) {
+            $updateData['lead_budget_amount'] = $validated['lead_budget_amount'];
+            $updateData['budget_amount_type'] = $validated['budget_amount_type'] === 'custom'
+                ? $validated['budget_amount_type_custom']
+                : $validated['budget_amount_type'];
+        }
+
+        $productionInitiation->update($updateData);
 
         $this->notifications->notify(
             $productionInitiation->initiatedBy,
@@ -102,7 +181,7 @@ class ProductionApprovalApiController extends Controller
         ]);
     }
 
-    private function formatItem(ProductionInitiation $i): array
+    private function formatItem(ProductionInitiation $i, ?\App\Models\User $user = null): array
     {
         $customFormData = [];
         if (is_array($i->custom_form_data)) {
@@ -120,6 +199,12 @@ class ProductionApprovalApiController extends Controller
             }
         }
 
+        // Budget approval — mirrors the fields/permission web's Blade uses:
+        // `is_budget_approval_needed` gates whether the review form must
+        // collect budget details, `canViewBudgetApprovalDetails()` gates
+        // whether the already-collected amount is shown at all.
+        $canViewBudget = $user?->canViewBudgetApprovalDetails() ?? false;
+
         return [
             'id'                              => $i->id,
             'product_name'                    => $i->product_name ?? '',
@@ -136,6 +221,10 @@ class ProductionApprovalApiController extends Controller
             'approval_remarks'                => $i->production_approval_remarks,
             'custom_form_data'                => $customFormData,
             'can_review'                      => $this->canReview($i),
+            'is_budget_approval_needed'       => (bool) ($i->product?->is_budget_approval_needed ?? false),
+            'can_view_budget_details'         => $canViewBudget,
+            'lead_budget_amount'              => $canViewBudget ? $i->lead_budget_amount : null,
+            'budget_amount_type'              => $canViewBudget ? $i->budget_amount_type : null,
         ];
     }
 

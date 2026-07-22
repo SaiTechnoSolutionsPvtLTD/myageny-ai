@@ -28,7 +28,7 @@ class OvpModuleApiController extends Controller
         $user = auth()->user();
         $isExecutiveScopedView = $this->isExecutiveScopedUser($user);
 
-        $initiations = ProductionInitiation::query()
+        $query = ProductionInitiation::query()
             ->with([
                 'lead:id,company_name,contact_name,branch_id,assigned_to,created_by',
                 'lead.branch:id,name',
@@ -40,7 +40,33 @@ class OvpModuleApiController extends Controller
                 'ovpAllocatedTo:id,name',
                 'ovpAllocatedBy:id,name',
                 'reviewedBy:id,name',
-            ])
+            ]);
+
+        // Filters — mirrors web OvpModuleController::index() exactly, so mobile
+        // and web return the same result set for the same query params.
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->query('start_date'));
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->query('end_date'));
+        }
+        if ($request->filled('product_id')) {
+            $query->where('product_id', $request->query('product_id'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->query('status'));
+        }
+        if ($request->filled('user_id')) {
+            $query->where('ovp_allocated_to', $request->query('user_id'));
+        }
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->query('company_id'));
+        }
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->query('department_id'));
+        }
+
+        $initiations = $query
             ->when($isExecutiveScopedView, fn($q) => $q->where('ovp_allocated_to', $user->id))
             ->latest()
             ->get();
@@ -70,8 +96,39 @@ class OvpModuleApiController extends Controller
                 'counts'  => $counts,
                 'is_tl'   => $this->isTlScopedUser($user),
                 'is_executive' => $isExecutiveScopedView,
+                // Filter dropdown data — same source as web's index() (Product/
+                // Department/User/Company, active-only where applicable).
+                'filters' => $this->filterOptions(),
             ],
         ]);
+    }
+
+    /**
+     * Dropdown data for the mobile filter sheet — mirrors the four `$products`/
+     * `$departments`/`$users`/`$companies` variables web's OvpModuleController
+     * passes into the Blade view.
+     */
+    private function filterOptions(): array
+    {
+        return [
+            'products' => \App\Models\Product::orderBy('product_name')
+                ->get(['id', 'product_name'])
+                ->map(fn($p) => ['id' => $p->id, 'name' => $p->product_name])
+                ->all(),
+            'departments' => \App\Models\Department::orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
+                ->all(),
+            'users' => \App\Models\User::where('user_status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                ->all(),
+            'companies' => \App\Models\Company::orderBy('company_name')
+                ->get(['id', 'company_name'])
+                ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
+                ->all(),
+        ];
     }
 
     public function allocate(Request $request, ProductionInitiation $productionInitiation): JsonResponse
