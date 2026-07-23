@@ -350,6 +350,7 @@ class AuthController extends Controller
             'role'            => $user->roles->first()?->name ?? null,
             'role_display'    => $user->role_display_name,
             'dashboard_route' => $mobileRoute,
+            'is_designing_department' => $user->belongsToDesigningDepartment(),
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
             'branch' => $user->branch ? [

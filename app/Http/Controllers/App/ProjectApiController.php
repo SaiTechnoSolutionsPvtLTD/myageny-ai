@@ -128,13 +128,7 @@ class ProjectApiController extends Controller
                 'team_member_options'          => $this->dashboardTeamMembers($user, $projects),
                 'current_month_delivery'       => $currentMonthDelivery->map(fn($p) => $this->serializeProjectSummary($p))->values(),
                 'recent_projects'              => $filteredProjects->take(10)->map(fn($p) => $this->serializeProjectSummary($p))->values(),
-                'timesheet_summary'            => [
-                    'entries_count'         => $timesheetSummary['entries_count'],
-                    'submitted_today'       => $timesheetSummary['submitted_today'],
-                    'contributors_count'    => $timesheetSummary['contributors_count'],
-                    'pending_delivery_count' => $timesheetSummary['pending_delivery_count'],
-                    'entries'               => $timesheetSummary['entries']->map(fn($ts) => $this->serializeTimesheet($ts))->values(),
-                ],
+                'timesheet_summary'            => $timesheetSummary,
                 'is_tl_scoped_view'            => $this->shouldLimitToAssignedProjects($user),
                 'is_contributor_scoped_view'   => $this->shouldLimitToEmployeeProjects($user),
                 'can_quick_add_production_update' => $this->canQuickAddProductionUpdate($user),
@@ -1095,12 +1089,19 @@ class ProjectApiController extends Controller
         return $this->shouldLimitToAssignedProjects($user);
     }
 
+    // Mirrors web's ProjectController::dashboardTimesheetSummary() exactly —
+    // this used to return a different shape entirely (aggregate stats:
+    // entries_count/submitted_today/contributors_count/pending_delivery_count)
+    // instead of the per-project rows (project_name, company_name,
+    // entries_count, total_posters, total_videos) the "Timesheet & Activity
+    // Summary" table actually needs. That table didn't exist on mobile yet,
+    // so nothing was consuming the old shape — safe to replace outright.
     private function dashboardTimesheetSummary(User $user, Collection $projects, array $filters): array
     {
         $projectIds = $projects->pluck('id')->map(fn($id) => (int) $id)->filter()->values();
 
         if ($projectIds->isEmpty()) {
-            return ['entries_count' => 0, 'submitted_today' => 0, 'contributors_count' => 0, 'pending_delivery_count' => 0, 'entries' => collect()];
+            return [];
         }
 
         $query = ProjectTimesheet::query()
@@ -1122,13 +1123,17 @@ class ProjectApiController extends Controller
 
         $entries = $query->latest('timesheet_date')->latest('created_at')->get();
 
-        return [
-            'entries_count'          => $entries->count(),
-            'submitted_today'        => $entries->filter(fn($e) => optional($e->timesheet_date)?->isToday())->count(),
-            'contributors_count'     => $entries->pluck('user_id')->filter()->unique()->count(),
-            'pending_delivery_count' => $entries->filter(fn($e) => ! $e->project_delivery_date || $e->project_delivery_date->isFuture())->count(),
-            'entries'                => $entries->take(8),
-        ];
+        return $entries->groupBy('production_initiation_id')->map(function ($projectEntries) {
+            $first = $projectEntries->first();
+            $project = $first->project;
+            return [
+                'project_name' => $project?->product_name ?: 'Unknown Project',
+                'company_name' => $project?->company_name ?: ($project?->lead?->company_name ?: 'No Company'),
+                'entries_count' => $projectEntries->count(),
+                'total_posters' => (int) $projectEntries->sum('poster_count'),
+                'total_videos'  => (int) $projectEntries->sum('video_count'),
+            ];
+        })->values()->all();
     }
 
     private function currentMonthDeliveryProjects(Collection $projects): Collection
