@@ -163,6 +163,13 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('attendance',           [AttendanceApiController::class, 'store'])->name('attendance.store');
         Route::post('attendance/checkout',  [AttendanceApiController::class, 'storeCheckout'])->name('attendance.checkout.store');
 
+        // ── Edit an existing manual attendance record (HR/Admin only) ────────
+        // Distinct from store()/storeCheckout() above — these never create a
+        // new record, only correct login_time/logout_time/remarks on one that
+        // already exists. store()'s duplicate-prevention is untouched.
+        Route::put('attendance/{id}/checkin',  [AttendanceApiController::class, 'updateCheckIn'])->name('attendance.checkin.update');
+        Route::put('attendance/{id}/checkout', [AttendanceApiController::class, 'updateCheckOut'])->name('attendance.checkout.update');
+
         Route::get('attendance/{id}', [AttendanceApiController::class, 'show'])->name('attendance.show');
 
         Route::get('assets/meta',   [AssetApiController::class, 'meta'])->name('assets.meta');
@@ -399,4 +406,5 @@ Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.re
     Route::get('/revenue-comparison', [ReportApiController::class, 'revenueComparisonApi'])->name('revenue-comparison');
     Route::get('/branch-comparison', [ReportApiController::class, 'branchComparisonApi'])->name('branch-comparison');
     Route::get('/smm', [ReportApiController::class, 'smmReportApi'])->name('smm');
+    Route::get('/sales-comparison', [ReportApiController::class, 'salesComparisonApi'])->name('sales-comparison');
 });

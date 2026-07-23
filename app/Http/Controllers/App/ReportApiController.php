@@ -17,6 +17,10 @@ use App\Models\LeadProductPayment;
 use App\Models\Branch;
 use App\Models\Lead;
 use App\Models\ProductionInitiation;
+use App\Models\User;
+use App\Models\Department;
+use App\Models\SalesTarget;
+use App\Models\Role;
 
 class ReportApiController extends Controller
 {
@@ -602,80 +606,95 @@ class ReportApiController extends Controller
 
     public function productWiseApi(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'product_id' => ['nullable', 'integer', 'exists:products,id'],
-            'branch_id'  => ['nullable', 'integer', 'exists:branches,id'],
-            'date_from'  => ['nullable', 'date'],
-            'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'page'       => ['nullable', 'integer', 'min:1'],
-            'per_page'   => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
-
-        // Defaults mirror the web controller: current month when not supplied.
-        $request->merge([
-            'date_from' => $validated['date_from'] ?? now()->startOfMonth()->toDateString(),
-            'date_to'   => $validated['date_to'] ?? now()->endOfMonth()->toDateString(),
-        ]);
-
-        $perPage = $validated['per_page'] ?? 20;
-
-        // Reused, not duplicated — identical helpers the web report already uses.
-        $query = $this->buildProductWiseQuery($request);
-        $reportRows = $query->paginate($perPage)->withQueryString();
-
-        $analyticsRows = (clone $query)->get();
-
-        $summary = [
-            'rows'          => $analyticsRows->count(),
-            'quantity_sold' => (int) $analyticsRows->sum('quantity_sold'),
-            'sales_amount'  => (float) $analyticsRows->sum('sales_amount'),
-            'net_revenue'   => (float) $analyticsRows->sum('net_revenue'),
-        ];
-
-        // Already shaped as monthly_trend / products / categories — matches the
-        // mobile app's analytics model 1:1, no reshaping needed.
-        $analytics = $this->buildProductWiseAnalytics($analyticsRows);
-
-        $productOptions = Product::query()->orderBy('package_name');
-        $this->visibility->applyProductVisibility($productOptions);
-        $products = $productOptions->get(['id', 'package_name', 'product_name', 'sku'])
-            ->map(fn($p) => [
-                'id'   => $p->id,
-                'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
+        try {
+            $validated = $request->validate([
+                'product_id' => ['nullable', 'integer', 'exists:products,id'],
+                'branch_id'  => ['nullable', 'integer', 'exists:branches,id'],
+                'date_from'  => ['nullable', 'date'],
+                'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
+                'page'       => ['nullable', 'integer', 'min:1'],
+                'per_page'   => ['nullable', 'integer', 'min:1', 'max:100'],
             ]);
 
-        $branches = Branch::query()->orderBy('name')->get(['id', 'name'])
-            ->map(fn($b) => ['id' => $b->id, 'name' => $b->name]);
+            // Defaults mirror the web controller: current month when not supplied.
+            $request->merge([
+                'date_from' => $validated['date_from'] ?? now()->startOfMonth()->toDateString(),
+                'date_to'   => $validated['date_to'] ?? now()->endOfMonth()->toDateString(),
+            ]);
 
-        $data = $reportRows->getCollection()->map(fn($row) => [
-            'product_code'    => $row->product_code ?: '-',
-            'product_name'    => $row->product_name ?: '-',
-            'category_name'   => $row->category_name ?: '-',
-            'quantity_sold'   => (int) ($row->quantity_sold ?? 0),
-            'sales_amount'    => (float) ($row->sales_amount ?? 0),
-            'discount_amount' => (float) ($row->discount_amount ?? 0),
-            'tax_amount'      => (float) ($row->tax_amount ?? 0),
-            'net_revenue'     => (float) ($row->net_revenue ?? 0),
-        ]);
+            $perPage = $validated['per_page'] ?? 20;
 
-        return response()->json([
-            'status'  => true,
-            'data'    => $data,
-            'summary' => $summary,
-            'analytics' => $analytics,
-            'filters' => [
-                'products' => $products,
-                'branches' => $branches,
-            ],
-            'pagination' => [
-                'current_page' => $reportRows->currentPage(),
-                'last_page'    => $reportRows->lastPage(),
-                'per_page'     => $reportRows->perPage(),
-                'total'        => $reportRows->total(),
-                'from'         => $reportRows->firstItem() ?? 0,
-                'to'           => $reportRows->lastItem() ?? 0,
-            ],
-        ]);
+            // Reused, not duplicated — identical helpers the web report already uses.
+            $query = $this->buildProductWiseQuery($request);
+            $reportRows = $query->paginate($perPage)->withQueryString();
+
+            $analyticsRows = (clone $query)->get();
+
+            $summary = [
+                'rows'          => $analyticsRows->count(),
+                'quantity_sold' => (int) $analyticsRows->sum('quantity_sold'),
+                'sales_amount'  => (float) $analyticsRows->sum('sales_amount'),
+                'net_revenue'   => (float) $analyticsRows->sum('net_revenue'),
+            ];
+
+            // Already shaped as monthly_trend / products / categories — matches the
+            // mobile app's analytics model 1:1, no reshaping needed.
+            $analytics = $this->buildProductWiseAnalytics($analyticsRows);
+
+            $productOptions = Product::query()->orderBy('package_name');
+            $this->visibility->applyProductVisibility($productOptions);
+            $products = $productOptions->get(['id', 'package_name', 'product_name', 'sku'])
+                ->map(fn($p) => [
+                    'id'   => $p->id,
+                    'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
+                ]);
+
+            $branches = Branch::query()->orderBy('name')->get(['id', 'name'])
+                ->map(fn($b) => ['id' => $b->id, 'name' => $b->name]);
+
+            $data = $reportRows->getCollection()->map(fn($row) => [
+                'product_code'    => $row->product_code ?: '-',
+                'product_name'    => $row->product_name ?: '-',
+                'category_name'   => $row->category_name ?: '-',
+                'quantity_sold'   => (int) ($row->quantity_sold ?? 0),
+                'sales_amount'    => (float) ($row->sales_amount ?? 0),
+                'discount_amount' => (float) ($row->discount_amount ?? 0),
+                'tax_amount'      => (float) ($row->tax_amount ?? 0),
+                'net_revenue'     => (float) ($row->net_revenue ?? 0),
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'data'    => $data,
+                'summary' => $summary,
+                'analytics' => $analytics,
+                'filters' => [
+                    'products' => $products,
+                    'branches' => $branches,
+                ],
+                'pagination' => [
+                    'current_page' => $reportRows->currentPage(),
+                    'last_page'    => $reportRows->lastPage(),
+                    'per_page'     => $reportRows->perPage(),
+                    'total'        => $reportRows->total(),
+                    'from'         => $reportRows->firstItem() ?? 0,
+                    'to'           => $reportRows->lastItem() ?? 0,
+                ],
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to load the product wise report right now.',
+            ], 500);
+        }
     }
 
     private function buildProductWiseQuery(Request $request)
@@ -733,105 +752,159 @@ class ReportApiController extends Controller
 
     public function smmReportApi(Request $request): JsonResponse
     {
-        $request->validate([
-            'date_from'  => ['nullable', 'date'],
-            'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'lead_id'    => ['nullable', 'integer', 'exists:leads,id'],
-            'product_id' => ['nullable', 'integer', 'exists:products,id'],
-            'status'     => ['nullable', 'in:completed,pending,overdue'],
-        ]);
-
-        $companyId = $this->visibility->companyIdFor();
-
-        // Reused, not duplicated — identical helper the web report already uses.
-        $rows = $this->buildSmmReportData($request, $companyId);
-
-        $leads = Lead::query()
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->orderBy('company_name')
-            ->get(['id', 'company_name', 'contact_name'])
-            ->map(fn($lead) => [
-                'id'   => $lead->id,
-                'name' => trim($lead->company_name ?: ($lead->contact_name ?? '')),
+        try {
+            $request->validate([
+                'date_from'  => ['nullable', 'date'],
+                'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
+                'lead_id'    => ['nullable', 'integer', 'exists:leads,id'],
+                'product_id' => ['nullable', 'integer', 'exists:products,id'],
+                'status'     => ['nullable', 'in:completed,pending,overdue'],
             ]);
 
-        $products = Product::query()
-            ->countWise()
-            ->when($companyId, fn($q) => $q->where('products.company_id', $companyId))
-            ->orderBy('package_name')
-            ->get(['id', 'package_name'])
-            ->map(fn($product) => ['id' => $product->id, 'name' => $product->package_name]);
+            // Unlike web (which defaults to all-time and renders into an HTML
+            // table the browser can handle at any size), an unfiltered mobile
+            // request has no such safety net: the full company-wide, all-time
+            // row set would be decoded and mapped in one shot, which for a
+            // company with a lot of SMM history can be large enough to freeze
+            // the UI thread long enough to trigger an OS-level "app not
+            // responding" kill. Defaulting to the current month (same pattern
+            // every other report already uses) keeps the default view fast;
+            // users can still widen the range via filters.
+            $defaultFromDate = now()->startOfMonth()->toDateString();
+            $defaultToDate   = now()->endOfMonth()->toDateString();
+            $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
 
-        $data = collect($rows)->map(fn($row) => [
-            'account_name'             => $row['account_name'],
-            'month'                    => $row['month'],
-            'product_name'             => $row['product_name'],
-            'start_date'               => $row['start_date'],
-            'end_date'                 => $row['end_date'],
-            'tenure'                   => $row['tenure'],
-            'committed_posters'        => (int) ($row['committed_posters'] ?? 0),
-            'committed_videos'         => (int) ($row['committed_videos'] ?? 0),
-            'design_completed_posters' => (int) ($row['design_completed_posters'] ?? 0),
-            'design_pending_posters'   => (int) ($row['design_pending_posters'] ?? 0),
-            'design_completed_videos'  => (int) ($row['design_completed_videos'] ?? 0),
-            'design_pending_videos'    => (int) ($row['design_pending_videos'] ?? 0),
-            'design_persons'           => $row['design_persons'],
-            'dm_completed_posters'     => (int) ($row['dm_completed_posters'] ?? 0),
-            'dm_pending_posters'       => (int) ($row['dm_pending_posters'] ?? 0),
-            'dm_completed_videos'      => (int) ($row['dm_completed_videos'] ?? 0),
-            'dm_pending_videos'        => (int) ($row['dm_pending_videos'] ?? 0),
-            'dm_persons'               => $row['dm_persons'],
-            'status'                   => $row['status'],
-        ]);
+            $companyId = $this->visibility->companyIdFor();
 
-        return response()->json([
-            'status' => true,
-            'data'   => $data,
-            'filters' => [
-                'leads'    => $leads,
-                'products' => $products,
-            ],
-        ]);
+            // Reused, not duplicated — mirrors web's buildSmmReportData logic
+            // exactly (same fallback chain for committed counts/persons).
+            $rows = $this->buildSmmReportData($request, $companyId);
+
+            $leads = Lead::query()
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->orderBy('company_name')
+                ->get(['id', 'company_name', 'contact_name'])
+                ->map(fn($lead) => [
+                    'id'   => $lead->id,
+                    'name' => trim($lead->company_name ?: ($lead->contact_name ?? '')),
+                ]);
+
+            $products = Product::query()
+                ->countWise()
+                ->when($companyId, fn($q) => $q->where('products.company_id', $companyId))
+                ->orderBy('package_name')
+                ->get(['id', 'package_name'])
+                ->map(fn($product) => ['id' => $product->id, 'name' => $product->package_name]);
+
+            $data = collect($rows)->map(fn($row) => [
+                'account_name'             => $row['account_name'],
+                'month'                    => $row['month'],
+                'product_name'             => $row['product_name'],
+                'start_date'               => $row['start_date'],
+                'end_date'                 => $row['end_date'],
+                'tenure'                   => $row['tenure'],
+                'committed_posters'        => (int) ($row['committed_posters'] ?? 0),
+                'committed_videos'         => (int) ($row['committed_videos'] ?? 0),
+                'completed_posters'        => (int) ($row['completed_posters'] ?? 0),
+                'pending_posters'          => (int) ($row['pending_posters'] ?? 0),
+                'completed_videos'         => (int) ($row['completed_videos'] ?? 0),
+                'pending_videos'           => (int) ($row['pending_videos'] ?? 0),
+                'design_completed_posters' => (int) ($row['design_completed_posters'] ?? 0),
+                'design_pending_posters'   => (int) ($row['design_pending_posters'] ?? 0),
+                'design_completed_videos'  => (int) ($row['design_completed_videos'] ?? 0),
+                'design_pending_videos'    => (int) ($row['design_pending_videos'] ?? 0),
+                'design_persons'           => $row['design_persons'],
+                'dm_completed_posters'     => (int) ($row['dm_completed_posters'] ?? 0),
+                'dm_pending_posters'       => (int) ($row['dm_pending_posters'] ?? 0),
+                'dm_completed_videos'      => (int) ($row['dm_completed_videos'] ?? 0),
+                'dm_pending_videos'        => (int) ($row['dm_pending_videos'] ?? 0),
+                'dm_persons'               => $row['dm_persons'],
+                'status'                   => $row['status'],
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'data'   => $data,
+                'filters' => [
+                    'leads'    => $leads,
+                    'products' => $products,
+                ],
+                'meta' => [
+                    'default_from_date' => $defaultFromDate,
+                    'default_to_date'   => $defaultToDate,
+                    'applied_from_date' => $request->input('date_from', $defaultFromDate),
+                    'applied_to_date'   => $request->input('date_to', $defaultToDate),
+                ],
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to load the SMM report right now.',
+            ], 500);
+        }
     }
 
     public function branchComparisonApi(Request $request): JsonResponse
     {
-        $request->validate([
-            'period_type' => ['nullable', 'in:custom,month,quarter,year'],
-            'year'        => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'month'       => ['nullable', 'integer', 'min:1', 'max:12'],
-            'quarter'     => ['nullable', 'integer', 'min:1', 'max:4'],
-            'date_from'   => ['nullable', 'date'],
-            'date_to'     => ['nullable', 'date', 'after_or_equal:date_from'],
-        ]);
+        try {
+            $request->validate([
+                'period_type' => ['nullable', 'in:custom,month,quarter,year'],
+                'year'        => ['nullable', 'integer', 'min:2000', 'max:2100'],
+                'month'       => ['nullable', 'integer', 'min:1', 'max:12'],
+                'quarter'     => ['nullable', 'integer', 'min:1', 'max:4'],
+                'date_from'   => ['nullable', 'date'],
+                'date_to'     => ['nullable', 'date', 'after_or_equal:date_from'],
+            ]);
 
-        // Reused, not duplicated — identical helper the web report already uses.
-        [$dateFrom, $dateTo, $periodLabel, $periodType] = $this->resolvePeriodRange($request);
+            // Reused, not duplicated — identical helper the web report already uses.
+            [$dateFrom, $dateTo, $periodLabel, $periodType] = $this->resolvePeriodRange($request);
 
-        $filterOptions = [
-            'period_types' => [
-                'custom'  => 'Custom Date Range',
-                'month'   => 'Monthly',
-                'quarter' => 'Quarterly',
-                'year'    => 'Yearly',
-            ],
-            'years' => collect(range(now()->year - 5, now()->year + 1))->sortDesc()->values()->all(),
-            'months' => collect(range(1, 12))->mapWithKeys(fn($month) => [
-                $month => \Carbon\Carbon::create()->month($month)->format('F'),
-            ])->all(),
-            'quarters' => [1 => 'Quarter 1', 2 => 'Quarter 2', 3 => 'Quarter 3', 4 => 'Quarter 4'],
-        ];
+            $filterOptions = [
+                'period_types' => [
+                    'custom'  => 'Custom Date Range',
+                    'month'   => 'Monthly',
+                    'quarter' => 'Quarterly',
+                    'year'    => 'Yearly',
+                ],
+                'years' => collect(range(now()->year - 5, now()->year + 1))->sortDesc()->values()->all(),
+                'months' => collect(range(1, 12))->mapWithKeys(fn($month) => [
+                    $month => \Carbon\Carbon::create()->month($month)->format('F'),
+                ])->all(),
+                'quarters' => [1 => 'Quarter 1', 2 => 'Quarter 2', 3 => 'Quarter 3', 4 => 'Quarter 4'],
+            ];
 
-        // Already shaped as rows / all_sources / all_statuses — matches the
-        // mobile app's model 1:1, no reshaping needed.
-        $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
+            // Already shaped as rows / all_sources / all_statuses — matches the
+            // mobile app's model 1:1, no reshaping needed.
+            $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
 
-        return response()->json([
-            'status'         => true,
-            'period_label'   => $periodLabel,
-            'filter_options' => $filterOptions,
-            'comparison_data' => $comparisonData,
-        ]);
+            return response()->json([
+                'status'         => true,
+                'period_label'   => $periodLabel,
+                'filter_options' => $filterOptions,
+                'comparison_data' => $comparisonData,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to load the branch comparison report right now.',
+            ], 500);
+        }
     }
 
     private function buildBranchComparisonData(string $dateFrom, string $dateTo): array
@@ -985,42 +1058,297 @@ class ReportApiController extends Controller
 
     public function revenueComparisonApi(Request $request): JsonResponse
     {
-        $request->validate([
-            'period_type' => ['nullable', 'in:month,quarter,year'],
-            'year'        => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'month'       => ['nullable', 'integer', 'min:1', 'max:12'],
-            'quarter'     => ['nullable', 'integer', 'min:1', 'max:4'],
-            'product_id'  => ['nullable', 'integer', 'exists:products,id'],
-            'branch_id'   => ['nullable', 'integer', 'exists:branches,id'],
-        ]);
+        try {
+            $request->validate([
+                'period_type' => ['nullable', 'in:month,quarter,year'],
+                'year'        => ['nullable', 'integer', 'min:2000', 'max:2100'],
+                'month'       => ['nullable', 'integer', 'min:1', 'max:12'],
+                'quarter'     => ['nullable', 'integer', 'min:1', 'max:4'],
+                'product_id'  => ['nullable', 'integer', 'exists:products,id'],
+                'branch_id'   => ['nullable', 'integer', 'exists:branches,id'],
+            ]);
 
-        // Reused, not duplicated — identical helpers the web report already uses.
-        $filterOptions   = $this->revenueComparisonFilterOptions();
-        $selectedFilters = $this->normalizeRevenueComparisonFilters($request);
-        $comparison      = $this->buildRevenueComparisonData($selectedFilters);
+            // Reused, not duplicated — identical helpers the web report already uses.
+            $filterOptions   = $this->revenueComparisonFilterOptions();
+            $selectedFilters = $this->normalizeRevenueComparisonFilters($request);
+            $comparison      = $this->buildRevenueComparisonData($selectedFilters);
 
-        return response()->json([
-            'status' => true,
-            'filter_options' => [
-                'period_types' => $filterOptions['period_types'],
-                'years'        => $filterOptions['years'],
-                'months'       => $filterOptions['months'],
-                'quarters'     => $filterOptions['quarters'],
-                'products'     => collect($filterOptions['products'])->map(fn($p) => [
-                    'id'   => $p->id,
-                    'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
-                ]),
-                'branches' => collect($filterOptions['branches'])->map(fn($b) => [
-                    'id' => $b->id,
-                    'name' => $b->name,
-                ]),
-            ],
-            // Already shaped as cards / table / analytics — matches the mobile
-            // app's model 1:1, no reshaping needed.
-            'comparison' => $comparison,
-        ]);
+            return response()->json([
+                'status' => true,
+                'filter_options' => [
+                    'period_types' => $filterOptions['period_types'],
+                    'years'        => $filterOptions['years'],
+                    'months'       => $filterOptions['months'],
+                    'quarters'     => $filterOptions['quarters'],
+                    'products'     => collect($filterOptions['products'])->map(fn($p) => [
+                        'id'   => $p->id,
+                        'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
+                    ]),
+                    'branches' => collect($filterOptions['branches'])->map(fn($b) => [
+                        'id' => $b->id,
+                        'name' => $b->name,
+                    ]),
+                ],
+                // Already shaped as cards / table / analytics — matches the mobile
+                // app's model 1:1, no reshaping needed.
+                'comparison' => $comparison,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to load the revenue comparison report right now.',
+            ], 500);
+        }
     }
 
+    // ─── Sales Comparison Report ──────────────────────────────────────────
+    // Mirrors CrmReportController::salesComparison() exactly — same three
+    // scopes (all_branches / particular_branch / all_users), same target
+    // vs. actual calculation, same sort order. Previously had no mobile
+    // endpoint at all.
+    public function salesComparisonApi(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'period_type' => ['nullable', 'in:month,quarter,year'],
+                'scope'       => ['nullable', 'in:all_branches,particular_branch,all_users'],
+                'branch_id'   => ['nullable', 'integer', 'exists:branches,id'],
+                'month'       => ['nullable', 'string'],
+                'quarter'     => ['nullable', 'string'],
+                'year'        => ['nullable', 'string'],
+            ]);
+
+            $companyId = $this->visibility->companyIdFor() ?: 1;
+
+            $periodType = $request->input('period_type', 'month');
+            $scope = $request->input('scope', 'all_branches');
+
+            $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+
+            $selectedBranchId = $request->input('branch_id');
+            if (!$selectedBranchId) {
+                $selectedBranchId = auth()->user()?->branch_id ?: ($branches->first()?->id ?? null);
+            }
+
+            $selectedMonth = $request->input('month', date('Y-m'));
+            $currentQuarter = date('Y') . '-Q' . ceil(date('m') / 3);
+            $selectedQuarter = $request->input('quarter', $currentQuarter);
+            $selectedYear = $request->input('year', date('Y'));
+
+            $periodVal = $selectedMonth;
+            if ($periodType === 'quarter') {
+                $periodVal = $selectedQuarter;
+            } elseif ($periodType === 'year') {
+                $periodVal = $selectedYear;
+            }
+
+            $periodDetails = $this->resolvePeriodDetails($periodType, $periodVal);
+            $start = $periodDetails['start'];
+            $end = $periodDetails['end'];
+            $targetMonths = $periodDetails['months'];
+
+            $comparisonData = $this->buildSalesComparisonData($companyId, $scope, $selectedBranchId, $start, $end, $targetMonths);
+
+            return response()->json([
+                'status' => true,
+                'filters' => [
+                    'period_type'       => $periodType,
+                    'scope'             => $scope,
+                    'selected_branch_id' => $selectedBranchId,
+                    'selected_month'    => $selectedMonth,
+                    'selected_quarter'  => $selectedQuarter,
+                    'selected_year'     => $selectedYear,
+                ],
+                'filter_options' => [
+                    'branches' => $branches->map(fn($b) => ['id' => $b->id, 'name' => $b->name])->values(),
+                ],
+                'comparison_data' => $comparisonData,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to load the sales comparison report right now.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Reused by salesComparisonApi — identical target-vs-actual calculation
+     * CrmReportController::salesComparison() uses for all three scopes.
+     */
+    private function buildSalesComparisonData(int $companyId, string $scope, $selectedBranchId, $start, $end, array $targetMonths): array
+    {
+        $comparisonData = [];
+
+        $salesDeptIds = Department::where('company_id', $companyId)
+            ->whereRaw('LOWER(name) LIKE ?', ['%Sales%'])
+            ->pluck('id');
+
+        $targetRoleBaseNames = [
+            'branch_admin',
+            'branch_manager',
+            'cheif_operating_officer',
+            'chief_business_officer',
+        ];
+
+        if ($scope === 'all_branches') {
+            $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+
+            foreach ($branches as $branch) {
+                $target = (float) SalesTarget::where('branch_id', $branch->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.branch_id', $branch->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $branch->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        } elseif ($scope === 'particular_branch') {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function ($q) use ($selectedBranchId) {
+                    $q->where('branch_id', $selectedBranchId)
+                        ->orWhereHas('branches', fn($bq) => $bq->where('branches.id', $selectedBranchId));
+                })
+                ->where(function ($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) SalesTarget::where('user_id', $user->id)
+                    ->where('branch_id', $selectedBranchId)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->where('leads.branch_id', $selectedBranchId)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $user->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        } else {
+            $users = User::where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where(function ($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
+                    $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
+                    foreach ($targetRoleBaseNames as $baseRole) {
+                        $tenantRole = Role::tenantRoleName($baseRole, $companyId);
+                        $query->orWhereHas('roles', fn($q) => $q->where('name', $baseRole)->orWhere('name', $tenantRole));
+                    }
+                })
+                ->get();
+
+            foreach ($users as $user) {
+                $target = (float) SalesTarget::where('user_id', $user->id)
+                    ->whereIn('target_month', $targetMonths)
+                    ->sum('target_amount');
+
+                $actual = (float) LeadProductPayment::join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+                    ->where('leads.assigned_to', $user->id)
+                    ->whereBetween('lead_product_payments.payment_date', [$start, $end])
+                    ->sum('lead_product_payments.amount');
+
+                $comparisonData[] = [
+                    'label' => $user->name,
+                    'target' => $target,
+                    'actual' => $actual,
+                    'difference' => $actual - $target,
+                ];
+            }
+        }
+
+        usort($comparisonData, fn($a, $b) => $b['difference'] <=> $a['difference']);
+
+        return $comparisonData;
+    }
+
+    /**
+     * Reused by salesComparisonApi — identical to
+     * CrmReportController::resolvePeriodDetails().
+     */
+    private function resolvePeriodDetails(string $periodType, string $periodValue): array
+    {
+        $start = null;
+        $end = null;
+        $months = [];
+
+        if ($periodType === 'quarter') {
+            [$year, $q] = explode('-Q', $periodValue);
+            $q = (int) $q;
+            $monthStart = ($q - 1) * 3 + 1;
+
+            $start = Carbon::create($year, $monthStart, 1)->startOfDay();
+            $end = $start->copy()->addMonths(2)->endOfMonth();
+
+            for ($i = 0; $i < 3; $i++) {
+                $months[] = $start->copy()->addMonths($i)->format('Y-m');
+            }
+        } elseif ($periodType === 'year') {
+            $start = Carbon::create((int) $periodValue, 1, 1)->startOfDay();
+            $end = Carbon::create((int) $periodValue, 12, 31)->endOfDay();
+
+            for ($i = 1; $i <= 12; $i++) {
+                $months[] = sprintf('%04d-%02d', (int) $periodValue, $i);
+            }
+        } else {
+            $carbon = Carbon::parse($periodValue . '-01');
+            $start = $carbon->copy()->startOfMonth();
+            $end = $carbon->copy()->endOfMonth();
+            $months[] = $periodValue;
+        }
+
+        return [
+            'start' => $start,
+            'end' => $end,
+            'months' => $months,
+        ];
+    }
+
+    /**
+     * Mirrors CrmReportController::buildSmmReportData() exactly — same
+     * custom-form committed-count fallback, same role-based department
+     * fallback for timesheet persons, same multi-group aggregation (not
+     * just the first matching group), and same allocated-user fallback
+     * tier. Previously this mobile copy was a simplified subset that
+     * under-reported committed counts and dropped persons/hours whenever
+     * a project had more than one timesheet department group.
+     */
     private function buildSmmReportData(Request $request, ?int $companyId): \Illuminate\Support\Collection
     {
         $dateFrom  = $request->input('date_from', '');
@@ -1028,6 +1356,21 @@ class ReportApiController extends Controller
         $leadId    = $request->input('lead_id');
         $productId = $request->input('product_id');
         $status    = $request->input('status');
+
+        // Fetch all users with their departments to map allocations
+        $usersWithDept = DB::table('users as u')
+            ->leftJoin('employee_onboardings as eo', function ($join) {
+                $join->on('eo.portal_user_id', '=', 'u.id')
+                    ->whereNull('eo.deleted_at');
+            })
+            ->leftJoin('departments as dep', 'dep.id', '=', 'eo.department_id')
+            ->select([
+                'u.id',
+                'u.name',
+                'dep.name as dept_name',
+            ])
+            ->get()
+            ->keyBy('id');
 
         // Base query: one row per production_initiation (= one product order per lead)
         $query = DB::table('production_initiations as pi')
@@ -1046,6 +1389,8 @@ class ReportApiController extends Controller
                 'pi.custom_form_data',
                 'pi.created_at as initiated_at',
                 'pi.tl_employee_allocations',
+                'pi.project_allocated_employee_user_ids',
+                'pi.project_allocated_tl_user_ids',
                 'l.company_name',
                 'l.contact_name',
                 'p.package_name as product_name',
@@ -1086,44 +1431,63 @@ class ReportApiController extends Controller
             ->get()
             ->groupBy('production_initiation_id');
 
-        // Gather timesheet-completed poster/video counts per initiation + department
+        // Gather timesheet-completed poster/video counts per initiation + department,
+        // falling back to the user's role-based department when employee_onboardings
+        // has no record for them (mirrors web's COALESCE(dep_eo.name, dep_role.name)).
         $timesheetSums = DB::table('project_timesheets as pt')
             ->join('users as u', 'u.id', '=', 'pt.user_id')
             ->leftJoin('employee_onboardings as eo', function ($join) {
                 $join->on('eo.portal_user_id', '=', 'pt.user_id')
                     ->whereNull('eo.deleted_at');
             })
-            ->leftJoin('departments as dep2', 'dep2.id', '=', 'eo.department_id')
+            ->leftJoin('departments as dep_eo', 'dep_eo.id', '=', 'eo.department_id')
+            ->leftJoin('model_has_roles as mhr', function ($join) {
+                $join->on('mhr.model_id', '=', 'pt.user_id')
+                    ->where('mhr.model_type', '=', 'App\\Models\\User');
+            })
+            ->leftJoin('roles as r', 'r.id', '=', 'mhr.role_id')
+            ->leftJoin('departments as dep_role', 'dep_role.id', '=', 'r.department_id')
             ->whereIn('pt.production_initiation_id', $piIds)
             ->select([
                 'pt.production_initiation_id',
-                'dep2.id as dept_id',
-                'dep2.name as dept_name',
+                DB::raw('COALESCE(dep_eo.name, dep_role.name) as dept_name'),
                 DB::raw('SUM(COALESCE(pt.poster_count, 0)) as completed_posters'),
                 DB::raw('SUM(COALESCE(pt.video_count, 0)) as completed_videos'),
                 DB::raw('GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ", ") as persons'),
             ])
-            ->groupBy('pt.production_initiation_id', 'dep2.id', 'dep2.name')
+            ->groupBy('pt.production_initiation_id', DB::raw('COALESCE(dep_eo.name, dep_role.name)'))
             ->get()
             ->groupBy('production_initiation_id');
 
         $today = now()->toDateString();
 
-        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status) {
+        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status, $usersWithDept) {
             $piId = $pi->pi_id;
 
-            // Parse custom_form_data for start/end date (stored as JSON array of {field_name, value})
+            // Parse custom_form_data for start/end date and committed counts
             $formData = json_decode($pi->custom_form_data ?? '[]', true) ?? [];
 
             $startDate = null;
             $endDate   = null;
+            $committedPostersFromForm = 0;
+            $committedVideosFromForm  = 0;
+
             foreach ($formData as $field) {
                 $key = strtolower(trim($field['field_name'] ?? ''));
+                $label = strtolower(trim($field['label'] ?? ($field['key'] ?? '')));
+                $value = trim((string) ($field['value'] ?? ''));
+
                 if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
-                    $startDate = $field['value'] ?? null;
+                    $startDate = $value ?: null;
                 }
                 if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date'])) {
-                    $endDate = $field['value'] ?? null;
+                    $endDate = $value ?: null;
+                }
+                if ($label === 'number of posters' || $label === 'number of poster' || str_contains($key, 'number_of_posters') || str_contains($key, 'poster_count')) {
+                    $committedPostersFromForm = (int) $value;
+                }
+                if ($label === 'number of videos' || $label === 'number of video' || str_contains($key, 'number_of_videos') || str_contains($key, 'video_count')) {
+                    $committedVideosFromForm = (int) $value;
                 }
             }
 
@@ -1132,7 +1496,6 @@ class ReportApiController extends Controller
             if ($startDate && $endDate) {
                 try {
                     $tenure = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate), true);
-                    // $tenure = round($tenure, 1);
                 } catch (\Exception $e) {
                 }
             }
@@ -1157,29 +1520,113 @@ class ReportApiController extends Controller
             $dmCommittedPosters     = $dmPcr     ? (int) $dmPcr->poster_count     : 0;
             $dmCommittedVideos      = $dmPcr     ? (int) $dmPcr->video_count      : 0;
 
-            $committedPosters = $designCommittedPosters + $dmCommittedPosters;
-            $committedVideos  = $designCommittedVideos  + $dmCommittedVideos;
+            // Resolve main committed counts (fallback to custom form data if count report is 0)
+            $mainCommittedPosters = $designCommittedPosters ?: ($dmCommittedPosters ?: $committedPostersFromForm);
+            $mainCommittedVideos  = $designCommittedVideos  ?: ($dmCommittedVideos  ?: $committedVideosFromForm);
 
-            // Timesheet completions: split by design vs dm
+            // Both Design and DM teams get the same committed deliverables count for the project
+            $designCommittedPosters = $mainCommittedPosters;
+            $designCommittedVideos  = $mainCommittedVideos;
+            $dmCommittedPosters     = $mainCommittedPosters;
+            $dmCommittedVideos      = $mainCommittedVideos;
+
+            $committedPosters = $mainCommittedPosters;
+            $committedVideos  = $mainCommittedVideos;
+
+            // Timesheet completions: split by design vs dm, merging ALL matching
+            // groups (not just the first) — a project can have multiple people
+            // logged under slightly different department labels.
             $tsSets = $timesheetSums->get($piId, collect());
-            $designTs = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'design'));
-            $dmTs     = $tsSets->first(fn($r) => str_contains(strtolower($r->dept_name ?? ''), 'digital') || str_contains(strtolower($r->dept_name ?? ''), 'dm') || str_contains(strtolower($r->dept_name ?? ''), 'marketing'));
 
-            $designCompletedPosters = $designTs ? (int) $designTs->completed_posters : 0;
-            $designCompletedVideos  = $designTs ? (int) $designTs->completed_videos  : 0;
-            $designPersons          = $designTs ? ($designTs->persons ?? '-') : '-';
+            $designCompletedPosters = 0;
+            $designCompletedVideos  = 0;
+            $designPersonsList      = [];
 
-            $dmCompletedPosters = $dmTs ? (int) $dmTs->completed_posters : 0;
-            $dmCompletedVideos  = $dmTs ? (int) $dmTs->completed_videos  : 0;
-            $dmPersons          = $dmTs ? ($dmTs->persons ?? '-') : '-';
+            $dmCompletedPosters = 0;
+            $dmCompletedVideos  = 0;
+            $dmPersonsList      = [];
 
-            // Pending = Committed (from PCR) − Done (from timesheets), clamped to 0
+            foreach ($tsSets as $ts) {
+                $tsDeptLower = strtolower($ts->dept_name ?? '');
+                $tsPersons = array_filter(array_map('trim', explode(',', $ts->persons ?? '')));
+
+                if (str_contains($tsDeptLower, 'design')) {
+                    $designCompletedPosters += (int) $ts->completed_posters;
+                    $designCompletedVideos  += (int) $ts->completed_videos;
+                    $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                } elseif (str_contains($tsDeptLower, 'digital') || str_contains($tsDeptLower, 'dm') || str_contains($tsDeptLower, 'marketing')) {
+                    $dmCompletedPosters += (int) $ts->completed_posters;
+                    $dmCompletedVideos  += (int) $ts->completed_videos;
+                    $dmPersonsList = array_merge($dmPersonsList, $tsPersons);
+                } else {
+                    // Fallback to project's department
+                    $projDeptLower = strtolower($pi->department_name ?? '');
+                    if (str_contains($projDeptLower, 'design')) {
+                        $designCompletedPosters += (int) $ts->completed_posters;
+                        $designCompletedVideos  += (int) $ts->completed_videos;
+                        $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                    } elseif (str_contains($projDeptLower, 'digital') || str_contains($projDeptLower, 'dm') || str_contains($projDeptLower, 'marketing')) {
+                        $dmCompletedPosters += (int) $ts->completed_posters;
+                        $dmCompletedVideos  += (int) $ts->completed_videos;
+                        $dmPersonsList = array_merge($dmPersonsList, $tsPersons);
+                    } else {
+                        // Default to Design
+                        $designCompletedPosters += (int) $ts->completed_posters;
+                        $designCompletedVideos  += (int) $ts->completed_videos;
+                        $designPersonsList = array_merge($designPersonsList, $tsPersons);
+                    }
+                }
+            }
+
+            $designPersons = !empty($designPersonsList) ? implode(', ', array_unique($designPersonsList)) : '-';
+            $dmPersons     = !empty($dmPersonsList)     ? implode(', ', array_unique($dmPersonsList))     : '-';
+
+            // Pending = Committed − Done (from timesheets), clamped to 0
             $designPendingPosters = max(0, $designCommittedPosters - $designCompletedPosters);
             $designPendingVideos  = max(0, $designCommittedVideos  - $designCompletedVideos);
             $dmPendingPosters     = max(0, $dmCommittedPosters     - $dmCompletedPosters);
             $dmPendingVideos      = max(0, $dmCommittedVideos      - $dmCompletedVideos);
 
-            // Allocated persons from tl_employee_allocations fallback
+            // Allocated persons fallback using project_allocated_employee_user_ids and project_allocated_tl_user_ids
+            $designAllocatedNames = [];
+            $dmAllocatedNames     = [];
+
+            $allocatedEmployeeIds = json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+            $allocatedTlIds       = json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+            $allocatedUserIds     = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds)));
+
+            foreach ($allocatedUserIds as $uId) {
+                $userDept = $usersWithDept->get($uId);
+                if ($userDept) {
+                    $uName = $userDept->name;
+                    $uDeptLower = strtolower($userDept->dept_name ?? '');
+
+                    if (str_contains($uDeptLower, 'design')) {
+                        $designAllocatedNames[] = $uName;
+                    } elseif (str_contains($uDeptLower, 'digital') || str_contains($uDeptLower, 'dm') || str_contains($uDeptLower, 'marketing')) {
+                        $dmAllocatedNames[] = $uName;
+                    } else {
+                        // Fallback to project's department if user's department doesn't match Design/DM
+                        $projDeptLower = strtolower($pi->department_name ?? '');
+                        if (str_contains($projDeptLower, 'design')) {
+                            $designAllocatedNames[] = $uName;
+                        } elseif (str_contains($projDeptLower, 'digital') || str_contains($projDeptLower, 'dm') || str_contains($projDeptLower, 'marketing')) {
+                            $dmAllocatedNames[] = $uName;
+                        } else {
+                            $designAllocatedNames[] = $uName;
+                        }
+                    }
+                }
+            }
+
+            if ($designPersons === '-') {
+                $designPersons = !empty($designAllocatedNames) ? implode(', ', array_unique($designAllocatedNames)) : '-';
+            }
+            if ($dmPersons === '-') {
+                $dmPersons = !empty($dmAllocatedNames) ? implode(', ', array_unique($dmAllocatedNames)) : '-';
+            }
+
+            // Fallback to tl_employee_allocations if still '-'
             if ($designPersons === '-' && $pi->tl_employee_allocations) {
                 try {
                     $allocs = json_decode($pi->tl_employee_allocations, true) ?? [];
@@ -1189,9 +1636,14 @@ class ReportApiController extends Controller
                 }
             }
 
+            $completedPosters = $designCompletedPosters + $dmCompletedPosters;
+            $completedVideos  = $designCompletedVideos + $dmCompletedVideos;
+            $pendingPosters   = max(0, $committedPosters - $completedPosters);
+            $pendingVideos    = max(0, $committedVideos - $completedVideos);
+
             // Status calculation
             $totalCommitted  = $committedPosters + $committedVideos;
-            $totalCompleted  = $designCompletedPosters + $designCompletedVideos + $dmCompletedPosters + $dmCompletedVideos;
+            $totalCompleted  = $completedPosters + $completedVideos;
             $deliveryDate    = $pi->project_delivery_date ?? $endDate;
 
             $computedStatus = 'pending';
@@ -1220,6 +1672,10 @@ class ReportApiController extends Controller
                 'tenure'                   => $tenure,
                 'committed_posters'        => $committedPosters,
                 'committed_videos'         => $committedVideos,
+                'completed_posters'        => $completedPosters,
+                'pending_posters'          => $pendingPosters,
+                'completed_videos'         => $completedVideos,
+                'pending_videos'           => $pendingVideos,
                 'design_completed_posters' => $designCompletedPosters,
                 'design_pending_posters'   => $designPendingPosters,
                 'design_completed_videos'  => $designCompletedVideos,
