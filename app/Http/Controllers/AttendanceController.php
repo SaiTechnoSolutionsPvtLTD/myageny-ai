@@ -16,7 +16,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class AttendanceController extends Controller
@@ -149,17 +148,6 @@ class AttendanceController extends Controller
         }
 
         if ($attendeeType === 'employee') {
-            $request->validate([
-                'attendee_key' => [
-                    Rule::unique('daily_attendances', 'employee_id')
-                        ->where(fn ($query) => $query
-                            ->where('attendee_type', 'employee')
-                            ->whereDate('attendance_date', $request->input('attendance_date'))),
-                ],
-            ], [
-                'attendee_key.unique' => 'Attendance is already entered for this employee on the selected date.',
-            ]);
-
             $employee = $this->activeEmployeesQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
@@ -170,18 +158,12 @@ class AttendanceController extends Controller
                 'employee_name' => $employee->name,
                 'attendance_photo' => $employee->photograph ? 'storage/' . $employee->photograph : '',
             ];
-        } else {
-            $request->validate([
-                'attendee_key' => [
-                    Rule::unique('daily_attendances', 'intern_joining_form_id')
-                        ->where(fn ($query) => $query
-                            ->where('attendee_type', 'intern')
-                            ->whereDate('attendance_date', $request->input('attendance_date'))),
-                ],
-            ], [
-                'attendee_key.unique' => 'Attendance is already entered for this intern on the selected date.',
-            ]);
 
+            $matchKey = [
+                'attendee_type' => 'employee',
+                'employee_id' => $employee->id,
+            ];
+        } else {
             $intern = $this->activeInternsQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
@@ -192,6 +174,11 @@ class AttendanceController extends Controller
                 'employee_name' => $intern->name,
                 'attendance_photo' => $intern->photograph ? 'storage/' . $intern->photograph : '',
             ];
+
+            $matchKey = [
+                'attendee_type' => 'intern',
+                'intern_joining_form_id' => $intern->id,
+            ];
         }
 
         $workingHours = $this->calculateWorkingHours(
@@ -200,7 +187,14 @@ class AttendanceController extends Controller
             $validated['logout_time'] ?? null
         );
 
-        DailyAttendance::create(array_merge($attendanceAttributes, [
+        $existingRecord = DailyAttendance::query()
+            ->where($matchKey)
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->first();
+
+        $isUpdate = (bool) $existingRecord;
+
+        $attendanceData = array_merge($attendanceAttributes, [
             'login_location' => $validated['attendance_status'] === 'leave' ? 'Manual HR Leave Entry' : 'Manual HR Entry',
             'login_latitude' => 0,
             'login_longitude' => 0,
@@ -219,13 +213,23 @@ class AttendanceController extends Controller
             'leave_category' => $validated['attendance_status'] === 'leave' ? ($validated['leave_category'] ?? null) : null,
             'leave_session' => $validated['attendance_status'] === 'leave' ? ($validated['leave_session'] ?? null) : null,
             'remarks' => $validated['remarks'] ?? null,
-        ]));
+        ]);
+
+        if ($existingRecord) {
+            $existingRecord->update($attendanceData);
+        } else {
+            DailyAttendance::create($attendanceData);
+        }
+
+        if ($validated['attendance_status'] === 'leave') {
+            $successMessage = $isUpdate ? 'Leave entry updated successfully.' : 'Leave entry created successfully.';
+        } else {
+            $successMessage = $isUpdate ? 'Attendance entry updated successfully.' : 'Attendance entry created successfully.';
+        }
 
         return redirect()
             ->route('attendance.index', ['from_date' => $validated['attendance_date'], 'to_date' => $validated['attendance_date']])
-            ->with('success', $validated['attendance_status'] === 'leave'
-                ? 'Leave entry created successfully.'
-                : 'Attendance entry created successfully.');
+            ->with('success', $successMessage);
     }
 
     public function storeCheckout(Request $request): RedirectResponse
