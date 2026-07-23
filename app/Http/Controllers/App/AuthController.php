@@ -350,6 +350,7 @@ class AuthController extends Controller
             'role'            => $user->roles->first()?->name ?? null,
             'role_display'    => $user->role_display_name,
             'dashboard_route' => $mobileRoute,
+            'is_designing_department' => $user->belongsToDesigningDepartment(),
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
             'branch' => $user->branch ? [
@@ -357,8 +358,8 @@ class AuthController extends Controller
                 'name'                     => $user->branch->name,
                 'latitude'                 => $user->branch->latitude,
                 'longitude'                => $user->branch->longitude,
-                'latitude_2'               => 0.00,
-                'longitude_2'              => 0.00,
+                'latitude_2'               => $user->branch->latitude,
+                'longitude_2'              => $user->branch->longitude,
                 'attendance_radius_meters' => 50,
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),

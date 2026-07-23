@@ -190,6 +190,22 @@ class AttendanceApiController extends Controller
         ];
     }
 
+    /**
+     * Shared branch-scoping check for a specific attendance record — reused by
+     * show(), updateCheckIn(), and updateCheckOut() rather than re-inlining
+     * the same contains() lookup in each.
+     */
+    private function isAccessibleRecord(DailyAttendance $attendance): bool
+    {
+        return $this->accessibleAttendees()->contains(function (array $attendee) use ($attendance) {
+            if ($attendance->attendee_type === 'employee') {
+                return $attendee['attendee_type'] === 'employee' && $attendee['id'] === $attendance->employee_id;
+            }
+
+            return $attendee['attendee_type'] === 'intern' && $attendee['id'] === $attendance->intern_joining_form_id;
+        });
+    }
+
     /** Mirrors AttendanceController::calculateWorkingHours(). */
     private function calculateWorkingHours(string $attendanceDate, string $loginTime, ?string $logoutTime): ?string
     {
@@ -438,18 +454,8 @@ class AttendanceApiController extends Controller
             }
         }
 
-        if ($this->canViewAllAttendance() && $this->shouldFilterByBranch()) {
-            $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendance) {
-                if ($attendance->attendee_type === 'employee') {
-                    return $attendee['attendee_type'] === 'employee' && $attendee['id'] === $attendance->employee_id;
-                } else {
-                    return $attendee['attendee_type'] === 'intern' && $attendee['id'] === $attendance->intern_joining_form_id;
-                }
-            });
-
-            if (! $isAccessible) {
-                return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
-            }
+        if ($this->canViewAllAttendance() && $this->shouldFilterByBranch() && ! $this->isAccessibleRecord($attendance)) {
+            return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
         }
 
         return response()->json([
@@ -742,7 +748,137 @@ class AttendanceApiController extends Controller
             'logout_longitude'      => 0,
             'logout_time'           => Carbon::createFromFormat('H:i', $validated['logout_time'])->format('H:i:s'),
             'overall_working_hours' => $workingHours,
-            'remarks'               => isset($validated['remarks']) ? $validated['remarks'] : null,
+            // Mirrors AttendanceController::storeCheckout() — a blank remarks
+            // field on resubmission keeps the existing remarks rather than
+            // wiping them out.
+            'remarks'               => filled($validated['remarks'] ?? null) ? $validated['remarks'] : $attendance->remarks,
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Checkout time updated successfully.',
+            'data'    => $this->formatRecord($attendance->fresh(['employee', 'intern'])),
+        ]);
+    }
+
+    /**
+     * PUT /mobile/hrms/attendance/{id}/checkin
+     *
+     * Edit an existing manual (or any accessible) check-in record's
+     * login_time/remarks. Distinct from store() — never creates a record,
+     * so store()'s duplicate-prevention validation is completely unaffected.
+     * HR/Admin only.
+     */
+    public function updateCheckIn(Request $request, int $id): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        $attendance = DailyAttendance::query()->with(['employee', 'intern'])->find($id);
+
+        if (! $attendance) {
+            return response()->json(['status' => false, 'message' => 'Attendance record not found.'], 404);
+        }
+
+        if (! $this->isAccessibleRecord($attendance)) {
+            return response()->json(['status' => false, 'message' => 'You do not have permission to edit this record.'], 403);
+        }
+
+        if ($attendance->attendance_status !== 'present') {
+            return response()->json(['status' => false, 'message' => 'Only present-day check-in records can be edited.'], 422);
+        }
+
+        $validated = $request->validate([
+            'login_time' => ['required', 'date_format:H:i'],
+            'remarks'    => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $logoutTime = $attendance->logout_time
+            ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('H:i')
+            : null;
+
+        if ($logoutTime !== null && $validated['login_time'] >= $logoutTime) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Check-in time must be before the check-out time.',
+                'errors'  => ['login_time' => ['Check-in time must be before the check-out time.']],
+            ], 422);
+        }
+
+        // Reused, not duplicated — same helper store()/storeCheckout() use.
+        $workingHours = $this->calculateWorkingHours(
+            optional($attendance->attendance_date)->format('Y-m-d'),
+            $validated['login_time'],
+            $logoutTime
+        );
+
+        $attendance->update([
+            'login_time'            => Carbon::createFromFormat('H:i', $validated['login_time'])->format('H:i:s'),
+            'overall_working_hours' => $workingHours,
+            'remarks'               => filled($validated['remarks'] ?? null) ? $validated['remarks'] : $attendance->remarks,
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Check-in time updated successfully.',
+            'data'    => $this->formatRecord($attendance->fresh(['employee', 'intern'])),
+        ]);
+    }
+
+    /**
+     * PUT /mobile/hrms/attendance/{id}/checkout
+     *
+     * Edit an existing check-out record's logout_time/remarks directly by
+     * record id — a more direct counterpart to storeCheckout() (which looks
+     * the record up by attendee_key + date) for the "tap a record in the
+     * list → Edit Check-Out" flow. HR/Admin only.
+     */
+    public function updateCheckOut(Request $request, int $id): JsonResponse
+    {
+        abort_unless($this->canViewAllAttendance(), 403);
+
+        $attendance = DailyAttendance::query()->with(['employee', 'intern'])->find($id);
+
+        if (! $attendance) {
+            return response()->json(['status' => false, 'message' => 'Attendance record not found.'], 404);
+        }
+
+        if (! $this->isAccessibleRecord($attendance)) {
+            return response()->json(['status' => false, 'message' => 'You do not have permission to edit this record.'], 403);
+        }
+
+        if ($attendance->attendance_status !== 'present' || ! $attendance->login_time) {
+            return response()->json(['status' => false, 'message' => 'This record has no check-in to check out against.'], 422);
+        }
+
+        $validated = $request->validate([
+            'logout_time' => ['required', 'date_format:H:i'],
+            'remarks'     => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $loginTime = Carbon::createFromFormat('H:i:s', $attendance->login_time)->format('H:i');
+
+        if ($validated['logout_time'] <= $loginTime) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Check-out time must be after the check-in time.',
+                'errors'  => ['logout_time' => ['Check-out time must be after the check-in time.']],
+            ], 422);
+        }
+
+        // Reused, not duplicated — same helper store()/storeCheckout() use.
+        $workingHours = $this->calculateWorkingHours(
+            optional($attendance->attendance_date)->format('Y-m-d'),
+            $loginTime,
+            $validated['logout_time']
+        );
+
+        $attendance->update([
+            'logout_location'       => $attendance->logout_location ?: 'Manual HR Checkout',
+            'logout_latitude'       => $attendance->logout_latitude ?? 0,
+            'logout_longitude'      => $attendance->logout_longitude ?? 0,
+            'logout_time'           => Carbon::createFromFormat('H:i', $validated['logout_time'])->format('H:i:s'),
+            'overall_working_hours' => $workingHours,
+            'remarks'               => filled($validated['remarks'] ?? null) ? $validated['remarks'] : $attendance->remarks,
         ]);
 
         return response()->json([
