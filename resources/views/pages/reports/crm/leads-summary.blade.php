@@ -144,9 +144,17 @@
                     </span>
                     <span class="crm-summary-stat-chip">Volume</span>
                 </div>
-                <div class="crm-summary-stat-label">Report Rows</div>
-                <div class="crm-summary-stat-value">{{ number_format($summary['rows']) }}</div>
-                <div class="crm-summary-stat-note">Current filter set visible lead summary rows.</div>
+                <div class="crm-summary-stat-label">Total Leads / Rows</div>
+                <div class="crm-summary-stat-value" style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                    <span>{{ number_format($summary['total_leads'] ?? $summary['rows']) }} <span style="font-size:13px; font-weight:700; color:#64748b;">Leads</span></span>
+                    @if(($summary['rows'] ?? 0) !== ($summary['total_leads'] ?? 0))
+                        <span style="font-size:16px; color:#cbd5e1; font-weight:400;">/</span>
+                        <span style="font-size:20px; color:#c2410c;">{{ number_format($summary['rows']) }} <span style="font-size:12px; font-weight:700; color:#9a3412;">Rows</span></span>
+                    @endif
+                </div>
+                <div class="crm-summary-stat-note">
+                    Total <strong>{{ number_format($summary['total_leads'] ?? $summary['rows']) }}</strong> leads (<strong>{{ number_format($summary['rows']) }}</strong> summary rows) matching current filters.
+                </div>
             </div>
             <div class="crm-summary-stat" style="--stat-accent:#2563eb;--stat-soft:#dbeafe;">
                 <div class="crm-summary-stat-top">
@@ -205,7 +213,7 @@
                     <div class="crm-summary-card-title">Filters</div>
                     <div class="crm-summary-card-subtitle">Lead Source, Lead Status, User-wise, Date-wise, Product-wise</div>
                 </div>
-                <div class="crm-summary-chip">{{ $reportRows->total() }} results</div>
+                <div class="crm-summary-chip">{{ number_format($summary['total_leads'] ?? $reportRows->total()) }} Leads / {{ number_format($summary['rows'] ?? $reportRows->total()) }} Rows</div>
             </div>
             <div class="crm-summary-filter-body">
                 <div class="crm-summary-quick-filters">
@@ -305,7 +313,7 @@
                 <div class="crm-summary-table-head">
                     <div>
                         <div class="crm-summary-card-title">Lead Summary Sheet</div>
-                        <div class="crm-summary-card-subtitle">Showing {{ $reportRows->firstItem() ?? 0 }}-{{ $reportRows->lastItem() ?? 0 }} of {{ $reportRows->total() }} rows</div>
+                        <div class="crm-summary-card-subtitle">Showing {{ $reportRows->firstItem() ?? 0 }}-{{ $reportRows->lastItem() ?? 0 }} of {{ $reportRows->total() }} rows &bull; <strong>Total Leads: {{ number_format($summary['total_leads'] ?? $reportRows->total()) }}</strong> (Total Rows: {{ number_format($summary['rows'] ?? $reportRows->total()) }})</div>
                     </div>
                 </div>
 

@@ -50,32 +50,47 @@ class ReportApiController extends Controller
 
             $query = $this->buildLeadsSummaryQuery($request);
 
-            // Full filtered set — needed for accurate totals + analytics,
-            // exactly like the web controller does.
-            $allRows = $query->get();
+            // 1. Calculate Summary aggregates directly in SQL using toBase()
+            $summaryQuery = (clone $query)->toBase();
+            $summaryQuery->orders = null;
+            $summaryQuery->columns = null;
+            $summaryStats = $summaryQuery->first([
+                DB::raw('COUNT(*) as total_rows'),
+                DB::raw('COUNT(DISTINCT leads.id) as total_leads'),
+                DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_cost'),
+                DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
+            ]);
 
-            $perPage = (int) $request->input('per_page', 100);
-            $reportRows = $query->paginate($perPage)->withQueryString();
+            $totalCost = (float) ($summaryStats->total_cost ?? 0);
+            $totalPaid = (float) ($summaryStats->total_paid ?? 0);
 
-            $leadProductIds = $allRows->pluck('lead_product_id')->filter()->unique()->toArray();
-            $totalPaid = 0;
-            if (!empty($leadProductIds)) {
-                $totalPaid = (float) DB::table('lead_product_payments')
-                    ->whereIn('lead_product_id', $leadProductIds)
-                    ->sum('amount');
-            }
-
-            $totalCost = (float) $allRows->sum('total_price');
             $summary = [
-                'rows'          => $allRows->count(),
+                'rows'          => (int) ($summaryStats->total_rows ?? 0),
+                'total_leads'   => (int) ($summaryStats->total_leads ?? 0),
                 'total_cost'    => round($totalCost, 2),
                 'received_cost' => round($totalPaid, 2),
                 'pending_cost'  => round(max(0, $totalCost - $totalPaid), 2),
             ];
 
-            // Unchanged analytics builder — same shape the web Chart.js code consumes
-            // (monthly_trend, sources, statuses, owners, products).
-            $analytics = $this->buildLeadsSummaryAnalytics($allRows);
+            // 2. Fetch lightweight stdClass rows for analytics using toBase()
+            $analyticsQuery = (clone $query)->toBase();
+            $analyticsQuery->orders = null;
+            $analyticsRows = $analyticsQuery->get([
+                'leads.lead_date',
+                'leads.created_at as lead_created_at',
+                'lead_products.total_price',
+                DB::raw('COALESCE(payment_totals.total_received, lead_products.amount_paid, 0) as amount_paid'),
+                DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
+                DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
+                'product_lead_statuses.name as product_lead_status',
+                'assigned_users.name as allocated_to_name',
+                'lead_products.product_name',
+            ]);
+
+            $perPage = (int) $request->input('per_page', 20);
+            $reportRows = (clone $query)->paginate($perPage)->withQueryString();
+
+            $analytics = $this->buildLeadsSummaryAnalytics($analyticsRows);
 
             $sourceOptions = LeadSource::query()->orderBy('name')->pluck('name')->values();
             $statusOptions = LeadStatus::query()->orderBy('name')->pluck('name')->values();

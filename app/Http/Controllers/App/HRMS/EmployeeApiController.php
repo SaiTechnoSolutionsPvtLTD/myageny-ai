@@ -139,7 +139,7 @@ class EmployeeApiController extends Controller
             'converted_from_intern' => $e->sourceIntern
                 ? ($e->sourceIntern->intern_id ?: $e->sourceIntern->name)
                 : null,
-            'photograph_url' => $e->photograph ? asset('storage/' . $e->photograph) : null,
+            'photograph_url' => $e->getFileUrl('photograph'),
         ];
     }
 
@@ -161,7 +161,7 @@ class EmployeeApiController extends Controller
             'status'                   => $e->status,
             'employee_type'            => $e->employee_type === 'non_billable' ? 'non_billable' : 'billable',
             'avatar_initial'           => strtoupper(substr($e->name, 0, 1)),
-            'photograph_url'           => $e->photograph ? asset('storage/' . $e->photograph) : null,
+            'photograph_url'           => $e->getFileUrl('photograph'),
 
             // Source — mirrors the "Source" row on employee-show.blade.php
             // (either "Direct Employee Onboarding" or a link to the intern
@@ -249,7 +249,7 @@ class EmployeeApiController extends Controller
             'documents' => collect(self::DOCUMENT_LABELS)->map(fn ($label, $field) => [
                 'field' => $field,
                 'label' => $label,
-                'url'   => $e->{$field} ? asset('storage/' . $e->{$field}) : null,
+                'url'   => $e->getFileUrl($field),
             ])->values(),
 
             // Relations

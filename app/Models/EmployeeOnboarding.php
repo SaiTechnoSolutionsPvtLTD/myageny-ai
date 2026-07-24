@@ -211,4 +211,22 @@ class EmployeeOnboarding extends Model
     {
         return $query->where('status', self::STATUS_ACTIVE);
     }
+
+    public function getFileUrl(?string $field = 'photograph'): ?string
+    {
+        $path = $field ? ($this->{$field} ?? null) : null;
+        if (! $path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        if (file_exists(public_path($path))) {
+            return asset($path);
+        }
+
+        return asset('storage/' . ltrim($path, '/'));
+    }
 }
