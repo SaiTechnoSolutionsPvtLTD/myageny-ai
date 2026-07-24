@@ -82,7 +82,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedValue = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
         $totalProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
-        
+
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
             ->whereIn('lead_id', $leadIds)
             ->whereDate('remind_at', today())
@@ -639,7 +639,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedValue = (float) \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
         $totalProductsCount = \App\Models\LeadProduct::whereIn('lead_id', $leadIds)->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
-        
+
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
             ->whereIn('lead_id', $leadIds)
             ->whereDate('remind_at', today())
@@ -859,8 +859,8 @@ class SuperAdminDashboardController extends ApiController
                     'user_id'         => $user->id,
                     'user_name'       => $user->name,
                     'user_email'      => $user->email,
-                    'role'            => $user->roles->first()?->display_name,
-                    'role_name'       => $user->roles->first()?->name,
+                    'role'            => $user->roles->first()?->name,
+                    'role_name'       => $user->roles->first()?->display_name,
                     'total_leads'     => $total,
                     'convert_leads'   => $convertCount,
                     'lost_leads'      => $lost,

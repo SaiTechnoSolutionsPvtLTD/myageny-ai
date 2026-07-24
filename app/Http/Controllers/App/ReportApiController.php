@@ -759,6 +759,7 @@ class ReportApiController extends Controller
                 'lead_id'    => ['nullable', 'integer', 'exists:leads,id'],
                 'product_id' => ['nullable', 'integer', 'exists:products,id'],
                 'status'     => ['nullable', 'in:completed,pending,overdue'],
+                'page'       => ['nullable', 'integer', 'min:1'],
             ]);
 
             // Unlike web (which defaults to all-time and renders into an HTML
@@ -767,34 +768,76 @@ class ReportApiController extends Controller
             // row set would be decoded and mapped in one shot, which for a
             // company with a lot of SMM history can be large enough to freeze
             // the UI thread long enough to trigger an OS-level "app not
-            // responding" kill. Defaulting to the current month (same pattern
-            // every other report already uses) keeps the default view fast;
-            // users can still widen the range via filters.
+            // responding" kill (and, as seen in production, exhaust PHP's
+            // memory_limit outright). Defaulting to the current month (same
+            // pattern every other report already uses) keeps the default
+            // view fast; users can still widen the range via filters.
             $defaultFromDate = now()->startOfMonth()->toDateString();
             $defaultToDate   = now()->endOfMonth()->toDateString();
             $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
 
             $companyId = $this->visibility->companyIdFor();
+            $status    = $request->input('status');
+            $perPage   = 25;
+            $today     = now()->toDateString();
 
-            // Reused, not duplicated — mirrors web's buildSmmReportData logic
-            // exactly (same fallback chain for committed counts/persons).
-            $rows = $this->buildSmmReportData($request, $companyId);
+            // Page-bounded now (previously ->get() on the full date-filtered
+            // set) — this is the actual fix for the OOM crash: peak memory is
+            // O(one page) instead of O(every matching row for the period).
+            $usersWithDept = $this->fetchSmmUsersWithDept($companyId);
+            $baseQuery     = $this->buildSmmBaseQuery($request, $companyId);
 
-            $leads = Lead::query()
-                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-                ->orderBy('company_name')
-                ->get(['id', 'company_name', 'contact_name'])
-                ->map(fn($lead) => [
-                    'id'   => $lead->id,
-                    'name' => trim($lead->company_name ?: ($lead->contact_name ?? '')),
-                ]);
+            $paginated = (clone $baseQuery)->paginate($perPage)->withQueryString();
+            $pageItems = collect($paginated->items());
 
-            $products = Product::query()
-                ->countWise()
-                ->when($companyId, fn($q) => $q->where('products.company_id', $companyId))
-                ->orderBy('package_name')
-                ->get(['id', 'package_name'])
-                ->map(fn($product) => ['id' => $product->id, 'name' => $product->package_name]);
+            $pagePiIds = $pageItems->pluck('pi_id')->unique()->values()->all();
+            [$pageCountReports, $pageTimesheetSums] = $this->fetchSmmLookups($pagePiIds);
+
+            // Status is computed in PHP (committed vs completed counts,
+            // delivery date vs today) rather than stored on the row, so it
+            // can't be filtered via SQL WHERE before pagination. We filter
+            // within this page's rows instead — a page may come back with
+            // fewer than $perPage visible rows when a status filter is
+            // active; the client keeps requesting subsequent pages until it
+            // has enough to show or hits the last page. This trades a little
+            // UX smoothness for not having to duplicate/backfill status as a
+            // real column.
+            $rows = $pageItems
+                ->map(fn($pi) => $this->computeSmmRow($pi, $pageCountReports, $pageTimesheetSums, $usersWithDept, $today))
+                ->when($status, fn($rows) => $rows->filter(fn($row) => $row['status'] === $status))
+                ->values();
+
+            // Filter dropdown options + full status breakdown only need to be
+            // computed once per filter application, not on every subsequent
+            // page the user scrolls into — the stats totals in particular
+            // require walking every matching row (independent of the status
+            // filter, so the grid stays accurate no matter which status tab
+            // is selected), so they're deliberately NOT recomputed per page.
+            //
+            // Leads are intentionally NOT fetched here anymore — that used
+            // to be an unbounded Lead::query()->get() for the WHOLE company
+            // (every lead, every request), which was itself large enough to
+            // contribute to the memory_limit crashes. The Lead filter is now
+            // a searchable, server-paginated field backed by
+            // leadsSearchApi() instead (see that method below).
+            $products = null;
+            $stats = null;
+
+            if ($paginated->currentPage() === 1) {
+                $products = Product::query()
+                    ->countWise()
+                    ->when($companyId, fn($q) => $q->where('products.company_id', $companyId))
+                    ->orderBy('package_name')
+                    ->get(['id', 'package_name'])
+                    ->map(fn($product) => ['id' => $product->id, 'name' => $product->package_name]);
+
+                // Streamed in bounded chunks (not ->get()) — same reason as
+                // the page query above: this walks every row matching the
+                // date/lead/product filters (ignoring status, since we want
+                // the full breakdown by status) to produce exact totals
+                // without ever holding the full result set in memory.
+                $stats = $this->computeSmmStats(clone $baseQuery, $usersWithDept, $today);
+            }
 
             $data = collect($rows)->map(fn($row) => [
                 'account_name'             => $row['account_name'],
@@ -825,11 +868,19 @@ class ReportApiController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => $data,
-                'filters' => [
-                    'leads'    => $leads,
+                // Only present on page 1 — see the comment above where these
+                // are computed. Flutter retains whatever it received from
+                // page 1 rather than expecting these on every page. No
+                // "leads" key anymore — see leadsSearchApi() instead.
+                'filters' => $products !== null ? [
                     'products' => $products,
-                ],
+                ] : null,
+                'stats' => $stats,
                 'meta' => [
+                    'current_page'      => $paginated->currentPage(),
+                    'last_page'         => $paginated->lastPage(),
+                    'per_page'          => $paginated->perPage(),
+                    'has_more'          => $paginated->currentPage() < $paginated->lastPage(),
                     'default_from_date' => $defaultFromDate,
                     'default_to_date'   => $defaultToDate,
                     'applied_from_date' => $request->input('date_from', $defaultFromDate),
@@ -848,6 +899,70 @@ class ReportApiController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Unable to load the SMM report right now.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Lightweight, paginated lead lookup for report filter dropdowns —
+     * returns just {id, name}, never the full Lead record, and is always
+     * limited/paginated so a company's entire lead list is never loaded in
+     * one request. Replaces the previous unbounded Lead::query()->get()
+     * that used to run on every SMM report request.
+     *
+     * Deliberately generic (not SMM-specific) so the same endpoint can back
+     * the identical Lead filter on the other report screens later without
+     * duplicating this query.
+     */
+    public function leadsSearchApi(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'q'    => ['nullable', 'string', 'max:100'],
+                'page' => ['nullable', 'integer', 'min:1'],
+            ]);
+
+            $companyId = $this->visibility->companyIdFor();
+            $q = trim((string) $request->input('q', ''));
+
+            $leads = Lead::query()
+                ->when($companyId, fn($query) => $query->where('company_id', $companyId))
+                ->when($q !== '', function ($query) use ($q) {
+                    $query->where(function ($sub) use ($q) {
+                        $sub->where('company_name', 'like', "%{$q}%")
+                            ->orWhere('contact_name', 'like', "%{$q}%")
+                            ->orWhere('mobile_number', 'like', "%{$q}%");
+                    });
+                })
+                ->orderBy('company_name')
+                ->paginate(20, ['id', 'company_name', 'contact_name']);
+
+            $data = collect($leads->items())->map(fn($lead) => [
+                'id'   => $lead->id,
+                'name' => trim($lead->company_name ?: ($lead->contact_name ?? '')) ?: 'N/A',
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'data'   => $data,
+                'meta'   => [
+                    'current_page' => $leads->currentPage(),
+                    'last_page'    => $leads->lastPage(),
+                    'has_more'     => $leads->currentPage() < $leads->lastPage(),
+                ],
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid search request.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unable to search leads right now.',
             ], 500);
         }
     }
@@ -1341,29 +1456,21 @@ class ReportApiController extends Controller
     }
 
     /**
-     * Mirrors CrmReportController::buildSmmReportData() exactly — same
-     * custom-form committed-count fallback, same role-based department
-     * fallback for timesheet persons, same multi-group aggregation (not
-     * just the first matching group), and same allocated-user fallback
-     * tier. Previously this mobile copy was a simplified subset that
-     * under-reported committed counts and dropped persons/hours whenever
-     * a project had more than one timesheet department group.
+     * Users + department mapping used to resolve allocated-person names in
+     * computeSmmRow()'s fallback chain. Previously fetched with no company
+     * scope at all (every user, platform-wide) — scoped here since it's only
+     * ever used to resolve names for this one company's initiations, and an
+     * unscoped fetch was needless extra memory on multi-tenant installs.
      */
-    private function buildSmmReportData(Request $request, ?int $companyId): \Illuminate\Support\Collection
+    private function fetchSmmUsersWithDept(?int $companyId): \Illuminate\Support\Collection
     {
-        $dateFrom  = $request->input('date_from', '');
-        $dateTo    = $request->input('date_to', '');
-        $leadId    = $request->input('lead_id');
-        $productId = $request->input('product_id');
-        $status    = $request->input('status');
-
-        // Fetch all users with their departments to map allocations
-        $usersWithDept = DB::table('users as u')
+        return DB::table('users as u')
             ->leftJoin('employee_onboardings as eo', function ($join) {
                 $join->on('eo.portal_user_id', '=', 'u.id')
                     ->whereNull('eo.deleted_at');
             })
             ->leftJoin('departments as dep', 'dep.id', '=', 'eo.department_id')
+            ->when($companyId, fn($q) => $q->where('u.company_id', $companyId))
             ->select([
                 'u.id',
                 'u.name',
@@ -1371,8 +1478,23 @@ class ReportApiController extends Controller
             ])
             ->get()
             ->keyBy('id');
+    }
 
-        // Base query: one row per production_initiation (= one product order per lead)
+    /**
+     * Base query: one row per production_initiation (= one product order per
+     * lead), filtered by company/date/lead/product — but deliberately NOT
+     * executed here. The caller decides whether to page it (smmReportApi's
+     * displayed rows) or stream it in chunks (computeSmmStats) — this is the
+     * actual fix for the OOM crash: nothing calls ->get() on the unbounded
+     * result set anymore.
+     */
+    private function buildSmmBaseQuery(Request $request, ?int $companyId)
+    {
+        $dateFrom  = $request->input('date_from', '');
+        $dateTo    = $request->input('date_to', '');
+        $leadId    = $request->input('lead_id');
+        $productId = $request->input('product_id');
+
         $query = DB::table('production_initiations as pi')
             ->join('leads as l', 'l.id', '=', 'pi.lead_id')
             ->join('lead_products as lp', 'lp.id', '=', 'pi.lead_product_id')
@@ -1411,10 +1533,21 @@ class ReportApiController extends Controller
             });
         }
 
-        $initiations = $query->get();
+        return $query;
+    }
 
-        // Gather all production count report rows for these initiations (per department)
-        $piIds = $initiations->pluck('pi_id')->unique()->values()->all();
+    /**
+     * Production count reports + timesheet completion sums, scoped to just
+     * the given initiation ids — called once per page (25 ids) or once per
+     * chunk inside computeSmmStats(), never for the full unbounded set.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
+     */
+    private function fetchSmmLookups(array $piIds): array
+    {
+        if (empty($piIds)) {
+            return [collect(), collect()];
+        }
 
         $countReports = DB::table('production_count_reports as pcr')
             ->join('departments as dep', 'dep.id', '=', 'pcr.department_id')
@@ -1431,9 +1564,10 @@ class ReportApiController extends Controller
             ->get()
             ->groupBy('production_initiation_id');
 
-        // Gather timesheet-completed poster/video counts per initiation + department,
-        // falling back to the user's role-based department when employee_onboardings
-        // has no record for them (mirrors web's COALESCE(dep_eo.name, dep_role.name)).
+        // Gather timesheet-completed poster/video counts per initiation +
+        // department, falling back to the user's role-based department when
+        // employee_onboardings has no record for them (mirrors web's
+        // COALESCE(dep_eo.name, dep_role.name)).
         $timesheetSums = DB::table('project_timesheets as pt')
             ->join('users as u', 'u.id', '=', 'pt.user_id')
             ->leftJoin('employee_onboardings as eo', function ($join) {
@@ -1459,9 +1593,61 @@ class ReportApiController extends Controller
             ->get()
             ->groupBy('production_initiation_id');
 
-        $today = now()->toDateString();
+        return [$countReports, $timesheetSums];
+    }
 
-        $rows = $initiations->map(function ($pi) use ($countReports, $timesheetSums, $today, $status, $usersWithDept) {
+    /**
+     * Walks every row matching the base query's filters (date/lead/product —
+     * status is intentionally excluded so the stats grid always shows the
+     * full breakdown regardless of which status tab is selected) in bounded
+     * chunks, accumulating status counts without ever holding more than one
+     * chunk + its lookups in memory. This is what lets the stats grid stay
+     * accurate under pagination without re-introducing the original
+     * unbounded ->get() that caused the OOM crash.
+     */
+    private function computeSmmStats($query, \Illuminate\Support\Collection $usersWithDept, string $today): array
+    {
+        $total = 0;
+        $completed = 0;
+        $pending = 0;
+        $overdue = 0;
+
+        $query->chunk(300, function ($chunk) use (&$total, &$completed, &$pending, &$overdue, $usersWithDept, $today) {
+            $piIds = $chunk->pluck('pi_id')->unique()->values()->all();
+            [$countReports, $timesheetSums] = $this->fetchSmmLookups($piIds);
+
+            foreach ($chunk as $pi) {
+                $row = $this->computeSmmRow($pi, $countReports, $timesheetSums, $usersWithDept, $today);
+                $total++;
+
+                match ($row['status']) {
+                    'completed' => $completed++,
+                    'overdue'   => $overdue++,
+                    default     => $pending++,
+                };
+            }
+        });
+
+        return [
+            'total'     => $total,
+            'completed' => $completed,
+            'pending'   => $pending,
+            'overdue'   => $overdue,
+        ];
+    }
+
+    /**
+     * Mirrors CrmReportController::buildSmmReportData()'s per-row logic
+     * exactly — same custom-form committed-count fallback, same role-based
+     * department fallback for timesheet persons, same multi-group
+     * aggregation (not just the first matching group), and same
+     * allocated-user fallback tier. Always returns the row (including its
+     * computed `status`) — status filtering is the caller's job now, not
+     * this method's, so it can be reused for both the displayed page and the
+     * full stats breakdown.
+     */
+    private function computeSmmRow($pi, \Illuminate\Support\Collection $countReports, \Illuminate\Support\Collection $timesheetSums, \Illuminate\Support\Collection $usersWithDept, string $today): array
+    {
             $piId = $pi->pi_id;
 
             // Parse custom_form_data for start/end date and committed counts
@@ -1653,10 +1839,9 @@ class ReportApiController extends Controller
                 $computedStatus = 'overdue';
             }
 
-            // Apply status filter
-            if ($status && $computedStatus !== $status) {
-                return null;
-            }
+            // Status filtering (if requested) is applied by the caller on the
+            // returned rows — this method always returns the row so it can
+            // also be reused by computeSmmStats() to tally every status.
 
             $accountName = trim(($pi->company_name ?? '') ?: (trim(($pi->contact_name ?? '') . ' ' . ($pi->last_name ?? ''))));
 
@@ -1689,9 +1874,6 @@ class ReportApiController extends Controller
                 'status'                   => $computedStatus,
                 'department_name'          => $pi->department_name ?? '-',
             ];
-        })->filter()->values();
-
-        return $rows;
     }
 
     private function buildProductWiseAnalytics($rows): array

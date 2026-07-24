@@ -407,4 +407,9 @@ Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.re
     Route::get('/branch-comparison', [ReportApiController::class, 'branchComparisonApi'])->name('branch-comparison');
     Route::get('/smm', [ReportApiController::class, 'smmReportApi'])->name('smm');
     Route::get('/sales-comparison', [ReportApiController::class, 'salesComparisonApi'])->name('sales-comparison');
+
+    // Lightweight, paginated lead lookup for filter dropdowns — built
+    // generically (search on company_name/contact_name/mobile_number,
+    // 20/page) so any report's Lead filter can call it, not just SMM's.
+    Route::get('/leads-search', [ReportApiController::class, 'leadsSearchApi'])->name('leads-search');
 });

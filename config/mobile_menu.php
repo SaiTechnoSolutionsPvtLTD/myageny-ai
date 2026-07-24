@@ -35,7 +35,7 @@ return [
 
     // ── Projects (promoted from a nested CRM group to its own module) ──────
     'projects' => [
-        'label' => 'Projects',
+        'label' => 'Production',
         'order' => 20,
         'gate' => ['require_method' => 'canAccessMobileProjectsModule'],
         'items' => [

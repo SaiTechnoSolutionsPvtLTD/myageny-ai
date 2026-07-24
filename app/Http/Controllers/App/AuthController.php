@@ -321,15 +321,16 @@ class AuthController extends Controller
         if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
             $mobileRoute = '/';
         } else {
-            $mobileRoute = match ($departmentRoute) {
-                'hrms.dashboard'  => '/hrms-dashboard',
-                'dashboard.admin' => '/',
-                // Every other role (Sales, Customer Success, Development, ...)
-                // lands on HRMS first and reaches CRM/Projects via the Module
-                // Switcher — see the Post-Login Navigation fix from earlier
-                // this session.
-                default           => '/hrms-dashboard',
-            };
+            $mobileRoute = '/hrms-dashboard';
+            // $mobileRoute = match ($departmentRoute) {
+            //     'hrms.dashboard'  => '/hrms-dashboard',
+            //     'dashboard.admin' => '/',
+            //     // Every other role (Sales, Customer Success, Development, ...)
+            //     // lands on HRMS first and reaches CRM/Projects via the Module
+            //     // Switcher — see the Post-Login Navigation fix from earlier
+            //     // this session.
+            //     default           => '/hrms-dashboard',
+            // };
         }
 
         // Flat permission-name list — the single source every module (Menu,

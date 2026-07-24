@@ -286,6 +286,10 @@ class OvpModuleApiController extends Controller
 
         return [
             'id'                    => $i->id,
+            // Lets the mobile app deep-link straight to this record's Lead
+            // Details screen without a separate lookup — the `lead`
+            // relation above is already eager-loaded, so this is free.
+            'lead_id'               => $i->lead_id,
             'product_name'          => $i->product_name ?? $i->lead?->productName ?? '',
             'total_working_days'    => $i->total_working_days ?? 0,
             'department'            => $i->department?->name ?? '',
