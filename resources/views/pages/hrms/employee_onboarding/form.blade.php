@@ -315,7 +315,7 @@
                                 <input type="file" name="photograph" class="eob-input" accept=".jpg,.jpeg,.png">
                                 @if($employee?->photograph)
                                     <div class="eob-file-links">
-                                        <a href="{{ asset('storage/' . $employee->photograph) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View Existing</a>
+                                        <a href="{{ $employee->getFileUrl('photograph') }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View Existing</a>
                                     </div>
                                 @endif
                                 @error('photograph')<div class="eob-error">{{ $message }}</div>@enderror
@@ -822,8 +822,8 @@
                                         <div class="eob-file-meta">
                                             <div class="eob-file-name">{{ basename($employee->{$field}) }}</div>
                                             <div class="eob-file-links">
-                                                <a href="{{ asset('storage/' . $employee->{$field}) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View</a>
-                                                <a href="{{ asset('storage/' . $employee->{$field}) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download</a>
+                                                <a href="{{ $employee->getFileUrl($field) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View</a>
+                                                <a href="{{ $employee->getFileUrl($field) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download</a>
                                             </div>
                                         </div>
                                     @endif

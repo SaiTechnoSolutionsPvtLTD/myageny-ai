@@ -389,7 +389,7 @@ class EmployeeOnboardingController extends Controller
                 $this->deleteStoredFile($employee->{$field});
             }
 
-            $employee->{$field} = $request->file($field)->store(self::FILE_DIRECTORY, 'public');
+            $employee->{$field} = $this->uploadToPublicFolder($request->file($field));
         }
     }
 
@@ -470,9 +470,32 @@ class EmployeeOnboardingController extends Controller
 
     private function deleteStoredFile(?string $path): void
     {
-        if ($path && Storage::disk('public')->exists($path)) {
+        if (! $path) {
+            return;
+        }
+
+        $publicFilePath = public_path($path);
+        if (file_exists($publicFilePath) && is_file($publicFilePath)) {
+            @unlink($publicFilePath);
+        }
+
+        if (Storage::disk('public')->exists($path)) {
             Storage::disk('public')->delete($path);
         }
+    }
+
+    private function uploadToPublicFolder(\Illuminate\Http\UploadedFile $file): string
+    {
+        $filename = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
+        $targetDir = public_path(self::FILE_DIRECTORY);
+
+        if (! file_exists($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        $file->move($targetDir, $filename);
+
+        return self::FILE_DIRECTORY . '/' . $filename;
     }
 
     private function teamLeadUsers(): Collection
@@ -587,7 +610,7 @@ class EmployeeOnboardingController extends Controller
 
         if ($request->hasFile('photograph')) {
             $this->deleteStoredFile($employee_onboarding->photograph);
-            $employee_onboarding->photograph = $request->file('photograph')->store(self::FILE_DIRECTORY, 'public');
+            $employee_onboarding->photograph = $this->uploadToPublicFolder($request->file('photograph'));
             $employee_onboarding->save();
 
             $portalUser = $employee_onboarding->portalUser;

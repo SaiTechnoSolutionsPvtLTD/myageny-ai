@@ -86,31 +86,48 @@ class CrmReportController extends Controller
     {
         $query = $this->buildLeadsSummaryQuery($request);
 
-        // Get all data for analytics and summary
-        $allRows = $query->get();
+        // 1. Calculate Summary aggregates directly in SQL using toBase() for zero Eloquent overhead
+        $summaryQuery = (clone $query)->toBase();
+        $summaryQuery->orders = null;
+        $summaryQuery->columns = null;
+        $summaryStats = $summaryQuery->first([
+            DB::raw('COUNT(*) as total_rows'),
+            DB::raw('COUNT(DISTINCT leads.id) as total_leads'),
+            DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_cost'),
+            DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
+        ]);
 
-        // Paginate for display (100 records per page for better data visibility)
-        $reportRows = $query->paginate(100)->withQueryString();
-        $analyticsRows = $allRows;
+        $totalCost = (float) ($summaryStats->total_cost ?? 0);
+        $totalPaid = (float) ($summaryStats->total_paid ?? 0);
 
-        $summaryRows = $allRows;
-        $leadProductIds = $summaryRows->pluck('lead_product_id')->filter()->unique()->toArray();
-
-        $totalPaid = 0;
-        if (!empty($leadProductIds)) {
-            $totalPaid = (float) DB::table('lead_product_payments')
-                ->whereIn('lead_product_id', $leadProductIds)
-                ->sum('amount');
-        }
-
-        $totalCost = (float) $summaryRows->sum('total_price');
         $summary = [
-            'rows' => $summaryRows->count(),
-            'total_cost' => $totalCost,
+            'rows'          => (int) ($summaryStats->total_rows ?? 0),
+            'total_leads'   => (int) ($summaryStats->total_leads ?? 0),
+            'total_cost'    => $totalCost,
             'received_cost' => $totalPaid,
-            'pending_cost' => max(0, $totalCost - $totalPaid),
+            'pending_cost'  => max(0, $totalCost - $totalPaid),
         ];
+
+        // 2. Fetch lightweight stdClass rows for analytics using toBase() to bypass Eloquent Model memory overhead
+        $analyticsQuery = (clone $query)->toBase();
+        $analyticsQuery->orders = null;
+        $analyticsRows = $analyticsQuery->get([
+            'leads.lead_date',
+            'leads.created_at as lead_created_at',
+            'lead_products.total_price',
+            DB::raw('COALESCE(payment_totals.total_received, lead_products.amount_paid, 0) as amount_paid'),
+            DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
+            DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
+            'product_lead_statuses.name as product_lead_status',
+            'assigned_users.name as allocated_to_name',
+            'lead_products.product_name',
+        ]);
+
         $analytics = $this->buildLeadsSummaryAnalytics($analyticsRows);
+
+        // 3. Paginate for table display (20 records per page for fast page loading)
+        $perPage = (int) $request->input('per_page', 20);
+        $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
         $sourceOptions = LeadSource::query()
             ->orderBy('name')
@@ -438,6 +455,10 @@ class CrmReportController extends Controller
             ->selectRaw('lead_product_id, MIN(created_at) as converted_at')
             ->groupBy('lead_product_id');
 
+        $paymentsSubquery = DB::table('lead_product_payments')
+            ->selectRaw('lead_product_id, SUM(amount) as total_received')
+            ->groupBy('lead_product_id');
+
         $query = Lead::query()
             ->leftJoin('lead_products', 'lead_products.lead_id', '=', 'leads.id')
             ->leftJoin('lead_sources as lead_source_table', 'lead_source_table.id', '=', 'leads.lead_source_id')
@@ -446,6 +467,9 @@ class CrmReportController extends Controller
             ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
             ->leftJoinSub($convertedSubquery, 'converted_products', function ($join) {
                 $join->on('converted_products.lead_product_id', '=', 'lead_products.id');
+            })
+            ->leftJoinSub($paymentsSubquery, 'payment_totals', function ($join) {
+                $join->on('payment_totals.lead_product_id', '=', 'lead_products.id');
             })
             ->select([
                 'leads.id as lead_id',
@@ -461,7 +485,7 @@ class CrmReportController extends Controller
                 'lead_products.product_id',
                 'lead_products.product_name',
                 'lead_products.total_price',
-                'lead_products.amount_paid',
+                DB::raw('COALESCE(payment_totals.total_received, lead_products.amount_paid, 0) as amount_paid'),
                 'lead_products.created_at as lead_product_created_at',
                 'product_lead_statuses.name as product_lead_status',
                 'assigned_users.name as allocated_to_name',
@@ -649,23 +673,11 @@ class CrmReportController extends Controller
 
     private function buildLeadsSummaryAnalytics($rows): array
     {
-        // Get all payments for these products
-        $productIds = collect($rows)->pluck('lead_product_id')->filter()->unique()->toArray();
-        $paymentsMap = [];
-        if (!empty($productIds)) {
-            $paymentsMap = DB::table('lead_product_payments')
-                ->whereIn('lead_product_id', $productIds)
-                ->groupBy('lead_product_id')
-                ->selectRaw('lead_product_id, SUM(amount) as total_paid')
-                ->pluck('total_paid', 'lead_product_id')
-                ->toArray();
-        }
-
-        $normalizedRows = collect($rows)->map(function ($row) use ($paymentsMap) {
+        $normalizedRows = collect($rows)->map(function ($row) {
             $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
             $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
             $totalCost = (float) ($row->total_price ?? 0);
-            $receivedCost = (float) ($paymentsMap[$row->lead_product_id] ?? 0);
+            $receivedCost = (float) ($row->amount_paid ?? 0);
 
             return [
                 'source' => $row->lead_source ?: 'Unknown',
