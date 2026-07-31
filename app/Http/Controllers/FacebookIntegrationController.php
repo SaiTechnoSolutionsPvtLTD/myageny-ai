@@ -646,19 +646,20 @@ class FacebookIntegrationController extends Controller
         try {
             $camp_id = $request->camp_id;
 
-            CampaignMaster::where( 'id', $camp_id )->update( [
-                'is_integrated'=>0
-            ] );
+            $campaign = CampaignMaster::find($camp_id);
 
-            CampaignFieldMigration::where( 'campaign_id', $camp_id )->delete();
-            CampaignFields::where( 'campaign_id', $camp_id )->delete();
-            AssignedUser::where('campaign_id',$camp_id)->delete();
+            if ($campaign) {
+                CampaignFieldMigration::where('campaign_id', $camp_id)->delete();
+                CampaignFields::where('campaign_id', $camp_id)->delete();
+                AssignedUser::where('campaign_id', $camp_id)->delete();
+                $campaign->delete();
+            }
 
-            return response()->json(['success' => 'facebook integration deleted Successfully'], 200);
+            return response()->json(['success' => 'Facebook integration deleted successfully.'], 200);
 
-        } catch ( \Exception $e ) {
+        } catch ( \Throwable $e ) {
             Log::error( 'Error deleting facebook integration: ' . $e->getMessage(), [ 'error' => $e ] );
-            return redirect()->back()->with( 'error', 'something went wrong' );
+            return response()->json(['error' => 'Failed to delete integration.'], 500);
         }
     }
 
@@ -674,8 +675,12 @@ class FacebookIntegrationController extends Controller
                 return response()->json(['error' => 'Campaign not found'], 404);
             }
 
-            $leads = $importer->fetchLeadSubmissions($campaign_master);
-            $this->storeCampaignFieldsFromSubmissions($camp_id, $leads);
+            try {
+                $leads = $importer->fetchLeadSubmissions($campaign_master);
+                $this->storeCampaignFieldsFromSubmissions($camp_id, $leads);
+            } catch (\Throwable $e) {
+                Log::warning('Could not fetch new FB lead submissions during edit: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'view' => view('pages.settings.facebook-integration.fb-edit-field-mapping', [
@@ -686,9 +691,9 @@ class FacebookIntegrationController extends Controller
                 'cam_id' => $camp_id,
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Error during Facebook integration update: ' . $e->getMessage(), ['exception' => $e]);
-            return redirect()->back()->with('error', 'Something went wrong while updating the campaign fields.');
+            return response()->json(['error' => 'Something went wrong while updating the campaign fields.'], 500);
         }
     }
 

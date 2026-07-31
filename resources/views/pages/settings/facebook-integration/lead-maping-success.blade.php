@@ -99,5 +99,10 @@
                 <p>We could not find the campaign assignment summary for this integration.</p>
             </div>
         @endif
+
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid #f1f1f1;">
+            <button type="button" class="crm-btn crm-btn-secondary" onclick="closeModal('editMappingModal')">Close</button>
+            <button type="button" class="crm-btn crm-btn-primary" onclick="window.location.reload()">Done & Refresh</button>
+        </div>
     </div>
 </div>

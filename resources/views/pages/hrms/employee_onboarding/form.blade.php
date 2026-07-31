@@ -1073,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const parentRoleId = selectedRole?.parentRoleId || '';
         const parentRoleLabel = selectedRole?.parentRoleLabel || '';
 
-        return tlUsers.filter(function (tlUser) {
+        const primaryMatches = tlUsers.filter(function (tlUser) {
             if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
                 return false;
             }
@@ -1088,6 +1088,22 @@ document.addEventListener('DOMContentLoaded', function () {
             const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
 
             return matchesDepartment && matchesBranch;
+        });
+
+        if (primaryMatches.length > 0) {
+            return primaryMatches;
+        }
+
+        // Fallback: If no TL is found, return Branch Admins and Managers for the selected branch
+        return tlUsers.filter(function (tlUser) {
+            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
+                return false;
+            }
+
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
+            const isBranchAdminOrManager = tlUser.is_branch_admin_or_manager || tlUser.is_super_admin;
+
+            return matchesBranch && isBranchAdminOrManager;
         });
     }
 
@@ -1118,11 +1134,37 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        const selectedBranchId = branchSelect ? branchSelect.value : '';
+
+        // Check primary matches
+        const primaryTlUsers = tlUsers.filter(function (tlUser) {
+            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
+                return false;
+            }
+
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
+
+            if (parentRoleId) {
+                return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
+            }
+
+            const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
+            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
+
+            return matchesDepartment && matchesBranch;
+        });
+
+        const isUsingFallback = primaryTlUsers.length === 0;
         const filteredTlUsers = filteredTlUsersForSelection();
 
-        placeholder.textContent = filteredTlUsers.length
-            ? (parentRoleId ? 'Select ' + parentRoleLabel : 'Select TL')
-            : (parentRoleId ? 'No user found with ' + parentRoleLabel + ' role' : 'No TL found for this department');
+        if (isUsingFallback) {
+            placeholder.textContent = filteredTlUsers.length
+                ? 'Select Branch Admin / Manager (No TL found)'
+                : 'No Branch Admin / Manager found for this branch';
+        } else {
+            placeholder.textContent = parentRoleId ? 'Select ' + parentRoleLabel : 'Select TL';
+        }
+
         tlSelect.appendChild(placeholder);
 
         filteredTlUsers.forEach(function (tlUser) {
@@ -1148,17 +1190,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (tlHelp) {
-            tlHelp.textContent = filteredTlUsers.length
-                ? (
-                    parentRoleId
-                        ? filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available from mapped parent role: ' + parentRoleLabel + '.'
-                        : filteredTlUsers.length + ' TL' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the selected department.'
-                )
-                : (
-                    parentRoleId
-                        ? 'No active users found for mapped parent role: ' + parentRoleLabel + '.'
-                        : 'No active TLs found. Create or assign a TL role for this department first.'
-                );
+            if (isUsingFallback) {
+                tlHelp.textContent = filteredTlUsers.length
+                    ? 'No TL found for the selected department/role. ' + filteredTlUsers.length + ' Branch Admin / Manager' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for selection.'
+                    : 'No TL, Branch Admin, or Manager found for the selected branch.';
+            } else {
+                tlHelp.textContent = parentRoleId
+                    ? filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available from mapped parent role: ' + parentRoleLabel + '.'
+                    : filteredTlUsers.length + ' TL' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the selected department.';
+            }
         }
 
         updatePortalMappingSummary();

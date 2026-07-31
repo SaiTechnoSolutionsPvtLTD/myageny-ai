@@ -229,4 +229,35 @@ class EmployeeOnboarding extends Model
 
         return asset('storage/' . ltrim($path, '/'));
     }
+
+    public function getProfileCompletionPercentageAttribute(): int
+    {
+        $checks = [
+            !empty($this->name),
+            !empty($this->mobile),
+            !empty($this->email),
+            !empty($this->date_of_birth),
+            !empty($this->joining_date),
+            !empty($this->father_name),
+            !empty($this->correspondence_address) || !empty($this->permanent_address),
+            !empty($this->department_id),
+            !empty($this->role_id),
+            !empty($this->portal_user_id),
+            !empty($this->emergency_contact_name) && !empty($this->emergency_contact_no),
+            !empty($this->bank_account_no) && !empty($this->bank_ifsc_code),
+            !empty($this->aadhaar_card_no),
+            !empty($this->pan_card_no),
+            (float) $this->gross_salary > 0,
+            $this->relationLoaded('educations') ? $this->educations->isNotEmpty() : $this->educations()->exists(),
+            $this->relationLoaded('familyDetails') ? $this->familyDetails->isNotEmpty() : $this->familyDetails()->exists(),
+            !empty($this->photograph),
+            !empty($this->signature) || !empty($this->document_aadhaar_card) || !empty($this->document_pan_card) || !empty($this->document_10th_marksheet),
+            !empty($this->declaration_date) || !empty($this->salary_effective_from) || !empty($this->blood_group),
+        ];
+
+        $filledCount = count(array_filter($checks));
+        $totalChecks = count($checks);
+
+        return (int) round(($filledCount / $totalChecks) * 100);
+    }
 }

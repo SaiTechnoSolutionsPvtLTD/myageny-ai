@@ -12,13 +12,21 @@ class StoreLeadFormFieldRequest extends FormRequest
 
     public function rules(): array
     {
+        $companyId = $this->company_id ?? auth()->user()?->company_id ?? session('company_id');
+
         return [
+            'company_id'           => ['nullable', 'integer', 'exists:companies,id'],
             'label'                => ['required', 'string', 'max:255'],
             'field_name'           => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('lead_form_fields', 'field_name')->where('company_id', auth()->user()?->company_id)
+                Rule::unique('lead_form_fields', 'field_name')->where(function ($query) use ($companyId) {
+                    if ($companyId) {
+                        return $query->where('company_id', $companyId);
+                    }
+                    return $query;
+                })
             ],
             'field_type'           => ['required', Rule::in(['text','number','select','radio','textarea','date','email','phone'])],
             'placeholder'          => ['nullable', 'string', 'max:255'],

@@ -34,7 +34,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->has('date_from') && !$request->has('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -120,7 +120,7 @@ class LeadController extends Controller
             'new'           => Lead::whereIn('id', $activeLeadIds)->whereDoesntHave('callUpdates')->count(),
         ];
 
-        $filterPanelOpen =
+        $filterPanelOpen = !$request->has('reset') && (
             $request->filled('search')
             || $request->filled('branch_id')
             || $request->filled('mobile_number')
@@ -129,8 +129,9 @@ class LeadController extends Controller
             || $request->filled('priority')
             || $request->filled('assigned_to')
             || $request->filled('product_name')
-            || $request->input('date_from') !== $defaultFromDate
-            || $request->input('date_to') !== $defaultToDate;
+            || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
+            || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate)
+        );
 
         return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
     }
@@ -143,7 +144,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->has('date_from') && !$request->has('date_to')) {
+        if (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset')) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,
@@ -219,15 +220,15 @@ class LeadController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
+        $statsBase = (clone $query)->with('payments');
         $leadProducts = $query->paginate(15)->withQueryString();
 
-        $statsBase = clone $query;
         $statsRows = $statsBase->get();
 
         $stats = [
             'total_products' => $statsRows->count(),
             'total_value' => (float) $statsRows->sum('total_price'),
-            'received' => (float) $statsRows->sum('amount_paid'),
+            'received' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_paid),
             'pending' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_pending),
         ];
 
@@ -237,7 +238,7 @@ class LeadController extends Controller
         $this->visibility->applyProductVisibility($productOptions);
         $products = $productOptions->get(['id', 'package_name', 'product_name']);
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
-        $filterPanelOpen =
+        $filterPanelOpen = !$request->has('reset') && (
             $request->filled('lead_id')
             || $request->filled('mobile_number')
             || $request->filled('product_id')
@@ -246,7 +247,8 @@ class LeadController extends Controller
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
             || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
-            || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate);
+            || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate)
+        );
 
         return view('pages.leads.products.index', [
             'leadProducts' => $leadProducts,

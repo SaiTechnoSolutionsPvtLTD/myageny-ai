@@ -722,9 +722,44 @@ class InternJoiningFormController extends Controller
                         ->unique()
                         ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : 'Team Lead'),
                     'is_super_admin' => $isSuperAdmin,
+                    'is_branch_admin_or_manager' => $this->isBranchAdminOrManager($user),
                 ];
             })
             ->values();
+    }
+
+    private function isBranchAdminOrManager(User $user): bool
+    {
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
+            return true;
+        }
+
+        $adminOrManagerKeys = [
+            'branch_admin',
+            'branch_manager',
+            'manager',
+            'admin',
+            'company_admin',
+            'super_admin',
+            'coo',
+            'cbo',
+            'chief_operating_officer',
+            'cheif_operating_officer',
+            'chief_business_officer',
+        ];
+
+        return $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
+            $roleKeys = collect([$role->name, $role->display_name])
+                ->filter()
+                ->flatMap(function (string $roleName) {
+                    $normalized = $this->normalizeRoleKey($roleName);
+
+                    return [$normalized, Str::afterLast($normalized, '__')];
+                })
+                ->unique();
+
+            return $roleKeys->intersect($adminOrManagerKeys)->isNotEmpty();
+        });
     }
 
     private function roleLooksLikeTeamLead(Role $role): bool

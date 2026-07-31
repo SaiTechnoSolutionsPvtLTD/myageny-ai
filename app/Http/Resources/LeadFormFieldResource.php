@@ -11,6 +11,8 @@ class LeadFormFieldResource extends JsonResource
     {
         return [
             'id'                   => $this->id,
+            'company_id'           => $this->company_id,
+            'company_name'         => $this->company?->company_name,
             'label'                => $this->label,
             'field_name'           => $this->field_name,
             'field_type'           => $this->field_type,

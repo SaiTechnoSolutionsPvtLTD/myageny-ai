@@ -517,6 +517,19 @@ class User extends Authenticatable
             || $this->hasCustomerSupportLikeRole();
     }
 
+    public function canAccessCrmModule(): bool
+    {
+        return $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
+            || $this->hasAdminLikeRole()
+            || $this->hasSalesLikeRole()
+            || $this->belongsToSalesDepartment()
+            || $this->belongsToDigitalMarketingDepartment()
+            || $this->can('modules_menu.crm')
+            || $this->can('dashboard.view')
+            || $this->can('leads.menuview');
+    }
+
     public function isExecutiveHrmsUser(): bool
     {
         return $this->hasExecutiveLikeRole()
@@ -771,10 +784,7 @@ class User extends Authenticatable
 
     public function canAccessMobileCrmModule(): bool
     {
-        return $this->can('modules_menu.crm')
-            || $this->isSuperAdmin()
-            || $this->isCompanyAdmin()
-            || $this->hasSalesLikeRole();
+        return $this->canAccessCrmModule();
     }
 
     public function canAccessMobileCstModule(): bool

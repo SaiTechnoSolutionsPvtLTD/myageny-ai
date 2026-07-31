@@ -80,6 +80,7 @@
                                 <th>Employee ID</th>
                                 <th>Employee</th>
                                 <th>Role / Department</th>
+                                <th>Progress</th>
                                 <th>Contact</th>
                                 <th>DOB</th>
                                 <th>Status</th>
@@ -103,6 +104,20 @@
                                     <td>
                                         <div class="eob-cell-title">{{ $employee->role?->display_name ?: ($employee->role?->name ?: 'No role') }}</div>
                                         <div class="eob-cell-sub">{{ $employee->department?->name ?: 'No department' }}</div>
+                                    </td>
+                                    <td>
+                                        @php
+                                            $pct = $employee->profile_completion_percentage;
+                                            $fillClass = $pct >= 80 ? 'eob-progress-high' : ($pct >= 50 ? 'eob-progress-mid' : 'eob-progress-low');
+                                        @endphp
+                                        <div class="eob-progress-wrap">
+                                            <div class="eob-progress-info">
+                                                <span>{{ $pct }}%</span>
+                                            </div>
+                                            <div class="eob-progress-bar-bg">
+                                                <div class="eob-progress-bar-fill {{ $fillClass }}" style="width: {{ $pct }}%;"></div>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>
                                         <div class="eob-cell-title">{{ $employee->mobile }}</div>

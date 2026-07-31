@@ -33,12 +33,31 @@
             <div class="eob-card-head">
                 <div>
                     <div class="eob-card-title">{{ $visitor->visitor_name }}</div>
-                    <div class="eob-card-sub">{{ $visitor->mobile_number }}</div>
+                    <div class="eob-card-sub">{{ $visitor->mobile_number }} &bull; <span class="eob-badge eob-badge-blue">{{ $visitor->visitor_type_label }}</span></div>
                 </div>
                 <span class="vm-status vm-status-{{ $visitor->status }}">{{ str_replace('_', ' ', $visitor->status) }}</span>
             </div>
             <div class="eob-card-body">
                 <div class="eob-show-grid">
+                    <div class="eob-show-item">
+                        <div class="eob-show-label">Visitor Type</div>
+                        <div class="eob-show-value">{{ $visitor->visitor_type_label }}</div>
+                    </div>
+                    @if($visitor->visitor_type === 'candidate')
+                        <div class="eob-show-item">
+                            <div class="eob-show-label">Email ID</div>
+                            <div class="eob-show-value">{{ $visitor->email ?: '-' }}</div>
+                        </div>
+                        <div class="eob-show-item">
+                            <div class="eob-show-label">Applied Position</div>
+                            <div class="eob-show-value">{{ $visitor->applied_position ?: '-' }}</div>
+                        </div>
+                    @elseif($visitor->visitor_type === 'client')
+                        <div class="eob-show-item">
+                            <div class="eob-show-label">Company Name</div>
+                            <div class="eob-show-value">{{ $visitor->company_name ?: '-' }}</div>
+                        </div>
+                    @endif
                     <div class="eob-show-item">
                         <div class="eob-show-label">Visit Date</div>
                         <div class="eob-show-value">{{ $visitor->visit_date->format('d M Y') }}</div>
@@ -56,7 +75,7 @@
                         <div class="eob-show-value">{{ $visitor->out_time ? \Carbon\Carbon::parse($visitor->out_time)->format('h:i A') : 'Pending' }}</div>
                     </div>
                     <div class="eob-show-item" style="grid-column:1 / -1;">
-                        <div class="eob-show-label">Remarks</div>
+                        <div class="eob-show-label">Purpose of Meet</div>
                         <div class="eob-show-value">{{ $visitor->remarks ?: 'No remarks added.' }}</div>
                     </div>
                 </div>

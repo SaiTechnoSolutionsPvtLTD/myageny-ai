@@ -19,9 +19,13 @@ class VisitorManagementController extends Controller
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('visitor_name', 'like', '%' . $search . '%')
                         ->orWhere('mobile_number', 'like', '%' . $search . '%')
-                        ->orWhere('person_to_meet', 'like', '%' . $search . '%');
+                        ->orWhere('person_to_meet', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('applied_position', 'like', '%' . $search . '%')
+                        ->orWhere('company_name', 'like', '%' . $search . '%');
                 });
             })
+            ->when($request->visitor_type, fn ($query) => $query->where('visitor_type', $request->visitor_type))
             ->when($request->visit_date, fn ($query) => $query->whereDate('visit_date', $request->visit_date))
             ->when($request->status, fn ($query) => $query->where('status', $request->status))
             ->latest('visit_date')
@@ -36,6 +40,7 @@ class VisitorManagementController extends Controller
     {
         return view('pages.hrms.visitor_management.create', [
             'visitor' => new VisitorEntry([
+                'visitor_type' => VisitorEntry::TYPE_OTHERS,
                 'visit_date' => now()->toDateString(),
                 'in_time' => now()->format('H:i'),
             ]),
@@ -91,6 +96,7 @@ class VisitorManagementController extends Controller
     {
         return view('pages.public.visitor-entry', [
             'visitor' => new VisitorEntry([
+                'visitor_type' => VisitorEntry::TYPE_OTHERS,
                 'visit_date' => now()->toDateString(),
                 'in_time' => now()->format('H:i'),
             ]),
@@ -107,6 +113,15 @@ class VisitorManagementController extends Controller
     private function payload(array $validated): array
     {
         $validated['status'] = VisitorEntry::statusFor($validated['out_time'] ?? null);
+
+        if (($validated['visitor_type'] ?? '') !== VisitorEntry::TYPE_CANDIDATE) {
+            $validated['email'] = null;
+            $validated['applied_position'] = null;
+        }
+
+        if (($validated['visitor_type'] ?? '') !== VisitorEntry::TYPE_CLIENT) {
+            $validated['company_name'] = null;
+        }
 
         return $validated;
     }

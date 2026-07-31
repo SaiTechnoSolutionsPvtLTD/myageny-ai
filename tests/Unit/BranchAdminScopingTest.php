@@ -62,10 +62,9 @@ class BranchAdminScopingTest extends TestCase
         // Branch
         $this->assertStringContainsString('"branches"."id" in (?)', $branchSql);
         
-        // Assert DataVisibilityService gives them ACCESS_COMPANY level so they see all executives in their branch
+        // Assert DataVisibilityService gives them branch-scoped user IDs
         $visibilityService = app(\App\Services\DataVisibilityService::class);
-        $this->assertEquals(\App\Models\RoleMapping::ACCESS_COMPANY, $visibilityService->accessLevelFor($user));
-        $this->assertNull($visibilityService->visibleUserIds($user));
+        $this->assertNotNull($visibilityService->visibleUserIds($user));
 
         // Clean up session
         auth()->logout();

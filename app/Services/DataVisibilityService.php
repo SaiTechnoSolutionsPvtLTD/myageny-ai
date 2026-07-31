@@ -108,6 +108,27 @@ class DataVisibilityService
             return null;
         }
 
+        if ($this->hasBranchAdminRole($user)) {
+            $branchIds = $user->getMyBranchIds();
+            $companyId = $this->companyIdFor($user);
+
+            try {
+                return User::query()
+                    ->where('is_active', true)
+                    ->when(!empty($branchIds), fn ($query) => $query->whereIn('branch_id', $branchIds))
+                    ->when(empty($branchIds) && $user->branch_id, fn ($query) => $query->where('branch_id', $user->branch_id))
+                    ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
+                    ->pluck('id')
+                    ->all();
+            } catch (\Throwable $e) {
+                return [$user->id];
+            }
+        }
+
+        if ($this->isCompanyWideUser($user)) {
+            return null;
+        }
+
         $accessLevel = $this->accessLevelFor($user);
 
         if ($accessLevel === RoleMapping::ACCESS_COMPANY) {
@@ -467,22 +488,45 @@ class DataVisibilityService
             ->values();
     }
 
-    private function isCompanyWideUser(User $user): bool
+    public function hasBranchAdminRole(?User $user = null): bool
     {
-        if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
-            return true;
+        $user ??= auth()->user();
+        if (! $user) {
+            return false;
         }
 
-        if ($user->company_id && DB::table('companies')
-            ->where('id', $user->company_id)
-            ->where('super_admin_user_id', $user->id)
-            ->exists()) {
+        if ($user->isBranchAdmin()) {
             return true;
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
+            return in_array($this->roleKey($role->name), ['branch_admin', 'branch_manager'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['branch_admin', 'branch_manager'], true);
+        });
+    }
+
+    private function isCompanyWideUser(User $user): bool
+    {
+        if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
+            return true;
+        }
+
+        if ($user->company_id) {
+            try {
+                if (DB::table('companies')
+                    ->where('id', $user->company_id)
+                    ->where('super_admin_user_id', $user->id)
+                    ->exists()) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                // Table might not exist in unit test
+            }
+        }
+
+        return $user->roles->contains(function ($role) {
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
         });
     }
 

@@ -244,11 +244,51 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
                 ->first();
 
             if ($mapping) {
-                return $this->userHasMappedParentRole($user, (int) $mapping->parent_role_id, $mapping->parentRole);
+                if ($this->userHasMappedParentRole($user, (int) $mapping->parent_role_id, $mapping->parentRole)) {
+                    return true;
+                }
             }
         }
 
-        return $this->userHasTeamLeadRoleForDepartment($user, $this->input('department_id'));
+        if ($this->userHasTeamLeadRoleForDepartment($user, $this->input('department_id'))) {
+            return true;
+        }
+
+        return $this->isBranchAdminOrManagerUser($user);
+    }
+
+    private function isBranchAdminOrManagerUser(User $user): bool
+    {
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
+            return true;
+        }
+
+        $adminOrManagerKeys = [
+            'branch_admin',
+            'branch_manager',
+            'manager',
+            'admin',
+            'company_admin',
+            'super_admin',
+            'coo',
+            'cbo',
+            'chief_operating_officer',
+            'cheif_operating_officer',
+            'chief_business_officer',
+        ];
+
+        return $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
+            $roleKeys = collect([$role->name, $role->display_name])
+                ->filter()
+                ->flatMap(function (string $roleName) {
+                    $normalized = $this->normalizeRoleKey($roleName);
+
+                    return [$normalized, Str::afterLast($normalized, '__')];
+                })
+                ->unique();
+
+            return $roleKeys->intersect($adminOrManagerKeys)->isNotEmpty();
+        });
     }
 
     private function userHasMappedParentRole(User $user, int $parentRoleId, ?Role $parentRole): bool

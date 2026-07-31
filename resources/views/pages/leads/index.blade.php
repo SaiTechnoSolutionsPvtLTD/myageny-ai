@@ -466,7 +466,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-event ld-fi"></i>
                                     <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                                           value="{{ request('date_from', $defaultFromDate) }}" onchange="autoSubmit()">
+                                           value="{{ request('date_from') }}" onchange="autoSubmit()">
                                 </div>
                             </div>
                             <span class="ld-date-sep">to</span>
@@ -475,7 +475,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-check ld-fi"></i>
                                     <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                                           value="{{ request('date_to', $defaultToDate) }}" onchange="autoSubmit()">
+                                           value="{{ request('date_to') }}" onchange="autoSubmit()">
                                 </div>
                             </div>
                         </div>
@@ -495,7 +495,7 @@
                                 <i class="bi bi-check2-circle"></i>
                                 Apply Filter
                             </button>
-                            <a href="{{ route('leads.index') }}" class="ld-reset-btn">
+                            <a href="{{ route('leads.index', ['reset' => 1]) }}" class="ld-reset-btn">
                                 <i class="bi bi-arrow-counterclockwise"></i>
                                 Reset
                             </a>
@@ -837,44 +837,6 @@
 @push('scripts')
 <script>
 // Filter logic
-const oldFf = {
-    f_branch:    { label:'Branch',   sel:'#f_branch' },
-    f_mobile:    { label:'Mobile',   sel:'#f_mobile' },
-    f_source:    { label:'Source',   sel:'#f_source' },
-    f_user:      { label:'User',     sel:'#f_user' },
-    f_date_from: { label:'From',     sel:'#f_date_from' },
-    f_date_to:   { label:'To',       sel:'#f_date_to' },
-};
-function updateFilters() {
-    let count = 0, chips = [];
-    Object.entries(ff).forEach(([id, cfg]) => {
-        const el = document.querySelector(cfg.sel);
-        if (el && el.value) {
-            count++;
-            const display = el.tagName === 'SELECT' ? el.options[el.selectedIndex].text : el.value;
-            chips.push(`<span class="ld-chip" onclick="clearF('${id}')">${cfg.label}: ${display} Ã—</span>`);
-        }
-    });
-    const cnt = document.getElementById('fCount');
-    cnt.textContent = count; cnt.style.display = count > 0 ? 'inline-flex' : 'none';
-    const bar = document.getElementById('chipsBar');
-    bar.style.display = count > 0 ? 'flex' : 'none';
-    bar.innerHTML = chips.join('');
-}
-function clearF(id) { const el = document.querySelector(ff[id].sel); if(el) el.value=''; updateFilters(); document.getElementById('filterForm').submit(); }
-function autoSubmit() { updateFilters(); document.getElementById('filterForm').submit(); }
-let st;
-function delaySubmit() { clearTimeout(st); updateFilters(); st = setTimeout(() => document.getElementById('filterForm').submit(), 600); }
-function setQ(p) {
-    const today = new Date(), fmt = d => d.toISOString().split('T')[0];
-    const f = document.getElementById('f_date_from'), t = document.getElementById('f_date_to');
-    if (p==='today') { f.value=fmt(today); t.value=fmt(today); }
-    else if (p==='week') { const mon=new Date(today); mon.setDate(today.getDate()-today.getDay()+1); const sun=new Date(mon); sun.setDate(mon.getDate()+6); f.value=fmt(mon); t.value=fmt(sun); }
-    else if (p==='month') { f.value=fmt(new Date(today.getFullYear(),today.getMonth(),1)); t.value=fmt(new Date(today.getFullYear(),today.getMonth()+1,0)); }
-    updateFilters(); document.getElementById('filterForm').submit();
-}
-document.addEventListener('DOMContentLoaded', updateFilters);
-
 const todayDate = @json(now()->toDateString());
 const defaultFromDate = @json($defaultFromDate);
 const defaultToDate = @json($defaultToDate);

@@ -210,12 +210,12 @@
                                 <details class="crm-table-dropdown">
                                     <summary class="crm-table-dropdown-trigger">Actions</summary>
                                     <div class="crm-table-dropdown-menu">
-                                <form action="{{ route('settings.facebook-integration.sync', $campaignMaster) }}" method="POST" style="display:inline">
-                                    @csrf
-                                    <button class="crm-icon-btn">Sync Now</button>
-                                </form>
-                                <button type="button" class="crm-icon-btn editintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Edit Mapping</button>
-                                <button type="button" class="crm-icon-btn danger deleteintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Delete</button>
+                                        <form action="{{ route('settings.facebook-integration.sync', $campaignMaster) }}" method="POST" style="display:inline">
+                                            @csrf
+                                            <button type="submit" class="crm-table-dropdown-item">Sync Now</button>
+                                        </form>
+                                        <button type="button" class="crm-table-dropdown-item editintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Edit Mapping</button>
+                                        <button type="button" class="crm-table-dropdown-item danger deleteintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Delete</button>
                                     </div>
                                 </details>
                             </td>
@@ -231,36 +231,27 @@
             @if ($campaignMasters->hasPages())
                 @include('partials.table-pagination', ['paginator' => $campaignMasters])
             @endif
-            @if (false && $campaignMasters->hasPages())
-                <div class="crm-pagination">
-                    <div class="crm-page-info">
-                        Page {{ $campaignMasters->currentPage() }} of {{ $campaignMasters->lastPage() }}
-                    </div>
-                    <div class="crm-page-links">
-                        @if ($campaignMasters->onFirstPage())
-                            <span class="crm-page-link disabled">Prev</span>
-                        @else
-                            <a href="{{ $campaignMasters->previousPageUrl() }}" class="crm-page-link">Prev</a>
-                        @endif
+        </div>
+    </div>
 
-                        @foreach ($campaignMasters->getUrlRange(max(1, $campaignMasters->currentPage() - 2), min($campaignMasters->lastPage(), $campaignMasters->currentPage() + 2)) as $page => $url)
-                            <a href="{{ $url }}" class="crm-page-link {{ $page == $campaignMasters->currentPage() ? 'active' : '' }}">{{ $page }}</a>
-                        @endforeach
-
-                        @if ($campaignMasters->hasMorePages())
-                            <a href="{{ $campaignMasters->nextPageUrl() }}" class="crm-page-link">Next</a>
-                        @else
-                            <span class="crm-page-link disabled">Next</span>
-                        @endif
-                    </div>
-                </div>
-            @endif
+    <!-- ====== EDIT MAPPING MODAL ====== -->
+    <div class="crm-modal-overlay" id="editMappingModal" style="display:none;">
+        <div class="crm-modal" style="width:880px; max-width:95vw; max-height:90vh; overflow-y:auto;">
+            <div class="crm-modal-header">
+                <h3>Edit Campaign Integration</h3>
+                <button type="button" onclick="closeModal('editMappingModal')">✕</button>
+            </div>
+            <div class="crm-modal-body" style="padding:16px 20px;">
+                <div class="man"></div>
+            </div>
         </div>
     </div>
 
 </main>
 
 @push('scripts')
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.8.7/chosen.jquery.min.js"></script>
+@include('pages.settings.facebook-integration.facebook-script')
 @include('pages.settings.partials.modal-scripts')
 @endpush
 @endsection

@@ -160,6 +160,31 @@
     .eob-form-grid { grid-template-columns:1fr; }
     .eob-card-body { padding:18px; }
     .eob-foot { padding:16px 18px; }
+.eob-wizard-progress-meta span { font-size:12px; font-weight:700; color:#7c7c7c; text-align:right; }
+.eob-wizard-progress-track { width:100%; height:8px; border-radius:999px; background:#f1ece8; overflow:hidden; }
+.eob-wizard-progress-track span { display:block; height:100%; width:0; border-radius:999px; background:linear-gradient(135deg,#fe5f04,#ff9a52); transition:width .24s ease; }
+.eob-wizard-panels { display:flex; flex-direction:column; gap:16px; }
+.eob-wizard-panel { display:none; animation:eobWizardFade .22s ease; }
+.eob-wizard-panel.is-active { display:block; }
+.eob-wizard-footer { justify-content:space-between; }
+.eob-wizard-footer-actions { display:flex; gap:10px; flex-wrap:wrap; }
+@media (max-width: 960px) {
+    .eob-topbar { padding:16px 20px; }
+    .eob-body { padding:16px 20px 24px; }
+    .eob-show-layout { grid-template-columns:1fr; }
+    .eob-show-grid, .eob-file-grid, .eob-doc-list { grid-template-columns:1fr; }
+    .eob-profile-sticky { position:static; }
+    .eob-wizard-shell { grid-template-columns:1fr; }
+    .eob-wizard-nav { position:static; }
+    .eob-wizard-progress-card { flex-direction:column; align-items:flex-start; }
+    .eob-wizard-progress-meta { min-width:100%; }
+    .eob-wizard-progress-meta span { text-align:left; }
+}
+@media (max-width: 768px) {
+    .eob-topbar { flex-direction:column; align-items:flex-start; }
+    .eob-form-grid { grid-template-columns:1fr; }
+    .eob-card-body { padding:18px; }
+    .eob-foot { padding:16px 18px; }
     .eob-filter-form { flex-direction:column; align-items:stretch; }
     .eob-field { min-width:100%; }
     .eob-wizard-footer { flex-direction:column; align-items:stretch; }
@@ -170,4 +195,11 @@
     from { opacity:0; transform:translateY(8px); }
     to { opacity:1; transform:translateY(0); }
 }
+.eob-progress-wrap { display:flex; flex-direction:column; gap:4px; min-width:115px; }
+.eob-progress-info { display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:800; color:#475569; }
+.eob-progress-bar-bg { width:100%; height:7px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+.eob-progress-bar-fill { height:100%; border-radius:999px; transition:width .3s ease; }
+.eob-progress-high { background:linear-gradient(90deg, #16a34a, #22c55e); }
+.eob-progress-mid { background:linear-gradient(90deg, #d97706, #f59e0b); }
+.eob-progress-low { background:linear-gradient(90deg, #dc2626, #ef4444); }
 </style>

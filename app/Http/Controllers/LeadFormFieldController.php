@@ -31,7 +31,7 @@ class LeadFormFieldController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = LeadFormField::query();
+        $query = LeadFormField::with('company');
 
         if ($request->filled('field_type')) {
             $query->where('field_type', $request->field_type);
@@ -39,6 +39,10 @@ class LeadFormFieldController extends Controller
 
         if ($request->has('is_active')) {
             $query->where('is_active', (bool)$request->is_active);
+        }
+
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
         }
 
         if ($request->filled('branch_id')) {
@@ -63,6 +67,7 @@ class LeadFormFieldController extends Controller
     /**
      * Create a new custom field.
      *
+     * @bodyParam company_id          int     optional  Company ID.
      * @bodyParam label               string  required  Human-readable label. Example: "Budget Amount"
      * @bodyParam field_type          string  required  One of: text, number, select, radio, textarea, date, email, phone. Example: "number"
      * @bodyParam placeholder         string  optional  Placeholder text.
@@ -81,6 +86,10 @@ class LeadFormFieldController extends Controller
     {
         $data = $request->validated();
 
+        if (empty($data['company_id'])) {
+            $data['company_id'] = auth()->user()?->company_id ?? session('company_id');
+        }
+
         // Ensure options are null for non-option types
         if (!in_array($data['field_type'], LeadFormField::OPTION_TYPES)) {
             $data['options'] = null;
@@ -91,7 +100,7 @@ class LeadFormFieldController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Field created successfully.',
-            'data'    => new LeadFormFieldResource($field),
+            'data'    => new LeadFormFieldResource($field->load('company')),
         ], 201);
     }
 

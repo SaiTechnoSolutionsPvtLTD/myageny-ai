@@ -499,8 +499,8 @@
         <div class="nav-section">
             <div class="nav-title">CRM</div>
             <div class="nav-items">
-                <a href="{{ url('/dashboard') }}" class="nav-item {{ request()->is('dashboard') || request()->is('/') ? 'active' : '' }}">
-                    @if(request()->is('dashboard') || request()->is('/'))
+                <a href="{{ route('dashboard.admin') }}" class="nav-item {{ request()->routeIs('dashboard.admin') || request()->is('dashboard') || request()->is('/') ? 'active' : '' }}">
+                    @if(request()->routeIs('dashboard.admin') || request()->is('dashboard') || request()->is('/'))
                         <div class="active-indicator"></div>
                     @endif
                     <div class="nav-content">

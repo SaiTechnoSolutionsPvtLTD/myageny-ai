@@ -18,17 +18,28 @@ class AdminDashboardService
      */
     private function baseQuery(array $filters)
     {
+        $user = auth()->user();
         $query = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
             ->leftJoin('users', 'users.id', '=', 'leads.assigned_to')
             ->leftJoin('branches', 'branches.id', '=', 'users.branch_id');
 
-        $visibleUserIds = $this->visibility->visibleUserIds();
-        $this->visibility->applyCompanyVisibility($query, null, 'leads.company_id');
+        $visibleUserIds = $this->visibility->visibleUserIds($user);
+        $this->visibility->applyCompanyVisibility($query, $user, 'leads.company_id');
 
         if ($visibleUserIds !== null) {
             $query->whereIn('leads.assigned_to', $visibleUserIds);
+        }
+
+        if ($user && ($user->isBranchAdmin() || $this->visibility->hasBranchAdminRole($user))) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                $query->where(function ($q) use ($branchIds) {
+                    $q->whereIn('leads.branch_id', $branchIds)
+                      ->orWhereIn('users.branch_id', $branchIds);
+                });
+            }
         }
 
         // Product filter
@@ -78,6 +89,7 @@ class AdminDashboardService
      */
     private function paymentBaseQuery(array $filters)
     {
+        $user = auth()->user();
         $query = LeadProductPayment::query()
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
@@ -85,11 +97,21 @@ class AdminDashboardService
             ->leftJoin('users', 'users.id', '=', 'leads.assigned_to')
             ->leftJoin('branches', 'branches.id', '=', 'users.branch_id');
 
-        $visibleUserIds = $this->visibility->visibleUserIds();
-        $this->visibility->applyCompanyVisibility($query, null, 'leads.company_id');
+        $visibleUserIds = $this->visibility->visibleUserIds($user);
+        $this->visibility->applyCompanyVisibility($query, $user, 'leads.company_id');
 
         if ($visibleUserIds !== null) {
             $query->whereIn('leads.assigned_to', $visibleUserIds);
+        }
+
+        if ($user && ($user->isBranchAdmin() || $this->visibility->hasBranchAdminRole($user))) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                $query->where(function ($q) use ($branchIds) {
+                    $q->whereIn('leads.branch_id', $branchIds)
+                      ->orWhereIn('users.branch_id', $branchIds);
+                });
+            }
         }
 
         if (!empty($filters['product_id'])) {

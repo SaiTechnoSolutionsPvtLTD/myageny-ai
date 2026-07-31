@@ -294,6 +294,7 @@ select.form-control { appearance:none; cursor:pointer; }
                             <th style="width:36px;">#</th>
                             <th>Field Label</th>
                             <th>Field Name (API Key)</th>
+                            <th>Company</th>
                             <th>Type</th>
                             <th>Options</th>
                             <th>Required</th>
@@ -305,7 +306,7 @@ select.form-control { appearance:none; cursor:pointer; }
                     </thead>
                     <tbody id="fieldsTableBody">
                         <tr>
-                            <td colspan="10">
+                            <td colspan="12">
                                 <div class="empty-state">
                                     <i class="bi bi-hourglass-split"></i>
                                     <p>Loading...</p>
@@ -328,6 +329,20 @@ select.form-control { appearance:none; cursor:pointer; }
         </div>
         <div class="modal-body">
             <input type="hidden" id="editFieldId">
+
+            <div class="form-row full">
+                <div class="form-group">
+                    <label class="form-label">Company</label>
+                    <select id="fCompanyId" class="form-control">
+                        <option value="">Default (Current User Company)</option>
+                        @if(isset($companies))
+                            @foreach($companies as $c)
+                                <option value="{{ $c->id }}">{{ $c->company_name }}</option>
+                            @endforeach
+                        @endif
+                    </select>
+                </div>
+            </div>
 
             <div class="form-row">
                 <div class="form-group">
@@ -451,6 +466,7 @@ select.form-control { appearance:none; cursor:pointer; }
 // ================================================================
 const API_BASE = '/api/lead-form-fields';
 const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+const USER_COMPANY_ID = {{ auth()->user()?->company_id ? auth()->user()->company_id : 'null' }};
 
 let allFields      = [];
 let currentType    = 'all';
@@ -514,6 +530,7 @@ function renderTable() {
                 </div>
             </td>
             <td><code style="font-size:11px;color:#60308c;background:#f5eeff;padding:2px 6px;border-radius:4px;">${f.field_name}</code></td>
+            <td>${f.company_name ? escHtml(f.company_name) : '<span style="color:#aaa;font-size:12px;">Default</span>'}</td>
             <td>${typeBadge(f.field_type)}</td>
             <td>${optionsPreview(f)}</td>
             <td>${f.is_required ? '<i class="bi bi-check-circle-fill" style="color:#469d89"></i>' : '<i class="bi bi-dash-circle" style="color:#ddd"></i>'}</td>
@@ -590,6 +607,8 @@ function resetForm() {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+    const fComp = document.getElementById('fCompanyId');
+    if (fComp) fComp.value = USER_COMPANY_ID ? USER_COMPANY_ID : '';
     document.getElementById('fType').value = 'text';
     document.getElementById('fSortOrder').value = 0;
     document.getElementById('fRequired').checked = false;
@@ -614,6 +633,9 @@ function openEditModal(id) {
     document.getElementById('editFieldId').value = id;
     document.getElementById('modalTitle').textContent = 'Edit Field';
     document.getElementById('saveBtnText').textContent = 'Update Field';
+
+    const fComp = document.getElementById('fCompanyId');
+    if (fComp) fComp.value = f.company_id ?? (USER_COMPANY_ID ? USER_COMPANY_ID : '');
 
     document.getElementById('fLabel').value       = f.label;
     document.getElementById('fType').value        = f.field_type;
@@ -711,8 +733,10 @@ async function saveField() {
     const id      = document.getElementById('editFieldId').value;
     const type    = document.getElementById('fType').value;
     const isCalc  = document.getElementById('fIsCalc').checked;
+    const compEl  = document.getElementById('fCompanyId');
 
     const payload = {
+        company_id:     compEl && compEl.value ? parseInt(compEl.value) : null,
         label:          document.getElementById('fLabel').value.trim(),
         field_type:     type,
         placeholder:    document.getElementById('fPlaceholder').value.trim() || null,

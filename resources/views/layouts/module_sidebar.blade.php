@@ -5,8 +5,8 @@
             'title' => 'CRM',
             'description' => 'Leads, quotations, products, settings, and customer workflows.',
             'icon' => 'bi-briefcase-fill',
-            'permission' => 'modules_menu.crm',
-            'url' => route('dashboard'),
+            'accessor' => 'canAccessCrmModule',
+            'url' => route('dashboard.admin'),
         ],
         [
             'key' => 'hrms',

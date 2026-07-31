@@ -90,8 +90,10 @@ Route::get('/forgot-password', function () {
 })->name('password.request');
 
 
-Route::get('/lead/form-customization', fn() => view('pages.field_customization.index'))
-    ->middleware(['auth', 'can:form_customization.menuview']);
+Route::get('/lead/form-customization', function () {
+    $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
+    return view('pages.field_customization.index', compact('companies'));
+})->middleware(['auth', 'can:form_customization.menuview']);
 Route::middleware(['auth'])->group(function () {
 
   // Dashboard

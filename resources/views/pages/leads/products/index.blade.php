@@ -304,12 +304,12 @@
 
                 <div class="lpd-field">
                     <label class="lpd-label" for="date_from">Created From</label>
-                    <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from', $defaultFromDate) }}">
+                    <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from') }}">
                 </div>
 
                 <div class="lpd-field">
                     <label class="lpd-label" for="date_to">Created To</label>
-                    <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to', $defaultToDate) }}">
+                    <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to') }}">
                 </div>
 
                 <div class="lpd-field">
@@ -324,9 +324,7 @@
 
                 <div class="lpd-filter-actions">
                     <button type="submit" class="lpd-btn lpd-btn-primary">Filter</button>
-                    @if($hasCustomFilters)
-                        <a href="{{ route('leads.products.index') }}" class="lpd-btn lpd-btn-ghost">Reset</a>
-                    @endif
+                    <a href="{{ route('leads.products.index', ['reset' => 1]) }}" class="lpd-btn lpd-btn-ghost">Reset</a>
                 </div>
             </form>
             </div>

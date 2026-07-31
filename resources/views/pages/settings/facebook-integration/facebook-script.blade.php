@@ -34,12 +34,13 @@
             var $select = $(this);
 
             if ($select.data('chosen')) {
-                $select.trigger('chosen:updated');
-                return;
+                $select.chosen('destroy');
             }
 
             $select.chosen({
-                width: '100%'
+                width: '100%',
+                placeholder_text_multiple: 'Select users...',
+                no_results_text: 'No active user found matching'
             });
         });
     }
@@ -47,12 +48,16 @@
     function replaceFlowView(response, fallbackMessage) {
         if (response && response.view) {
             $('.man').html(response.view);
+            if ($('#editMappingModal').length) {
+                $('#editMappingModal').css('display', 'flex');
+            }
             initChosen('.man');
             initFieldMapping('.man');
             return true;
         }
 
-        window.alert(fallbackMessage);
+        var msg = (response && response.error) ? response.error : fallbackMessage;
+        window.alert(msg);
         return false;
     }
 
@@ -402,61 +407,6 @@
         });
     });
 
-    $(document).on('click', '.pinnala_poganu', function (event) {
-        event.preventDefault();
-        window.history.back();
-    });
-
-    $(document).on('click', '.deleteintegratedcamp', function (event) {
-        event.preventDefault();
-
-        var campId = $(this).data('camp_id');
-
-        if (!window.confirm('Delete this integrated campaign?')) {
-            return;
-        }
-
-        $.ajax({
-            url: "{{ url('/settings/deleteintegration') }}",
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': csrfToken()
-            },
-            data: {
-                camp_id: campId
-            },
-            success: function () {
-                window.location.reload();
-            },
-            error: function () {
-                window.alert('Failed to delete integration. Please try again.');
-            }
-        });
-    });
-
-    $(document).on('click', '.editintegratedcamp', function (event) {
-        event.preventDefault();
-
-        var campId = $(this).data('camp_id');
-
-        $.ajax({
-            url: "{{ url('/settings/editfieldmaps') }}",
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': csrfToken()
-            },
-            data: {
-                camid: campId
-            },
-            success: function (response) {
-                replaceFlowView(response, 'Unexpected response while loading edit field mapping.');
-            },
-            error: function () {
-                window.alert('Failed to load field mapping editor. Please try again.');
-            }
-        });
-    });
-
     $(document).on('click', '#saveDataButton', function (event) {
         event.preventDefault();
 
@@ -515,6 +465,72 @@
             },
             complete: function () {
                 resetLoading($button);
+            }
+        });
+    });
+
+    $(document).on('click', '.pinnala_poganu', function (event) {
+        event.preventDefault();
+        window.history.back();
+    });
+
+    $(document).on('click', '.deleteintegratedcamp', function (event) {
+        event.preventDefault();
+
+        var campId = $(this).data('camp_id');
+
+        if (!window.confirm('Are you sure you want to delete this Facebook campaign integration?')) {
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: "{{ url('/settings/deleteintegration') }}",
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken()
+            },
+            data: {
+                camp_id: campId
+            },
+            success: function (response) {
+                window.location.reload();
+            },
+            error: function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to delete integration. Please try again.';
+                window.alert(msg);
+                $btn.prop('disabled', false);
+            }
+        });
+    });
+
+    $(document).on('click', '.editintegratedcamp', function (event) {
+        event.preventDefault();
+
+        var campId = $(this).data('camp_id');
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: "{{ url('/settings/editfieldmaps') }}",
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken()
+            },
+            data: {
+                camid: campId
+            },
+            success: function (response) {
+                replaceFlowView(response, 'Unexpected response while loading edit field mapping.');
+            },
+            error: function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to load field mapping editor. Please try again.';
+                window.alert(msg);
+            },
+            complete: function () {
+                $btn.prop('disabled', false);
             }
         });
     });

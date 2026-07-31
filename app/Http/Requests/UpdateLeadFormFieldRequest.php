@@ -13,6 +13,7 @@ class UpdateLeadFormFieldRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'company_id'           => ['nullable', 'integer', 'exists:companies,id'],
             'label'                => ['sometimes', 'required', 'string', 'max:255'],
             'field_type'           => ['sometimes', 'required', Rule::in(['text','number','select','radio','textarea','date','email','phone'])],
             'placeholder'          => ['nullable', 'string', 'max:255'],

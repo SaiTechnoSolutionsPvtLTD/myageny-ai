@@ -45,4 +45,21 @@ class UserDashboardRouteTest extends TestCase
 
         $this->assertEquals('hrms.dashboard', $user->dashboardRoute());
     }
+
+    /** @test */
+    public function digital_marketing_user_can_access_crm_module()
+    {
+        $department = new Department();
+        $department->name = 'Digital Marketing';
+
+        $role = new Role();
+        $role->name = 'digital_marketing_tl';
+        $role->setRelation('department', $department);
+
+        $user = new User();
+        $user->company_id = 1;
+        $user->setRelation('roles', new EloquentCollection([$role]));
+
+        $this->assertTrue($user->canAccessCrmModule());
+    }
 }

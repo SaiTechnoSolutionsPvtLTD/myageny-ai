@@ -99,6 +99,20 @@
                             </div>
                         </div>
 
+                        <div class="eob-empid-card" style="margin-top:12px;">
+                            @php
+                                $showPct = $employee->profile_completion_percentage;
+                                $showFill = $showPct >= 80 ? 'eob-progress-high' : ($showPct >= 50 ? 'eob-progress-mid' : 'eob-progress-low');
+                            @endphp
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <span class="eob-empid-label">Profile Completion</span>
+                                <span style="font-size:13px; font-weight:800; color:#121212;">{{ $showPct }}%</span>
+                            </div>
+                            <div class="eob-progress-bar-bg">
+                                <div class="eob-progress-bar-fill {{ $showFill }}" style="width: {{ $showPct }}%;"></div>
+                            </div>
+                        </div>
+
                         <div class="eob-side-list">
                             <div class="eob-side-item">
                                 <div class="eob-side-label">Mobile</div>
