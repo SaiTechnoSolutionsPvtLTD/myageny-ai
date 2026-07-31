@@ -14,6 +14,41 @@ class AdminDashboardService
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     /**
+     * Branch-wise data visibility for the Product Dashboard.
+     *
+     * Returns null when the user should see all branches (System Admin,
+     * Company Admin, and any other role DataVisibilityService::isCompanyWideUser()
+     * treats as company-wide — e.g. CBO/COO/designated super-admin), matching
+     * existing business rules for those roles.
+     *
+     * Otherwise returns the explicit list of branch IDs the user is allowed to
+     * see. This deliberately covers Branch Admin as well: elsewhere in the app
+     * (leads/quotations/products visibility) Branch Admin is treated as
+     * company-wide by isCompanyWideUser(), but the Product Dashboard requires
+     * Branch Admin to be scoped to their own assigned branch(es) only, so that
+     * case is excluded here without changing the shared method's behavior for
+     * any other consumer.
+     *
+     * $user->getMyBranchIds() is the existing helper used for this purpose
+     * elsewhere in the codebase (User model) — it already covers both a
+     * single assigned branch and multiple branches (branch_user pivot).
+     */
+    public function restrictedBranchIds(?User $user = null): ?array
+    {
+        $user ??= auth()->user();
+
+        if (! $user) {
+            return null;
+        }
+
+        if ($this->visibility->isCompanyWideUser($user) && ! $user->isBranchAdmin()) {
+            return null;
+        }
+
+        return $user->getMyBranchIds();
+    }
+
+    /**
      * Build base query for lead_products with all filters applied.
      */
     private function baseQuery(array $filters)
@@ -275,7 +310,7 @@ class AdminDashboardService
     /**
      * 5. Top Performing User.
      */
-    public function getTopUser(array $filters): array
+    public function getTopUser(array $filters): ?array
     {
         $row = $this->paymentBaseQuery($filters)
             ->selectRaw("
@@ -290,8 +325,13 @@ class AdminDashboardService
             ->orderByDesc('total_collected_amount')
             ->first();
 
+        // Return null (not []) when there's no top user for the current
+        // scope/filters. An empty PHP array json_encode()s to `[]`, but the
+        // mobile app's model expects a single object (or null) here — `[]`
+        // was crashing ProductDashboardData.fromJson on the Flutter side
+        // whenever a branch/filter scope had no payments yet.
         if (!$row) {
-            return [];
+            return null;
         }
 
         return [

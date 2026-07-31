@@ -8,6 +8,7 @@ use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -270,7 +271,14 @@ class AttendanceApiController extends Controller
      * GET /mobile/hrms/attendance
      *
      * Query params:
-     *   attendance_date  (Y-m-d, default: today)
+     *   date_from        (Y-m-d) + date_to (Y-m-d) — preferred, supports any range
+     *   attendance_date  (Y-m-d) — back-compat single-day shortcut, still
+     *                     supported since nothing else needs to change to
+     *                     keep working; treated as date_from == date_to.
+     *                     Ignored if date_from/date_to are present.
+     *   (no date param at all) — defaults to the current month to date,
+     *                     matching this app's other quick-filter screens
+     *                     and the web Attendance page's own default.
      *   status           (present|absent|leave)
      *   login_timing     (early|late|on-time)
      *   employee_name    (string search — HR only)
@@ -283,6 +291,8 @@ class AttendanceApiController extends Controller
     {
         $rules = [
             'attendance_date' => ['nullable', 'date'],
+            'date_from'       => ['nullable', 'date'],
+            'date_to'         => ['nullable', 'date', 'after_or_equal:date_from'],
             'status'          => ['nullable', 'in:present,absent,leave'],
             'login_timing'    => ['nullable', 'in:early,late,on-time'],
             'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -298,7 +308,20 @@ class AttendanceApiController extends Controller
 
         $validated = $request->validate($rules);
 
-        $selectedDate       = $validated['attendance_date'] ?? now()->toDateString();
+        // ── Resolve the date range ────────────────────────────────────────────
+        // Priority: explicit date_from/date_to > single-day attendance_date
+        // (back-compat) > default to "this month to date".
+        if (!empty($validated['date_from']) || !empty($validated['date_to'])) {
+            $selectedFromDate = $validated['date_from'] ?? $validated['date_to'];
+            $selectedToDate   = $validated['date_to']   ?? $selectedFromDate;
+        } elseif (!empty($validated['attendance_date'])) {
+            $selectedFromDate = $validated['attendance_date'];
+            $selectedToDate   = $validated['attendance_date'];
+        } else {
+            $selectedFromDate = now()->startOfMonth()->toDateString();
+            $selectedToDate   = now()->toDateString();
+        }
+
         $statusFilter       = $validated['status']        ?? null;
         $loginTimingFilter  = $validated['login_timing']  ?? null;
         $employeeNameFilter = $this->canViewAllAttendance() ? trim((string) ($validated['employee_name'] ?? '')) : '';
@@ -311,22 +334,24 @@ class AttendanceApiController extends Controller
 
         if ($accessibleAttendees->isEmpty()) {
             return response()->json([
-                'status'        => true,
-                'message'       => 'No accessible records.',
-                'can_view_all'  => false,
-                'stats'         => $this->emptyStats(),
-                'data'          => $this->emptyPagination($page, $perPage),
-                'selected_date' => $selectedDate,
+                'status'             => true,
+                'message'            => 'No accessible records.',
+                'can_view_all'       => false,
+                'stats'              => $this->emptyStats(),
+                'data'               => $this->emptyPagination($page, $perPage),
+                'selected_from_date' => $selectedFromDate,
+                'selected_to_date'   => $selectedToDate,
             ]);
         }
 
         $accessibleEmployeeIds = $accessibleAttendees->where('attendee_type', 'employee')->pluck('id')->values();
         $accessibleInternIds   = $accessibleAttendees->where('attendee_type', 'intern')->pluck('id')->values();
 
-        // ── Fetch present / leave records (scoped to accessible) ─────────────
+        // ── Fetch present / leave records across the range (scoped to accessible) ──
         $attendanceCollection = DailyAttendance::query()
             ->with(['employee', 'intern'])
-            ->whereDate('attendance_date', $selectedDate)
+            ->whereDate('attendance_date', '>=', $selectedFromDate)
+            ->whereDate('attendance_date', '<=', $selectedToDate)
             ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
                 if ($accessibleEmployeeIds->isNotEmpty()) {
                     $query->orWhere(function ($q) use ($accessibleEmployeeIds) {
@@ -341,23 +366,46 @@ class AttendanceApiController extends Controller
                     });
                 }
             })
+            ->orderBy('attendance_date')
             ->orderBy('login_time')
             ->get();
 
         $attendanceRecords = $attendanceCollection->map(fn(DailyAttendance $a) => $this->formatRecord($a));
 
-        // ── Build absent records ─────────────────────────────────────────────
+        // ── Build absent records — one per missing day per accessible attendee ──
+        // Mirrors AttendanceController::buildAttendanceData() on the web side:
+        // for every calendar day in the selected range, an accessible attendee
+        // with no present/leave row on that specific day counts as absent for
+        // that day. A single-day request (the old default) is just a
+        // one-day CarbonPeriod, so this is a strict superset of the previous
+        // behavior — existing single-day callers see identical results.
         $presentKeys = $attendanceRecords
-            ->map(fn(array $r) => $r['attendee_type'] . ':' . $this->normalize($r['employee_id']))
+            ->map(fn(array $r) => implode(':', [
+                $r['attendee_type'],
+                $this->normalize($r['employee_id']),
+                $r['attendance_date'],
+            ]))
             ->filter()->unique()->values();
 
-        $absentRecords = $accessibleAttendees
-            ->reject(function (array $attendee) use ($presentKeys) {
-                return $presentKeys->contains($attendee['attendee_type'] . ':' . $this->normalize($attendee['display_id']));
-            })
-            ->map(fn(array $attendee) => $this->absentRecord($attendee, $selectedDate));
+        $selectedDates = collect(CarbonPeriod::create($selectedFromDate, $selectedToDate))
+            ->map(fn(Carbon $date) => $date->format('Y-m-d'))
+            ->values();
 
-        // ── Stats ────────────────────────────────────────────────────────────
+        $absentRecords = $selectedDates
+            ->flatMap(function (string $date) use ($accessibleAttendees, $presentKeys) {
+                return $accessibleAttendees
+                    ->reject(function (array $attendee) use ($presentKeys, $date) {
+                        return $presentKeys->contains(implode(':', [
+                            $attendee['attendee_type'],
+                            $this->normalize($attendee['display_id']),
+                            $date,
+                        ]));
+                    })
+                    ->map(fn(array $attendee) => $this->absentRecord($attendee, $date));
+            })
+            ->values();
+
+        // ── Stats (aggregated across the whole range) ─────────────────────────
         $stats = [
             'total_employees'  => $accessibleAttendees->count(),
             'present_count'    => $attendanceRecords->where('attendance_status', 'present')->count(),
@@ -408,7 +456,11 @@ class AttendanceApiController extends Controller
 
             return true;
         })
-            ->sortBy(fn(array $rec) => $this->normalize($rec['employee_id']) . '|' . $this->normalize($rec['employee_name']), options: SORT_NATURAL)
+            // Date first (oldest → newest — a strict generalization of the
+            // old single-day sort, which was effectively "by employee only"
+            // since every record shared the same date), then employee within
+            // a day, same as before.
+            ->sortBy(fn(array $rec) => $rec['attendance_date'] . '|' . $this->normalize($rec['employee_id']) . '|' . $this->normalize($rec['employee_name']), options: SORT_NATURAL)
             ->values();
 
         // ── Paginate ─────────────────────────────────────────────────────────
@@ -416,18 +468,19 @@ class AttendanceApiController extends Controller
         $paged = $records->forPage($page, $perPage)->values();
 
         return response()->json([
-            'status'        => true,
-            'message'       => 'Attendance records fetched successfully.',
-            'can_view_all'  => $this->canViewAllAttendance(),
-            'stats'         => $stats,
-            'data'          => [
+            'status'             => true,
+            'message'            => 'Attendance records fetched successfully.',
+            'can_view_all'       => $this->canViewAllAttendance(),
+            'stats'              => $stats,
+            'data'               => [
                 'current_page' => $page,
                 'per_page'     => $perPage,
                 'total'        => $total,
                 'last_page'    => (int) ceil($total / max($perPage, 1)),
                 'data'         => $paged,
             ],
-            'selected_date' => $selectedDate,
+            'selected_from_date' => $selectedFromDate,
+            'selected_to_date'   => $selectedToDate,
         ]);
     }
 

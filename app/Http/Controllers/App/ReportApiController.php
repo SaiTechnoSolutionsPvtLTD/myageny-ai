@@ -58,7 +58,8 @@ class ReportApiController extends Controller
                 DB::raw('COUNT(*) as total_rows'),
                 DB::raw('COUNT(DISTINCT leads.id) as total_leads'),
                 DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_cost'),
-                DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
+                DB::raw('SUM(COALESCE(lead_products.amount_paid, 0)) as total_paid'),
+                // DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
             ]);
 
             $totalCost = (float) ($summaryStats->total_cost ?? 0);

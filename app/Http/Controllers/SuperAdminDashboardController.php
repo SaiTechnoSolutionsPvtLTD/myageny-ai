@@ -341,6 +341,7 @@ class SuperAdminDashboardController extends ApiController
             'date_from'  => $dateFrom,
             'date_to'    => $dateTo,
             'quick_date' => $request->quick_date,
+            'year'       => $request->year,
         ]);
 
         // ── Build response ────────────────────────────────────────
@@ -484,8 +485,24 @@ class SuperAdminDashboardController extends ApiController
     // ── Private: resolve date range from quick_date or explicit dates ──
     private function resolveDates(Request $request): array
     {
+        // Year-wise dropdown — an explicit calendar year takes priority over
+        // quick_date/date_from/date_to, since it's a separate, more specific
+        // selection in the UI (pick any past year, not just "this year").
+        if ($request->filled('year')) {
+            $year = (int) $request->year;
+            return [
+                Carbon::create($year, 1, 1)->toDateString(),
+                Carbon::create($year, 12, 31)->toDateString(),
+            ];
+        }
+
         if ($request->filled('quick_date')) {
             return match ($request->quick_date) {
+                // 'All' — no date restriction at all. Every consumer below
+                // already uses ->when($dateFrom, ...)/->when($dateTo, ...),
+                // so returning nulls here is sufficient; no other query needs
+                // to change to support it.
+                'all'     => [null, null],
                 'today'   => [today()->toDateString(), today()->toDateString()],
                 'week'    => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
                 'month'   => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
@@ -587,7 +604,12 @@ class SuperAdminDashboardController extends ApiController
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:today,week,month,quarter,year'],
+            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year'],
+            // Year-wise filter — an explicit calendar year (e.g. 2024), distinct
+            // from the 'year' quick_date value (which always means "this year").
+            // Takes priority over quick_date/date_from/date_to when present —
+            // see resolveDates().
+            'year'       => ['nullable', 'integer', 'min:2000', 'max:' . (now()->year + 1)],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -603,7 +625,8 @@ class SuperAdminDashboardController extends ApiController
         [$prevFrom, $prevTo, $comparisonLabel] = $this->resolvePreviousPeriod(
             $request->quick_date,
             $dateFrom,
-            $dateTo
+            $dateTo,
+            $request->filled('year') ? (int) $request->year : null
         );
 
         $prevBase = function () use ($request, $branchId, $userId, $stage, $source, $prevFrom, $prevTo) {
@@ -941,6 +964,7 @@ class SuperAdminDashboardController extends ApiController
             'date_from'  => $dateFrom,
             'date_to'    => $dateTo,
             'quick_date' => $request->quick_date,
+            'year'       => $request->year,
         ]);
 
         // ── Build response ────────────────────────────────────────
@@ -1030,6 +1054,9 @@ class SuperAdminDashboardController extends ApiController
                 'priority_colors'  => Lead::PRIORITY_COLORS,
                 'product_statuses' => LeadProduct::PRODUCT_STATUSES,
                 'payment_modes'    => LeadProduct::PAYMENT_MODES,
+                'users' => $this->visibility->visibleAssignableUsers($request->user())
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->values(),
             ],
 
         ], 'Super Admin Dashboard data fetched.');
@@ -1053,10 +1080,26 @@ class SuperAdminDashboardController extends ApiController
         return view('pages.dashboard.leads.admin-product-wise-dashboard', compact('products', 'branches', 'users', 'sources', 'statuses', 'apiToken'));
     }
 
-    private function resolvePreviousPeriod(?string $quickDate, ?string $dateFrom, ?string $dateTo): array
+    private function resolvePreviousPeriod(?string $quickDate, ?string $dateFrom, ?string $dateTo, ?int $year = null): array
     {
+        // Year-wise dropdown — compare against the same calendar range one
+        // year earlier, same convention as the 'year' quick_date case below.
+        if ($year) {
+            $prevYear = $year - 1;
+            return [
+                Carbon::create($prevYear, 1, 1)->toDateString(),
+                Carbon::create($prevYear, 12, 31)->toDateString(),
+                "vs {$prevYear}",
+            ];
+        }
+
         if ($quickDate) {
             return match ($quickDate) {
+                // 'All' has no meaningful "previous period" to compare
+                // against — a null comparison_label tells the Flutter side to
+                // hide the vs-badge entirely rather than show a misleading
+                // comparison (see dashboard_filter_bar.dart / trend cards).
+                'all' => [null, null, null],
                 'today' => [
                     now()->subDay()->toDateString(),
                     now()->subDay()->toDateString(),

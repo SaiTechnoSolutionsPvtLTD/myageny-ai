@@ -488,24 +488,27 @@ class DataVisibilityService
             ->values();
     }
 
-    public function hasBranchAdminRole(?User $user = null): bool
+    
+    public function isCompanyWideUser(User $user): bool
     {
-        $user ??= auth()->user();
-        if (! $user) {
-            return false;
+        if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
+            return true;
         }
 
-        if ($user->isBranchAdmin()) {
+        if ($user->company_id && DB::table('companies')
+            ->where('id', $user->company_id)
+            ->where('super_admin_user_id', $user->id)
+            ->exists()) {
             return true;
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['branch_admin', 'branch_manager'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['branch_admin', 'branch_manager'], true);
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
         });
     }
 
-    private function isCompanyWideUser(User $user): bool
+    public function isCompanyWideUser(User $user): bool
     {
         if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
             return true;

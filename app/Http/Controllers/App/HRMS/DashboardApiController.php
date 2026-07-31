@@ -639,7 +639,14 @@ class DashboardApiController extends Controller
 
     private function employeeQueryForDashboard(): Builder
     {
-        $query = EmployeeOnboarding::withoutGlobalScopes()->active();
+        // Was withoutGlobalScopes() — that also strips EmployeeOnboarding's
+        // model-level 'branch' global scope (see EmployeeOnboarding::booted()),
+        // which only restricts results when the authenticated user
+        // isBranchAdmin() and is a no-op for every other role. Dropping the
+        // bypass lets that existing, already-tested scope apply here too, so
+        // Branch Admin's org-dashboard counts are branch-scoped consistently
+        // with the attendance figures below (which never bypassed it).
+        $query = EmployeeOnboarding::active();
         $companyId = auth()->user()?->company_id;
 
         if ($companyId) {
@@ -659,7 +666,10 @@ class DashboardApiController extends Controller
 
     private function employeeStatusQuery(string $status): Builder
     {
-        $query = EmployeeOnboarding::withoutGlobalScopes()->where('status', $status);
+        // See employeeQueryForDashboard() above — withoutGlobalScopes()
+        // removed for the same reason (restore branch scoping for Branch
+        // Admin without affecting any other role).
+        $query = EmployeeOnboarding::where('status', $status);
         $companyId = auth()->user()?->company_id;
 
         if ($companyId) {
@@ -674,7 +684,9 @@ class DashboardApiController extends Controller
 
     private function internQueryForDashboard(): Builder
     {
-        $query = InternJoiningForm::withoutGlobalScopes()->active();
+        // See employeeQueryForDashboard() above — same reasoning, applied to
+        // InternJoiningForm's equivalent 'branch' global scope.
+        $query = InternJoiningForm::active();
         $companyId = auth()->user()?->company_id;
 
         if ($companyId) {
@@ -694,7 +706,8 @@ class DashboardApiController extends Controller
 
     private function internStatusQuery(string $status): Builder
     {
-        $query = InternJoiningForm::withoutGlobalScopes()->where('internship_status', $status);
+        // See employeeQueryForDashboard() above.
+        $query = InternJoiningForm::where('internship_status', $status);
         $companyId = auth()->user()?->company_id;
 
         if ($companyId) {
@@ -844,7 +857,13 @@ class DashboardApiController extends Controller
     {
         $user = auth()->user();
 
-        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+        // Branch Admin sees the Organization Dashboard too (view-only —
+        // deliberately NOT added to canManageExitRequests()/
+        // canManageAnnouncements() below, which stay HR/Company-Admin only),
+        // scoped to their own branch via the existing branch-scoped queries
+        // (see employeeQueryForDashboard() etc., which now rely on the
+        // model-level 'branch' global scope instead of bypassing it).
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
     }
 
     private function canManageExitRequests(): bool
