@@ -467,7 +467,7 @@ class DataVisibilityService
             ->values();
     }
 
-    private function isCompanyWideUser(User $user): bool
+    public function isCompanyWideUser(User $user): bool
     {
         if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
             return true;

@@ -66,11 +66,27 @@ class AdminDashboardProductController extends Controller
             $products = \App\Models\Product::query();
             $this->visibility->applyProductVisibility($products, $request->user());
             $products = $products->select('id', 'product_name')->orderBy('product_name')->get();
+
+            // Branch-scoped dropdown options — mirrors the same restriction applied
+            // to the dashboard data itself (AdminDashboardService::restrictedBranchIds),
+            // so a Branch Admin/branch-scoped user isn't offered other branches or
+            // their users as selectable filters in the first place.
+            $branchIds = $this->service->restrictedBranchIds($request->user());
+
             $branches = $this->visibility->visibleBranches($request->user());
-            $users    = $this->visibility->visibleAssignableUsers($request->user())->map(fn ($user) => [
+            if ($branchIds !== null) {
+                $branches = $branches->whereIn('id', $branchIds)->values();
+            }
+
+            $assignableUsers = $this->visibility->visibleAssignableUsers($request->user());
+            if ($branchIds !== null) {
+                $assignableUsers = $assignableUsers->whereIn('branch_id', $branchIds);
+            }
+            $users = $assignableUsers->map(fn ($user) => [
                 'id' => $user->id,
                 'name' => $user->name,
             ])->values();
+
             $sources  = $this->visibility->visibleLeadSources($request->user());
 
             return response()->json([
