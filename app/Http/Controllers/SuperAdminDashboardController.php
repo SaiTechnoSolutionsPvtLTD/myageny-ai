@@ -502,44 +502,72 @@ class SuperAdminDashboardController extends ApiController
         $leadIds = collect($leadIds)->filter()->values();
         $companyId = $request->user()?->company_id;
 
+        // 1. Try grouping by LeadStatus if present and yields results
         $statuses = LeadStatus::query()
             ->when(
                 $companyId,
                 fn($query) => $query->where(fn($statusQuery) => $statusQuery
                     ->where('company_id', $companyId)
-                    ->orWhereNull('company_id')),
-                fn($query) => $query->whereNull('company_id')
+                    ->orWhereNull('company_id'))
             )
-            ->orderBy('name')
+            ->orderBy('id')
             ->get(['id', 'name']);
 
-        if ($statuses->isEmpty()) {
-            return ['total' => 0, 'stages' => []];
+        if ($statuses->isNotEmpty() && $leadIds->isNotEmpty()) {
+            $counts = LeadProduct::query()
+                ->whereIn('lead_id', $leadIds)
+                ->whereNotNull('lead_status_id')
+                ->whereIn('lead_status_id', $statuses->pluck('id'))
+                ->select('lead_status_id', DB::raw('COUNT(*) as count'))
+                ->groupBy('lead_status_id')
+                ->pluck('count', 'lead_status_id');
+
+            $stageTotal = (int) $counts->sum();
+
+            if ($stageTotal > 0) {
+                $stages = $statuses->map(function ($status) use ($counts, $stageTotal) {
+                    $key = LeadProduct::statusKey($status->name);
+                    $count = (int) ($counts[$status->id] ?? 0);
+
+                    return [
+                        'key'     => (string) $status->id,
+                        'label'   => $status->name,
+                        'count'   => $count,
+                        'percent' => $stageTotal > 0 ? round($count / $stageTotal * 100, 1) : 0,
+                        'color'   => LeadProduct::PRODUCT_STATUS_CONFIG[$key]
+                            ?? ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'],
+                    ];
+                })->values()->toArray();
+
+                return ['total' => $stageTotal, 'stages' => $stages];
+            }
         }
 
-        $counts = $leadIds->isEmpty()
+        // 2. Default fallback: Group by product_status column (case insensitive)
+        $rawCounts = $leadIds->isEmpty()
             ? collect()
             : LeadProduct::query()
-            ->whereIn('lead_id', $leadIds)
-            ->whereIn('lead_status_id', $statuses->pluck('id'))
-            ->select('lead_status_id', DB::raw('COUNT(*) as count'))
-            ->groupBy('lead_status_id')
-            ->pluck('count', 'lead_status_id');
+                ->whereIn('lead_id', $leadIds)
+                ->select(DB::raw('LOWER(TRIM(product_status)) as pstatus'), DB::raw('COUNT(*) as count'))
+                ->groupBy(DB::raw('LOWER(TRIM(product_status))'))
+                ->pluck('count', 'pstatus');
 
-        $stageTotal = (int) $counts->sum();
-        $stages = $statuses->map(function ($status) use ($counts, $stageTotal) {
-            $key = LeadProduct::statusKey($status->name);
-            $count = (int) ($counts[$status->id] ?? 0);
+        $stageTotal = (int) $rawCounts->sum();
+        $stages = [];
 
-            return [
-                'key'     => (string) $status->id,
-                'label'   => $status->name,
+        foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
+            $count = (int) ($rawCounts[$pkey] ?? 0);
+            $config = LeadProduct::PRODUCT_STATUS_CONFIG[$pkey]
+                ?? ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'];
+
+            $stages[] = [
+                'key'     => $pkey,
+                'label'   => $plabel,
                 'count'   => $count,
                 'percent' => $stageTotal > 0 ? round($count / $stageTotal * 100, 1) : 0,
-                'color'   => LeadProduct::PRODUCT_STATUS_CONFIG[$key]
-                    ?? ['bg' => '#f5f4f6', 'text' => '#7c7c7c', 'border' => '#e1dee3'],
+                'color'   => $config,
             ];
-        })->values()->toArray();
+        }
 
         return ['total' => $stageTotal, 'stages' => $stages];
     }
@@ -770,13 +798,17 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 7. Recent leads ───────────────────────────────────────
         $recentLeads = (clone $base())
-            ->with(['branch:id,name', 'assignedTo:id,name', 'leadSource:id,name', 'products'])
+            ->with(['branch:id,name', 'assignedTo:id,name', 'leadSource:id,name', 'products.leadSource:id,name'])
             ->latest('lead_date')
             ->take(8)
             ->get()
             ->map(function ($l) {
-
                 $dealValue = $l->products->sum('total_price');
+                $sourceName = $l->leadSource?->name
+                    ?: ($l->lead_source
+                    ?: ($l->products->first()?->leadSource?->name
+                    ?: ($l->source_label
+                    ?: '—')));
 
                 return [
                     'id'                     => $l->id,
@@ -785,8 +817,8 @@ class SuperAdminDashboardController extends ApiController
                     'contact_name'           => $l->contact_name,
                     'mobile_number'          => $l->mobile_number,
                     'lead_date'              => $l->lead_date->toDateString(),
-                    'lead_source'            => $l->source?->name,
-                    'source_label'           => $l->source?->name,
+                    'lead_source'            => $sourceName,
+                    'source_label'           => $sourceName,
                     'lead_status'            => $l->lead_status,
                     'status_label'           => $l->status_label,
                     'status_color'           => $l->status_color,

@@ -1155,32 +1155,56 @@ function renderFinancials(f) {
 
 /* ── Pipeline Funnel ── */
 function renderFunnel(f) {
-    document.getElementById('daFunnelTotal').textContent = f.total + ' total';
-    var maxCount = Math.max.apply(null, f.stages.map(function(s) { return s.count; })) || 1;
+    if (!f || !f.stages || !Array.isArray(f.stages) || f.stages.length === 0) {
+        if (document.getElementById('daFunnelTotal')) document.getElementById('daFunnelTotal').textContent = '0 total';
+        if (document.getElementById('daFunnelBody')) {
+            document.getElementById('daFunnelBody').innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">No pipeline funnel data available.</div>';
+        }
+        return;
+    }
+
+    if (document.getElementById('daFunnelTotal')) {
+        document.getElementById('daFunnelTotal').textContent = (f.total || 0) + ' total';
+    }
+
+    var counts = f.stages.map(function(s) { return Number(s.count) || 0; });
+    var maxCount = counts.length ? Math.max.apply(null, counts) : 1;
+    if (!maxCount || maxCount <= 0 || !isFinite(maxCount)) maxCount = 1;
 
     var rows = f.stages.map(function(s) {
-        var barW = Math.round(s.count / maxCount * 100);
-        var c    = s.color;
+        var cnt  = Number(s.count) || 0;
+        var barW = Math.min(100, Math.max(0, Math.round(cnt / maxCount * 100)));
+        var c    = s.color || { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' };
+        var textColor = c.text || '#2563eb';
+        var bgColor = c.bg || '#eff6ff';
+        var borderColor = c.border || '#bfdbfe';
+
         return '<div class="da-funnel-row">' +
             '<div class="da-funnel-top">' +
-            '<div class="da-funnel-label" style="color:' + c.text + '">' + s.label + '</div>' +
+            '<div class="da-funnel-label" style="color:' + textColor + '">' + (s.label || 'Stage') + '</div>' +
             '<div class="da-funnel-right">' +
-            '<span class="da-funnel-pct" style="background:' + c.bg + ';color:' + c.text + ';border:1px solid ' + c.border + '">' + s.percent + '%</span>' +
-            '<span class="da-funnel-count" style="color:' + c.text + '">' + s.count + '</span></div></div>' +
-            '<div class="da-bar-outer"><div class="da-bar-inner" style="width:' + barW + '%;background:' + c.text + '"></div></div></div>';
+            '<span class="da-funnel-pct" style="background:' + bgColor + ';color:' + textColor + ';border:1px solid ' + borderColor + '">' + (s.percent || 0) + '%</span>' +
+            '<span class="da-funnel-count" style="color:' + textColor + '">' + cnt + '</span></div></div>' +
+            '<div class="da-bar-outer"><div class="da-bar-inner" style="width:' + barW + '%;background:' + textColor + '"></div></div></div>';
     }).join('');
 
-    var widths = [100,85,72,60,50,40];
+    var widths = [100, 85, 72, 60, 50, 40];
     var visual = '<div class="da-funnel-visual"><div class="da-funnel-visual-title">Visual Funnel</div>' +
         f.stages.map(function(s, i) {
-            var w = widths[i] || 35;
+            var w  = widths[i] || 35;
             var ml = (100 - w) / 2;
+            var c  = s.color || { text: '#fe5f04' };
+            var textColor = c.text || '#fe5f04';
+            var cnt = Number(s.count) || 0;
+
             return '<div class="da-funnel-step" style="margin-left:' + ml + '%;width:' + w + '%;margin-bottom:3px">' +
-                '<div class="da-funnel-step-inner" style="background:' + s.color.text + ';opacity:' + (0.65 + i * 0.07) + '">' +
-                '<span>' + s.label + '</span><span>' + s.count + '</span></div></div>';
+                '<div class="da-funnel-step-inner" style="background:' + textColor + ';opacity:' + (0.65 + i * 0.07) + '">' +
+                '<span>' + (s.label || 'Stage') + '</span><span>' + cnt + '</span></div></div>';
         }).join('') + '</div>';
 
-    document.getElementById('daFunnelBody').innerHTML = rows + visual;
+    if (document.getElementById('daFunnelBody')) {
+        document.getElementById('daFunnelBody').innerHTML = rows + visual;
+    }
 }
 
 /* ── Source Distribution ── */
@@ -1362,7 +1386,7 @@ function renderRecentLeads(leads) {
             '<div class="da-lead-co-av" style="background:' + ac + '">' + (l.company_name ? l.company_name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div class="da-lead-name">' + l.company_name + '</div><div class="da-lead-contact">' + l.contact_name + '</div></div></div></td>' +
             '<td style="font-family:monospace">' + l.mobile_number + '</td>' +
-            '<td>' + l.source_label + '</td>' +
+            '<td>' + (l.source_label || l.lead_source || '—') + '</td>' +
             '<td>' + '<span class="da-pill" style="background:' + pc.bg + ';color:' + pc.text + '">' + l.priority_label + '</span>' + '</td>' +
             '<td style="font-weight:800">' + l.deal_value_formatted + '</td>' +
             '<td>' + (l.assigned_to?.name || '—') + '</td>' +
