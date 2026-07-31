@@ -1022,6 +1022,17 @@ class SuperAdminDashboardController extends ApiController
                 'priority_colors'  => Lead::PRIORITY_COLORS,
                 'product_statuses' => LeadProduct::PRODUCT_STATUSES,
                 'payment_modes'    => LeadProduct::PAYMENT_MODES,
+                // Full role/company-visible assignable-users list, independent
+                // of the active branch/date/stage/source filter — mirrors what
+                // DashboardController::index() hands the web blade at page
+                // load. team_performance (above) is intentionally narrowed to
+                // "users with leads in the current filter, top 10 by convert
+                // value", which makes it unsuitable as a filter dropdown's
+                // option source (a user with 0 leads this month, or ranked
+                // 11th+, would otherwise vanish from the picker entirely).
+                'users' => $this->visibility->visibleAssignableUsers($request->user())
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->values(),
             ],
 
         ], 'Super Admin Dashboard data fetched.');
