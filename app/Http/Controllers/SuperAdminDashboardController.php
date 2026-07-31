@@ -309,7 +309,7 @@ class SuperAdminDashboardController extends ApiController
         // ── 10. 6-month trend ────────────────────────────────────
         $monthTrend = [];
         for ($i = 5; $i >= 0; $i--) {
-            $month = now()->subMonths($i);
+            $month = now()->startOfMonth()->subMonths($i);
             $q = Lead::whereYear('lead_date', $month->year)
                 ->whereMonth('lead_date', $month->month)
                 ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
@@ -932,7 +932,7 @@ class SuperAdminDashboardController extends ApiController
         // ── 10. 6-month trend ────────────────────────────────────
         $monthTrend = [];
         for ($i = 5; $i >= 0; $i--) {
-            $month = now()->subMonths($i);
+            $month = now()->startOfMonth()->subMonths($i);
             $q = Lead::whereYear('lead_date', $month->year)
                 ->whereMonth('lead_date', $month->month)
                 ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))

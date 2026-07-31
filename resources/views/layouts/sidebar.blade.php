@@ -190,7 +190,7 @@
         <div class="nav-section">
             <div class="nav-title">HRMS</div>
             <div class="nav-items">
-                @can('dashboard.view')
+                @if(auth()->user()?->can('dashboard.view') || auth()->user()?->can('dashboard.menuview') || auth()->user()?->can('modules_menu.hrms') || auth()->user()?->isCompanyAdmin() || auth()->user()?->isSystemAdmin())
                 <a href="{{ route('hrms.dashboard') }}" class="nav-item {{ request()->routeIs('hrms.dashboard') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.dashboard'))
                         <div class="active-indicator"></div>
@@ -205,7 +205,7 @@
                         <span>Dashboard</span>
                     </div>
                 </a>
-                @endcan
+                @endif
 
                 @if(! $hrmsSelfService)
                 @can('masters.menuview')
@@ -342,7 +342,7 @@
                 @endcan
                 @endif
 
-                @if(! $hrmsSelfService && (auth()->user()?->belongsToHrDepartment() || auth()->user()?->hasHrLikeRole()))
+                @if(! $hrmsSelfService)
                 @can('announcements.menuview')
                 <a href="{{ route('hrms-announcements.index') }}" class="nav-item {{ request()->routeIs('hrms-announcements.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms-announcements.*'))
