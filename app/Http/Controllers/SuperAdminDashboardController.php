@@ -1022,6 +1022,9 @@ class SuperAdminDashboardController extends ApiController
                 'priority_colors'  => Lead::PRIORITY_COLORS,
                 'product_statuses' => LeadProduct::PRODUCT_STATUSES,
                 'payment_modes'    => LeadProduct::PAYMENT_MODES,
+                'users' => $this->visibility->visibleAssignableUsers($request->user())
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->values(),
             ],
 
         ], 'Super Admin Dashboard data fetched.');
