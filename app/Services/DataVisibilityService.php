@@ -508,30 +508,7 @@ class DataVisibilityService
         });
     }
 
-    public function isCompanyWideUser(User $user): bool
-    {
-        if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
-            return true;
-        }
 
-        if ($user->company_id) {
-            try {
-                if (DB::table('companies')
-                    ->where('id', $user->company_id)
-                    ->where('super_admin_user_id', $user->id)
-                    ->exists()) {
-                    return true;
-                }
-            } catch (\Throwable $e) {
-                // Table might not exist in unit test
-            }
-        }
-
-        return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
-        });
-    }
 
     private function userHasTlRole(int $userId): bool
     {
