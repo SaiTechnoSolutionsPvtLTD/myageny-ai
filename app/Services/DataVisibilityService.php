@@ -100,6 +100,23 @@ class DataVisibilityService
         return RoleMapping::ACCESS_SELF;
     }
 
+    public function hasBranchAdminRole(?User $user = null): bool
+    {
+        $user ??= auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isBranchAdmin()) {
+            return true;
+        }
+
+        return $user->roles->contains(function ($role) {
+            return in_array($this->roleKey($role->name), ['branch_admin', 'branch_manager'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['branch_admin', 'branch_manager'], true);
+        });
+    }
+
     public function visibleUserIds(?User $user = null): ?array
     {
         $user ??= auth()->user();
