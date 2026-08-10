@@ -17,8 +17,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class LeadProductController extends Controller
 {
@@ -611,6 +613,34 @@ class LeadProductController extends Controller
             return $initiation;
         });
 
+        // Send Email notification to Customer Success Team & CC
+        try {
+            // $toEmails = ['kesavaraj@saitechnosolutions.net'];
+            $toEmails = ['customersuccess@saitechnosolutions.net', 'customersuccessteam.sts@gmail.com'];
+            $ccEmail = 'tamilarasan@saitechnosolutions.net';
+            // $ccEmail = 'kesavarajs.sts@gmail.com';
+
+            $lead = $leadProduct->lead;
+            $initiatedBy = auth()->user();
+
+            Mail::send('emails.production_initiation', [
+                'initiation' => $initiation,
+                'leadProduct' => $leadProduct,
+                'lead' => $lead,
+                'departmentName' => $mappedDepartment->name,
+                'initiatedBy' => $initiatedBy,
+            ], function ($message) use ($toEmails, $ccEmail, $leadProduct, $initiation) {
+                $message->to($toEmails)
+                    ->cc($ccEmail)
+                    ->subject('New Production Initiation - Lead #' . $leadProduct->lead_id . ' (' . ($initiation->product_name ?: $leadProduct->product_name) . ')');
+            });
+        } catch (\Throwable $exception) {
+            \Illuminate\Support\Facades\Log::error('Failed to send production initiation email.', [
+                'initiation_id' => $initiation->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
         return response()->json([
             'message' => 'Production initiation submitted successfully.',
             'initiation' => [
@@ -866,6 +896,20 @@ class LeadProductController extends Controller
 
         $payment = DB::transaction(function () use ($request, $lp, $actorId) {
             $attachment = $request->file('attachment');
+            $attachmentPath = null;
+            $attachmentName = null;
+
+            if ($attachment) {
+                $attachmentName = $attachment->getClientOriginalName();
+                $filename = time() . '_' . Str::random(8) . '.' . $attachment->getClientOriginalExtension();
+                $targetDir = public_path('uploads/lead-product-payments');
+                if (!file_exists($targetDir)) {
+                    mkdir($targetDir, 0777, true);
+                }
+                $attachment->move($targetDir, $filename);
+                $attachmentPath = 'uploads/lead-product-payments/' . $filename;
+            }
+
             $p = LeadProductPayment::create([
                 'lead_product_id' => $lp->id,
                 'lead_id'         => $lp->lead_id,
@@ -874,8 +918,8 @@ class LeadProductController extends Controller
                 'payment_date'    => $request->payment_date,
                 'reference_number'=> $request->reference_number,
                 'notes'           => $request->notes,
-                'attachment_path' => $attachment ? $attachment->store('lead-product-payments', 'public') : null,
-                'attachment_name' => $attachment ? $attachment->getClientOriginalName() : null,
+                'attachment_path' => $attachmentPath,
+                'attachment_name' => $attachmentName,
                 'recorded_by'     => $actorId,
             ]);
             return $p;
@@ -902,7 +946,12 @@ class LeadProductController extends Controller
 
         DB::transaction(function () use ($payment, $lp) {
             if ($payment->attachment_path) {
-                Storage::disk('public')->delete($payment->attachment_path);
+                $publicFile = public_path($payment->attachment_path);
+                if (file_exists($publicFile)) {
+                    @unlink($publicFile);
+                } elseif (Storage::disk('public')->exists($payment->attachment_path)) {
+                    Storage::disk('public')->delete($payment->attachment_path);
+                }
             }
             $payment->delete();
             $lp->recalcPaid();

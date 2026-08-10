@@ -39,7 +39,7 @@ class SuperAdminDashboardController extends ApiController
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:today,week,month,quarter,year'],
+            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -931,8 +931,15 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 10. 6-month trend ────────────────────────────────────
         $monthTrend = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $month = now()->startOfMonth()->subMonths($i);
+        $trendMonths = [];
+        $trendStart = now()->startOfMonth()->subMonths(5);
+        for ($i = 0; $i < 6; $i++) {
+            $month = (clone $trendStart)->addMonths($i);
+            $monthKey = $month->format('Y-m');
+            if (isset($trendMonths[$monthKey])) {
+                continue;
+            }
+            $trendMonths[$monthKey] = true;
             $q = Lead::whereYear('lead_date', $month->year)
                 ->whereMonth('lead_date', $month->month)
                 ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))

@@ -9,6 +9,7 @@ use App\Http\Resources\LeadSourceCollection;
 use App\Http\Resources\LeadStatusCollection;
 use App\Models\Branch;
 use App\Models\Lead;
+use App\Models\LeadCstUpdate;
 use App\Models\LeadFieldValue;
 use App\Models\LeadFormField;
 use App\Models\LeadProduct;
@@ -19,6 +20,7 @@ use App\Models\OutcomeCategory;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\DataVisibilityService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -67,17 +69,59 @@ class LeadController extends Controller
         }
 
         if ($request->filled('lead_source')) {
-            $query->where('lead_source_id', $request->lead_source);
+            $sourceInput = $request->lead_source;
+
+            $sourceObj = null;
+            if (is_numeric($sourceInput)) {
+                $sourceObj = LeadSource::find($sourceInput);
+            } else {
+                $sourceObj = LeadSource::where('name', $sourceInput)
+                    ->orWhere('id', $sourceInput)
+                    ->first();
+            }
+
+            if ($sourceObj) {
+                $query->where('lead_source_id', $sourceObj->id);
+            } else {
+                $query->where(function ($q) use ($sourceInput) {
+                    $q->whereHas('leadSource', function ($lsq) use ($sourceInput) {
+                        $lsq->where('name', 'like', "%{$sourceInput}%");
+                    })
+                    ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+                });
+            }
         }
 
         if ($request->filled('lead_status')) {
-            $statusId = $request->lead_status;
-            $query->where(function ($q) use ($statusId) {
-                $q->where('lead_status_id', $statusId)
-                  ->orWhereHas('products', function ($pq) use ($statusId) {
-                      $pq->where('lead_status_id', $statusId);
-                  });
-            });
+            $statusInput = $request->lead_status;
+
+            $statusObj = null;
+            if (is_numeric($statusInput)) {
+                $statusObj = LeadStatus::find($statusInput);
+            } else {
+                $statusObj = LeadStatus::where('name', $statusInput)
+                    ->orWhere('id', $statusInput)
+                    ->first();
+            }
+
+            if ($statusObj) {
+                $statusId = $statusObj->id;
+                $query->where(function ($q) use ($statusId) {
+                    $q->where('lead_status_id', $statusId)
+                      ->orWhereHas('products', function ($pq) use ($statusId) {
+                          $pq->where('lead_status_id', $statusId);
+                      });
+                });
+            } else {
+                $query->where(function ($q) use ($statusInput) {
+                    $q->whereHas('leadStatus', function ($lsq) use ($statusInput) {
+                        $lsq->where('name', 'like', "%{$statusInput}%");
+                    })
+                    ->orWhereHas('products', function ($pq) use ($statusInput) {
+                        $pq->where('product_status', 'like', "%{$statusInput}%");
+                    });
+                });
+            }
         }
 
         if ($request->filled('priority')) {
@@ -311,6 +355,7 @@ class LeadController extends Controller
             'createdBy',
             'callUpdates.user',
             'reminders',
+            'products.product',
             'products.payments',
             'products.latestProductionInitiation.department',
             'products.latestProductionInitiation.initiatedBy',
@@ -320,6 +365,8 @@ class LeadController extends Controller
             'products.latestProductionInitiation.employeeAllocatedBy',
             'products.latestProductionInitiation.projectUpdates.createdBy',
             'quotations',
+            'cstUpdates.user',
+            'cstUpdates.product.product',
             'customFieldValues.field' => function ($query) {
                 $query->where('is_active', true)->orderBy('sort_order')->orderBy('label');
             },
@@ -329,7 +376,52 @@ class LeadController extends Controller
             ->where('status', 'pending')
             ->count();
 
-        return view('pages.leads.show', compact('lead', 'outcomes', 'pendingPriceRequestCount'));
+        $cstUpdatesCount = $lead->cstUpdates->count();
+        $cstOnlyCount = $lead->cstUpdates->where('update_type', 'cst_update')->count();
+        $weeklyOnlyCount = $lead->cstUpdates->where('update_type', 'weekly_update')->count();
+        $reviewOnlyCount = $lead->cstUpdates->where('update_type', 'review')->count();
+        $escalationOnlyCount = $lead->cstUpdates->where('update_type', 'escalation')->count();
+
+        $convertedProducts = $lead->products
+            ->filter(fn ($p) => strtolower((string) $p->product_status) === 'converted' || $p->product_status_key === 'converted')
+            ->values();
+
+        if ($convertedProducts->isEmpty() && $lead->products->isNotEmpty()) {
+            $convertedProducts = $lead->products;
+        }
+
+        return view('pages.leads.show', compact(
+            'lead',
+            'outcomes',
+            'pendingPriceRequestCount',
+            'cstUpdatesCount',
+            'cstOnlyCount',
+            'weeklyOnlyCount',
+            'reviewOnlyCount',
+            'escalationOnlyCount',
+            'convertedProducts'
+        ));
+    }
+
+    public function storeCstUpdate(Request $request, Lead $lead): RedirectResponse
+    {
+        abort_unless(auth()->user()?->isCustomerSuccessUser(), 403, 'Only Customer Success Team members can add CST updates.');
+
+        $validated = $request->validate([
+            'update_type' => ['required', Rule::in(['cst_update', 'weekly_update', 'review', 'escalation'])],
+            'lead_product_id' => ['nullable', 'exists:lead_products,id'],
+            'notes' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $lead->cstUpdates()->create([
+            'company_id' => auth()->user()?->company_id,
+            'lead_product_id' => $validated['lead_product_id'] ?? null,
+            'update_type' => $validated['update_type'],
+            'notes' => $validated['notes'],
+            'user_id' => auth()->id(),
+        ]);
+
+        return back()->with('success', 'CST Update added successfully.');
     }
 
     /**

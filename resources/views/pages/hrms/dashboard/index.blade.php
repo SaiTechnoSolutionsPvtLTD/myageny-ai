@@ -813,6 +813,77 @@
                 </div>
             </div>
 
+            <!-- Interview Assigned Section -->
+            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
+                <div class="hrms-panel-head">
+                    <div>
+                        <div class="hrms-panel-title">🎯 Interview Assigned</div>
+                        <div class="hrms-panel-sub">Interviews scheduled and allocated for today's evaluation</div>
+                    </div>
+                    <a href="{{ route('recruitment.index') }}" class="hrms-link">View Candidates</a>
+                </div>
+                <div class="hrms-feature-list">
+                    @forelse($stats['assigned_interviews'] ?? [] as $interview)
+                    <div class="hrms-feature" style="align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; background: #ffffff; border-radius: 16px; padding: 16px; border: 1px solid #f0e9e3;">
+                        <div style="display: flex; gap: 14px; align-items: flex-start; flex: 1; min-width: 250px;">
+                            <div class="hrms-feature-icon" style="background: #fff3eb; color: #fe5f04; font-size: 18px; font-weight: 800; border-color: #ffd9bf;">
+                                {{ strtoupper(substr($interview->candidate?->name ?: 'C', 0, 1)) }}
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <strong style="font-size: 15px; color: #111827;">{{ $interview->candidate?->name ?: 'Candidate' }}</strong>
+                                    @if($interview->candidate?->candidate_no)
+                                        <span style="font-size: 11px; font-weight: 700; color: #6b7280; background: #f3f4f6; padding: 2px 8px; border-radius: 999px;">{{ $interview->candidate->candidate_no }}</span>
+                                    @endif
+                                </div>
+                                <span style="font-size: 13px; color: #4b5563; margin-top: 2px; display: block;">
+                                    <i class="bi bi-briefcase" style="margin-right: 4px; color: #fe5f04;"></i> {{ $interview->candidate?->job_title ?: 'Position not specified' }}
+                                </span>
+                                <div style="display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: #6b7280;">
+                                    <span><i class="bi bi-calendar-event" style="color: #fe5f04;"></i> <strong>Date:</strong> {{ $interview->scheduled_at ? $interview->scheduled_at->format('d M Y, h:i A') : 'N/A' }}</span>
+                                    <span><i class="bi bi-person-check" style="color: #fe5f04;"></i> <strong>Interviewer:</strong> {{ $interview->interviewer_name ?: 'Not assigned' }}</span>
+                                </div>
+                                @if($interview->notes)
+                                    <div style="margin-top: 8px; font-size: 12px; color: #6b7280; font-style: italic; background: #faf5f0; padding: 6px 10px; border-radius: 8px; border-left: 3px solid #fe5f04;">
+                                        Note: {{ $interview->notes }}
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 130px;">
+                            @if($interview->status === 'scheduled')
+                                <span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">
+                                    ● Scheduled
+                                </span>
+                            @elseif($interview->status === 'completed')
+                                <span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                                    ✓ Completed
+                                </span>
+                            @else
+                                <span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">
+                                    ✕ {{ $interview->status_label }}
+                                </span>
+                            @endif
+
+                            @if($interview->recruitment_candidate_id)
+                                <a href="{{ route('recruitment.show', $interview->recruitment_candidate_id) }}" class="hrms-btn hrms-btn-primary" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">
+                                    View Details <i class="bi bi-arrow-right"></i>
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                    @empty
+                    <div class="hrms-feature" style="align-items: center; justify-content: center; text-align: center; padding: 24px; background: #faf7f4; border-radius: 16px;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                            <div class="hrms-feature-icon" style="background: #fff3eb; color: #fe5f04;">📋</div>
+                            <strong style="color: #374151;">No Interviews Assigned For Today</strong>
+                            <span style="color: #9ca3af; font-size: 12px;">When candidates are scheduled for an interview with you today, they will appear here.</span>
+                        </div>
+                    </div>
+                    @endforelse
+                </div>
+            </div>
+
             <!-- Announcements -->
             <div class="hrms-card hrms-panel" style="grid-column: span 2;">
                 <div class="hrms-panel-head">

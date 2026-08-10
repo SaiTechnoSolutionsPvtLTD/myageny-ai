@@ -17,7 +17,23 @@ class SupportController extends Controller
      */
     public function index()
     {
-        $userId = Auth::id();
+        $user = Auth::user();
+        $userId = $user->id;
+        $companyId = $user->company_id;
+
+        if (!$companyId) {
+            $companyId = \App\Models\EmployeeOnboarding::withoutGlobalScopes()
+                ->where(function ($q) use ($user) {
+                    $q->where('portal_user_id', $user->id)
+                      ->orWhere('email', $user->email);
+                })
+                ->whereNotNull('company_id')
+                ->value('company_id');
+
+            if ($companyId) {
+                $user->update(['company_id' => $companyId]);
+            }
+        }
 
         // Get received tickets (where current user is the target)
         $receivedTickets = SupportTicket::with(['creator', 'assignedTo'])
@@ -31,10 +47,19 @@ class SupportController extends Controller
             ->latest()
             ->get();
 
-        // Get users for Select2 dropdown (exclude current user)
-        $users = User::where('id', '!=', $userId)
-            ->where('is_active', true)
-            ->orderBy('name')
+        // Get users for Select2 dropdown (exclude current user, include all active users for the company)
+        $usersQuery = User::withoutGlobalScope('branch')
+            ->where('id', '!=', $userId)
+            ->where(function ($query) {
+                $query->where('is_active', true)
+                    ->orWhere('user_status', 'active');
+            });
+
+        if ($companyId) {
+            $usersQuery->where('company_id', $companyId);
+        }
+
+        $users = $usersQuery->orderBy('name')
             ->get(['id', 'name', 'email']);
 
         return view('pages.support.index', compact('receivedTickets', 'createdTickets', 'users'));
@@ -52,17 +77,56 @@ class SupportController extends Controller
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,zip,txt', 'max:10240'],
         ]);
 
+        $user = Auth::user();
+        $toUser = User::find($request->to_user_id);
+
+        // Resolve company_id with fallbacks
+        $companyId = $user?->company_id;
+
+        if (!$companyId && $user) {
+            $companyId = \App\Models\EmployeeOnboarding::withoutGlobalScopes()
+                ->where(function ($q) use ($user) {
+                    $q->where('portal_user_id', $user->id)
+                      ->orWhere('email', $user->email);
+                })
+                ->whereNotNull('company_id')
+                ->value('company_id');
+        }
+
+        if (!$companyId && $toUser) {
+            $companyId = $toUser->company_id;
+        }
+
+        if (!$companyId && $toUser) {
+            $companyId = \App\Models\EmployeeOnboarding::withoutGlobalScopes()
+                ->where(function ($q) use ($toUser) {
+                    $q->where('portal_user_id', $toUser->id)
+                      ->orWhere('email', $toUser->email);
+                })
+                ->whereNotNull('company_id')
+                ->value('company_id');
+        }
+
+        if (!$companyId) {
+            $companyId = \App\Models\Company::orderBy('id')->value('id');
+        }
+
+        // Auto-update creator user's company_id if it was null
+        if ($user && !$user->company_id && $companyId) {
+            $user->update(['company_id' => $companyId]);
+        }
+
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
             $attachmentPath = $request->file('attachment')->store('support-tickets', 'public');
         }
 
         $ticket = SupportTicket::create([
-            'company_id' => Auth::user()->company_id,
+            'company_id' => $companyId,
             'subject' => $request->subject,
             'message' => $request->message,
             'attachment_path' => $attachmentPath,
-            'created_by' => Auth::id(),
+            'created_by' => $user->id,
             'to_user_id' => $request->to_user_id,
             'status' => 'pending',
         ]);
@@ -111,8 +175,14 @@ class SupportController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        if ($ticket->status === 'closed') {
+            return redirect()
+                ->route('support.index')
+                ->with('error', 'This ticket has already been closed and cannot be updated.');
+        }
+
         $request->validate([
-            'status' => ['required', 'string', 'in:pending,resolved,closed'],
+            'status' => ['required', 'string', 'in:pending,onprocess,resolved,closed'],
             'remark' => ['nullable', 'string'],
         ]);
 

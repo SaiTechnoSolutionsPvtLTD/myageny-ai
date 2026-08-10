@@ -570,15 +570,28 @@ class InternJoiningFormController extends Controller
     private function createPortalUser(InternJoiningForm $intern, array $validated): User
     {
         $role = Role::withoutGlobalScopes()->findOrFail($validated['role_id']);
+        $email = trim((string) $validated['portal_email']);
 
-        $user = User::create([
-            'name' => $intern->name,
-            'email' => $validated['portal_email'],
-            'password' => Hash::make($validated['portal_password']),
-            'company_id' => auth()->user()?->company_id,
-            'branch_id' => $validated['branch_id'],
-            'is_active' => true,
-        ]);
+        $user = $intern->portalUser ?? User::where('email', $email)->first();
+
+        if (! $user) {
+            $user = User::create([
+                'name' => $intern->name,
+                'email' => $email,
+                'password' => Hash::make($validated['portal_password']),
+                'company_id' => auth()->user()?->company_id,
+                'branch_id' => $validated['branch_id'],
+                'is_active' => true,
+            ]);
+        } else {
+            $user->update([
+                'name' => $intern->name,
+                'email' => $email,
+                'password' => Hash::make($validated['portal_password']),
+                'branch_id' => $validated['branch_id'],
+                'is_active' => true,
+            ]);
+        }
 
         $user->syncRoles([$role->name]);
 

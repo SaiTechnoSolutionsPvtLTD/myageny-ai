@@ -51,6 +51,7 @@
             </div>
         </div>
         <div class="lsp-topbar-right">
+            <a href="{{ route('recruitment.edit', $candidate) }}" class="lsp-btn lsp-btn-outline"><i class="bi bi-pencil"></i> Edit Candidate</a>
             @if($candidate->resume_path)
                 <a href="{{ asset('storage/' . $candidate->resume_path) }}" target="_blank" class="lsp-btn lsp-btn-primary">View Resume</a>
             @endif
@@ -120,21 +121,109 @@
                 <div class="lsp-stack">
                     <div class="lsp-card">
                         <div class="lsp-card-head">
-                            <div class="lsp-card-title">Contact Information</div>
+                            <div class="lsp-card-title">Candidate Profile & Information</div>
                         </div>
                         <div class="lsp-card-body">
                             <div class="lsp-info-grid">
-                                <div class="lsp-info-item"><div class="lsp-il">Candidate</div><div class="lsp-iv">{{ $candidate->name }}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Mobile</div><div class="lsp-iv"><a href="tel:{{ $candidate->mobile_number }}">{{ $candidate->mobile_number }}</a></div></div>
+                                <div class="lsp-info-item"><div class="lsp-il">Candidate Name</div><div class="lsp-iv">{{ $candidate->name }}</div></div>
+                                <div class="lsp-info-item"><div class="lsp-il">Mobile Number</div><div class="lsp-iv"><a href="tel:{{ $candidate->mobile_number }}">{{ $candidate->mobile_number }}</a></div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Email</div><div class="lsp-iv">{!! $candidate->email ? '<a href="mailto:'.$candidate->email.'">'.$candidate->email.'</a>' : 'N/A' !!}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Location</div><div class="lsp-iv">{{ $candidate->location ?: 'N/A' }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Applied For</div><div class="lsp-iv">{{ $candidate->job_title }}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Source</div><div class="lsp-iv">{{ $candidate->source ?: 'N/A' }}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Experience</div><div class="lsp-iv">{{ $candidate->experience_years !== null ? $candidate->experience_years . ' year(s)' : 'N/A' }}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Notice Period</div><div class="lsp-iv">{{ $candidate->notice_period ?: 'N/A' }}</div></div>
+                                <div class="lsp-info-item">
+                                    <div class="lsp-il">Candidate Type</div>
+                                    <div class="lsp-iv">
+                                        <span class="rec-chip {{ $candidate->candidate_type === 'experienced' ? 'rec-chip-interview_scheduled' : 'rec-chip-applied' }}">
+                                            {{ ucfirst($candidate->candidate_type ?: 'fresher') }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="lsp-info-item">
+                                    <div class="lsp-il">Source</div>
+                                    <div class="lsp-iv">
+                                        {{ $candidate->source ?: 'N/A' }}
+                                        @if($candidate->source === 'Others' && $candidate->source_details)
+                                            <span style="font-weight:600; color:#666;">({{ $candidate->source_details }})</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="lsp-info-item"><div class="lsp-il">Expected CTC</div><div class="lsp-iv">{{ $candidate->expected_ctc !== null ? '₹ ' . number_format((float) $candidate->expected_ctc, 2) : 'N/A' }}</div></div>
                             </div>
                         </div>
                     </div>
+
+                    @if($candidate->candidate_type === 'intern' || $candidate->institute_name || $candidate->course_name)
+                        <div class="lsp-card">
+                            <div class="lsp-card-head">
+                                <div class="lsp-card-title">Internship Details</div>
+                            </div>
+                            <div class="lsp-card-body">
+                                <div class="lsp-info-grid">
+                                    <div class="lsp-info-item"><div class="lsp-il">Institute / College</div><div class="lsp-iv">{{ $candidate->institute_name ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Course / Degree</div><div class="lsp-iv">{{ $candidate->course_name ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Internship Duration</div><div class="lsp-iv">{{ $candidate->internship_months ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Stipend Provided</div><div class="lsp-iv">{{ $candidate->has_stipend ? ucfirst($candidate->has_stipend) : 'N/A' }}</div></div>
+                                    @if($candidate->has_stipend === 'yes')
+                                        <div class="lsp-info-item"><div class="lsp-il">Stipend Amount</div><div class="lsp-iv">{{ $candidate->stipend_amount !== null ? '₹ ' . number_format((float) $candidate->stipend_amount, 2) : 'N/A' }}</div></div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($candidate->candidate_type === 'experienced' || $candidate->experience_years !== null || $candidate->previous_company)
+                        <div class="lsp-card">
+                            <div class="lsp-card-head">
+                                <div class="lsp-card-title">Experience & Previous HR Details</div>
+                            </div>
+                            <div class="lsp-card-body">
+                                <div class="lsp-info-grid">
+                                    <div class="lsp-info-item"><div class="lsp-il">Experience Years</div><div class="lsp-iv">{{ $candidate->experience_years !== null ? $candidate->experience_years . ' Year(s)' : 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Notice Period</div><div class="lsp-iv">{{ $candidate->notice_period ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Current CTC</div><div class="lsp-iv">{{ $candidate->current_ctc !== null ? '₹ ' . number_format((float) $candidate->current_ctc, 2) : 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Previous Company</div><div class="lsp-iv">{{ $candidate->previous_company ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Previous HR Name</div><div class="lsp-iv">{{ $candidate->previous_hr_name ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Previous HR Contact</div><div class="lsp-iv">{!! $candidate->previous_hr_contact ? '<a href="tel:'.$candidate->previous_hr_contact.'">'.$candidate->previous_hr_contact.'</a>' : 'N/A' !!}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Relieving Reason</div><div class="lsp-iv">{{ $candidate->relieving_reason ?: 'N/A' }}</div></div>
+                                    <div class="lsp-info-item"><div class="lsp-il">Own Laptop</div><div class="lsp-iv">{{ $candidate->has_laptop ? ucfirst($candidate->has_laptop) : 'N/A' }}</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(!empty($candidate->education_details))
+                        <div class="lsp-card">
+                            <div class="lsp-card-head">
+                                <div class="lsp-card-title">Education Details</div>
+                            </div>
+                            <div class="lsp-card-body">
+                                <div style="overflow-x:auto;">
+                                    <table class="lsp-qt-items-tbl">
+                                        <thead>
+                                            <tr>
+                                                <th>Degree / Qualification</th>
+                                                <th>Institution / College</th>
+                                                <th>Specialization</th>
+                                                <th>Passing Year</th>
+                                                <th>Percentage / CGPA</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($candidate->education_details as $edu)
+                                                <tr>
+                                                    <td><strong>{{ $edu['degree'] ?? 'N/A' }}</strong></td>
+                                                    <td>{{ $edu['institution'] ?? 'N/A' }}</td>
+                                                    <td>{{ $edu['specialization'] ?? 'N/A' }}</td>
+                                                    <td>{{ $edu['year_of_passing'] ?? 'N/A' }}</td>
+                                                    <td>{{ $edu['percentage'] ?? 'N/A' }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="lsp-card">
                         <div class="lsp-card-head">
@@ -302,30 +391,34 @@
                                 <thead>
                                     <tr>
                                         <th>Date</th>
-                                        <th>Round</th>
-                                        <th>Mode</th>
                                         <th>Interviewer</th>
                                         <th>Status</th>
                                         <th>Notes</th>
+                                        <th style="text-align:right;">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($candidate->interviews as $interview)
                                         <tr>
                                             <td>{{ $interview->scheduled_at?->format('d M Y, h:i A') }}</td>
-                                            <td>{{ $interview->round ?: 'N/A' }}</td>
-                                            <td>
-                                                {{ $interview->mode_label }}
-                                                @if($interview->interview_link)
-                                                    <br><a href="{{ $interview->interview_link }}" target="_blank" class="rec-resume-link">Open Link</a>
-                                                @endif
-                                            </td>
                                             <td>{{ $interview->interviewer_name ?: 'N/A' }}</td>
                                             <td>{{ $interview->status_label }}</td>
                                             <td>{{ $interview->notes ?: 'N/A' }}</td>
+                                            <td style="text-align:right;">
+                                                 <button type="button" class="lsp-btn lsp-btn-outline" style="padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"
+                                                     onclick="openRescheduleModal(
+                                                         {{ $interview->id }},
+                                                         '{{ optional($interview->scheduled_at)->format('Y-m-d\TH:i') }}',
+                                                         '{{ addslashes($interview->interviewer_name ?? '') }}',
+                                                         '{{ $interview->status }}',
+                                                         '{{ addslashes($interview->notes ?? '') }}'
+                                                     )">
+                                                     <i class="bi bi-arrow-repeat"></i> Reschedule
+                                                 </button>
+                                             </td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="6" style="text-align:center;color:#9e9e9e;padding:28px;">No interviews scheduled.</td></tr>
+                                        <tr><td colspan="5" style="text-align:center;color:#9e9e9e;padding:28px;">No interviews scheduled.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>
@@ -345,27 +438,16 @@
                                     <label class="lsp-label">Scheduled At <span class="lsp-req">*</span></label>
                                     <input type="datetime-local" name="scheduled_at" class="lsp-inp no-ico" value="{{ old('scheduled_at') }}" required>
                                 </div>
-                                <div class="lsp-form-row lsp-form-row-2">
-                                    <div class="lsp-group">
-                                        <label class="lsp-label">Round</label>
-                                        <input type="text" name="round" class="lsp-inp no-ico" value="{{ old('round') }}" placeholder="HR, Technical 1">
-                                    </div>
-                                    <div class="lsp-group">
-                                        <label class="lsp-label">Mode <span class="lsp-req">*</span></label>
-                                        <select name="mode" class="lsp-sel no-ico" required>
-                                            @foreach($interviewModes as $value => $label)
-                                                <option value="{{ $value }}" @selected(old('mode', 'phone') === $value)>{{ $label }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                </div>
                                 <div class="lsp-group">
-                                    <label class="lsp-label">Interviewer</label>
-                                    <input type="text" name="interviewer_name" class="lsp-inp no-ico" value="{{ old('interviewer_name') }}">
-                                </div>
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Interview Link</label>
-                                    <input type="text" name="interview_link" class="lsp-inp no-ico" value="{{ old('interview_link') }}">
+                                    <label class="lsp-label">Interviewer (Team Leads)</label>
+                                    <select name="interviewer_id" id="interviewer_select" class="lsp-sel no-ico select2" style="width:100%;">
+                                        <option value="">Select Interviewer</option>
+                                        @foreach($activeUsers as $user)
+                                            <option value="{{ $user->id }}" @selected(old('interviewer_id') == $user->id || old('interviewer_name') === $user->name)>
+                                                {{ $user->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
                                 </div>
                                 <div class="lsp-group">
                                     <label class="lsp-label">Interview Status</label>
@@ -451,6 +533,53 @@
         </div>
     </div>
 </div>
+
+{{-- RESCHEDULE INTERVIEW MODAL --}}
+<div id="modalRescheduleInterview" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div class="lsp-card" style="max-width:540px;width:100%;background:#fff;border-radius:18px;box-shadow:0 20px 45px rgba(0,0,0,0.2);overflow:hidden;margin:0 auto;">
+        <div class="lsp-card-head" style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#fe5f04 0%,#ff8745 100%);padding:16px 20px;">
+            <div class="lsp-card-title" style="color:#fff;font-size:16px;font-weight:700;">🔄 Reschedule Interview</div>
+            <button type="button" style="border:none;background:none;font-size:22px;font-weight:700;cursor:pointer;color:#fff;line-height:1;" onclick="closeRescheduleModal()">&times;</button>
+        </div>
+        <form id="formRescheduleInterview" method="POST" action="">
+            @csrf
+            @method('PUT')
+            <div class="lsp-card-body" style="padding:20px;">
+                <div class="lsp-stack">
+                    <div class="lsp-group">
+                        <label class="lsp-label">Scheduled At <span class="lsp-req">*</span></label>
+                        <input type="datetime-local" id="reschedule_scheduled_at" name="scheduled_at" class="lsp-inp no-ico" required>
+                    </div>
+                    <div class="lsp-group">
+                        <label class="lsp-label">Interviewer (Team Leads)</label>
+                        <select id="reschedule_interviewer_select" name="interviewer_id" class="lsp-sel no-ico select2" style="width:100%;">
+                            <option value="">Select Interviewer</option>
+                            @foreach($activeUsers as $user)
+                                <option value="{{ $user->id }}" data-name="{{ $user->name }}">{{ $user->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="lsp-group">
+                        <label class="lsp-label">Interview Status</label>
+                        <select id="reschedule_status" name="status" class="lsp-sel no-ico">
+                            @foreach($interviewStatuses as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="lsp-group">
+                        <label class="lsp-label">Notes</label>
+                        <textarea id="reschedule_notes" name="notes" class="lsp-ta" rows="3"></textarea>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid #eee;">
+                        <button type="button" class="lsp-btn lsp-btn-outline" onclick="closeRescheduleModal()">Cancel</button>
+                        <button type="submit" class="lsp-btn lsp-btn-primary">Save Changes & Send Email</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -467,5 +596,46 @@ function switchRecruitmentTab(name, btn) {
     btn.classList.add('active');
     document.getElementById('panel-' + name)?.classList.add('active');
 }
+
+function openRescheduleModal(id, scheduledAt, interviewerName, status, notes) {
+    const modal = document.getElementById('modalRescheduleInterview');
+    const form = document.getElementById('formRescheduleInterview');
+    form.action = `{{ url('/') }}/recruitment/{{ $candidate->id }}/interviews/${id}`;
+
+    document.getElementById('reschedule_scheduled_at').value = scheduledAt;
+    document.getElementById('reschedule_status').value = status;
+    document.getElementById('reschedule_notes').value = notes;
+
+    const select = document.getElementById('reschedule_interviewer_select');
+    if (select) {
+        let matchedVal = '';
+        for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].getAttribute('data-name') === interviewerName || select.options[i].text.trim() === interviewerName) {
+                matchedVal = select.options[i].value;
+                break;
+            }
+        }
+        select.value = matchedVal;
+        if (window.jQuery && window.jQuery(select).data('select2')) {
+            window.jQuery(select).val(matchedVal).trigger('change');
+        }
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeRescheduleModal() {
+    document.getElementById('modalRescheduleInterview').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.jQuery && window.jQuery.fn.select2) {
+        window.jQuery('#interviewer_select, #reschedule_interviewer_select').select2({
+            placeholder: 'Select Interviewer',
+            allowClear: true,
+            width: '100%'
+        });
+    }
+});
 </script>
 @endpush

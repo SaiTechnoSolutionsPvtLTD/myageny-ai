@@ -316,6 +316,27 @@
     $deptName = strtolower(trim((string) ($projectItem->department?->name ?? '')));
     $isContentCalendarDept = in_array($deptName, ['designing', 'digital marketing'], true);
     $contentCalendarSheetUrl = (string) ($projectItem->content_calendar_sheet_url ?? '');
+
+    // Testing Tab: show only for Development and Testing department users or admins
+    $currentUser = auth()->user();
+    $isDevUser = $currentUser && (
+        $currentUser->belongsToDevelopmentDepartment() ||
+        $currentUser->hasDevelopmentLikeRole() ||
+        $currentUser->isDevelopmentTeam()
+    );
+    $isTestingUser = $currentUser && (
+        $currentUser->belongsToTestingDepartment() ||
+        $currentUser->hasTestingLikeRole()
+    );
+    $isAdminUser = $currentUser && (
+        $currentUser->isSuperAdmin() ||
+        $currentUser->hasAdminLikeRole()
+    );
+    $canSeeTestingTab = $isAdminUser || $isDevUser || $isTestingUser || in_array($deptName, ['development', 'testing', 'web development', 'app development', 'software development'], true);
+
+    if ($activeTab === 'testing' && ! $canSeeTestingTab) {
+        $activeTab = 'overview';
+    }
 @endphp
 <div class="ps-page">
     <div class="ps-topbar">
@@ -342,6 +363,11 @@
             <button type="button" class="ps-tab-btn {{ $activeTab === 'allocation' ? 'is-active' : '' }}" data-tab-target="allocation">{{ $isTlScopedView ? 'Team Allocation' : 'TL Allocation' }}</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'updates' ? 'is-active' : '' }}" data-tab-target="updates">Production Update</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'timeline' ? 'is-active' : '' }}" data-tab-target="timeline">Timeline</button>
+            @if($canSeeTestingTab)
+            <button type="button" class="ps-tab-btn {{ $activeTab === 'testing' ? 'is-active' : '' }}" data-tab-target="testing">
+                <i class="bi bi-bug" style="margin-right:5px;"></i>Testing
+            </button>
+            @endif
             @if($isContentCalendarDept)
             <button type="button" class="ps-tab-btn {{ $activeTab === 'content_calendar' ? 'is-active' : '' }}" data-tab-target="content_calendar" id="cc-tab-btn">
                 <i class="bi bi-calendar2-week" style="margin-right:5px;"></i>Content Calendar
@@ -653,7 +679,7 @@
                         @endif
                             
                         @if($canAllocate)
-                            <form method="POST" action="{{ route('projects.allocate', $projectItem) }}">
+                            <form method="POST" action="{{ route('projects.allocate', $projectItem) }}" id="tl-allocation-form">
                                 @csrf
                                 @if($tlUsers->isNotEmpty())
                                     <div class="ps-label" style="margin-bottom:8px;">Available TLs</div>
@@ -742,7 +768,7 @@
                             @endif
 
                             @if($canAllocateEmployees)
-                                <form method="POST" action="{{ route('projects.employee-allocate', $projectItem) }}">
+                                <form method="POST" action="{{ route('projects.employee-allocate', $projectItem) }}" id="employee-allocation-form">
                                     @csrf
                                     @if($teamMembers->isNotEmpty())
                                         <div class="ps-label" style="margin:16px 0 8px;">Mapped Employees</div>
@@ -1068,8 +1094,343 @@
         </section>
         @endif
 
+        {{-- Testing Panel Section --}}
+        @if($canSeeTestingTab)
+        <section class="ps-tab-panel {{ $activeTab === 'testing' ? 'is-active' : '' }}" data-tab-panel="testing">
+            <section class="ps-card">
+                <div class="ps-card-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <div class="ps-card-title">🧪 Project Testing Handover</div>
+                        <div class="ps-card-sub">Development team testing links, credentials, and QA status logs.</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <button type="button" class="ps-btn" style="background: #dc2626; color: #ffffff; border: none; font-weight: 700; padding: 10px 18px; border-radius: 999px; box-shadow: 0 4px 12px rgba(220,38,38,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddBugModal()">
+                            <i class="bi bi-bug-fill"></i> + Add Bug
+                        </button>
+                        <button type="button" class="ps-btn" style="background: linear-gradient(135deg, #fe5f04, #ff8a3d); color: #ffffff; border: none; font-weight: 700; padding: 10px 20px; border-radius: 999px; box-shadow: 0 4px 12px rgba(254,95,4,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;" onclick="openMoveToTestingModal()">
+                            <i class="bi bi-send-check-fill"></i> Move to Testing
+                        </button>
+                    </div>
+                </div>
+                <div class="ps-card-body">
+                    @forelse($testingDetails as $detail)
+                        <div style="background: #ffffff; border-radius: 16px; padding: 20px; margin-bottom: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.03); position: relative;">
+                            <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, #fe5f04, #ff8745); border-radius: 16px 0 0 16px;"></div>
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 30px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 12px; font-weight: 700;">
+                                        <i class="bi bi-bug-fill"></i> Moved to Testing
+                                    </span>
+                                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 30px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600;">
+                                        <i class="bi bi-clock-history"></i>
+                                        {{ $detail->created_at?->format('d M Y, h:i A') }}
+                                    </span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    @if($detail->testingTl)
+                                        <div style="font-size: 13px; font-weight: 600; color: #0284c7;">
+                                            <i class="bi bi-person-check-fill" style="margin-right:4px;"></i>Testing TL: {{ $detail->testingTl->name }}
+                                        </div>
+                                    @endif
+                                    <div style="display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; padding: 4px 14px 4px 6px; border-radius: 30px; border: 1px solid #e2e8f0;">
+                                        <div style="width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #fe5f04 0%, #ff8745 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">
+                                            {{ strtoupper(substr($detail->movedBy?->name ?? 'D', 0, 1)) }}
+                                        </div>
+                                        <span style="font-size: 12.5px; font-weight: 600; color: #334155;">{{ $detail->movedBy?->name ?? 'Developer' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 14px;">
+                                @if($detail->credentials)
+                                    <div style="background: #f8fafc; padding: 14px 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                                        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; margin-bottom: 6px;">🔑 Credentials / Access Details</div>
+                                        <div style="font-size: 13px; color: #1e293b; font-family: monospace; white-space: pre-line;">{!! e($detail->credentials) !!}</div>
+                                    </div>
+                                @endif
+                            </div>
+
+                            @if($detail->notes)
+                                <div style="margin-top: 14px; background: #fff8f3; padding: 14px 16px; border-radius: 12px; border: 1px solid #ffd8bf;">
+                                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #c2410c; margin-bottom: 6px;">📝 Developer Remarks / Instructions</div>
+                                    <div style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-line;">{!! e($detail->notes) !!}</div>
+                                </div>
+                            @endif
+                        </div>
+                    @empty
+                        <div style="text-align: center; padding: 48px 20px; background: #f8fafc; border-radius: 16px; border: 2px dashed #cbd5e1;">
+                            <div style="font-size: 40px; margin-bottom: 12px;">🧪</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #334155;">Project Not Moved to Testing Yet</div>
+                            <div style="font-size: 13px; color: #64748b; margin-top: 4px; max-width: 480px; margin-left: auto; margin-right: auto;">
+                                Development team can click <strong>Move to Testing</strong> above to submit testing URL, access credentials, and send notification email to the Testing TL.
+                            </div>
+                        </div>
+                    @endforelse
+
+                    {{-- Reported Bugs List Section --}}
+                    @if(isset($bugs) && $bugs->isNotEmpty())
+                        <div style="margin-top: 24px; padding-top: 20px; border-top: 2px dashed #cbd5e1;">
+                            <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i class="bi bi-bug-fill" style="color: #dc2626;"></i> Reported Project Bugs
+                                    <span style="font-size: 12px; font-weight: 700; background: #fee2e2; color: #991b1b; padding: 2px 10px; border-radius: 20px;">{{ $bugs->count() }}</span>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; gap: 12px;">
+                                @foreach($bugs as $bug)
+                                    <div style="background: #ffffff; border-radius: 12px; padding: 16px; border: 1px solid #fecaca; box-shadow: 0 2px 8px rgba(220,38,38,0.04);">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                @php
+                                                    $priorityBadge = match($bug->priority) {
+                                                        'High' => ['bg' => '#fef2f2', 'color' => '#dc2626', 'border' => '#fecaca', 'icon' => 'bi-exclamation-triangle-fill'],
+                                                        'Low' => ['bg' => '#f0f9ff', 'color' => '#0284c7', 'border' => '#bae6fd', 'icon' => 'bi-info-circle-fill'],
+                                                        default => ['bg' => '#fff7ed', 'color' => '#c2410c', 'border' => '#fed7aa', 'icon' => 'bi-exclamation-circle-fill'],
+                                                    };
+                                                @endphp
+                                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; background: {{ $priorityBadge['bg'] }}; color: {{ $priorityBadge['color'] }}; border: 1px solid {{ $priorityBadge['border'] }}; font-size: 11px; font-weight: 800;">
+                                                    <i class="bi {{ $priorityBadge['icon'] }}"></i> {{ $bug->priority }} Priority Bug
+                                                </span>
+                                                <span style="font-size: 12px; color: #64748b;">
+                                                    <i class="bi bi-clock-history"></i> {{ $bug->created_at?->format('d M Y, h:i A') }}
+                                                </span>
+                                            </div>
+
+                                            <div style="font-size: 12px; color: #475569; font-weight: 600;">
+                                                👤 Reported by {{ $bug->createdBy?->name ?? 'Tester' }}
+                                            </div>
+                                        </div>
+
+                                        <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6; white-space: pre-line;">{!! e($bug->description) !!}</div>
+
+                                        @if($bug->attachment_path)
+                                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+                                                <a href="{{ asset($bug->attachment_path) }}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: #0284c7; text-decoration: underline;">
+                                                    <i class="bi bi-paperclip" style="font-size: 14px;"></i> View / Download Attachment ({{ $bug->attachment_original_name ?: 'File' }})
+                                                </a>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </section>
+        </section>
+        @endif
+
     </div>
 </div>
+
+{{-- Move to Testing Modal --}}
+<div class="ps-modal-overlay" id="move-to-testing-modal-overlay" onclick="closeMoveToTestingModal()"></div>
+<div class="ps-modal" id="move-to-testing-modal" style="max-width: 600px; overflow: hidden;">
+    {{-- Process Loading Overlay --}}
+    <div id="moveToTestingLoadingOverlay" style="display: none; position: absolute; inset: 0; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; flex-direction: column; gap: 14px; text-align: center; padding: 24px;">
+        <div style="width: 48px; height: 48px; border: 4px solid #fed7aa; border-top-color: #fe5f04; border-radius: 50%; animation: psSpin 0.85s linear infinite;"></div>
+        <div>
+            <div style="font-size: 16px; font-weight: 800; color: #1e293b;">Sending Notification Email...</div>
+            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Notifying Testing TL & Team Leads. Please wait a moment...</div>
+        </div>
+    </div>
+
+    <div class="ps-modal-head">
+        <div>
+            <div class="ps-card-title" style="display:flex; align-items:center; gap:8px; color:#ea580c;">
+                🧪 Move Project to Testing
+            </div>
+            <div class="ps-card-sub">Submit testing credentials to transfer project to QA/Testing TL.</div>
+        </div>
+        <button type="button" class="ps-modal-close" onclick="closeMoveToTestingModal()" aria-label="Close modal">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="ps-modal-body">
+        <form id="moveToTestingForm" method="POST" action="{{ route('projects.move-to-testing', $projectItem) }}" onsubmit="handleMoveToTestingSubmit(event, this)">
+            @csrf
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Select Testing TL <span style="color: #ef4444;">*</span>
+                    </label>
+                    <select name="testing_tl_id" class="pjd-select" style="width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px; border: 1px solid #cbd5e1;" required>
+                        <option value="">-- Select Testing TL --</option>
+                        @foreach($testingTlUsers as $tlUser)
+                            <option value="{{ $tlUser->id }}">{{ $tlUser->name }} ({{ $tlUser->role_display_name }})</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Testing Credentials / Access Info
+                    </label>
+                    <textarea name="credentials" rows="3" class="cc-sheet-input" style="width: 100%; min-height: 80px; padding: 10px; border-radius: 10px; font-family: monospace;" placeholder="Username: admin@test.com&#10;Password: Test@1234&#10;Admin URL: https://admin.test.com"></textarea>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Developer Notes / Instructions
+                    </label>
+                    <textarea name="notes" rows="3" class="cc-sheet-input" style="width: 100%; min-height: 80px; padding: 10px; border-radius: 10px;" placeholder="Please test user authentication, payment checkout flow, and PDF report generation..."></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+                    <button type="button" class="ps-btn" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;" onclick="closeMoveToTestingModal()">
+                        Cancel
+                    </button>
+                    <button type="submit" id="btnMoveToTestingSubmit" class="ps-btn" style="background: linear-gradient(135deg, #fe5f04, #ff8745); color: #ffffff; border: none; font-weight: 700; padding: 10px 22px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+                        <span id="btnMoveToTestingIcon">🚀</span>
+                        <span id="btnMoveToTestingText">Submit & Send Mail to Testing TL</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Add Bug Modal --}}
+<div class="ps-modal-overlay" id="add-bug-modal-overlay" onclick="closeAddBugModal()"></div>
+<div class="ps-modal" id="add-bug-modal" style="max-width: 560px; overflow: hidden;">
+    <div class="ps-modal-head">
+        <div>
+            <div class="ps-card-title" style="display:flex; align-items:center; gap:8px; color:#dc2626;">
+                🐞 Report Project Bug
+            </div>
+            <div class="ps-card-sub">Log bug description, set priority level, and upload screenshot or attachment.</div>
+        </div>
+        <button type="button" class="ps-modal-close" onclick="closeAddBugModal()" aria-label="Close modal">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="ps-modal-body">
+        <form method="POST" action="{{ route('projects.bugs.store', $projectItem) }}" enctype="multipart/form-data" onsubmit="handleAddBugSubmit(event, this)">
+            @csrf
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Priority Level <span style="color: #ef4444;">*</span>
+                    </label>
+                    <select name="priority" class="pjd-select" style="width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px; border: 1px solid #cbd5e1;" required>
+                        <option value="High">🔴 High Priority</option>
+                        <option value="Medium" selected>🟠 Medium Priority</option>
+                        <option value="Low">🔵 Low Priority</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Bug Description <span style="color: #ef4444;">*</span>
+                    </label>
+                    <textarea name="description" rows="4" class="cc-sheet-input" style="width: 100%; min-height: 100px; padding: 10px; border-radius: 10px;" placeholder="Describe the issue, step-by-step reproduction, or expected vs actual behavior..." required></textarea>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        Attachment / File Upload (Screenshot, PDF, Log File)
+                    </label>
+                    <input type="file" name="attachment" class="cc-sheet-input" style="width: 100%; padding: 8px 10px;" accept="image/*,.pdf,.doc,.docx,.zip">
+                    <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">Files will be stored in public folder and viewable by team.</div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+                    <button type="button" class="ps-btn" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;" onclick="closeAddBugModal()">
+                        Cancel
+                    </button>
+                    <button type="submit" id="btnSubmitBugShow" class="ps-btn" style="background: #dc2626; color: #ffffff; border: none; font-weight: 700; padding: 10px 22px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+                        <span id="btnSubmitBugIconShow">🐞</span>
+                        <span id="btnSubmitBugTextShow">Submit Bug Report</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+@keyframes psSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.ps-spin-icon {
+    display: inline-block;
+    animation: psSpin 0.85s linear infinite;
+}
+</style>
+
+<script>
+function openAddBugModal() {
+    const btn = document.getElementById('btnSubmitBugShow');
+    if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        const icon = document.getElementById('btnSubmitBugIconShow');
+        const text = document.getElementById('btnSubmitBugTextShow');
+        if (icon) icon.innerHTML = '🐞';
+        if (text) text.textContent = 'Submit Bug Report';
+    }
+    document.getElementById('add-bug-modal-overlay').classList.add('is-open');
+    document.getElementById('add-bug-modal').classList.add('is-open');
+}
+function closeAddBugModal() {
+    document.getElementById('add-bug-modal-overlay').classList.remove('is-open');
+    document.getElementById('add-bug-modal').classList.remove('is-open');
+}
+function handleAddBugSubmit(event, form) {
+    const btn = document.getElementById('btnSubmitBugShow');
+    if (btn) {
+        if (btn.disabled) {
+            event.preventDefault();
+            return false;
+        }
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.style.cursor = 'wait';
+        const icon = document.getElementById('btnSubmitBugIconShow');
+        const text = document.getElementById('btnSubmitBugTextShow');
+        if (icon) icon.innerHTML = '<i class="bi bi-arrow-repeat ps-spin-icon"></i>';
+        if (text) text.textContent = ' Submitting Bug Report...';
+    }
+}
+function openMoveToTestingModal() {
+    const overlay = document.getElementById('moveToTestingLoadingOverlay');
+    if (overlay) overlay.style.display = 'none';
+    const btn = document.getElementById('btnMoveToTestingSubmit');
+    if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        document.getElementById('btnMoveToTestingIcon').innerHTML = '🚀';
+        document.getElementById('btnMoveToTestingText').textContent = 'Submit & Send Mail to Testing TL';
+    }
+    document.getElementById('move-to-testing-modal-overlay').classList.add('is-open');
+    document.getElementById('move-to-testing-modal').classList.add('is-open');
+}
+function closeMoveToTestingModal() {
+    document.getElementById('move-to-testing-modal-overlay').classList.remove('is-open');
+    document.getElementById('move-to-testing-modal').classList.remove('is-open');
+}
+function handleMoveToTestingSubmit(event, form) {
+    const overlay = document.getElementById('moveToTestingLoadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+    }
+    const btn = document.getElementById('btnMoveToTestingSubmit');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.75';
+        btn.style.cursor = 'wait';
+        const icon = document.getElementById('btnMoveToTestingIcon');
+        const text = document.getElementById('btnMoveToTestingText');
+        if (icon) icon.innerHTML = '<i class="bi bi-arrow-repeat ps-spin-icon"></i>';
+        if (text) text.textContent = ' Sending Notification Mail...';
+    }
+}
+</script>
 
 <div class="ps-modal-overlay {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal-overlay></div>
 <div class="ps-modal {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal>
@@ -1486,4 +1847,417 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 @endif
+
+{{-- Support Portal Style Process Overlay for TL Allocation --}}
+<div id="tlAllocationProcessOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner"></div>
+            <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+        </div>
+        <h4 id="tlProcessOverlayTitle" class="support-process-title">Allocating TL &amp; Sending Email...</h4>
+        <p id="tlProcessOverlaySubtitle" class="support-process-subtitle">Please wait while project allocation details are sent to allocated Team Lead(s)...</p>
+
+        <div class="support-progress-wrapper">
+            <div class="support-progress-bar">
+                <div id="tlSupportProgressFill" class="support-progress-fill"></div>
+            </div>
+            <div class="support-progress-status">
+                <span id="tlSupportProgressText">Connecting to server...</span>
+                <span id="tlSupportProgressPercent">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- TL Allocation Confirmation Modal --}}
+<div id="tlConfirmModal" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card" style="width: 520px; max-width: calc(100vw - 32px); text-align: left; padding: 0; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 20px 24px; color: #ffffff; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="bi bi-person-check-fill"></i> Confirm TL Allocation
+                </h3>
+                <p style="margin: 4px 0 0; font-size: 12px; opacity: 0.9;">Project #{{ $projectItem->id }} - {{ $projectItem->product_name ?: 'Product' }}</p>
+            </div>
+            <button type="button" id="tlConfirmCloseBtn" style="background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+
+        <div style="padding: 24px;">
+            <p style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0 0 8px;">Are you sure you want to allocate this project to the selected Team Lead(s)?</p>
+            <p style="font-size: 13px; color: #475569; margin: 0 0 16px; line-height: 1.5;">
+                An email notification with complete project details will be dispatched automatically to:
+            </p>
+            
+            <div id="tlConfirmNamesList" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px; color: #1e40af; font-weight: 700;">
+                <!-- Selected TL names injected dynamically -->
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; font-size: 12px; color: #64748b; line-height: 1.6;">
+                <strong>Project:</strong> {{ $projectItem->product_name ?: 'Product' }}<br>
+                <strong>Client/Company:</strong> {{ $projectItem->lead?->company_name ?: $projectItem->lead?->contact_name ?: 'N/A' }}<br>
+                <strong>Department:</strong> {{ $projectItem->department?->name ?: 'Production' }}
+            </div>
+        </div>
+
+        <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px;">
+            <button type="button" id="tlConfirmCancelBtn" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-size: 13px; font-weight: 700; cursor: pointer;">Cancel</button>
+            <button type="button" id="tlConfirmSubmitBtn" style="padding: 10px 22px; border-radius: 10px; border: none; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(30,64,175,0.3);">
+                Yes, Allocate &amp; Send Mail
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+.support-process-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    animation: fadeInOverlay 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.support-process-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 40px 36px;
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+    text-align: center;
+    transform: scale(0.95);
+    animation: scaleInCard 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes scaleInCard {
+    to { transform: scale(1); }
+}
+.support-process-icon-wrap {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.support-process-spinner {
+    position: absolute;
+    inset: 0;
+    border: 3.5px solid #dbeafe;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spinOverlay 0.8s linear infinite;
+}
+@keyframes spinOverlay {
+    to { transform: rotate(360deg); }
+}
+.support-process-icon {
+    font-size: 32px;
+    color: #2563eb;
+}
+.support-process-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 8px;
+}
+.support-process-subtitle {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 0 28px;
+    line-height: 1.5;
+}
+.support-progress-wrapper {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 16px 20px;
+}
+.support-progress-bar {
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.support-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+.support-progress-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tlForm = document.getElementById('tl-allocation-form');
+    var tlConfirmModal = document.getElementById('tlConfirmModal');
+    var tlConfirmCloseBtn = document.getElementById('tlConfirmCloseBtn');
+    var tlConfirmCancelBtn = document.getElementById('tlConfirmCancelBtn');
+    var tlConfirmSubmitBtn = document.getElementById('tlConfirmSubmitBtn');
+    var tlConfirmNamesList = document.getElementById('tlConfirmNamesList');
+    var tlOverlay = document.getElementById('tlAllocationProcessOverlay');
+    var progressInterval = null;
+
+    if (!tlForm) return;
+
+    tlForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var selectEl = tlForm.querySelector('select[name="tl_user_ids[]"]');
+        if (!selectEl) return;
+
+        var selectedOptions = Array.from(selectEl.selectedOptions);
+        if (selectedOptions.length === 0) {
+            alert('Please select at least one Team Lead (TL) for allocation.');
+            return;
+        }
+
+        var selectedNames = selectedOptions.map(function (opt) {
+            return opt.text.split('|')[0].trim();
+        });
+
+        if (tlConfirmNamesList) {
+            tlConfirmNamesList.innerHTML = '<div style="margin-bottom:6px; color:#475569; font-weight:600;">📧 Selected Team Lead(s):</div>' +
+                selectedNames.map(function (name) {
+                    return '<div style="font-size:14px; font-weight:800; color:#1e40af; margin-bottom:2px;">✓ ' + escapeHtml(name) + '</div>';
+                }).join('');
+        }
+
+        if (tlConfirmModal) tlConfirmModal.style.display = 'flex';
+    });
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function closeConfirmModal() {
+        if (tlConfirmModal) tlConfirmModal.style.display = 'none';
+    }
+
+    if (tlConfirmCloseBtn) tlConfirmCloseBtn.addEventListener('click', closeConfirmModal);
+    if (tlConfirmCancelBtn) tlConfirmCancelBtn.addEventListener('click', closeConfirmModal);
+
+    if (tlConfirmSubmitBtn) {
+        tlConfirmSubmitBtn.addEventListener('click', function () {
+            closeConfirmModal();
+            showTlProgressOverlay();
+            setTimeout(function () {
+                tlForm.submit();
+            }, 600);
+        });
+    }
+
+    function showTlProgressOverlay() {
+        var fill = document.getElementById('tlSupportProgressFill');
+        var percentText = document.getElementById('tlSupportProgressPercent');
+        var statusText = document.getElementById('tlSupportProgressText');
+        if (!tlOverlay || !fill || !percentText || !statusText) return;
+
+        tlOverlay.style.display = 'flex';
+        var currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (progressInterval) clearInterval(progressInterval);
+
+        progressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = 'Building project & requirement details...';
+            } else if (currentProgress < 75) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = 'Sending email notification to allocated Team Lead(s)...';
+            } else if (currentProgress < 94) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing TL project allocation...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
+});
+</script>
+
+{{-- Support Portal Style Process Overlay for Team / Employee Allocation (Orange Theme) --}}
+<div id="teamAllocationProcessOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card" style="border: 1px solid #ffedd5;">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner" style="border: 3.5px solid #ffedd5; border-top-color: #ea580c;"></div>
+            <i class="bi bi-people-fill support-process-icon" style="color: #ea580c;"></i>
+        </div>
+        <h4 id="teamProcessOverlayTitle" class="support-process-title">Allocating Team &amp; Sending Email...</h4>
+        <p id="teamProcessOverlaySubtitle" class="support-process-subtitle">Please wait while project details are sent to allocated Team Members...</p>
+
+        <div class="support-progress-wrapper" style="background: #fff7ed; border-color: #ffedd5;">
+            <div class="support-progress-bar" style="background: #fed7aa;">
+                <div id="teamSupportProgressFill" class="support-progress-fill" style="background: linear-gradient(90deg, #ea580c 0%, #f97316 100%);"></div>
+            </div>
+            <div class="support-progress-status" style="color: #9a3412;">
+                <span id="teamSupportProgressText">Connecting to server...</span>
+                <span id="teamSupportProgressPercent">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Team Allocation Confirmation Modal (Orange Theme) --}}
+<div id="teamConfirmModal" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card" style="width: 520px; max-width: calc(100vw - 32px); text-align: left; padding: 0; overflow: hidden; border: 1px solid #ffedd5;">
+        <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 20px 24px; color: #ffffff; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                    <i class="bi bi-people-fill"></i> Confirm Team Allocation
+                </h3>
+                <p style="margin: 4px 0 0; font-size: 12px; opacity: 0.95;">Project #{{ $projectItem->id }} - {{ $projectItem->product_name ?: 'Product' }}</p>
+            </div>
+            <button type="button" id="teamConfirmCloseBtn" style="background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+
+        <div style="padding: 24px;">
+            <p style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0 0 8px;">Are you sure you want to allocate these Team Members to this project?</p>
+            <p style="font-size: 13px; color: #475569; margin: 0 0 16px; line-height: 1.5;">
+                An email notification with complete project details will be dispatched automatically to:
+            </p>
+            
+            <div id="teamConfirmNamesList" style="background: #fff7ed; border: 1px solid #ffedd5; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px; color: #c2410c; font-weight: 700;">
+                <!-- Selected Team Member names injected dynamically -->
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; font-size: 12px; color: #64748b; line-height: 1.6;">
+                <strong>Project:</strong> {{ $projectItem->product_name ?: 'Product' }}<br>
+                <strong>Client/Company:</strong> {{ $projectItem->lead?->company_name ?: $projectItem->lead?->contact_name ?: 'N/A' }}<br>
+                <strong>Department:</strong> {{ $projectItem->department?->name ?: 'Production' }}
+            </div>
+        </div>
+
+        <div style="padding: 16px 24px; background: #fff7ed; border-top: 1px solid #ffedd5; display: flex; justify-content: flex-end; gap: 12px;">
+            <button type="button" id="teamConfirmCancelBtn" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-size: 13px; font-weight: 700; cursor: pointer;">Cancel</button>
+            <button type="button" id="teamConfirmSubmitBtn" style="padding: 10px 22px; border-radius: 10px; border: none; background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(234,88,12,0.35);">
+                Yes, Allocate Team &amp; Send Mail
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var teamForm = document.getElementById('employee-allocation-form');
+    var teamConfirmModal = document.getElementById('teamConfirmModal');
+    var teamConfirmCloseBtn = document.getElementById('teamConfirmCloseBtn');
+    var teamConfirmCancelBtn = document.getElementById('teamConfirmCancelBtn');
+    var teamConfirmSubmitBtn = document.getElementById('teamConfirmSubmitBtn');
+    var teamConfirmNamesList = document.getElementById('teamConfirmNamesList');
+    var teamOverlay = document.getElementById('teamAllocationProcessOverlay');
+    var teamProgressInterval = null;
+
+    if (!teamForm) return;
+
+    teamForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var selectEl = teamForm.querySelector('select[name="employee_user_ids[]"]');
+        if (!selectEl) return;
+
+        var selectedOptions = Array.from(selectEl.selectedOptions);
+        if (selectedOptions.length === 0) {
+            alert('Please select at least one team member for allocation.');
+            return;
+        }
+
+        var selectedNames = selectedOptions.map(function (opt) {
+            return opt.text.split('|')[0].trim();
+        });
+
+        if (teamConfirmNamesList) {
+            teamConfirmNamesList.innerHTML = '<div style="margin-bottom:6px; color:#9a3412; font-weight:600;">📧 Selected Team Member(s):</div>' +
+                selectedNames.map(function (name) {
+                    return '<div style="font-size:14px; font-weight:800; color:#ea580c; margin-bottom:2px;">✓ ' + escapeHtml(name) + '</div>';
+                }).join('');
+        }
+
+        if (teamConfirmModal) teamConfirmModal.style.display = 'flex';
+    });
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function closeTeamConfirmModal() {
+        if (teamConfirmModal) teamConfirmModal.style.display = 'none';
+    }
+
+    if (teamConfirmCloseBtn) teamConfirmCloseBtn.addEventListener('click', closeTeamConfirmModal);
+    if (teamConfirmCancelBtn) teamConfirmCancelBtn.addEventListener('click', closeTeamConfirmModal);
+
+    if (teamConfirmSubmitBtn) {
+        teamConfirmSubmitBtn.addEventListener('click', function () {
+            closeTeamConfirmModal();
+            showTeamProgressOverlay();
+            setTimeout(function () {
+                teamForm.submit();
+            }, 600);
+        });
+    }
+
+    function showTeamProgressOverlay() {
+        var fill = document.getElementById('teamSupportProgressFill');
+        var percentText = document.getElementById('teamSupportProgressPercent');
+        var statusText = document.getElementById('teamSupportProgressText');
+        if (!teamOverlay || !fill || !percentText || !statusText) return;
+
+        teamOverlay.style.display = 'flex';
+        var currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (teamProgressInterval) clearInterval(teamProgressInterval);
+
+        teamProgressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = 'Preparing project details for team...';
+            } else if (currentProgress < 75) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = 'Sending email notifications to team members...';
+            } else if (currentProgress < 94) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing team allocation...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
+});
+</script>
 @endpush

@@ -437,6 +437,8 @@
                                                 class="pa-action-btn"
                                                 data-pa-open
                                                 data-action="{{ route('production-approvals.review', $item) }}"
+                                                data-product-name="{{ $item->product_name }}"
+                                                data-company-name="{{ $displayCompany }}"
                                                 data-approval-remarks="{{ $item->production_approval_remarks }}"
                                                 data-custom-form='@json($item->custom_form_data ?? [])'
                                                 data-is-budget-approval-needed="{{ optional($item->product)->is_budget_approval_needed ? 1 : 0 }}"
@@ -503,7 +505,7 @@
                         </div>
 
                         <div class="pa-remarks-panel">
-                            <label class="pa-label" for="pa-approval-remarks">Production Approval Remarks</label>
+                            <label class="pa-label" for="pa-approval-remarks">Production Approval Remarks <span style="color:#dc2626;">*</span></label>
                             <textarea id="pa-approval-remarks" name="production_approval_remarks" class="pa-input pa-textarea" required></textarea>
                         </div>
                     </div>
@@ -517,6 +519,55 @@
             </form>
         </div>
     </div>
+
+    {{-- Production Approval Confirmation Modal --}}
+    <div class="pa-modal" id="pa-confirm-modal">
+        <div class="pa-modal-card" style="width: min(100%, 520px); height: auto; max-height: 90vh;">
+            <div class="pa-modal-head" style="background:#f0fdf4; border-bottom:1px solid #bbf7d0;">
+                <div>
+                    <div class="pa-modal-title" style="color:#166534; display:flex; align-items:center; gap:8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Confirm Production Approval
+                    </div>
+                </div>
+                <button type="button" class="pa-modal-close" id="pa-confirm-close">&times;</button>
+            </div>
+            <div style="padding: 24px;">
+                <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to approve this production request?</p>
+                <p style="font-size: 13px; color: #4b5563; margin: 0 0 16px; line-height: 1.5;">
+                    An email notification will be dispatched automatically to:<br>
+                    <span style="display:inline-flex; align-items:center; gap:6px; margin-top:8px; font-weight:700; color:#047857; background:#ecfdf5; padding:6px 12px; border-radius:8px; border:1px solid #a7f3d0; font-size:12px;">
+                        📧 Lead Sales Person &amp; projects@saitechnosolutions.net
+                    </span>
+                </p>
+                <div id="pa-confirm-details-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; font-size:13px; color:#334155; line-height:1.6;">
+                    <!-- Filled dynamically by JS -->
+                </div>
+            </div>
+            <div class="pa-modal-actions" style="justify-content: flex-end; gap: 10px; padding: 16px 24px 20px;">
+                <button type="button" class="pa-btn" id="pa-confirm-cancel">Cancel</button>
+                <button type="button" class="pa-btn approve" id="pa-confirm-submit-btn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); color:#fff; font-weight:800; padding:10px 20px;">
+                    Yes, Approve &amp; Send Mail
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Loading Progress Overlay --}}
+    <div id="paLoadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:#ffffff; border-radius:20px; padding:36px 44px; text-align:center; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); max-width:440px; width:90%;">
+            <div style="width:52px; height:52px; border:4px solid #e2e8f0; border-top-color:#10b981; border-radius:50%; margin:0 auto 20px; animation:paSpin 0.8s linear infinite;"></div>
+            <h4 id="paLoadingTitle" style="margin:0 0 8px; font-size:18px; font-weight:800; color:#0f172a;">Approving &amp; Sending Email...</h4>
+            <p id="paLoadingText" style="margin:0; font-size:13px; color:#64748b; line-height:1.55;">Please wait while we update production approval status and dispatch email notifications to team members.</p>
+        </div>
+    </div>
+
+    <style>
+    @keyframes paSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    </style>
 </div>
 @endsection
 
@@ -543,6 +594,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const decisionInput = document.getElementById('pa-decision-input');
     const approvalRemarksInput = document.getElementById('pa-approval-remarks');
     const customFormWrap = document.getElementById('pa-custom-form-wrap');
+    const confirmModal = document.getElementById('pa-confirm-modal');
+    const confirmCloseBtn = document.getElementById('pa-confirm-close');
+    const confirmCancelBtn = document.getElementById('pa-confirm-cancel');
+    const confirmSubmitBtn = document.getElementById('pa-confirm-submit-btn');
+    const confirmDetailsBox = document.getElementById('pa-confirm-details-box');
+    const loadingOverlay = document.getElementById('paLoadingOverlay');
+    const loadingTitle = document.getElementById('paLoadingTitle');
+    const loadingText = document.getElementById('paLoadingText');
+
+    let currentButton = null;
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -600,6 +661,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function openModal(button) {
+        currentButton = button;
         form.action = button.dataset.action || '';
         approvalRemarksInput.value = button.dataset.approvalRemarks || '';
         renderCustomFormData(JSON.parse(button.dataset.customForm || '[]'));
@@ -628,6 +690,12 @@ document.addEventListener('DOMContentLoaded', function () {
         budgetType.removeAttribute('required');
         budgetCustom.removeAttribute('required');
         renderCustomFormData([]);
+    }
+
+    function showLoading(title, text) {
+        if (loadingTitle) loadingTitle.innerText = title || 'Processing Request...';
+        if (loadingText) loadingText.innerText = text || 'Please wait while we process your request.';
+        if (loadingOverlay) loadingOverlay.style.display = 'flex';
     }
 
     document.querySelectorAll('[data-pa-open]').forEach(function (button) {
@@ -665,6 +733,49 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+
+    form.addEventListener('submit', function (e) {
+        if (decisionInput.value === 'approval') {
+            e.preventDefault();
+            
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            var prodName = (currentButton && currentButton.dataset.productName) || 'Product';
+            var companyName = (currentButton && currentButton.dataset.companyName) || '';
+            var remarks = approvalRemarksInput.value || 'None';
+            var bAmount = budgetAmount.value;
+            var bType = budgetType.value === 'custom' ? budgetCustom.value : budgetType.value;
+
+            var detailsHtml = '<div><strong>Product:</strong> ' + escapeHtml(prodName) + '</div>';
+            if (companyName) detailsHtml += '<div><strong>Client/Company:</strong> ' + escapeHtml(companyName) + '</div>';
+            if (bAmount) detailsHtml += '<div><strong>Approved Budget:</strong> ₹' + escapeHtml(bAmount) + ' (' + escapeHtml(bType) + ')</div>';
+            detailsHtml += '<div><strong>Remarks:</strong> ' + escapeHtml(remarks) + '</div>';
+
+            if (confirmDetailsBox) confirmDetailsBox.innerHTML = detailsHtml;
+            if (confirmModal) confirmModal.classList.add('is-open');
+        } else if (decisionInput.value === 'rejected') {
+            showLoading('Rejecting Request...', 'Updating production approval status to rejected...');
+        }
+    });
+
+    if (confirmSubmitBtn) {
+        confirmSubmitBtn.addEventListener('click', function () {
+            if (confirmModal) confirmModal.classList.remove('is-open');
+            if (modal) modal.classList.remove('is-open');
+            showLoading('Approving & Sending Email...', 'Please wait while we update production approval status and dispatch email notifications to team members.');
+            form.submit();
+        });
+    }
+
+    function closeConfirmModal() {
+        if (confirmModal) confirmModal.classList.remove('is-open');
+    }
+
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeConfirmModal);
+    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', closeConfirmModal);
 });
 </script>
 @endpush

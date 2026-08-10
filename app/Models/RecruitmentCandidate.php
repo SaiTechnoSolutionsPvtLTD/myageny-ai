@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecruitmentCandidate extends Model
 {
@@ -34,11 +35,24 @@ class RecruitmentCandidate extends Model
         'email',
         'location',
         'job_title',
+        'candidate_type',
+        'institute_name',
+        'course_name',
+        'internship_months',
+        'has_stipend',
+        'stipend_amount',
         'source',
+        'source_details',
         'current_ctc',
         'expected_ctc',
         'notice_period',
         'experience_years',
+        'previous_company',
+        'previous_hr_name',
+        'previous_hr_contact',
+        'relieving_reason',
+        'has_laptop',
+        'education_details',
         'resume_path',
         'status',
         'remarks',
@@ -50,7 +64,9 @@ class RecruitmentCandidate extends Model
     protected $casts = [
         'current_ctc' => 'decimal:2',
         'expected_ctc' => 'decimal:2',
+        'stipend_amount' => 'decimal:2',
         'experience_years' => 'integer',
+        'education_details' => 'array',
         'status_updated_at' => 'datetime',
     ];
 
@@ -62,6 +78,11 @@ class RecruitmentCandidate extends Model
     public function interviews(): HasMany
     {
         return $this->hasMany(RecruitmentInterview::class)->latest('scheduled_at');
+    }
+
+    public function latestInterview(): HasOne
+    {
+        return $this->hasOne(RecruitmentInterview::class)->latestOfMany('scheduled_at');
     }
 
     public function creator(): BelongsTo

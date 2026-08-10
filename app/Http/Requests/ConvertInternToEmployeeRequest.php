@@ -20,8 +20,19 @@ class ConvertInternToEmployeeRequest extends FormRequest
 
     public function rules(): array
     {
+        $intern = $this->route('intern');
+        $existingUser = User::where('email', $this->input('portal_email'))->first();
+        $ignoreUserId = $intern?->portal_user_id ?? $existingUser?->id;
+
+        $emailRules = ['required', 'email', 'max:150'];
+        if ($ignoreUserId) {
+            $emailRules[] = Rule::unique('users', 'email')->ignore($ignoreUserId);
+        } else {
+            $emailRules[] = Rule::unique('users', 'email');
+        }
+
         return [
-            'portal_email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')],
+            'portal_email' => $emailRules,
             'portal_password' => ['required', 'string', 'min:8', 'max:255'],
             'branch_id' => ['required', 'exists:branches,id'],
             'department_id' => ['required', 'exists:departments,id'],

@@ -31,11 +31,7 @@ class CstAllocationApiController extends Controller
             $isAdmin = $this->isAdmin($currentUser);
             $tab = $request->get('tab', 'pending') === 'completed' ? 'completed' : 'pending';
 
-            // 1. Same eligibility query as web: at least one converted
-            // product, and payment on converted products >= 40% of their
-            // total (with total > 0). `assignedTo` + `branch` are eager
-            // loaded here (web doesn't) purely to kill the N+1 the blade
-            // otherwise takes per row — no business-logic change.
+            // 1. Query leads that have at least one converted product
             $leadsQuery = Lead::with([
                 'products' => fn ($q) => $q->where('product_status', 'converted'),
                 'customerSupportTl:id,name',
@@ -58,17 +54,7 @@ class CstAllocationApiController extends Controller
                     ->where('product_status', 'converted')
                     ->whereNull('deleted_at')
                     ->selectRaw('COALESCE(SUM(amount_paid), 0)');
-            }, 'payment_amount_paid')
-            ->whereRaw('
-                (SELECT COALESCE(SUM(amount_paid), 0) FROM lead_products
-                 WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL)
-                >= 0.4 * (SELECT COALESCE(SUM(total_price), 0) FROM lead_products
-                 WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL)
-            ')
-            ->whereRaw('
-                (SELECT COALESCE(SUM(total_price), 0) FROM lead_products
-                 WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL) > 0
-            ');
+            }, 'payment_amount_paid');
 
             // 2. Filters — identical semantics to web
             if ($branchId = $request->get('branch_id')) {
@@ -83,6 +69,15 @@ class CstAllocationApiController extends Controller
                 $leadsQuery->where(function ($q) use ($cstUserId) {
                     $q->where('customer_support_executive_id', $cstUserId)
                       ->orWhere('customer_support_tl_id', $cstUserId);
+                });
+            }
+            if ($leadId = $request->get('lead_id')) {
+                $leadsQuery->where('leads.id', $leadId);
+            }
+            if ($leadAccount = $request->get('lead_account')) {
+                $leadsQuery->where(function ($q) use ($leadAccount) {
+                    $q->where('company_name', 'like', "%{$leadAccount}%")
+                      ->orWhere('contact_name', 'like', "%{$leadAccount}%");
                 });
             }
 
@@ -164,12 +159,22 @@ class CstAllocationApiController extends Controller
             $this->visibility->applyProductVisibility($products, $currentUser);
             $products = $products->select('id', 'product_name')->orderBy('product_name')->get();
 
+            $leadAccounts = Lead::whereHas('products', fn ($q) => $q->where('product_status', 'converted'))
+                ->select('id', 'company_name', 'contact_name')
+                ->orderBy('company_name')
+                ->get()
+                ->map(fn ($l) => [
+                    'id' => $l->id,
+                    'name' => $l->company_name ?: ($l->contact_name ?: 'Lead #' . $l->id),
+                ]);
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'branches' => $branches,
                     'products' => $products,
                     'cst_users' => $cstUsers,
+                    'lead_accounts' => $leadAccounts,
                 ],
             ]);
         } catch (Throwable $e) {

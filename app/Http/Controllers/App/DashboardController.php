@@ -67,7 +67,7 @@ class DashboardController extends Controller
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:today,week,month,quarter,year'],
+            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -441,6 +441,7 @@ class DashboardController extends Controller
     {
         if ($request->filled('quick_date')) {
             return match ($request->quick_date) {
+                'all'     => [null, null],
                 'today'   => [today()->toDateString(), today()->toDateString()],
                 'week'    => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
                 'month'   => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],

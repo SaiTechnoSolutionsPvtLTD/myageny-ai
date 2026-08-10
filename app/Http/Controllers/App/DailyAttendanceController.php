@@ -186,6 +186,14 @@ class DailyAttendanceController extends Controller
             ], 422);
         }
 
+        // Refresh last_login_at (and IP) every time this endpoint is hit,
+        // same pattern as AuthController::me() — keeps "last active" fresh
+        // without firing model events.
+        $request->user()->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+        ])->saveQuietly();
+
         $query = DailyAttendance::query()->latest('attendance_date')->latest('login_time');
 
         if ($request->filled('employee_id')) {

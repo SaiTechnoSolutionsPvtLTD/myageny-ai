@@ -14,6 +14,7 @@ use App\Models\LeaveRequest;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
+use App\Models\RecruitmentInterview;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -183,6 +184,7 @@ class DashboardController extends Controller
             'exit_approval_queue' => $exitApprovalQueue,
             'exit_request' => $exitRequest,
             'can_raise_exit' => (bool) ($currentEmployee && $currentEmployee->status === EmployeeOnboarding::STATUS_ACTIVE && ! ($exitRequest && $exitRequest->isOpenForEmployee())),
+            'assigned_interviews' => $this->assignedInterviewsForUser(),
         ];
 
         return view('pages.hrms.dashboard.index', compact('stats'));
@@ -277,6 +279,7 @@ class DashboardController extends Controller
             'work_anniversary_greeting' => $this->workAnniversaryGreeting($employee, $today),
             'exit_request' => $exitRequest,
             'can_raise_exit' => (bool) ($employee && $employee->status === EmployeeOnboarding::STATUS_ACTIVE && ! ($exitRequest && $exitRequest->isOpenForEmployee())),
+            'assigned_interviews' => $this->assignedInterviewsForUser(),
         ];
 
         return view('pages.hrms.dashboard.index', compact('stats'));
@@ -749,5 +752,44 @@ class DashboardController extends Controller
     private function graceLoginTime(): string
     {
         return (string) (PayrollSetting::forCompany(auth()->user()?->company_id)->grace_login_time ?: '09:30:00');
+    }
+
+    private function assignedInterviewsForUser(): Collection
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return collect();
+        }
+
+        $isHrOrAdmin = $this->canViewOrganizationDashboard();
+
+        $query = RecruitmentInterview::query()
+            ->with(['candidate'])
+            ->whereDate('scheduled_at', today());
+
+        if (! $isHrOrAdmin) {
+            $employee = $this->currentEmployee();
+
+            $query->where(function ($q) use ($user, $employee) {
+                $q->where('interviewer_id', $user->id)
+                    ->orWhere('interviewer_name', $user->name);
+
+                if ($employee && $employee->name && $employee->name !== $user->name) {
+                    $q->orWhere('interviewer_name', $employee->name);
+                }
+            });
+        }
+
+        return $query
+            ->when($user->company_id, function ($q) use ($user) {
+                $q->where(function ($inner) use ($user) {
+                    $inner->where('company_id', $user->company_id)
+                        ->orWhereNull('company_id');
+                });
+            })
+            ->orderByRaw("CASE WHEN status = 'scheduled' THEN 1 ELSE 2 END")
+            ->orderBy('scheduled_at', 'desc')
+            ->limit(15)
+            ->get();
     }
 }

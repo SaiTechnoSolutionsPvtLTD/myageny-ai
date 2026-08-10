@@ -436,6 +436,7 @@
                 <button type="button" class="da-qb" data-val="month"   onclick="setQuick('month')">This Month</button>
                 <button type="button" class="da-qb" data-val="quarter" onclick="setQuick('quarter')">Quarter</button>
                 <button type="button" class="da-qb" data-val="year"    onclick="setQuick('year')">This Year</button>
+                <button type="button" class="da-qb" data-val="all"     onclick="setQuick('all')">Show All</button>
             </div>
 
             <div class="da-sep"></div>
@@ -1092,7 +1093,7 @@ function empty(icon, title) { return '<div class="da-empty"><div class="da-empty
 
 /* ── KPIs ── */
 function renderKpis(k, filters) {
-    var period = filters.quick_date ? ({ today:'Today', week:'This Week', month:'This Month', quarter:'This Quarter', year:'This Year' })[filters.quick_date] || '' : (filters.date_from ? filters.date_from + ' → ' + (filters.date_to || '…') : 'All Time');
+    var period = filters.quick_date ? ({ all:'All Time', today:'Today', week:'This Week', month:'This Month', quarter:'This Quarter', year:'This Year' })[filters.quick_date] || '' : (filters.date_from ? filters.date_from + ' → ' + (filters.date_to || '…') : 'All Time');
     document.getElementById('daKpiPeriod').textContent = period;
 
     var gradients = {
@@ -1153,6 +1154,77 @@ function renderFinancials(f) {
     document.getElementById('daFinGrid').innerHTML = html;
 }
 
+function getFilterDates() {
+    var from = state.dateFrom || '';
+    var to = state.dateTo || '';
+
+    if (!from && !to && state.quick) {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth();
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        var formatDate = function(d) {
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        };
+
+        if (state.quick === 'today') {
+            from = formatDate(now);
+            to = formatDate(now);
+        } else if (state.quick === 'week') {
+            var day = now.getDay();
+            var diffToMon = (day + 6) % 7;
+            var mon = new Date(y, m, now.getDate() - diffToMon);
+            var sun = new Date(y, m, now.getDate() - diffToMon + 6);
+            from = formatDate(mon);
+            to = formatDate(sun);
+        } else if (state.quick === 'month') {
+            var first = new Date(y, m, 1);
+            var last = new Date(y, m + 1, 0);
+            from = formatDate(first);
+            to = formatDate(last);
+        } else if (state.quick === 'quarter') {
+            var qStartMonth = Math.floor(m / 3) * 3;
+            var firstQ = new Date(y, qStartMonth, 1);
+            var lastQ = new Date(y, qStartMonth + 3, 0);
+            from = formatDate(firstQ);
+            to = formatDate(lastQ);
+        } else if (state.quick === 'year') {
+            var firstY = new Date(y, 0, 1);
+            var lastY = new Date(y, 11, 31);
+            from = formatDate(firstY);
+            to = formatDate(lastY);
+        }
+    }
+
+    return { from: from, to: to };
+}
+
+window.navigateToFunnelStage = function(stageVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+
+    if (stageVal) {
+        params.set('lead_status', stageVal);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+    if (state.source) {
+        params.set('lead_source', state.source);
+    }
+
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
+
 /* ── Pipeline Funnel ── */
 function renderFunnel(f) {
     if (!f || !f.stages || !Array.isArray(f.stages) || f.stages.length === 0) {
@@ -1179,12 +1251,17 @@ function renderFunnel(f) {
         var bgColor = c.bg || '#eff6ff';
         var borderColor = c.border || '#bfdbfe';
 
-        return '<div class="da-funnel-row">' +
+        var stageKey = s.key || s.id || s.label || '';
+        var safeKey  = String(stageKey).replace(/'/g, "\\'");
+
+        return '<div class="da-funnel-row" onclick="navigateToFunnelStage(\'' + safeKey + '\')" style="cursor:pointer;transition:transform .15s ease;" title="Click to view ' + (s.label || 'Stage') + ' leads">' +
             '<div class="da-funnel-top">' +
-            '<div class="da-funnel-label" style="color:' + textColor + '">' + (s.label || 'Stage') + '</div>' +
+            '<div class="da-funnel-label" style="color:' + textColor + ';cursor:pointer;">' +
+            (s.label || 'Stage') +
+            '</div>' +
             '<div class="da-funnel-right">' +
             '<span class="da-funnel-pct" style="background:' + bgColor + ';color:' + textColor + ';border:1px solid ' + borderColor + '">' + (s.percent || 0) + '%</span>' +
-            '<span class="da-funnel-count" style="color:' + textColor + '">' + cnt + '</span></div></div>' +
+            '<span class="da-funnel-count" style="color:' + textColor + ';">' + cnt + '</span></div></div>' +
             '<div class="da-bar-outer"><div class="da-bar-inner" style="width:' + barW + '%;background:' + textColor + '"></div></div></div>';
     }).join('');
 
@@ -1196,8 +1273,10 @@ function renderFunnel(f) {
             var c  = s.color || { text: '#fe5f04' };
             var textColor = c.text || '#fe5f04';
             var cnt = Number(s.count) || 0;
+            var stageKey = s.key || s.id || s.label || '';
+            var safeKey  = String(stageKey).replace(/'/g, "\\'");
 
-            return '<div class="da-funnel-step" style="margin-left:' + ml + '%;width:' + w + '%;margin-bottom:3px">' +
+            return '<div class="da-funnel-step" onclick="navigateToFunnelStage(\'' + safeKey + '\')" style="margin-left:' + ml + '%;width:' + w + '%;margin-bottom:3px;cursor:pointer;" title="Click to view ' + (s.label || 'Stage') + ' leads">' +
                 '<div class="da-funnel-step-inner" style="background:' + textColor + ';opacity:' + (0.65 + i * 0.07) + '">' +
                 '<span>' + (s.label || 'Stage') + '</span><span>' + cnt + '</span></div></div>';
         }).join('') + '</div>';
@@ -1206,6 +1285,32 @@ function renderFunnel(f) {
         document.getElementById('daFunnelBody').innerHTML = rows + visual;
     }
 }
+
+window.navigateToSource = function(sourceVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+
+    if (sourceVal) {
+        params.set('lead_source', sourceVal);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+    if (state.stage) {
+        params.set('lead_status', state.stage);
+    }
+
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
 
 /* ── Source Distribution ── */
 function renderSources(sd, payModes) {
@@ -1218,12 +1323,15 @@ function renderSources(sd, payModes) {
         var barW  = Math.round(s.count / maxSrc * 100);
         var color = colorMap[s.key] || '#7c7c7c';
         var emoji = emojiMap[s.key] || '📌';
-        return '<div class="da-source-row">' +
+        var sourceKey = s.key || s.id || s.label || '';
+        var safeKey  = String(sourceKey).replace(/'/g, "\\'");
+
+        return '<div class="da-source-row" onclick="navigateToSource(\'' + safeKey + '\')" style="cursor:pointer;transition:transform .15s ease;" title="Click to view ' + (s.label || 'Source') + ' leads">' +
             '<div class="da-source-top">' +
-            '<div class="da-source-label"><span>' + emoji + '</span>' + s.label + '</div>' +
+            '<div class="da-source-label" style="cursor:pointer;"><span>' + emoji + '</span>' + (s.label || 'Source') + '</div>' +
             '<div style="display:flex;align-items:center;gap:7px">' +
-            '<span style="font-size:10px;color:var(--da-muted);font-weight:600">' + s.percent + '%</span>' +
-            '<span style="font-size:14px;font-weight:800;color:' + color + '">' + s.count + '</span></div></div>' +
+            '<span style="font-size:10px;color:var(--da-muted);font-weight:600">' + (s.percent || 0) + '%</span>' +
+            '<span style="font-size:14px;font-weight:800;color:' + color + ';">' + s.count + '</span></div></div>' +
             '<div class="da-bar-outer" style="height:6px"><div class="da-bar-inner" style="width:' + barW + '%;background:' + color + '"></div></div></div>';
     }).join('');
 

@@ -384,18 +384,28 @@
                     <div class="eob-card-body">
                         <div class="eob-doc-list">
                             @foreach($documentLabels as $field => $label)
-                                @continue($field === 'signature' || $field === 'photograph')
+                                @continue($field === 'photograph')
                                 <div class="eob-doc-card">
                                     <div class="eob-doc-title">{{ $label }}</div>
-                                    @if($employee->{$field})
-                                        <div class="eob-doc-sub">{{ basename($employee->{$field}) }}</div>
-                                        <div class="eob-doc-actions">
-                                            <a href="{{ $employee->getFileUrl($field) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View</a>
-                                            <a href="{{ $employee->getFileUrl($field) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download</a>
-                                        </div>
-                                    @else
-                                        <div class="eob-doc-sub">No file uploaded.</div>
-                                    @endif
+                                    <form action="{{ route('employee-onboarding.update-document', $employee) }}" method="POST" enctype="multipart/form-data" style="margin-top: 8px;">
+                                        @csrf
+                                        <input type="hidden" name="document_field" value="{{ $field }}">
+                                        <input type="file" name="document_file" id="doc_file_{{ $field }}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,.txt" style="display: none;" onchange="this.form.submit()">
+
+                                        @if($employee->{$field})
+                                            <div class="eob-doc-sub" style="margin-bottom: 8px;">{{ basename($employee->{$field}) }}</div>
+                                            <div class="eob-doc-actions">
+                                                <a href="{{ $employee->getFileUrl($field) }}" target="_blank" class="eob-btn eob-btn-ghost eob-btn-sm">View</a>
+                                                <a href="{{ $employee->getFileUrl($field) }}" download class="eob-btn eob-btn-ghost eob-btn-sm">Download</a>
+                                                <button type="button" class="eob-btn eob-btn-primary eob-btn-sm" onclick="document.getElementById('doc_file_{{ $field }}').click()">Replace</button>
+                                            </div>
+                                        @else
+                                            <div class="eob-doc-sub" style="margin-bottom: 8px;">No file uploaded.</div>
+                                            <div class="eob-doc-actions">
+                                                <button type="button" class="eob-btn eob-btn-primary eob-btn-sm" onclick="document.getElementById('doc_file_{{ $field }}').click()">Upload File</button>
+                                            </div>
+                                        @endif
+                                    </form>
                                 </div>
                             @endforeach
                         </div>

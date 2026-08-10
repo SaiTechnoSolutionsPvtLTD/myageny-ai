@@ -110,7 +110,7 @@
     /* ─────────────────────────────────────────────────────────────
        MODAL HELPERS
     ───────────────────────────────────────────────────────────── */
-    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production', 'pp-modal-status-confirm'];
+    var MODALS = ['pp-modal-add-product', 'pp-modal-payment', 'pp-modal-history', 'pp-modal-production', 'pp-modal-status-confirm', 'pp-modal-price-confirm', 'pp-modal-production-confirm'];
 
     function ppShow(id) {
         console.log('PP: ppShow called for ID:', id);
@@ -243,13 +243,16 @@
         var dealInp = el('pp-deal-name');
         if (dealInp) dealInp.value = p.deal_name || '';
 
+        var origPrice = p.original_unit_price != null ? parseFloat(p.original_unit_price) : (p.product ? parseFloat(p.product.final_price || p.product.price || 0) : parseFloat(p.unit_price || 0));
+
         ppState.selected[p.product_id || p.id] = {
             id           : p.product_id || p.id,
             leadProductId: p.id,
             name         : p.name,
             description  : p.description || '',
             price        : parseFloat(p.unit_price || 0),
-            originalPrice: parseFloat(p.unit_price || 0),
+            originalPrice: origPrice,
+            previousPrice: parseFloat(p.unit_price || 0),
             qty          : parseInt(p.quantity || 1, 10),
             disc         : parseFloat(p.discount_percent || 0),
             remarks      : p.remarks || '',
@@ -529,6 +532,11 @@
     function submitProductEdit(dealName, product) {
         if (!product) { toast('Select a product to update.', 'error'); return; }
 
+        if (isSingleProductPriceChanged(product)) {
+            PP.ppSubmitPriceRequest();
+            return;
+        }
+
         var btnEl = el('pp-submit-deal-btn');
         if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Updating…'; }
 
@@ -556,6 +564,55 @@
         });
     }
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    var priceProgressInterval = null;
+
+    function showPriceProgressOverlay() {
+        var overlay = el('priceRequestProcessOverlay');
+        var fill = el('priceRequestProgressFill');
+        var percentText = el('priceRequestProgressPercent');
+        var statusText = el('priceRequestProgressText');
+        if (!overlay || !fill || !percentText || !statusText) return;
+
+        overlay.style.display = 'flex';
+        var currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (priceProgressInterval) clearInterval(priceProgressInterval);
+
+        priceProgressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = 'Building price request email...';
+            } else if (currentProgress < 75) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = 'Sending email to tamilarasan@saitechnosolutions.net...';
+            } else if (currentProgress < 94) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing price request approval submission...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
+
+    function hidePriceProgressOverlay() {
+        if (priceProgressInterval) clearInterval(priceProgressInterval);
+        var overlay = el('priceRequestProcessOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
     PP.ppSubmitPriceRequest = function () {
         var dealName = (el('pp-deal-name') || {}).value || '';
         if (!dealName.trim()) { toast('Please enter a Deal Name.', 'error'); return; }
@@ -567,35 +624,67 @@
             return;
         }
 
-        var btnEl = el('pp-submit-price-request-btn');
-        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Sending…'; }
+        var changedProducts = products.filter(isSingleProductPriceChanged);
 
-        api('POST', '/lead-product-price-requests', {
-            lead_id   : LEAD_ID,
-            deal_name : dealName.trim(),
-            products  : products.filter(function (p) {
-                return normalizePrice(p.price) !== normalizePrice(p.originalPrice);
-            }).map(function (p) {
-                return {
-                    product_id            : p.id,
-                    requested_unit_price  : p.price,
-                    quantity              : p.qty,
-                    discount_percent      : p.disc,
-                    remarks               : p.remarks,
-                };
-            }),
-        })
-        .then(function () {
-            PP.ppHideModal('pp-modal-add-product');
-            toast('Price request sent to admin.');
-        })
-        .catch(function (err) {
-            var msg = (err.errors && Object.values(err.errors)[0]) || err.message || 'Failed to send request.';
-            toast(msg, 'error');
-        })
-        .finally(function () {
-            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 3v12"></path><path d="m8 11 4 4 4-4"></path><path d="M5 21h14"></path></svg> Send Price Request'; }
+        // Render details in confirmation modal
+        var detailsHtml = '<div style="margin-bottom:8px;"><strong>Deal Name:</strong> ' + escapeHtml(dealName.trim()) + '</div>';
+        detailsHtml += '<div style="font-weight:700; margin-bottom:6px;">Requested Price Changes (' + changedProducts.length + ' item/s):</div>';
+        detailsHtml += '<ul style="margin:0; padding-left:20px; color:#374151;">';
+        changedProducts.forEach(function(p) {
+            detailsHtml += '<li style="margin-bottom:4px;"><strong>' + escapeHtml(p.name) + '</strong>: Base <span style="text-decoration:line-through;">' + fmt(p.originalPrice) + '</span> → Requested <strong style="color:#16a34a;">' + fmt(p.price) + '</strong> (Qty: ' + p.qty + ', Disc: ' + p.disc + '%)</li>';
         });
+        detailsHtml += '</ul>';
+
+        var detailsEl = el('pp-price-confirm-details');
+        if (detailsEl) detailsEl.innerHTML = detailsHtml;
+
+        // Attach confirm submit handler
+        var confirmBtn = el('pp-confirm-send-price-btn');
+        if (confirmBtn) {
+            confirmBtn.onclick = function () {
+                PP.ppHideModal('pp-modal-price-confirm');
+                PP.ppHideModal('pp-modal-add-product');
+                
+                showPriceProgressOverlay();
+
+                api('POST', '/lead-product-price-requests', {
+                    lead_id   : LEAD_ID,
+                    deal_name : dealName.trim(),
+                    products  : changedProducts.map(function (p) {
+                        return {
+                            product_id            : p.id,
+                            requested_unit_price  : p.price,
+                            quantity              : p.qty,
+                            discount_percent      : p.disc,
+                            remarks               : p.remarks,
+                        };
+                    }),
+                })
+                .then(function () {
+                    var fill = el('priceRequestProgressFill');
+                    var percentText = el('priceRequestProgressPercent');
+                    var statusText = el('priceRequestProgressText');
+                    if (fill) fill.style.width = '100%';
+                    if (percentText) percentText.innerText = '100%';
+                    if (statusText) statusText.innerText = 'Email sent & Price Request submitted successfully!';
+                    
+                    setTimeout(function() {
+                        hidePriceProgressOverlay();
+                        toast('Price request sent to admin and email notification sent to tamilarasan@saitechnosolutions.net.');
+                        if (typeof loadDeals === 'function') {
+                            loadDeals();
+                        }
+                    }, 600);
+                })
+                .catch(function (err) {
+                    hidePriceProgressOverlay();
+                    var msg = (err.errors && Object.values(err.errors)[0]) || err.message || 'Failed to send request.';
+                    toast(msg, 'error');
+                });
+            };
+        }
+
+        ppShow('pp-modal-price-confirm');
     };
 
     /* ─────────────────────────────────────────────────────────────
@@ -713,6 +802,7 @@
         var pendingClr = pending > 0 ? '#dc2626' : '#16a34a';
         var productionMeta = '';
         var productNameHtml = '<span class="pp-prod-name">' + escHtml(p.name) + '</span>';
+        var isRejectedInOvp = p.productionInitiation && (p.productionInitiation.status === 'rejected' || p.productionInitiation.status === 'reject');
 
         if (p.productionInitiation) {
             var movedText = p.productionInitiation.department_name
@@ -722,15 +812,22 @@
                 ? ' | ' + escHtml(p.productionInitiation.moved_at)
                 : '';
 
-            if (p.productionInitiation.view_url) {
-                productNameHtml = '<a class="pp-prod-name" href="' + escAttr(p.productionInitiation.view_url) + '" style="color:#047857;text-decoration:none">' +
-                    escHtml(p.name) +
-                '</a>';
-            }
+            if (isRejectedInOvp) {
+                var reasonText = p.productionInitiation.remarks ? ' | Reason: ' + escHtml(p.productionInitiation.remarks) : '';
+                productionMeta = '<div class="pp-prod-desc-sub" style="margin-top:6px;color:#dc2626;font-weight:700">' +
+                    '❌ OVP Rejected' + reasonText +
+                '</div>';
+            } else {
+                if (p.productionInitiation.view_url) {
+                    productNameHtml = '<a class="pp-prod-name" href="' + escAttr(p.productionInitiation.view_url) + '" style="color:#047857;text-decoration:none">' +
+                        escHtml(p.name) +
+                    '</a>';
+                }
 
-            productionMeta = '<div class="pp-prod-desc-sub" style="margin-top:6px;color:#047857;font-weight:700">' +
-                'Product initiate completed | ' + movedText + dateText +
-            '</div>';
+                productionMeta = '<div class="pp-prod-desc-sub" style="margin-top:6px;color:#047857;font-weight:700">' +
+                    'Product initiate completed | ' + movedText + dateText +
+                '</div>';
+            }
         }
 
         return '<div class="pp-prod-card pp-prod-card--sub" id="pp-prod-' + p.id + '">' +
@@ -791,11 +888,16 @@
                             '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>' +
                             'Edit' +
                         '</button>' +
-                        (p.productionInitiation
+                        (p.productionInitiation && !isRejectedInOvp
                             ? '<a class="pp-act-btn pp-btn-prod" href="' + escAttr(p.productionInitiation.view_url || '#') + '" style="opacity:.9">' +
                                 '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
                                 'Product Initiated' +
                               '</a>'
+                            : isRejectedInOvp
+                                ? '<button type="button" class="pp-act-btn pp-btn-reinitiate" onclick="PP.ppShowProduction(' + p.id + ')" title="Re-initiate production for rejected OVP item">' +
+                                    '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 11V16h5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 13V8h-5"/></svg>' +
+                                    'Re-Initiate' +
+                                  '</button>'
                             : !canMoveToProduction(p)
                                 ? '<button type="button" class="pp-act-btn pp-btn-prod" disabled style="opacity:.55;cursor:not-allowed" title="' + escAttr(productionLockedMessage(p)) + '">' +
                                     '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
@@ -805,10 +907,7 @@
                                 '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
                                 'Move to Production' +
                               '</button>') +
-                        '<button type="button" class="pp-act-btn pp-btn-del" ' +
-                            'onclick="PP.ppDeleteProduct(' + p.id + ',\'' + escAttr(p.name) + '\')">' +
-                            '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>' +
-                        '</button>' +
+
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -1273,13 +1372,23 @@
                         var productionHtml = '<span style="color: #64748b; font-style: italic;">Not initiated</span>';
                         if (prod.productionInitiation) {
                             var dept = prod.productionInitiation.department_name || 'Production';
-                            productionHtml = '<span style="color: #047857; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">' +
-                                '✓ ' + escHtml(dept) +
-                            '</span>';
-                            if (prod.productionInitiation.view_url) {
-                                productionHtml = '<a href="' + escAttr(prod.productionInitiation.view_url) + '" style="color: #047857; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;">' +
+                            var isProdRejected = prod.productionInitiation.status === 'rejected' || prod.productionInitiation.status === 'reject';
+                            if (isProdRejected) {
+                                productionHtml = '<div style="display:inline-flex; align-items:center; gap:6px;">' +
+                                    '<span style="color: #dc2626; font-weight: 700;">❌ Rejected in OVP</span>' +
+                                    '<button type="button" class="pp-act-btn pp-btn-reinitiate" onclick="PP.ppHideModal(\'pp-modal-info-summary\'); PP.ppShowProduction(' + prod.id + ')" style="padding: 3px 8px; font-size: 11px;">' +
+                                        'Re-Initiate' +
+                                    '</button>' +
+                                '</div>';
+                            } else {
+                                productionHtml = '<span style="color: #047857; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">' +
                                     '✓ ' + escHtml(dept) +
-                                '</a>';
+                                '</span>';
+                                if (prod.productionInitiation.view_url) {
+                                    productionHtml = '<a href="' + escAttr(prod.productionInitiation.view_url) + '" style="color: #047857; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;">' +
+                                        '✓ ' + escHtml(dept) +
+                                    '</a>';
+                                }
                             }
                         }
 
@@ -1350,11 +1459,54 @@
         renderProductionBody();
     };
 
+    var productionProgressInterval = null;
+
+    function showProductionProgressOverlay() {
+        var overlay = el('productionProcessOverlay');
+        var fill = el('productionProgressFill');
+        var percentText = el('productionProgressPercent');
+        var statusText = el('productionProgressText');
+        if (!overlay || !fill || !percentText || !statusText) return;
+
+        overlay.style.display = 'flex';
+        var currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (productionProgressInterval) clearInterval(productionProgressInterval);
+
+        productionProgressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = 'Building production initiation email...';
+            } else if (currentProgress < 75) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = 'Sending email to Customer Success Team (TO & CC)...';
+            } else if (currentProgress < 94) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing production initiation record...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
+
+    function hideProductionProgressOverlay() {
+        if (productionProgressInterval) clearInterval(productionProgressInterval);
+        var overlay = el('productionProcessOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
     PP.ppSubmitProductionInitiation = function () {
         var detail = ppState.production.detail;
         var leadProductId = ppState.production.leadProductId;
         var department = selectedProductionDepartment();
-        var submitBtn = el('pp-production-submit-btn');
 
         if (!detail || !leadProductId) {
             toast('Production details are not loaded yet.', 'error');
@@ -1382,29 +1534,48 @@
         formData.append('product_name', productName.trim());
         appendProductionCustomFields(formData, detail.ovp_form_schema || []);
 
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Submitting...';
+        // Fill details in confirmation modal
+        var detailsHtml = '<div style="margin-bottom:4px;"><strong>Product Name:</strong> ' + escapeHtml(productName.trim()) + '</div>';
+        detailsHtml += '<div style="margin-bottom:4px;"><strong>Department:</strong> ' + escapeHtml(department.name || '') + '</div>';
+        detailsHtml += '<div><strong>Lead ID:</strong> #' + LEAD_ID + '</div>';
+
+        var detailsEl = el('pp-production-confirm-details');
+        if (detailsEl) detailsEl.innerHTML = detailsHtml;
+
+        var confirmBtn = el('pp-confirm-send-production-btn');
+        if (confirmBtn) {
+            confirmBtn.onclick = function () {
+                PP.ppHideModal('pp-modal-production-confirm');
+                PP.ppHideModal('pp-modal-production');
+
+                showProductionProgressOverlay();
+
+                apiFormData('/lead-products/' + leadProductId + '/production-initiations', formData)
+                    .then(function (res) {
+                        var fill = el('productionProgressFill');
+                        var percentText = el('productionProgressPercent');
+                        var statusText = el('productionProgressText');
+                        if (fill) fill.style.width = '100%';
+                        if (percentText) percentText.innerText = '100%';
+                        if (statusText) statusText.innerText = 'Production initiated & email notification sent successfully!';
+
+                        setTimeout(function () {
+                            hideProductionProgressOverlay();
+                            ppState.production.lastSubmission = res;
+                            ppProductCache = {};
+                            loadDeals();
+                            toast(res.message || 'Production initiation submitted and email sent to Customer Success Team & CC.');
+                        }, 600);
+                    })
+                    .catch(function (err) {
+                        hideProductionProgressOverlay();
+                        var msg = firstErrorMessage(err) || err.message || 'Failed to submit production initiation.';
+                        toast(msg, 'error');
+                    });
+            };
         }
 
-        apiFormData('/lead-products/' + leadProductId + '/production-initiations', formData)
-            .then(function (res) {
-                ppState.production.lastSubmission = res;
-                ppProductCache = {};
-                PP.ppHideModal('pp-modal-production');
-                loadDeals();
-                toast(res.message || 'Production initiation submitted successfully.');
-            })
-            .catch(function (err) {
-                var msg = firstErrorMessage(err) || err.message || 'Failed to submit production initiation.';
-                toast(msg, 'error');
-            })
-            .finally(function () {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = 'Submit to Production';
-                }
-            });
+        ppShow('pp-modal-production-confirm');
     };
 
     function handlePaymentModalClosed() {
@@ -1427,12 +1598,19 @@
         }
 
         var statusHtml = '';
+        var isLatestRejected = detail.latest_initiation && (detail.latest_initiation.status === 'rejected' || detail.latest_initiation.status === 'reject');
+
         if (ppState.production.lastSubmission && ppState.production.lastSubmission.initiation) {
             var submission = ppState.production.lastSubmission.initiation;
             statusHtml = '<div class="pp-production-status">' +
                 '<strong>Production initiated successfully.</strong><br>' +
                 'Department: ' + escHtml(submission.department_name) + '<br>' +
                 'Product: ' + escHtml(submission.product_name || ((detail.product && detail.product.name) || '')) +
+            '</div>';
+        } else if (isLatestRejected) {
+            statusHtml = '<div class="pp-production-status" style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:12px 16px;border-radius:8px;margin-bottom:12px;">' +
+                '<strong>⚠️ Previous OVP Submission was Rejected.</strong><br>' +
+                '<span style="font-size:12px;color:#7f1d1d;">Review and update the fields below, then click Re-Initiate Production to submit back to OVP Module.</span>' +
             '</div>';
         }
 
@@ -1462,6 +1640,7 @@
         if (submitBtn) {
             if (selectedDepartment && selectedDepartment.workflow_mapped) {
                 submitBtn.classList.remove('pp-production-hidden');
+                submitBtn.innerText = isLatestRejected ? 'Re-Initiate Production' : 'Submit to Production';
             } else {
                 submitBtn.classList.add('pp-production-hidden');
             }
@@ -1888,10 +2067,16 @@
         return parseFloat(parseFloat(value || 0).toFixed(2));
     }
 
+    function isSingleProductPriceChanged(p) {
+        if (!p) return false;
+        var price = normalizePrice(p.price);
+        var orig = normalizePrice(p.originalPrice);
+        var prev = p.previousPrice != null ? normalizePrice(p.previousPrice) : null;
+        return price !== orig || (prev !== null && price !== prev);
+    }
+
     function hasPriceChange(products) {
-        return products.some(function (p) {
-            return normalizePrice(p.price) !== normalizePrice(p.originalPrice);
-        });
+        return (products || []).some(isSingleProductPriceChanged);
     }
 
     function escHtml(str) {

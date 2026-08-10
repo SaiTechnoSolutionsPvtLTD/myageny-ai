@@ -5,7 +5,7 @@
             'title' => 'CRM',
             'description' => 'Leads, quotations, products, settings, and customer workflows.',
             'icon' => 'bi-briefcase-fill',
-            'accessor' => 'canAccessCrmModule',
+           'permission' => 'modules_menu.crm',
             'url' => route('dashboard.admin'),
         ],
         [
@@ -29,7 +29,7 @@
             'title' => 'CST',
             'description' => 'Customer Success Team dashboard, metrics, and renewals.',
             'icon' => 'bi-chat-left-heart-fill',
-            'accessor' => 'canAccessCstModule',
+             'permission' => 'modules_menu.cst',
             'url' => route('dashboard.customer-success'),
         ],
     ];

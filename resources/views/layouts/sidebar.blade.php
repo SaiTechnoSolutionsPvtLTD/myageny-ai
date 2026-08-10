@@ -9,6 +9,7 @@
         || request()->routeIs('projects.my-accounts')
         || request()->routeIs('projects.my-accounts.show');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
+        || request()->routeIs('hrms.petty-cash.*')
         || request()->routeIs('hrms.masters.*')
         || request()->routeIs('employee-onboarding.*')
         || request()->routeIs('recruitment.*')
@@ -30,24 +31,25 @@
         || request()->routeIs('settings.house-keeping-works.*')
         || request()->routeIs('settings.payroll.*')
         || request()->routeIs('settings.facility-titles.*')
-        || request()->routeIs('settings.holiday-calendars.*');
+        || request()->routeIs('settings.holiday-calendars.*')
+        || request()->routeIs('support.*');
     $hrmsSelfService = auth()->user()?->isHrmsAttendanceOnlyUser();
     $canAccessProjectsModule = auth()->user()?->canAccessProjectsModule();
     $isDesigningDashboardActive = auth()->user()?->belongsToDesigningDepartment()
         || ($isDesigningDashboard ?? false)
-        || (auth()->user()?->hasAdminLikeRole() && session('selected_dashboard_type') === 'design');
+        || (auth()->user()?->canViewProjectsDashboardSwitcher() && session('selected_dashboard_type') === 'design');
 
     // OVP Module & Production Approvals Sidebar Counts
     $ovpNewCount = 0;
     $prodApprovalPendingCount = 0;
-    
+
     if (auth()->check()) {
         $currentUser = auth()->user();
-        
+
         if ($currentUser->can('ovp_module.menuview')) {
             $ovpTlRoleKeys = ['customer_support_team_tl'];
             $ovpExecutiveRoleKeys = ['customer_support_team_executive'];
-            
+
             $normalizeRole = function(string $value): string {
                 $value = \Illuminate\Support\Str::contains($value, '__') ? \Illuminate\Support\Str::afterLast($value, '__') : $value;
                 return \Illuminate\Support\Str::of($value)
@@ -73,15 +75,15 @@
 
             $ovpQuery = \App\Models\ProductionInitiation::query()
                 ->whereIn('status', ['ovp_pending', 'initiated']);
-                
+
             if ($isExecutiveScoped) {
                 $ovpQuery->where('ovp_allocated_to', $currentUser->id);
             }
-            
+
             $threeDaysAgo = \Illuminate\Support\Carbon::now()->subDays(3);
             $ovpNewCount = $ovpQuery->where('created_at', '>=', $threeDaysAgo)->count();
         }
-        
+
         if ($currentUser->can('production_approval_module.menuview')) {
             $prodApprovalPendingCount = \App\Models\ProductionInitiation::query()
                 ->whereIn('status', ['approval', 'approved'])
@@ -113,7 +115,7 @@
                 @if($canAccessProjectsModule)
                 @php
                     $dashboardUrl = route('projects.dashboard');
-                    if (auth()->user()?->hasAdminLikeRole()) {
+                    if (auth()->user()?->canViewProjectsDashboardSwitcher()) {
                         $dashboardUrl .= $isDesigningDashboardActive ? '?dashboard_type=design' : '?dashboard_type=production';
                     }
                 @endphp
@@ -306,10 +308,14 @@
 
                 @if(! $hrmsSelfService)
                 @can('house_keeping.menuview')
-                <a href="{{ route('house-keeping.index') }}" class="nav-item {{ request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*') ? 'active' : '' }}">
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ (request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*')) ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+
                     @if(request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*'))
                         <div class="active-indicator"></div>
                     @endif
+
                     <div class="nav-content">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 6h18"></path>
@@ -319,8 +325,21 @@
                             <path d="M10 16h4"></path>
                         </svg>
                         <span>House Keeping</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
                     </div>
                 </a>
+
+                <div class="submenu {{ (request()->routeIs('house-keeping.*') || request()->routeIs('settings.house-keeping-categories.*') || request()->routeIs('settings.house-keeping-works.*')) ? 'show' : '' }}">
+                    <a href="{{ route('house-keeping.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.index') ? 'active' : '' }}">
+                        Cleaning Sheet
+                    </a>
+                    <a href="{{ route('house-keeping.employees.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.employees.*') ? 'active' : '' }}">
+                        Employee Entry
+                    </a>
+                    <a href="{{ route('house-keeping.attendances.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.attendances.*') ? 'active' : '' }}">
+                        Attendance
+                    </a>
+                </div>
                 @endcan
                 @endif
 
@@ -337,6 +356,24 @@
                             <path d="M7 14h6"></path>
                         </svg>
                         <span>Payroll</span>
+                    </div>
+                </a>
+                @endcan
+                @endif
+
+                @if(! $hrmsSelfService)
+                @can('petty_cash.menuview')
+                <a href="{{ route('hrms.petty-cash.index') }}" class="nav-item {{ request()->routeIs('hrms.petty-cash.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.petty-cash.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                            <line x1="2" y1="10" x2="22" y2="10"></line>
+                            <circle cx="12" cy="15" r="2"></circle>
+                        </svg>
+                        <span>Petty Cash</span>
                     </div>
                 </a>
                 @endcan

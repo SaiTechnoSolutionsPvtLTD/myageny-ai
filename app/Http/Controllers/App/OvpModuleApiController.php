@@ -35,6 +35,7 @@ class OvpModuleApiController extends Controller
                 'lead.assignedTo:id,name',
                 'lead.createdBy:id,name',
                 'leadProduct:id,lead_id,amount_paid,total_price,created_at',
+                'leadProduct.payments',
                 'department:id,name',
                 'product.ovpFormFields',
                 'ovpAllocatedTo:id,name',
@@ -283,6 +284,20 @@ class OvpModuleApiController extends Controller
         $leadProduct = $i->leadProduct;
         $totalAmount    = $leadProduct ? (float) $leadProduct->total_price : 0.0;
         $receivedAmount = $leadProduct ? (float) $leadProduct->amount_paid  : 0.0;
+
+        if ($receivedAmount <= 0 && $i->lead_id) {
+            $leadPaymentsSum = (float) \App\Models\LeadProductPayment::where('lead_id', $i->lead_id)->sum('amount');
+            if ($leadPaymentsSum > 0) {
+                $receivedAmount = $leadPaymentsSum;
+            }
+        }
+
+        if ($totalAmount <= 0 && $i->lead_id) {
+            $leadTotalSum = (float) \App\Models\LeadProduct::where('lead_id', $i->lead_id)->sum('total_price');
+            if ($leadTotalSum > 0) {
+                $totalAmount = $leadTotalSum;
+            }
+        }
 
         return [
             'id'                    => $i->id,

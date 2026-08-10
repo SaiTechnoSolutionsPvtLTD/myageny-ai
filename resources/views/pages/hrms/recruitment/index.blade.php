@@ -90,7 +90,6 @@
                                 <th>Candidate</th>
                                 <th>Applied For</th>
                                 <th>Contact</th>
-                                <th>Location</th>
                                 <th>HR Activity</th>
                                 <th>Status</th>
                                 <th>Created</th>
@@ -112,18 +111,26 @@
                                         <div class="eob-cell-title">{{ $candidate->mobile_number }}</div>
                                         <div class="eob-cell-sub">{{ $candidate->email ?: 'Email not added' }}</div>
                                     </td>
-                                    <td>{{ $candidate->location ?: 'N/A' }}</td>
                                     <td>
                                         <div class="eob-cell-title">{{ $candidate->call_updates_count }} call update(s)</div>
                                         <div class="eob-cell-sub">{{ $candidate->interviews_count }} interview(s)</div>
                                     </td>
-                                    <td><span class="rec-chip rec-chip-{{ $candidate->status }}">{{ $candidate->status_label }}</span></td>
+                                    <td>
+                                        <span class="rec-chip rec-chip-{{ $candidate->status }}">{{ $candidate->status_label }}</span>
+                                        @if($candidate->status === \App\Models\RecruitmentCandidate::STATUS_INTERVIEW_SCHEDULED && $candidate->latestInterview?->scheduled_at)
+                                            <div class="eob-cell-sub" style="margin-top: 4px; font-weight: 600; color: #1d4ed8; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                                                <i class="bi bi-calendar-event" style="color: #fe5f04;"></i>
+                                                {{ $candidate->latestInterview->scheduled_at->format('d M Y, h:i A') }}
+                                            </div>
+                                        @endif
+                                    </td>
                                     <td>{{ $candidate->created_at->format('d M Y') }}</td>
                                     <td>
                                         <details class="eob-table-dropdown">
                                             <summary class="eob-table-dropdown-trigger">Actions</summary>
                                             <div class="eob-table-dropdown-menu">
                                                 <a href="{{ route('recruitment.show', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                                <a href="{{ route('recruitment.edit', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-pencil"></i> Edit</a>
                                             </div>
                                         </details>
                                     </td>

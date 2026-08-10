@@ -487,6 +487,7 @@
                                 <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
                                 <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
                                 <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
+                                <button type="button" class="ld-qb" id="quickAll" onclick="setQ('all')">Show All</button>
                             </div>
                         </div>
 
@@ -891,6 +892,7 @@ function updateFilters() {
     // Toggle active state for quick buttons
     document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
     document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
+    document.getElementById('quickAll')?.classList.toggle('active', !from && !to);
 
     // Calculate dynamic values for Week and Year active states
     const parts = defaultToDate.split('-').map(Number);
@@ -947,6 +949,13 @@ function setQ(p) {
     const f = document.getElementById('f_date_from');
     const t = document.getElementById('f_date_to');
     if (!f || !t) return;
+
+    if (p === 'all') {
+        f.value = '';
+        t.value = '';
+        autoSubmit();
+        return;
+    }
 
     let targetFrom = '';
     let targetTo = '';

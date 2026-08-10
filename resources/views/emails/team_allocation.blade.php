@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Team Project Assignment</title>
+</head>
+<body style="font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #fff7ed; margin: 0; padding: 24px; color: #1e293b; -webkit-font-smoothing: antialiased;">
+    <div style="max-width: 680px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(234, 88, 12, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.04); border: 1px solid #ffedd5;">
+        
+        {{-- Header (Orange Theme) --}}
+        <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 36px; color: #ffffff;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="vertical-align: middle;">
+                        <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;">👥 New Team Project Assignment</h2>
+                        <p style="margin: 6px 0 0; font-size: 13px; opacity: 0.95; font-weight: 500;">Lead #{{ $lead?->id }} — {{ $lead?->company_name ?: $lead?->contact_name }}</p>
+                    </td>
+                    <td style="vertical-align: middle; text-align: right;">
+                        <span style="background: rgba(255,255,255,0.22); backdrop-filter: blur(4px); padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; border: 1px solid rgba(255,255,255,0.3);">
+                            {{ $departmentName }}
+                        </span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        {{-- Content Body --}}
+        <div style="padding: 32px 36px;">
+            <p style="font-size: 15px; margin-top: 0; color: #0f172a; font-weight: 600;">
+                Hello Team Member,
+            </p>
+            <p style="font-size: 14px; color: #475569; line-height: 1.65; margin-bottom: 24px;">
+                You have been assigned to work on the project <strong style="color: #ea580c; font-weight: 800;">{{ $initiation->product_name ?: $leadProduct?->product_name }}</strong> by <strong>{{ $allocatedBy?->name ?? 'Team Lead' }}</strong>. Below are the complete project &amp; lead details:
+            </p>
+
+            {{-- Lead Summary Card --}}
+            <div style="background-color: #fff7ed; border: 1px solid #ffedd5; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+                <h4 style="margin: 0 0 14px; font-size: 12px; font-weight: 800; color: #c2410c; text-transform: uppercase; letter-spacing: 0.08em;">📋 Lead Information</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600; width: 150px;">Lead ID:</td>
+                        <td style="padding: 5px 0; color: #0f172a; font-weight: 800;">#{{ $lead?->id }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600;">Client / Company:</td>
+                        <td style="padding: 5px 0; color: #0f172a; font-weight: 700;">{{ $lead?->company_name ?: $lead?->contact_name ?: 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600;">Contact Person:</td>
+                        <td style="padding: 5px 0; color: #0f172a;">{{ $lead?->contact_name ?: 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600;">Mobile Number:</td>
+                        <td style="padding: 5px 0; color: #0f172a;">{{ $lead?->mobile_number ?: 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600;">Email:</td>
+                        <td style="padding: 5px 0; color: #0f172a;">{{ $lead?->email ?: 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #9a3412; font-weight: 600;">Branch:</td>
+                        <td style="padding: 5px 0; color: #0f172a;">{{ $lead?->branch?->name ?: 'N/A' }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            {{-- Project Details Card --}}
+            <div style="background-color: #fffaf0; border: 1px solid #fed7aa; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+                <h4 style="margin: 0 0 14px; font-size: 12px; font-weight: 800; color: #ea580c; text-transform: uppercase; letter-spacing: 0.08em;">📦 Project &amp; Work Details</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600; width: 150px;">Product Name:</td>
+                        <td style="padding: 5px 0; color: #0f172a; font-weight: 800; font-size: 15px;">{{ $initiation->product_name ?: $leadProduct?->product_name }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600;">Department:</td>
+                        <td style="padding: 5px 0; color: #ea580c; font-weight: 700;">{{ $departmentName }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600;">Working Days:</td>
+                        <td style="padding: 5px 0; color: #0f172a; font-weight: 700;">{{ $initiation->total_working_days ?: 1 }} Days</td>
+                    </tr>
+                    @if($initiation->project_delivery_date)
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600;">Delivery Date:</td>
+                        <td style="padding: 5px 0; color: #15803d; font-weight: 800;">{{ $initiation->project_delivery_date?->format('d M Y') }}</td>
+                    </tr>
+                    @endif
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600;">Assigned By:</td>
+                        <td style="padding: 5px 0; color: #0f172a; font-weight: 700;">{{ $allocatedBy?->name }} ({{ now()->format('d M Y, h:i A') }})</td>
+                    </tr>
+                    @if($initiation->requirements)
+                    <tr>
+                        <td style="padding: 5px 0; color: #c2410c; font-weight: 600; vertical-align: top;">Requirements:</td>
+                        <td style="padding: 5px 0; color: #1e293b; line-height: 1.55;">{{ $initiation->requirements }}</td>
+                    </tr>
+                    @endif
+                </table>
+            </div>
+
+            {{-- Custom Form Data if available --}}
+            @if(!empty($initiation->custom_form_data) && is_array($initiation->custom_form_data))
+            <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+                <h4 style="margin: 0 0 14px; font-size: 12px; font-weight: 800; color: #ea580c; text-transform: uppercase; letter-spacing: 0.08em;">⚙️ Custom Specifications</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    @foreach($initiation->custom_form_data as $entry)
+                        @php
+                            $label = $entry['label'] ?? ($entry['field_name'] ?? '');
+                            $val = $entry['value'] ?? '';
+                        @endphp
+                        @continue(!$label)
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 180px;">{{ $label }}:</td>
+                            <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">
+                                @if(is_array($val))
+                                    {{ implode(', ', $val) }}
+                                @elseif(is_bool($val))
+                                    {{ $val ? 'Yes' : 'No' }}
+                                @else
+                                    {{ $val }}
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </table>
+            </div>
+            @endif
+
+            {{-- Action Button --}}
+            <div style="margin-top: 28px; text-align: center;">
+                <a href="{{ route('projects.show', $initiation) }}"
+                   style="display: inline-block; background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 13px 32px; border-radius: 10px; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.35); transition: all 0.2s ease;">
+                    View Assigned Project Details
+                </a>
+            </div>
+        </div>
+
+        {{-- Footer --}}
+        <div style="background-color: #fff7ed; border-top: 1px solid #ffedd5; padding: 18px 36px; text-align: center; font-size: 12px; color: #9a3412;">
+            <p style="margin: 0 0 4px;">Assigned Team Members: <strong>{{ $allocatedEmployees->pluck('name')->implode(', ') }}</strong></p>
+            <p style="margin: 0;">Automated Team Assignment Notification | {{ config('app.name', 'My Agency') }} CRM</p>
+        </div>
+    </div>
+</body>
+</html>

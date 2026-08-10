@@ -19,7 +19,9 @@ use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\FacilityManagementController;
 use App\Http\Controllers\FacilityTitleController;
 use App\Http\Controllers\HolidayCalendarController;
+use App\Http\Controllers\HouseKeepingAttendanceController;
 use App\Http\Controllers\HouseKeepingCategoryController;
+use App\Http\Controllers\HouseKeepingEmployeeController;
 use App\Http\Controllers\HouseKeepingManagementController;
 use App\Http\Controllers\HouseKeepingWorkController;
 use App\Http\Controllers\HrmsAnnouncementController;
@@ -226,6 +228,16 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.schedule.update');
         Route::post('/projects-details/{productionInitiation}/updates', [ProjectController::class, 'storeUpdate'])
             ->name('projects.updates.store');
+        Route::post('/projects-details/{productionInitiation}/move-to-testing', [ProjectController::class, 'moveToTesting'])
+            ->name('projects.move-to-testing');
+        Route::post('/projects-details/{productionInitiation}/bugs', [ProjectController::class, 'storeBug'])
+            ->name('projects.bugs.store');
+        Route::get('/testing-details/{productionInitiation}', [ProjectController::class, 'testingDetails'])
+            ->name('projects.testing-details');
+        Route::post('/testing-details/{productionInitiation}/status', [ProjectController::class, 'updateTestingStatus'])
+            ->name('projects.testing-details.update-status');
+        Route::patch('/testing-details/bugs/{bug}/status', [ProjectController::class, 'updateBugStatus'])
+            ->name('projects.bugs.update-status');
         Route::post('/projects-details/updates/quick', [ProjectController::class, 'storeQuickUpdate'])
             ->name('projects.updates.quick-store');
         Route::patch('/projects-details/{productionInitiation}/content-calendar-sheet', [ProjectController::class, 'updateContentCalendarSheet'])
@@ -289,6 +301,13 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+    
+    // Petty Cash Report & Transactions
+    Route::get('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'report'])->name('hrms.petty-cash.index');
+    Route::post('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'store'])->name('hrms.petty-cash.store');
+    Route::put('/hrms/petty-cash/{entry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'update'])->name('hrms.petty-cash.update');
+    Route::get('/hrms/petty-cash/export-excel', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportExcel'])->name('hrms.petty-cash.export-excel');
+    Route::get('/hrms/petty-cash/export-pdf', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportPdf'])->name('hrms.petty-cash.export-pdf');
     Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
     Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
     Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
@@ -305,6 +324,18 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/house-keeping-management/completions', [HouseKeepingManagementController::class, 'updateCompletion'])
         ->middleware('can:house_keeping.menuview')
         ->name('house-keeping.completions.update');
+    Route::resource('house-keeping-employees', HouseKeepingEmployeeController::class)
+        ->middleware('can:house_keeping.menuview')
+        ->names('house-keeping.employees');
+    Route::get('/house-keeping-attendances', [HouseKeepingAttendanceController::class, 'index'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.index');
+    Route::post('/house-keeping-attendances', [HouseKeepingAttendanceController::class, 'storeOrUpdate'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.store');
+    Route::delete('/house-keeping-attendances/{attendance}', [HouseKeepingAttendanceController::class, 'destroy'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.destroy');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
         ->name('leave-requests.approve');
@@ -319,16 +350,19 @@ Route::middleware(['auth'])->group(function () {
         ->name('notifications.mark-all-read');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
         ->name('notifications.read');
-    Route::resource('recruitment', RecruitmentController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+    Route::resource('recruitment', RecruitmentController::class);
     Route::post('/recruitment/{recruitment}/call-updates', [RecruitmentController::class, 'storeCallUpdate'])
         ->name('recruitment.call-updates.store');
     Route::post('/recruitment/{recruitment}/interviews', [RecruitmentController::class, 'storeInterview'])
         ->name('recruitment.interviews.store');
+    Route::put('/recruitment/{recruitment}/interviews/{interview}', [RecruitmentController::class, 'updateInterview'])
+        ->name('recruitment.interviews.update');
     Route::patch('/recruitment/{recruitment}/status', [RecruitmentController::class, 'updateStatus'])
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
     Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::post('employee-onboarding/{employee_onboarding}/update-photo', [EmployeeOnboardingController::class, 'updatePhoto'])->name('employee-onboarding.update-photo');
+    Route::post('employee-onboarding/{employee_onboarding}/update-document', [EmployeeOnboardingController::class, 'updateDocument'])->name('employee-onboarding.update-document');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
@@ -384,6 +418,9 @@ Route::middleware(['auth'])->group(function () {
         // ── Call Updates ──────────────────────────────────────
         Route::post('/{lead}/calls',             [LeadShowController::class, 'storeCall'])->middleware('can:call_updates.create')->name('calls.store');
         Route::delete('/{lead}/calls/{call}',    [LeadShowController::class, 'destroyCall'])->middleware('can:call_updates.delete')->name('calls.destroy');
+
+        // ── CST Updates ───────────────────────────────────────
+        Route::post('/{lead}/cst-updates',       [LeadController::class, 'storeCstUpdate'])->name('cst-updates.store');
 
         // ── Reminders ─────────────────────────────────────────
         Route::post('/{lead}/reminders',                  [LeadShowController::class, 'storeReminder'])->middleware('can:leads.edit')->name('reminders.store');

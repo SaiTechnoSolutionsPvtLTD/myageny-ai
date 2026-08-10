@@ -319,6 +319,7 @@
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickWeek" onclick="setQ('week')">Week</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickMonth" onclick="setQ('month')">Month</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickYear" onclick="setQ('year')">Year</button>
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickAll" onclick="setQ('all')">Show All</button>
                     </div>
                 </div>
 
@@ -440,6 +441,7 @@ function updateFilters() {
 
     document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
     document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
+    document.getElementById('quickAll')?.classList.toggle('active', !from && !to);
 
     const parts = defaultToDate.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -475,6 +477,14 @@ function setQ(p) {
     const f = document.getElementById('date_from');
     const t = document.getElementById('date_to');
     if (!f || !t) return;
+
+    if (p === 'all') {
+        f.value = '';
+        t.value = '';
+        updateFilters();
+        f.closest('form').submit();
+        return;
+    }
 
     let targetFrom = '';
     let targetTo = '';

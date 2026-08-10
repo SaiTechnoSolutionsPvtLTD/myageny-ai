@@ -15,6 +15,8 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use App\Models\Department;
 use App\Models\Lead;
 use App\Models\LeadProduct;
@@ -405,7 +407,33 @@ class ProjectApiController extends Controller
             ]
         );
 
-        return response()->json(['success' => true, 'message' => 'Project allocated to TL successfully.']);
+        try {
+            $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+            $allocatedTls = User::whereIn('id', $selectedTlIds)
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->get();
+            $tlEmails = $allocatedTls->pluck('email')->filter()->unique()->values()->all();
+
+            if (!empty($tlEmails)) {
+                $allocatedBy = auth()->user();
+                Mail::send('emails.tl_allocation', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'allocatedBy' => $allocatedBy,
+                    'allocatedTls' => $allocatedTls,
+                ], function ($message) use ($tlEmails, $productionInitiation) {
+                    $message->to($tlEmails)
+                        ->subject('New Project TL Allocation - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed sending TL Allocation email: ' . $e->getMessage());
+        }
+
+        return response()->json(['success' => true, 'message' => 'Project allocated to TL successfully and notification email sent to allocated Team Lead(s).']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -465,7 +493,33 @@ class ProjectApiController extends Controller
             ]
         );
 
-        return response()->json(['success' => true, 'message' => 'Employees allocated successfully.']);
+        try {
+            $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+            $allocatedEmployees = User::whereIn('id', $selectedEmployeeIds)
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->get();
+            $empEmails = $allocatedEmployees->pluck('email')->filter()->unique()->values()->all();
+
+            if (!empty($empEmails)) {
+                $allocatedBy = auth()->user();
+                Mail::send('emails.team_allocation', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'allocatedBy' => $allocatedBy,
+                    'allocatedEmployees' => $allocatedEmployees,
+                ], function ($message) use ($empEmails, $productionInitiation) {
+                    $message->to($empEmails)
+                        ->subject('New Team Project Assignment - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Team Allocation email: ' . $e->getMessage());
+        }
+
+        return response()->json(['success' => true, 'message' => 'Employees allocated successfully and notification email sent to assigned team members.']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

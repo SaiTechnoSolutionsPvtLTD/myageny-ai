@@ -8,6 +8,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class ProductionApprovalController extends Controller
 {
@@ -147,6 +149,38 @@ class ProductionApprovalController extends Controller
         }
 
         $productionInitiation->update($updateData);
+
+        if ($validated['decision'] === 'approval') {
+            try {
+                $productionInitiation->loadMissing(['lead.assignedTo', 'lead.createdBy', 'leadProduct', 'department']);
+                $salesPerson = $productionInitiation->lead?->assignedTo ?: $productionInitiation->lead?->createdBy;
+                $salesPersonEmail = $salesPerson?->email;
+
+                $toEmails = array_values(array_filter(array_unique([
+                    $salesPersonEmail,
+                    'projects@saitechnosolutions.net',
+                ])));
+
+                $reviewedBy = auth()->user();
+
+                Mail::send('emails.production_approval_approved', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'reviewedBy' => $reviewedBy,
+                    'salesPerson' => $salesPerson,
+                ], function ($message) use ($toEmails, $productionInitiation) {
+                    $message->to($toEmails)
+                        ->subject('Production Approval Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            } catch (\Throwable $exception) {
+                Log::error('Failed to send production approval email.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
 
         return redirect()
             ->route('production-approvals.index', ['bucket' => $validated['decision'] === 'approval' ? 'approval' : 'rejected'])

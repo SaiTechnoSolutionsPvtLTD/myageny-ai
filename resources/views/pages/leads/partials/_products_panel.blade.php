@@ -44,6 +44,69 @@
 .pp-sum-card.pp-pending::before{background:#dc2626}
 .pp-sum-card.pp-count::before{background:#7c3aed}
 .pp-sum-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#9e9e9e;margin-bottom:6px}
+
+/* Progress Bar & Processing Overlay for Price Requests */
+.support-process-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+.support-process-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 36px 40px;
+    width: 440px;
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.support-process-icon-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.support-process-spinner {
+    position: absolute;
+    inset: 0;
+    border: 3px solid #f1f5f9;
+    border-top-color: #fe5f04;
+    border-radius: 50%;
+    animation: processSpin 1s linear infinite;
+}
+@keyframes processSpin { to { transform: rotate(360deg); } }
+.support-process-icon {
+    font-size: 32px;
+    color: #fe5f04;
+    animation: pulseIcon 1.5s ease-in-out infinite alternate;
+}
+@keyframes pulseIcon {
+    from { transform: scale(0.88); opacity: 0.85; }
+    to { transform: scale(1.12); opacity: 1; }
+}
+.support-process-title { font-size: 19px; font-weight: 800; color: #111827; margin: 0 0 6px; }
+.support-process-subtitle { font-size: 13px; color: #6b7280; margin: 0 0 24px; line-height: 1.5; }
+.support-progress-wrapper { width: 100%; }
+.support-progress-bar {
+    width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; position: relative;
+}
+.support-progress-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #fe5f04 0%, #ff8c3a 50%, #fe5f04 100%);
+    background-size: 200% 100%; border-radius: 999px; transition: width 0.3s ease; animation: gradientMove 2s linear infinite;
+}
+@keyframes gradientMove { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+.support-progress-status {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; font-weight: 700; color: #4b5563;
+}
 .pp-sum-value{font-size:22px;font-weight:800;color:#121212;line-height:1}
 .pp-sum-sub{font-size:11px;color:#9e9e9e;margin-top:4px}
 
@@ -107,6 +170,8 @@
 .pp-btn-hist:hover{background:#c7d2fe}
 .pp-btn-prod{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
 .pp-btn-prod:hover{background:#d1fae5}
+.pp-btn-reinitiate{background:#fff7ed;color:#c2410c;border-color:#ffedd5}
+.pp-btn-reinitiate:hover{background:#ffedd5}
 .pp-btn-edit{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
 .pp-btn-edit:hover{background:#dbeafe}
 .pp-btn-del{background:#fef2f2;color:#dc2626;border-color:#fecaca}
@@ -695,6 +760,108 @@
         </div>
         <div class="pp-mfoot" style="justify-content: flex-end;">
             <button type="button" class="ppf-btn ppf-btn-sec" onclick="PP.ppHideModal('pp-modal-info-summary')">Close</button>
+        </div>
+    </div>
+</div>
+
+{{-- Price Request Confirmation Modal --}}
+<div class="pp-overlay" id="pp-modal-price-confirm">
+    <div class="pp-modal-box" style="max-width: 520px;">
+        <div class="pp-mhd" style="background:#fff7ed; border-bottom:1px solid #ffedd5;">
+            <div class="pp-mtitle" style="color:#c2410c; display:flex; align-items:center; gap:8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Confirm Price Request
+            </div>
+            <button type="button" class="pp-mclose" onclick="PP.ppHideModal('pp-modal-price-confirm')">✕</button>
+        </div>
+        <div class="pp-mbody" style="padding: 24px;">
+            <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to send this price request?</p>
+            <p style="font-size: 13px; color: #6b7280; margin: 0 0 16px; line-height: 1.5;">An email notification will be sent to <strong>tamilarasan@saitechnosolutions.net</strong> with the requested price changes.</p>
+            
+            <div id="pp-price-confirm-details" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13px;">
+                <!-- Content generated dynamically by JS -->
+            </div>
+        </div>
+        <div class="pp-mfoot" style="justify-content: flex-end; gap: 10px;">
+            <button type="button" class="ppf-btn ppf-btn-sec" onclick="PP.ppHideModal('pp-modal-price-confirm')">Cancel</button>
+            <button type="button" class="ppf-btn pp-btn-hist" id="pp-confirm-send-price-btn" style="background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%);">
+                Yes, Send Request
+            </button>
+        </div>
+    </div>
+</div>
+
+{{-- Mail Process Overlay Loader --}}
+<div id="priceRequestProcessOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner"></div>
+            <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+        </div>
+        <h4 id="priceRequestOverlayTitle" class="support-process-title">Sending Email & Processing Request...</h4>
+        <p id="priceRequestOverlaySubtitle" class="support-process-subtitle">Please wait while the price request email is being sent to tamilarasan@saitechnosolutions.net...</p>
+
+        <div class="support-progress-wrapper">
+            <div class="support-progress-bar">
+                <div id="priceRequestProgressFill" class="support-progress-fill"></div>
+            </div>
+            <div class="support-progress-status">
+                <span id="priceRequestProgressText">Preparing email notification...</span>
+                <span id="priceRequestProgressPercent">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Production Initiation Confirmation Modal --}}
+<div class="pp-overlay" id="pp-modal-production-confirm">
+    <div class="pp-modal-box" style="max-width: 520px;">
+        <div class="pp-mhd" style="background:#f0fdf4; border-bottom:1px solid #bbf7d0;">
+            <div class="pp-mtitle" style="color:#166534; display:flex; align-items:center; gap:8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                Confirm Move to Production
+            </div>
+            <button type="button" class="pp-mclose" onclick="PP.ppHideModal('pp-modal-production-confirm')">✕</button>
+        </div>
+        <div class="pp-mbody" style="padding: 24px;">
+            <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to move this product to Production?</p>
+            <p style="font-size: 13px; color: #6b7280; margin: 0 0 16px; line-height: 1.5;">
+                An email notification will be sent to:<br>
+                <strong>TO:</strong> customersuccess@saitechnosolutions.net, customersuccessteam.sts@gmail.com<br>
+                <strong>CC:</strong> tamilarasan@saitechnosolutions.net
+            </p>
+            
+            <div id="pp-production-confirm-details" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13px;">
+                <!-- Filled dynamically by JS -->
+            </div>
+        </div>
+        <div class="pp-mfoot" style="justify-content: flex-end; gap: 10px;">
+            <button type="button" class="ppf-btn ppf-btn-sec" onclick="PP.ppHideModal('pp-modal-production-confirm')">Cancel</button>
+            <button type="button" class="ppf-btn" id="pp-confirm-send-production-btn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); color:#fff; font-weight:700;">
+                Yes, Move to Production
+            </button>
+        </div>
+    </div>
+</div>
+
+{{-- Production Process Overlay Loader --}}
+<div id="productionProcessOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner"></div>
+            <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+        </div>
+        <h4 id="productionOverlayTitle" class="support-process-title">Initiating Production & Sending Email...</h4>
+        <p id="productionOverlaySubtitle" class="support-process-subtitle">Please wait while the production initiation email notification is being sent to Customer Success Team & CC...</p>
+
+        <div class="support-progress-wrapper">
+            <div class="support-progress-bar">
+                <div id="productionProgressFill" class="support-progress-fill"></div>
+            </div>
+            <div class="support-progress-status">
+                <span id="productionProgressText">Preparing production initiation email...</span>
+                <span id="productionProgressPercent">0%</span>
+            </div>
         </div>
     </div>
 </div>

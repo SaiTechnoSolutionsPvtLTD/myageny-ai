@@ -117,6 +117,11 @@ class Lead extends Model
         return $this->belongsTo(User::class, 'customer_support_executive_id');
     }
 
+    public function cstUpdates(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(LeadCstUpdate::class)->latest();
+    }
+
     /**
      * Returns [id => name] map for all lead sources.
      */

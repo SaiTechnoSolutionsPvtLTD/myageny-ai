@@ -335,6 +335,11 @@ tbody tr:last-child td { border-bottom: none; }
                 Approval History
                 <span class="lsp-tab-count">{{ $approvalHistoryCount }}</span>
             </button>
+            <button class="lsp-tab" onclick="switchTab('cst-updates', this)">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                CST Updates
+                <span class="lsp-tab-count">{{ $cstUpdatesCount }}</span>
+            </button>
         </div>
     </div>
 
@@ -454,25 +459,12 @@ tbody tr:last-child td { border-bottom: none; }
                                     <div class="lsp-il">Current Status</div>
                                     <div class="lsp-meta-value">{{ $lead->status_label }}</div>
                                 </div>
-                                <span class="lsp-age-pill">{{ $lead->created_at->diffForHumans() }}</span>
+                                <span class="lsp-age-pill">{{ $lead->created_at?->diffForHumans() ?? '—' }}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="lsp-card">
-                        <div class="lsp-card-head"><div class="lsp-card-title">⚠️ Danger Zone</div></div>
-                        <div class="lsp-card-body">
-                            <p class="lsp-danger-note">Delete this lead only if you are sure. This action removes the lead record and cannot be undone.</p>
-                            <form method="POST" action="{{ route('leads.destroy', $lead) }}"
-                                  onsubmit="return confirm('Permanently delete this lead?')">
-                                @csrf @method('DELETE')
-                                <button type="submit" class="lsp-btn lsp-btn-danger" style="width:100%;justify-content:center;">
-                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-                                    Delete This Lead
-                                </button>
-                            </form>
-                        </div>
-                    </div>
+
                 </div>
             </div>
         </div>
@@ -516,13 +508,7 @@ tbody tr:last-child td { border-bottom: none; }
                                     <span class="lsp-call-dur">⏱ {{ $call->duration_minutes }} min</span>
                                     @endif
                                 </div>
-                                <form method="POST" action="{{ route('leads.calls.destroy', [$lead, $call]) }}">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="lsp-call-del" title="Remove"
-                                            onclick="return confirm('Remove this call record?')">
-                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-                                    </button>
-                                </form>
+
                             </div>
                             @if($call->notes)
                             <div class="lsp-call-notes">{{ $call->notes }}</div>
@@ -1064,6 +1050,127 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
         </div>
 
+        {{-- PANEL: CST UPDATES --}}
+        <div class="lsp-panel" id="panel-cst-updates">
+            <div class="lsp-card">
+                <div class="lsp-card-head" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div class="lsp-card-title">CST & Weekly Updates</div>
+                        <div class="lsp-card-sub">Record and track CST updates, weekly updates, and reviews for converted products.</div>
+                    </div>
+                    @if(auth()->user()?->isCustomerSuccessUser())
+                        <button type="button" class="lsp-btn lsp-btn-primary" onclick="openCstUpdateModal()">
+                            <i class="bi bi-plus-lg"></i> Add CST Update
+                        </button>
+                    @endif
+                </div>
+                <div class="lsp-card-body">
+                    {{-- Summary Stat Grid --}}
+                    <div class="lsp-stat-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 24px; gap: 14px;">
+                        <div class="lsp-stat-box" style="border-left: 4px solid #fe5f04; background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%); border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                            <div class="lsp-il" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Total Updates</div>
+                            <div class="lsp-deal-big" style="font-size: 22px; font-weight: 800; color: #fe5f04; margin-top: 4px;">{{ $cstUpdatesCount }}</div>
+                        </div>
+                        <div class="lsp-stat-box" style="border-left: 4px solid #2563eb; background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%); border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                            <div class="lsp-il" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">CST Updates</div>
+                            <div class="lsp-deal-big" style="font-size: 22px; font-weight: 800; color: #2563eb; margin-top: 4px;">{{ $cstOnlyCount }}</div>
+                        </div>
+                        <div class="lsp-stat-box" style="border-left: 4px solid #7c3aed; background: linear-gradient(135deg, #ffffff 0%, #faf5ff 100%); border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                            <div class="lsp-il" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Weekly Updates</div>
+                            <div class="lsp-deal-big" style="font-size: 22px; font-weight: 800; color: #7c3aed; margin-top: 4px;">{{ $weeklyOnlyCount }}</div>
+                        </div>
+                        <div class="lsp-stat-box" style="border-left: 4px solid #ea580c; background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%); border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                            <div class="lsp-il" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Reviews</div>
+                            <div class="lsp-deal-big" style="font-size: 22px; font-weight: 800; color: #ea580c; margin-top: 4px;">{{ $reviewOnlyCount }}</div>
+                        </div>
+                        <div class="lsp-stat-box" style="border-left: 4px solid #dc2626; background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%); border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                            <div class="lsp-il" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Escalation</div>
+                            <div class="lsp-deal-big" style="font-size: 22px; font-weight: 800; color: #dc2626; margin-top: 4px;">{{ $escalationOnlyCount }}</div>
+                        </div>
+                    </div>
+
+                    {{-- Premium CST Updates Card List --}}
+                    <div style="display: flex; flex-direction: column; gap: 14px;">
+                        @php
+                            $typeConfigs = [
+                                'cst_update' => [
+                                    'icon' => 'bi-chat-dots-fill',
+                                    'bg' => '#eff6ff',
+                                    'text' => '#1d4ed8',
+                                    'border' => '#bfdbfe',
+                                    'accent' => 'linear-gradient(180deg, #2563eb, #3b82f6)'
+                                ],
+                                'weekly_update' => [
+                                    'icon' => 'bi-calendar-week-fill',
+                                    'bg' => '#faf5ff',
+                                    'text' => '#7c3aed',
+                                    'border' => '#e9d5ff',
+                                    'accent' => 'linear-gradient(180deg, #7c3aed, #8b5cf6)'
+                                ],
+                                'review' => [
+                                    'icon' => 'bi-star-fill',
+                                    'bg' => '#fff7ed',
+                                    'text' => '#ea580c',
+                                    'border' => '#fed7aa',
+                                    'accent' => 'linear-gradient(180deg, #ea580c, #f97316)'
+                                ],
+                                'escalation' => [
+                                    'icon' => 'bi-exclamation-triangle-fill',
+                                    'bg' => '#fef2f2',
+                                    'text' => '#dc2626',
+                                    'border' => '#fecaca',
+                                    'accent' => 'linear-gradient(180deg, #dc2626, #ef4444)'
+                                ],
+                            ];
+                        @endphp
+                        @forelse($lead->cstUpdates as $update)
+                            @php
+                                $cfg = $typeConfigs[$update->update_type] ?? [
+                                    'icon' => 'bi-info-circle-fill',
+                                    'bg' => '#f1f5f9',
+                                    'text' => '#475569',
+                                    'border' => '#cbd5e1',
+                                    'accent' => 'linear-gradient(180deg, #64748b, #94a3b8)'
+                                ];
+                            @endphp
+                            <div style="position: relative; background: #ffffff; border-radius: 16px; padding: 18px 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.03); transition: all 0.25s ease; overflow: hidden;">
+                                <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 5px; background: {{ $cfg['accent'] }};"></div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 30px; background: {{ $cfg['bg'] }}; color: {{ $cfg['text'] }}; border: 1px solid {{ $cfg['border'] }}; font-size: 12px; font-weight: 700; letter-spacing: 0.2px;">
+                                            <i class="bi {{ $cfg['icon'] }}"></i>
+                                            {{ $update->update_type_label }}
+                                        </span>
+                                        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 30px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600;">
+                                            <i class="bi bi-clock-history"></i>
+                                            {{ $update->created_at?->format('d M Y, h:i A') }}
+                                        </span>
+                                    </div>
+                                    <div style="display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; padding: 4px 14px 4px 6px; border-radius: 30px; border: 1px solid #e2e8f0;">
+                                        <div style="width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #fe5f04 0%, #ff8745 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">
+                                            {{ strtoupper(substr($update->user?->name ?? 'S', 0, 1)) }}
+                                        </div>
+                                        <span style="font-size: 13px; font-weight: 600; color: #334155;">{{ $update->user?->name ?? 'System' }}</span>
+                                    </div>
+                                </div>
+                                @if($update->notes)
+                                    <div style="font-size: 14px; color: #1e293b; line-height: 1.7; background: #f8fafc; padding: 14px 18px; border-radius: 12px; border: 1px solid #e2e8f0; white-space: pre-line; font-family: inherit;">
+                                        {!! e($update->notes) !!}
+                                    </div>
+                                @endif
+                            </div>
+                        @empty
+                            <div style="text-align: center; padding: 42px 20px; background: #f8fafc; border-radius: 16px; border: 2px dashed #cbd5e1;">
+                                <div style="font-size: 36px; margin-bottom: 10px;">📝</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #334155;">No CST updates recorded yet</div>
+                                <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Click <strong>Add CST Update</strong> above to log your first update.</div>
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="lsp-panel" id="panel-quotations">
 
             <div class="page-header">
@@ -1227,24 +1334,6 @@ tbody tr:last-child td { border-bottom: none; }
                                     <div class="lsp-qt-pr grand"><span>Grand Total</span><span id="qtGrandTotal">₹0.00</span></div>
                                 </div>
                             </div>
-
-                            <div class="lsp-form-row lsp-form-row-2">
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Terms & Conditions</label>
-                                    <textarea name="terms_conditions" class="lsp-ta" rows="3" placeholder="Payment terms, delivery, etc."></textarea>
-                                </div>
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Internal Notes</label>
-                                    <textarea name="notes" class="lsp-ta" rows="3" placeholder="Notes visible to team only…"></textarea>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="lsp-btn lsp-btn-primary" style="justify-content:center;width:100%;">
-                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                Create Quotation
-                            </button>
-                        </div>
-                    </form>
                 </div>  --}}
             </div>
         </div>
@@ -1252,12 +1341,65 @@ tbody tr:last-child td { border-bottom: none; }
     </div>{{-- /lsp-body --}}
 </div>{{-- /lsp --}}
 
-
+{{-- ADD CST UPDATE MODAL --}}
+<div id="modalCstUpdate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div class="lsp-card" style="max-width:560px;width:100%;background:#fff;border-radius:18px;box-shadow:0 20px 45px rgba(0,0,0,0.2);overflow:hidden;margin:0 auto;">
+        <div class="lsp-card-head" style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#fe5f04 0%,#ff8745 100%);padding:16px 20px;">
+            <div class="lsp-card-title" style="color:#fff;font-size:16px;font-weight:700;">➕ Add CST Update</div>
+            <button type="button" style="border:none;background:none;font-size:22px;font-weight:700;cursor:pointer;color:#fff;line-height:1;" onclick="closeCstUpdateModal()">&times;</button>
+        </div>
+        <form method="POST" action="{{ route('leads.cst-updates.store', $lead) }}">
+            @csrf
+            <div class="lsp-card-body" style="padding:20px;">
+                <div class="lsp-stack">
+                    <div class="lsp-group">
+                        <label class="lsp-label">Update Type <span class="lsp-req">*</span></label>
+                        <select name="update_type" class="lsp-sel no-ico" required style="width:100%;">
+                            @foreach(\App\Models\LeadCstUpdate::UPDATE_TYPES as $key => $label)
+                                <option value="{{ $key }}" @selected(old('update_type') === $key)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="lsp-group">
+                        <label class="lsp-label">Notes / Update Content <span class="lsp-req">*</span></label>
+                        <textarea name="notes" class="lsp-ta" rows="5" placeholder="Type CST update, weekly progress, or review notes here..." required>{{ old('notes') }}</textarea>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid #eee;">
+                        <button type="button" class="lsp-btn lsp-btn-outline" onclick="closeCstUpdateModal()">Cancel</button>
+                        <button type="submit" class="lsp-btn lsp-btn-primary">Save Update</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 @endsection
 
 @push('scripts')
 <script>
+// ── CST Updates Modal ─────────────────────────────────────────────
+function openCstUpdateModal() {
+    const modal = document.getElementById('modalCstUpdate');
+    if (modal) {
+        modal.style.display = 'flex';
+        if (window.jQuery && window.jQuery.fn.select2) {
+            window.jQuery('#cst_converted_product_select').select2({
+                placeholder: 'Select Converted Product',
+                allowClear: true,
+                dropdownParent: window.jQuery('#modalCstUpdate'),
+                width: '100%'
+            });
+        }
+    }
+}
+
+function closeCstUpdateModal() {
+    const modal = document.getElementById('modalCstUpdate');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
 // ── Tab switching ─────────────────────────────────────────────────
 function switchTab(name, btn) {
     document.querySelectorAll('.lsp-tab').forEach(t => t.classList.remove('active'));
