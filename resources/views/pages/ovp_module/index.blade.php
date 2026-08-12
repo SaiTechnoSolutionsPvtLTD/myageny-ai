@@ -354,12 +354,12 @@
         @endif
 
         @php
-            $hasActiveFilters = request()->filled('start_date') || 
-                                request()->filled('end_date') || 
-                                request()->filled('product_id') || 
-                                request()->filled('status') || 
-                                request()->filled('user_id') || 
-                                request()->filled('company_id') || 
+            $hasActiveFilters = request()->filled('start_date') ||
+                                request()->filled('end_date') ||
+                                request()->filled('product_id') ||
+                                request()->filled('status') ||
+                                request()->filled('user_id') ||
+                                request()->filled('company_id') ||
                                 request()->filled('department_id');
         @endphp
 
@@ -407,7 +407,7 @@
                             <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Status</label>
                             <div class="ovp-select-wrap">
                                 <select name="status" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
-                                    <option value="">All Statuses</option>
+                                    <option value="">All Status</option>
                                     <option value="ovp_pending" {{ request('status') == 'ovp_pending' ? 'selected' : '' }}>OVP Pending</option>
                                     <option value="initiated" {{ request('status') == 'initiated' ? 'selected' : '' }}>Initiated</option>
                                     <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>

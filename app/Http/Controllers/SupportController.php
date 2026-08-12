@@ -118,7 +118,14 @@ class SupportController extends Controller
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('support-tickets', 'public');
+            $file = $request->file('attachment');
+            $filename = time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $file->getClientOriginalExtension();
+            $targetDir = public_path('uploads/support-tickets');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            $file->move($targetDir, $filename);
+            $attachmentPath = 'uploads/support-tickets/' . $filename;
         }
 
         $ticket = SupportTicket::create([
@@ -145,8 +152,13 @@ class SupportController extends Controller
                     $message->to($toUser->email, $toUser->name)
                         ->subject('New Support Ticket: ' . $ticket->subject);
 
-                    if ($ticket->attachment_path && Storage::disk('public')->exists($ticket->attachment_path)) {
-                        $message->attach(storage_path('app/public/' . $ticket->attachment_path));
+                    if ($ticket->attachment_path) {
+                        $fullPath = public_path($ticket->attachment_path);
+                        if (file_exists($fullPath)) {
+                            $message->attach($fullPath);
+                        } elseif (Storage::disk('public')->exists($ticket->attachment_path)) {
+                            $message->attach(storage_path('app/public/' . $ticket->attachment_path));
+                        }
                     }
                 });
             }

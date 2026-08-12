@@ -301,6 +301,14 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+
+    // Expense Requests
+    Route::prefix('hrms/expense-requests')->name('hrms.expense-requests.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ExpenseRequestController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\ExpenseRequestController::class, 'store'])->name('store');
+        Route::post('/{expenseRequest}/approve', [\App\Http\Controllers\ExpenseRequestController::class, 'approve'])->name('approve');
+        Route::post('/{expenseRequest}/reject', [\App\Http\Controllers\ExpenseRequestController::class, 'reject'])->name('reject');
+    });
     
     // Petty Cash Report & Transactions
     Route::get('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'report'])->name('hrms.petty-cash.index');
@@ -308,6 +316,11 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/hrms/petty-cash/{entry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'update'])->name('hrms.petty-cash.update');
     Route::get('/hrms/petty-cash/export-excel', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportExcel'])->name('hrms.petty-cash.export-excel');
     Route::get('/hrms/petty-cash/export-pdf', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportPdf'])->name('hrms.petty-cash.export-pdf');
+
+    // Rani Petty Cash Entries
+    Route::post('/hrms/petty-cash/rani', [\App\Http\Controllers\HRMS\PettyCashController::class, 'storeRani'])->name('hrms.petty-cash.rani.store');
+    Route::put('/hrms/petty-cash/rani/{raniEntry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'updateRani'])->name('hrms.petty-cash.rani.update');
+    Route::delete('/hrms/petty-cash/rani/{raniEntry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'destroyRani'])->name('hrms.petty-cash.rani.destroy');
     Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
     Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
     Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
@@ -400,6 +413,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:price_requests.reject')
         ->name('lead-price-requests.reject');
 
+    // ── Pre Sales Management ─────────────────────────────────────
+    Route::get('/pre-sales', [\App\Http\Controllers\PreSalesController::class, 'index'])->name('pre-sales.index');
+    Route::post('/pre-sales/allocate', [\App\Http\Controllers\PreSalesController::class, 'allocate'])->name('pre-sales.allocate');
+
     // ── Main Lead CRUD ─────────────────────────────────────────
    Route::prefix('leads')->name('leads.')->group(function () {
 
@@ -414,6 +431,7 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/{lead}',      [LeadController::class, 'update'])->middleware('can:leads.edit')->name('update');
         Route::delete('/{lead}',   [LeadController::class, 'destroy'])->middleware('can:leads.delete')->name('destroy');
         Route::patch('/{lead}/status', [LeadController::class, 'updateStatus'])->middleware('can:leads.update')->name('update-status');
+        Route::post('/{lead}/reassign', [LeadController::class, 'reassign'])->name('reassign');
 
         // ── Call Updates ──────────────────────────────────────
         Route::post('/{lead}/calls',             [LeadShowController::class, 'storeCall'])->middleware('can:call_updates.create')->name('calls.store');
@@ -597,6 +615,28 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
         Route::get('/', [\App\Http\Controllers\LeadReallocationController::class, 'index'])->name('index');
         Route::post('/reallocate', [\App\Http\Controllers\LeadReallocationController::class, 'reallocate'])->name('reallocate');
     });
+
+    // Expense Pipeline Settings
+    Route::prefix('expense-pipeline')->name('expense-pipeline.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ExpensePipelineController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\ExpensePipelineController::class, 'store'])->name('store');
+        Route::put('/{expensePipeline}', [\App\Http\Controllers\ExpensePipelineController::class, 'update'])->name('update');
+        Route::delete('/{expensePipeline}', [\App\Http\Controllers\ExpensePipelineController::class, 'destroy'])->name('destroy');
+        Route::patch('/{expensePipeline}/toggle', [\App\Http\Controllers\ExpensePipelineController::class, 'toggleStatus'])->name('toggle-status');
+    });
+
+    // Leave Hierarchy Settings
+    Route::prefix('leave-hierarchy')->name('leave-hierarchy.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'store'])->name('store');
+        Route::put('/{leaveHierarchy}', [\App\Http\Controllers\LeaveHierarchyController::class, 'update'])->name('update');
+        Route::delete('/{leaveHierarchy}', [\App\Http\Controllers\LeaveHierarchyController::class, 'destroy'])->name('destroy');
+        Route::patch('/{leaveHierarchy}/toggle', [\App\Http\Controllers\LeaveHierarchyController::class, 'toggleStatus'])->name('toggle-status');
+    });
+
+    // Expense Category Master
+    Route::resource('expense-categories', \App\Http\Controllers\ExpenseCategoryController::class)->except(['create', 'show', 'edit']);
+    Route::patch('expense-categories/{expenseCategory}/toggle', [\App\Http\Controllers\ExpenseCategoryController::class, 'toggleStatus'])->name('expense-categories.toggle-status');
 
     // Lead Source
     Route::resource('lead-sources', LeadSourceController::class)

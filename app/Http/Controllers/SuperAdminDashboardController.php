@@ -250,25 +250,34 @@ class SuperAdminDashboardController extends ApiController
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
-                $total    = (clone $q)->count();
-                $won      = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal   = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
-                $pipeline = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-                $convRate = $total > 0 ? round($won / $total * 100, 1) : 0;
+                $total          = (clone $q)->count();
+                $leadIds        = (clone $q)->pluck('id');
+                $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+                $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
+                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+
+                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
+                $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
+                $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
+                $pipeline       = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
 
                 return [
-                    'branch_id'   => $branch->id,
-                    'branch_name' => $branch->name,
-                    'branch_code' => $branch->code,
-                    'total_leads' => $total,
-                    'won_leads'   => $won,
-                    'lost_leads'  => (clone $q)->where('lead_status', 'lost')->count(),
-                    'won_value'   => $wonVal,
-                    'pipeline_value' => $pipeline,
-                    'conversion_rate' => $convRate,
+                    'branch_id'            => $branch->id,
+                    'branch_name'          => $branch->name,
+                    'branch_code'          => $branch->code,
+                    'total_leads'          => $total,
+                    'converted_count'      => $convertedCount,
+                    'converted_value'      => $convertedVal,
+                    'converted_percentage' => $convRate,
+                    'won_leads'            => $wonLeads,
+                    'won_value'            => $wonVal,
+                    'lost_leads'           => (clone $q)->where('lead_status', 'lost')->count(),
+                    'pipeline_value'       => $pipeline,
+                    'conversion_rate'      => $convRate,
                 ];
             })
-            ->sortByDesc('won_value')
+            ->sortByDesc('converted_value')
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────
@@ -873,25 +882,34 @@ class SuperAdminDashboardController extends ApiController
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
-                $total    = (clone $q)->count();
-                $won      = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal   = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
-                $pipeline = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-                $convRate = $total > 0 ? round($won / $total * 100, 1) : 0;
+                $total          = (clone $q)->count();
+                $leadIds        = (clone $q)->pluck('id');
+                $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+                $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
+                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+
+                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
+                $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
+                $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
+                $pipeline       = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
 
                 return [
-                    'branch_id'   => $branch->id,
-                    'branch_name' => $branch->name,
-                    'branch_code' => $branch->code,
-                    'total_leads' => $total,
-                    'won_leads'   => $won,
-                    'lost_leads'  => (clone $q)->where('lead_status', 'lost')->count(),
-                    'won_value'   => $wonVal,
-                    'pipeline_value' => $pipeline,
-                    'conversion_rate' => $convRate,
+                    'branch_id'            => $branch->id,
+                    'branch_name'          => $branch->name,
+                    'branch_code'          => $branch->code,
+                    'total_leads'          => $total,
+                    'converted_count'      => $convertedCount,
+                    'converted_value'      => $convertedVal,
+                    'converted_percentage' => $convRate,
+                    'won_leads'            => $wonLeads,
+                    'won_value'            => $wonVal,
+                    'lost_leads'           => (clone $q)->where('lead_status', 'lost')->count(),
+                    'pipeline_value'       => $pipeline,
+                    'conversion_rate'      => $convRate,
                 ];
             })
-            ->sortByDesc('won_value')
+            ->sortByDesc('converted_value')
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────

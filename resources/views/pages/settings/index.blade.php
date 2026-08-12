@@ -288,6 +288,40 @@
         </a>
         @endcan
 
+        <a href="{{ route('settings.expense-pipeline.index') }}" class="settings-card payroll">
+            <div class="settings-card-icon payroll">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Expense Pipeline</h4>
+            <p class="settings-card-text">Configure dynamic multi-stage role hierarchy pipelines for expense approvals across roles.</p>
+            <span class="settings-card-link">
+                Configure Expense Pipeline
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+
+        <a href="{{ route('settings.leave-hierarchy.index') }}" class="settings-card attendance">
+            <div class="settings-card-icon attendance">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Leave Hierarchy</h4>
+            <p class="settings-card-text">Configure dynamic multi-stage role approval hierarchies for leave requests across organization roles.</p>
+            <span class="settings-card-link">
+                Configure Leave Hierarchy
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+
         @can('form_customization.menuview')
         <a href="{{ url('/lead/form-customization') }}" class="settings-card facebook">
             <div class="settings-card-icon facebook">

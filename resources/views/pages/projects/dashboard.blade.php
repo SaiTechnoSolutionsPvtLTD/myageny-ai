@@ -253,7 +253,7 @@
                         <div class="pjd-field">
                             <label class="pjd-label">Status</label>
                             <select name="status" class="pjd-select">
-                                <option value="">All Statuses</option>
+                                <option value="">All Status</option>
                                 <option value="waiting_approval" @selected($filters['status'] === 'waiting_approval')>Waiting for content approval</option>
                                 <option value="inprogress" @selected($filters['status'] === 'inprogress')>In Progress</option>
                                 <option value="waiting_review" @selected($filters['status'] === 'waiting_review')>Waiting for Review</option>

@@ -43,7 +43,7 @@ class LeadController extends Controller
             ]);
         }
 
-        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'products'])
+        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
             ->latest('lead_date');
 
         $this->visibility->applyLeadVisibility($query);
@@ -132,6 +132,10 @@ class LeadController extends Controller
             $query->where('assigned_to', $request->assigned_to);
         }
 
+        if ($request->filled('pre_sale_executive_id')) {
+            $query->where('pre_sale_executive_id', $request->pre_sale_executive_id);
+        }
+
         if ($request->filled('product_name')) {
             $query->where('product_name', 'like', '%' . $request->product_name . '%');
         }
@@ -148,7 +152,19 @@ class LeadController extends Controller
 
         $leads    = $query->paginate(15)->withQueryString();
         $branches = Branch::where('is_active', true)->orderBy('name')->get();
-        $users    = $this->visibility->visibleAssignableUsers();
+        $users    = $this->visibility->visibleAssignableUsers()
+            ->reject(fn ($u) => $u->hasPreSalesLikeRole())
+            ->values();
+        
+        $preSaleExecutives = User::query()
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%pre_sale%')->orWhere('display_name', 'like', '%pre%sale%'))
+                  ->orWhereIn('id', Lead::query()->whereNotNull('pre_sale_executive_id')->distinct()->pluck('pre_sale_executive_id'));
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         $productQuery = Lead::select('product_name')->whereNotNull('product_name')->distinct();
         $this->visibility->applyLeadVisibility($productQuery);
         $products = $productQuery->pluck('product_name');
@@ -172,12 +188,13 @@ class LeadController extends Controller
             || $request->filled('lead_status')
             || $request->filled('priority')
             || $request->filled('assigned_to')
+            || $request->filled('pre_sale_executive_id')
             || $request->filled('product_name')
             || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
             || ($request->has('date_to') && $request->input('date_to') !== $defaultToDate)
         );
 
-        return view('pages.leads.index', compact('leads', 'branches', 'users', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
+        return view('pages.leads.index', compact('leads', 'branches', 'users', 'preSaleExecutives', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
     }
 
     /**
@@ -352,6 +369,7 @@ class LeadController extends Controller
         $lead->load([
             'branch',
             'assignedTo',
+            'preSaleExecutive',
             'createdBy',
             'callUpdates.user',
             'reminders',
@@ -371,7 +389,12 @@ class LeadController extends Controller
                 $query->where('is_active', true)->orderBy('sort_order')->orderBy('label');
             },
         ]);
-        $outcomes = OutcomeCategory::get();
+        $userCompanyId = auth()->user()?->company_id;
+        $outcomes = OutcomeCategory::when($userCompanyId, function ($q) use ($userCompanyId) {
+            $q->where(function ($q2) use ($userCompanyId) {
+                $q2->where('company_id', $userCompanyId)->orWhereNull('company_id');
+            });
+        })->get();
         $pendingPriceRequestCount = LeadProductPriceRequest::where('lead_id', $lead->id)
             ->where('status', 'pending')
             ->count();
@@ -390,6 +413,8 @@ class LeadController extends Controller
             $convertedProducts = $lead->products;
         }
 
+        $salesExecutives = $this->visibility->visibleAssignableUsers();
+
         return view('pages.leads.show', compact(
             'lead',
             'outcomes',
@@ -399,8 +424,31 @@ class LeadController extends Controller
             'weeklyOnlyCount',
             'reviewOnlyCount',
             'escalationOnlyCount',
-            'convertedProducts'
+            'convertedProducts',
+            'salesExecutives'
         ));
+    }
+
+    /**
+     * Reassign lead to a Sales Executive (for Pre Sales Executive).
+     */
+    public function reassign(Request $request, Lead $lead): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_unless($user?->hasPreSalesLikeRole() || $user?->isSystemAdmin() || $user?->isCompanyAdmin(), 403, 'Only Pre Sales Executives can reassign leads.');
+
+        $request->validate([
+            'assigned_to' => ['required', 'exists:users,id'],
+        ]);
+
+        $assignedUser = User::findOrFail($request->assigned_to);
+
+        $lead->update([
+            'assigned_to' => $assignedUser->id,
+            'pre_sale_executive_id' => $user->id,
+        ]);
+
+        return redirect()->back()->with('success', "Lead for <strong>{$lead->company_name}</strong> successfully reassigned to <strong>{$assignedUser->name}</strong>.");
     }
 
     public function storeCstUpdate(Request $request, Lead $lead): RedirectResponse
@@ -453,7 +501,12 @@ class LeadController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
         abort_unless($this->visibility->canAssignTo($assignedUser->id), 403);
 
-        $lead->update($request->validated());
+        $updateData = $request->validated();
+        if (auth()->user()?->hasPreSalesLikeRole()) {
+            $updateData['pre_sale_executive_id'] = auth()->id();
+        }
+
+        $lead->update($updateData);
         $this->syncCustomFieldValues($lead, $request->input('custom_fields', []));
 
         return redirect()

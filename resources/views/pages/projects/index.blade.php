@@ -100,6 +100,24 @@
                         <input type="text" name="search" value="{{ $projectFilters['search'] ?? '' }}" class="prj-filter-input" placeholder="Project, client, company, mobile">
                     </div>
                     <div class="prj-filter-group">
+                        <label class="prj-filter-label">Product</label>
+                        <select name="product_id" class="prj-filter-input">
+                            <option value="">All Products</option>
+                            @foreach($products as $product)
+                                <option value="{{ $product->id }}" @selected(($projectFilters['product_id'] ?? '') === (string) $product->id)>{{ $product->product_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="prj-filter-group">
+                        <label class="prj-filter-label">Department</label>
+                        <select name="department_id" class="prj-filter-input">
+                            <option value="">All Departments</option>
+                            @foreach($departments as $dept)
+                                <option value="{{ $dept->id }}" @selected(($projectFilters['department_id'] ?? '') === (string) $dept->id)>{{ $dept->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="prj-filter-group">
                         <label class="prj-filter-label">Project Category</label>
                         <select name="project_category" class="prj-filter-input">
                             <option value="">All Categories</option>
@@ -176,9 +194,52 @@
             </section>
         @else
 
+        <section class="prj-filter-card">
+            <form method="GET" action="{{ route('projects.index') }}" class="prj-filter-form">
+                @if(request('bucket'))
+                    <input type="hidden" name="bucket" value="{{ request('bucket') }}">
+                @endif
+                <div class="prj-filter-group">
+                    <label class="prj-filter-label">Lead / Company Search</label>
+                    <input type="text" name="search" value="{{ $projectFilters['search'] ?? '' }}" class="prj-filter-input" placeholder="Search Lead ID, company, client, mobile...">
+                </div>
+                <div class="prj-filter-group">
+                    <label class="prj-filter-label">Product</label>
+                    <select name="product_id" class="prj-filter-input">
+                        <option value="">All Products</option>
+                        @foreach($products as $product)
+                            <option value="{{ $product->id }}" @selected(($projectFilters['product_id'] ?? '') === (string) $product->id)>
+                                {{ $product->product_name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="prj-filter-group">
+                    <label class="prj-filter-label">Department</label>
+                    <select name="department_id" class="prj-filter-input">
+                        <option value="">All Departments</option>
+                        @foreach($departments as $dept)
+                            <option value="{{ $dept->id }}" @selected(($projectFilters['department_id'] ?? '') === (string) $dept->id)>
+                                {{ $dept->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="prj-filter-actions">
+                    <button type="submit" class="prj-action-btn">Filter</button>
+                    @if(!empty($projectFilters['search']) || !empty($projectFilters['product_id']) || !empty($projectFilters['department_id']))
+                        <a href="{{ route('projects.index', ['bucket' => $selectedBucket]) }}" class="prj-reset-btn">Reset</a>
+                    @endif
+                </div>
+            </form>
+        </section>
+
         <section class="prj-grid">
             @foreach($cards as $key => $card)
-                <a href="{{ route('projects.index', ['bucket' => $key]) }}" class="prj-card {{ $key }} {{ $selectedBucket === $key ? 'is-active' : '' }}">
+                @php
+                    $bucketQueryParams = array_merge(request()->query(), ['bucket' => $key]);
+                @endphp
+                <a href="{{ route('projects.index', $bucketQueryParams) }}" class="prj-card {{ $key }} {{ $selectedBucket === $key ? 'is-active' : '' }}">
                     <div class="prj-card-head">
                         <div>
                             <div class="prj-card-title">{{ $card['title'] }}</div>

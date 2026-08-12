@@ -348,11 +348,11 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isAdmin)
+
                                                 <button class="btn-action btn-primary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}')">
                                                     👥 Allocate CST User
                                                 </button>
-                                            @endif
+
                                         </div>
                                     </td>
                                 </tr>
@@ -434,11 +434,11 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isAdmin)
+
                                                 <button class="btn-action btn-secondary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '{{ $lead->customer_support_executive_id }}')">
                                                     Re-allocate CS User
                                                 </button>
-                                            @endif
+
                                         </div>
                                     </td>
                                 </tr>

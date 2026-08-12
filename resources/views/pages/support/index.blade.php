@@ -534,7 +534,7 @@
                                        data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
-                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
@@ -558,7 +558,7 @@
                             </td>
                             <td>
                                 @if($ticket->attachment_path)
-                                    <a href="{{ asset('storage/' . $ticket->attachment_path) }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
+                                    <a href="{{ $ticket->attachment_url }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
                                         <i class="bi bi-file-earmark-arrow-down"></i> View File
                                     </a>
                                 @else
@@ -619,7 +619,7 @@
                                        data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
-                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
@@ -643,7 +643,7 @@
                             </td>
                             <td>
                                 @if($ticket->attachment_path)
-                                    <a href="{{ asset('storage/' . $ticket->attachment_path) }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
+                                    <a href="{{ $ticket->attachment_url }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
                                         <i class="bi bi-file-earmark-arrow-down"></i> View File
                                     </a>
                                 @else

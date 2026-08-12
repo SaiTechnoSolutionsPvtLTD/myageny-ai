@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\DesignSettingTarget;
 use App\Models\Lead;
 use App\Models\LeadProduct;
+use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\ProjectTimesheet;
@@ -1007,6 +1008,19 @@ class ProjectController extends Controller
         $user = auth()->user();
         $isTlScopedView = $this->shouldLimitToAssignedProjects($user);
         $isContributorScopedView = $this->shouldLimitToEmployeeProjects($user);
+
+        $products = Product::query()->orderBy('product_name')->get(['id', 'product_name']);
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+
+        $filters = [
+            'search' => trim((string) $request->query('search', '')),
+            'product_id' => trim((string) $request->query('product_id', '')),
+            'department_id' => trim((string) $request->query('department_id', '')),
+            'project_category' => trim((string) $request->query('project_category', '')),
+            'delivery_from' => trim((string) $request->query('delivery_from', '')),
+            'delivery_to' => trim((string) $request->query('delivery_to', '')),
+        ];
+
         if ($isContributorScopedView) {
             $projects = $this->visibleProjectsQuery($user)
                 ->get()
@@ -1015,13 +1029,6 @@ class ProjectController extends Controller
 
                     return $project;
                 });
-
-            $filters = [
-                'search' => trim((string) $request->query('search', '')),
-                'project_category' => trim((string) $request->query('project_category', '')),
-                'delivery_from' => trim((string) $request->query('delivery_from', '')),
-                'delivery_to' => trim((string) $request->query('delivery_to', '')),
-            ];
 
             $filteredProjects = $this->filterEmployeeProjects($projects, $filters);
 
@@ -1038,6 +1045,8 @@ class ProjectController extends Controller
                 'isContributorScopedView' => true,
                 'employeeProjects' => $filteredProjects,
                 'projectFilters' => $filters,
+                'products' => $products,
+                'departments' => $departments,
                 'projectCategories' => $projects
                     ->map(fn (ProductionInitiation $project) => $project->product?->category?->name)
                     ->filter()
@@ -1050,6 +1059,41 @@ class ProjectController extends Controller
         $initiations = $this->visibleProjectsQuery($user)
             ->get()
             ->map(fn (ProductionInitiation $initiation) => $this->decorateProjectForUser($initiation, $user));
+
+        // Filter initiations by Product, Department, and Search (Lead/Company/Client/ID)
+        $filteredInitiations = $initiations->filter(function (ProductionInitiation $item) use ($filters) {
+            if ($filters['product_id'] !== '') {
+                if ((string) $item->product_id !== $filters['product_id']) {
+                    return false;
+                }
+            }
+
+            if ($filters['department_id'] !== '') {
+                if ((string) $item->department_id !== $filters['department_id']) {
+                    return false;
+                }
+            }
+
+            if ($filters['search'] !== '') {
+                $search = Str::lower($filters['search']);
+                $haystack = Str::lower(implode(' ', [
+                    $item->product_name,
+                    $item->client_name,
+                    $item->company_name,
+                    $item->lead?->contact_name,
+                    $item->lead?->company_name,
+                    $item->lead?->mobile_number,
+                    $item->lead_id ? 'LD-' . $item->lead_id : '',
+                    $item->lead_id ? (string) $item->lead_id : '',
+                ]));
+
+                if (! Str::contains($haystack, $search)) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
 
         $buckets = [
             'allocation_pending' => [
@@ -1066,7 +1110,7 @@ class ProjectController extends Controller
             ],
         ];
 
-        foreach ($initiations as $initiation) {
+        foreach ($filteredInitiations as $initiation) {
             $bucket = $this->resolveBucketForUser($initiation, $user);
 
             if (! $bucket) {
@@ -1092,6 +1136,9 @@ class ProjectController extends Controller
             'selectedCard' => $buckets[$selectedBucket],
             'isTlScopedView' => $isTlScopedView,
             'isContributorScopedView' => false,
+            'projectFilters' => $filters,
+            'products' => $products,
+            'departments' => $departments,
         ]);
     }
 
@@ -1887,6 +1934,14 @@ class ProjectController extends Controller
                     if (! Str::contains($haystack, $search)) {
                         return false;
                     }
+                }
+
+                if (($filters['product_id'] ?? '') !== '' && (string) $project->product_id !== (string) $filters['product_id']) {
+                    return false;
+                }
+
+                if (($filters['department_id'] ?? '') !== '' && (string) $project->department_id !== (string) $filters['department_id']) {
+                    return false;
                 }
 
                 if (($filters['project_category'] ?? '') !== '' && $project->product?->category?->name !== $filters['project_category']) {

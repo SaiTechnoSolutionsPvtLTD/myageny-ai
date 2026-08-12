@@ -170,12 +170,12 @@ class CstAllocationController extends Controller
     public function allocateTl(Request $request, Lead $lead): RedirectResponse
     {
         $currentUser = Auth::user();
-        $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        // $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
 
         // Verify authorization
-        if (!$isAdmin) {
-            abort(403, 'Unauthorized action.');
-        }
+        // if (!$isAdmin) {
+        //     abort(403, 'Unauthorized action.');
+        // }
 
         $request->validate([
             'cst_user_id' => 'required|exists:users,id',

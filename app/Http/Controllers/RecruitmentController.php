@@ -184,13 +184,14 @@ class RecruitmentController extends Controller
         $recruitment->load(['callUpdates.user', 'interviews.scheduler', 'creator', 'updater']);
 
         $activeUsers = User::query()
+            ->with(['roles', 'branch'])
             ->where(function ($query) {
                 $query->where('is_active', true)
                     ->orWhere('user_status', 'active');
             })
             ->orderBy('name')
             ->get()
-            ->filter(fn ($u) => $u->hasTlLikeRole() || $u->isSuperAdmin() || $u->isCompanyAdmin())
+            ->filter(fn ($u) => $u->hasTlLikeRole() || $u->isSuperAdmin() || $u->isCompanyAdmin() || $u->hasAdminLikeRole())
             ->values();
 
         return view('pages.hrms.recruitment.show', [

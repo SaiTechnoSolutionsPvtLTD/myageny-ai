@@ -709,7 +709,7 @@
                     <div class="da-card-title">🏢 Branch-wise Performance</div>
                     <span class="da-badge">Highest → Lowest</span>
                 </div>
-                <div id="daBranchBody">
+                <div id="daBranchBody" style="overflow-x:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:200px"></div></div>
                 </div>
             </div>
@@ -773,6 +773,7 @@
 var API_URL   = '{{ $apiBase ?? url("/api") }}/dashboard-data';
 var API_TOKEN = '{{ $apiToken ?? "" }}';   // Server-issued Sanctum token (2h expiry)
 var LEAD_BASE = '{{ $leadBase ?? url("/leads") }}';
+var LEAD_PRODUCTS_BASE = '{{ route("leads.products.index") }}';
 // Avatar colors
 var AV_COLORS = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b45309','#0f766e'];
 var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
@@ -1006,7 +1007,7 @@ function renderAll(d) {
 function renderTargetStats(ts) {
     const cardEl = document.getElementById('daTargetCard');
     if (!cardEl) return;
-    
+
     if (!ts || ts.target <= 0) {
         cardEl.style.display = 'none';
         return;
@@ -1139,10 +1140,10 @@ function renderKpis(k, filters) {
 /* ── Financials ── */
 function renderFinancials(f) {
     var cards = [
-        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% collected', bar:100 },
-        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of total',  bar:f.payment_percent },
+        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Collected', bar:100 },
+        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of Total',  bar:f.payment_percent },
         { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
-        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0 },
+        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0 },
     ];
     var html = cards.map(function(c) {
         return '<div class="da-fin" style="border-left-color:' + c.bc + '">' +
@@ -1204,7 +1205,7 @@ window.navigateToFunnelStage = function(stageVal) {
     var params = new URLSearchParams();
 
     if (stageVal) {
-        params.set('lead_status', stageVal);
+        params.set('product_status', stageVal);
     }
     if (dates.from) {
         params.set('date_from', dates.from);
@@ -1218,11 +1219,8 @@ window.navigateToFunnelStage = function(stageVal) {
     if (state.user) {
         params.set('assigned_to', state.user);
     }
-    if (state.source) {
-        params.set('lead_source', state.source);
-    }
 
-    window.location.href = LEAD_BASE + '?' + params.toString();
+    window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
 };
 
 /* ── Pipeline Funnel ── */
@@ -1382,26 +1380,33 @@ function renderTrend(months) {
 function renderBranchPerf(branches) {
     if (!branches.length) { document.getElementById('daBranchBody').innerHTML = empty('🏢','No branch data'); return; }
     var rankColors = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#b45309'];
-    var maxVal = branches.reduce(function(m, b) { return Math.max(m, b.won_value); }, 1);
+    var maxVal = branches.reduce(function(m, b) {
+        var val = b.converted_value !== undefined ? b.converted_value : (b.won_value || 0);
+        return Math.max(m, val);
+    }, 1);
 
     var rows = branches.map(function(b, i) {
-        var rc   = rankColors[i] || '#9ca3af';
-        var bpct = Math.round(b.won_value / maxVal * 100);
+        var rc        = rankColors[i] || '#9ca3af';
+        var convVal   = b.converted_value !== undefined ? b.converted_value : (b.won_value || 0);
+        var convCnt   = b.converted_count !== undefined ? b.converted_count : (b.converted_leads !== undefined ? b.converted_leads : (b.won_leads || 0));
+        var convPct   = b.converted_percentage !== undefined ? b.converted_percentage : (b.conversion_rate || 0);
+        var bpct      = Math.round(convVal / maxVal * 100);
+
         return '<tr>' +
             '<td><div class="da-rank" style="background:' + rc + '20;color:' + rc + '">' + (i+1) + '</div></td>' +
             '<td><div style="font-size:13px;font-weight:700;color:var(--da-text)">' + b.branch_name + '</div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:5px;width:100%"><div style="height:100%;width:' + bpct + '%;background:' + rc + ';border-radius:2px"></div></div></td>' +
             '<td style="text-align:right;font-weight:700;color:#374151">' + b.total_leads + '</td>' +
-            '<td style="text-align:right;font-weight:700;color:var(--da-green)">' + b.won_leads + '</td>' +
-            '<td style="text-align:right;font-weight:800;color:' + rc + '">' + fmtL(b.won_value) + '</td>' +
+            '<td style="text-align:right;font-weight:700;color:var(--da-green)">' + convCnt + '</td>' +
+            '<td style="text-align:right;font-weight:800;color:' + rc + '">' + fmtL(convVal) + '</td>' +
             '<td style="text-align:right">' +
-            '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + (b.conversion_rate>=50?'#f0fdf4':'#fffbeb') + ';color:' + (b.conversion_rate>=50?'#16a34a':'#b45309') + '">' + b.conversion_rate + '%</span>' +
+            '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + (convPct>=50?'#f0fdf4':'#fffbeb') + ';color:' + (convPct>=50?'#16a34a':'#b45309') + '">' + convPct + '%</span>' +
             '</td></tr>';
     }).join('');
 
     document.getElementById('daBranchBody').innerHTML =
         '<table class="da-perf-tbl"><thead><tr>' +
-        '<th>#</th><th>Branch</th><th style="text-align:right">Leads</th><th style="text-align:right">Won</th><th style="text-align:right">Won Value</th><th style="text-align:right">Conv.</th>' +
+        '<th>#</th><th>Branch</th><th style="text-align:right">Leads</th><th style="text-align:right">Converted Count</th><th style="text-align:right">Converted Value</th><th style="text-align:right">Converted %</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 

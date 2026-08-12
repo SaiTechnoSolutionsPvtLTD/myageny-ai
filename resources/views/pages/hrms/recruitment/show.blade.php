@@ -443,8 +443,12 @@
                                     <select name="interviewer_id" id="interviewer_select" class="lsp-sel no-ico select2" style="width:100%;">
                                         <option value="">Select Interviewer</option>
                                         @foreach($activeUsers as $user)
-                                            <option value="{{ $user->id }}" @selected(old('interviewer_id') == $user->id || old('interviewer_name') === $user->name)>
-                                                {{ $user->name }}
+                                            @php
+                                                $roleName = $user->role_display_name;
+                                                $label = $user->name . ($roleName && $roleName !== 'No Role' ? " ({$roleName})" : '');
+                                            @endphp
+                                            <option value="{{ $user->id }}" data-name="{{ $user->name }}" @selected(old('interviewer_id') == $user->id || old('interviewer_name') === $user->name)>
+                                                {{ $label }}
                                             </option>
                                         @endforeach
                                     </select>
@@ -555,7 +559,11 @@
                         <select id="reschedule_interviewer_select" name="interviewer_id" class="lsp-sel no-ico select2" style="width:100%;">
                             <option value="">Select Interviewer</option>
                             @foreach($activeUsers as $user)
-                                <option value="{{ $user->id }}" data-name="{{ $user->name }}">{{ $user->name }}</option>
+                                @php
+                                    $roleName = $user->role_display_name;
+                                    $label = $user->name . ($roleName && $roleName !== 'No Role' ? " ({$roleName})" : '');
+                                @endphp
+                                <option value="{{ $user->id }}" data-name="{{ $user->name }}">{{ $label }}</option>
                             @endforeach
                         </select>
                     </div>

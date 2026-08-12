@@ -31,6 +31,12 @@ class PettyCashController extends Controller
 
         $reportData = $this->calculateReportData($companyId, $startDate, $endDate);
 
+        $raniEntries = \App\Models\RaniPettyCash::query()
+            ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
+            ->orderBy('entry_date', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([
                 'success' => true,
@@ -41,6 +47,7 @@ class PettyCashController extends Controller
         return view('pages.hrms.petty_cash.index', array_merge($reportData, [
             'startDate' => $startDate->toDateString(),
             'endDate' => $endDate->toDateString(),
+            'raniEntries' => $raniEntries,
         ]));
     }
 
@@ -288,5 +295,65 @@ class PettyCashController extends Controller
             'startDate' => $startDate->format('d M Y'),
             'endDate' => $endDate->format('d M Y'),
         ]));
+    }
+
+    /**
+     * Store a newly created Rani Petty Cash entry.
+     */
+    public function storeRani(Request $request)
+    {
+        $companyId = Auth::user()?->company_id;
+
+        $validated = $request->validate([
+            'entry_date' => 'required|date',
+            'amount'     => 'required|numeric|min:0.01',
+            'notes'      => 'nullable|string|max:1000',
+        ]);
+
+        \App\Models\RaniPettyCash::create([
+            'company_id' => $companyId,
+            'user_id'    => Auth::id(),
+            'entry_date' => $validated['entry_date'],
+            'amount'     => $validated['amount'],
+            'notes'      => $validated['notes'] ?? null,
+        ]);
+
+        return redirect()
+            ->route('hrms.petty-cash.index')
+            ->with('success', 'Rani entry added successfully.');
+    }
+
+    /**
+     * Update specified Rani Petty Cash entry.
+     */
+    public function updateRani(Request $request, \App\Models\RaniPettyCash $raniEntry)
+    {
+        $validated = $request->validate([
+            'entry_date' => 'required|date',
+            'amount'     => 'required|numeric|min:0.01',
+            'notes'      => 'nullable|string|max:1000',
+        ]);
+
+        $raniEntry->update([
+            'entry_date' => $validated['entry_date'],
+            'amount'     => $validated['amount'],
+            'notes'      => $validated['notes'] ?? $raniEntry->notes,
+        ]);
+
+        return redirect()
+            ->route('hrms.petty-cash.index')
+            ->with('success', 'Rani entry updated successfully.');
+    }
+
+    /**
+     * Remove specified Rani Petty Cash entry.
+     */
+    public function destroyRani(\App\Models\RaniPettyCash $raniEntry)
+    {
+        $raniEntry->delete();
+
+        return redirect()
+            ->route('hrms.petty-cash.index')
+            ->with('success', 'Rani entry deleted successfully.');
     }
 }

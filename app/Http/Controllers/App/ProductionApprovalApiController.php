@@ -186,6 +186,37 @@ class ProductionApprovalApiController extends Controller
                     'error' => $exception->getMessage(),
                 ]);
             }
+        } elseif ($validated['decision'] === 'rejected' || $validated['decision'] === 'reject') {
+            try {
+                $productionInitiation->loadMissing(['lead.assignedTo', 'lead.createdBy', 'leadProduct', 'department']);
+                $salesPerson = $productionInitiation->lead?->assignedTo ?: $productionInitiation->lead?->createdBy;
+                $salesPersonEmail = $salesPerson?->email;
+
+                $toEmails = array_values(array_filter(array_unique([
+                    'customersuccessteam.sts@gmail.com',
+                    'customersuccess@saitechnosolutions.net',
+                    $salesPersonEmail,
+                ])));
+
+                $reviewedBy = auth()->user();
+
+                Mail::send('emails.production_approval_rejected', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'reviewedBy' => $reviewedBy,
+                    'salesPerson' => $salesPerson,
+                ], function ($message) use ($toEmails, $productionInitiation) {
+                    $message->to($toEmails)
+                        ->subject('Production Approval Rejected - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            } catch (\Throwable $exception) {
+                Log::error('Failed to send production approval rejection email.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         $this->notifications->notify(

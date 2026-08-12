@@ -379,6 +379,18 @@
                 @endcan
                 @endif
 
+                {{--  <a href="{{ route('hrms.expense-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.expense-requests.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.expense-requests.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                        <span>Expense Request</span>
+                    </div>
+                </a>  --}}
+
                 @if(! $hrmsSelfService)
                 @can('announcements.menuview')
                 <a href="{{ route('hrms-announcements.index') }}" class="nav-item {{ request()->routeIs('hrms-announcements.*') ? 'active' : '' }}">
@@ -622,6 +634,12 @@
      @can('leads.create')
     <a href="{{ url('/leads/create') }}" class="submenu-item {{ request()->is('leads/create') ? 'active' : '' }}">
         Add Lead
+    </a>
+    @endcan
+
+    @can('pre_sales.menuview')
+    <a href="{{ route('pre-sales.index') }}" class="submenu-item {{ request()->is('pre-sales*') ? 'active' : '' }}">
+        Pre Sales
     </a>
     @endcan
 

@@ -386,6 +386,7 @@ tbody tr:last-child td { border-bottom: none; }
                                 <div class="lsp-info-item"><div class="lsp-il">Source</div><div class="lsp-iv">{{ $lead->source_label }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Branch</div><div class="lsp-iv">{{ $lead->branch?->name ?? '—' }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Assigned To</div><div class="lsp-iv">{{ $lead->assignedTo?->name ?? 'Unassigned' }}</div></div>
+                                <div class="lsp-info-item"><div class="lsp-il">Pre-Sales Exec</div><div class="lsp-iv">{{ $lead->preSaleExecutive?->name ?? '—' }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Created By</div><div class="lsp-iv">{{ $lead->createdBy?->name ?? 'System' }}</div></div>
                             </div>
                         </div>
@@ -649,23 +650,23 @@ tbody tr:last-child td { border-bottom: none; }
                         </div>
 
                                     <div class="lsp-form-row lsp-form-row-2">
-                                         <div class="lsp-group">
-                                            <label class="lsp-label">Next Follow-up Date <span class="lsp-req">*</span></label>
-                                            <div class="lsp-fw">
-                                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                                <input type="date" name="next_follow_up" class="lsp-inp" min="{{ today()->toDateString() }}" required>
-                                            </div>
-                                         </div>
+                                          <div class="lsp-group">
+                                             <label class="lsp-label">Next Follow-up Date <span class="lsp-req" id="next_followup_date_req">*</span></label>
+                                             <div class="lsp-fw">
+                                                 <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                                 <input type="date" name="next_follow_up" id="next_followup_date_input" class="lsp-inp" min="{{ today()->toDateString() }}" required>
+                                             </div>
+                                          </div>
 
-                                         <div class="lsp-group">
-                                            <label class="lsp-label">Next Follow-up Time <span class="lsp-req">*</span></label>
-                                            <div class="lsp-fw">
-                                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                                <input type="time" name="followup_time" class="lsp-inp" required>
-                                            </div>
-                                         </div>
+                                          <div class="lsp-group">
+                                             <label class="lsp-label">Next Follow-up Time <span class="lsp-req" id="next_followup_time_req">*</span></label>
+                                             <div class="lsp-fw">
+                                                 <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                                 <input type="time" name="followup_time" id="next_followup_time_input" class="lsp-inp" required>
+                                             </div>
+                                          </div>
 
-                                    </div>
+                                     </div>
 
 
 
@@ -1640,6 +1641,26 @@ function summarizeNote() {
 <script>
 $(document).ready(function() {
 
+    function checkFollowupRequirement() {
+        let categoryText = $('#outcome_category option:selected').text().trim().toLowerCase();
+        let subCategoryText = $('#outcome_sub_category option:selected').text().trim().toLowerCase();
+
+        let isNotInterested = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
+                              (subCategoryText === 'not interested' || subCategoryText.includes('not interested'));
+
+        if (isNotInterested) {
+            $('#next_followup_date_input').removeAttr('required').val('');
+            $('#next_followup_time_input').removeAttr('required').val('');
+            $('#next_followup_date_req').hide();
+            $('#next_followup_time_req').hide();
+        } else {
+            $('#next_followup_date_input').attr('required', 'required');
+            $('#next_followup_time_input').attr('required', 'required');
+            $('#next_followup_date_req').show();
+            $('#next_followup_time_req').show();
+        }
+    }
+
     $('#outcome_category').change(function() {
 
         let category_id = $(this).val();
@@ -1660,13 +1681,19 @@ $(document).ready(function() {
                     });
 
                     $('#outcome_sub_category').html(options);
+                    checkFollowupRequirement();
                 }
             });
 
         } else {
             $('#outcome_sub_category').html('<option value="">— Select sub category —</option>');
         }
+        checkFollowupRequirement();
 
+    });
+
+    $('#outcome_sub_category').change(function() {
+        checkFollowupRequirement();
     });
 
 });

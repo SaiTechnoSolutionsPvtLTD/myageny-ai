@@ -110,7 +110,7 @@ td{font-size:13px;color:#121212}
             <div class="filter-group">
                 <label class="filter-label">Status</label>
                 <select name="status" class="filter-select">
-                    <option value="">All Statuses</option>
+                    <option value="">All Status</option>
                     @foreach(\App\Models\LeadProductPriceRequest::STATUSES as $key => $label)
                         <option value="{{ $key }}" {{ request('status') === $key ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
@@ -167,7 +167,7 @@ td{font-size:13px;color:#121212}
                         @php
                             $difference = $priceRequest->price_difference;
                             $badgeClass = $priceRequest->status === 'approved' ? 'badge-approved' : ($priceRequest->status === 'rejected' ? 'badge-rejected' : 'badge-pending');
-                            
+
                             $allocatedUser = $priceRequest->lead?->assignedTo ?? $priceRequest->requestedBy;
                             $recipientName = $allocatedUser?->name ?? 'Allocated Person';
                             $recipientEmail = $allocatedUser?->email ?? '';
@@ -267,7 +267,7 @@ td{font-size:13px;color:#121212}
         </div>
         <div class="pr-modal-body">
             <p style="margin: 0 0 14px; font-weight:700; font-size:15px; color:#111827;">Are you sure you want to APPROVE this price change request?</p>
-            
+
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:13px; line-height:1.6;">
                 <div><strong>Lead ID:</strong> <span id="approve_lead_info"></span></div>
                 <div><strong>Deal Name:</strong> <span id="approve_deal_name"></span></div>
@@ -296,7 +296,7 @@ td{font-size:13px;color:#121212}
         <div class="pr-modal-body">
             <input type="hidden" id="reject_form_id_holder">
             <p style="margin: 0 0 14px; font-weight:700; font-size:15px; color:#111827;">Are you sure you want to REJECT this price change request?</p>
-            
+
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:13px; line-height:1.6;">
                 <div><strong>Lead ID:</strong> <span id="reject_lead_info"></span></div>
                 <div><strong>Deal Name:</strong> <span id="reject_deal_name"></span></div>
@@ -354,7 +354,7 @@ function confirmApprove(id, leadId, dealName, productName, askedPrice, recipient
     document.getElementById('approve_product_name').innerText = productName;
     document.getElementById('approve_asked_price').innerText = askedPrice;
     document.getElementById('approve_recipient_info').innerText = recipientName + (recipientEmail ? ' (' + recipientEmail + ')' : '');
-    
+
     currentSubmitFormId = 'approve-form-' + id;
     document.getElementById('approveConfirmModal').style.display = 'flex';
 }
@@ -366,7 +366,7 @@ function confirmReject(id, leadId, dealName, productName, askedPrice, recipientN
     document.getElementById('reject_asked_price').innerText = askedPrice;
     document.getElementById('reject_recipient_info').innerText = recipientName + (recipientEmail ? ' (' + recipientEmail + ')' : '');
     document.getElementById('modal_rejection_reason').value = '';
-    
+
     currentSubmitFormId = 'reject-form-' + id;
     document.getElementById('reject_form_id_holder').value = id;
     document.getElementById('rejectConfirmModal').style.display = 'flex';

@@ -296,7 +296,7 @@
                 <div class="lpd-field">
                     <label class="lpd-label" for="product_active">Product Status (Catalog)</label>
                     <select id="product_active" name="product_active" class="lpd-select">
-                        <option value="">All Statuses</option>
+                        <option value="">All Status</option>
                         <option value="active" @selected(request('product_active') === 'active')>Active</option>
                         <option value="inactive" @selected(request('product_active') === 'inactive')>Inactive</option>
                     </select>

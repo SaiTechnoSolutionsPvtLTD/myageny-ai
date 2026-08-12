@@ -63,7 +63,13 @@ class OutcomeCategoryController extends Controller
 
     public function getSubCategories($id)
     {
+        $companyId = auth()->user()?->company_id;
         $data = OutcomeSubCategory::where('category_id', $id)
+            ->when($companyId, function ($q) use ($companyId) {
+                $q->where(function ($q2) use ($companyId) {
+                    $q2->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            })
             ->get();
 
         return response()->json($data);
@@ -71,7 +77,12 @@ class OutcomeCategoryController extends Controller
 
     public function getOutcomeCategory()
     {
-        $data = OutcomeCategory::get();
+        $companyId = auth()->user()?->company_id;
+        $data = OutcomeCategory::when($companyId, function ($q) use ($companyId) {
+            $q->where(function ($q2) use ($companyId) {
+                $q2->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        })->get();
 
         return new OutcomeCategoryCollection($data);
     }

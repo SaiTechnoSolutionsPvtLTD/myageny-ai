@@ -425,6 +425,13 @@ class User extends Authenticatable
         });
     }
 
+    public function hasPreSalesLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'pre_sale') || str_contains($key, 'presale');
+        });
+    }
+
     public function belongsToTestingDepartment(): bool
     {
         return collect($this->departmentKeys()->all())->contains(function ($key) {
