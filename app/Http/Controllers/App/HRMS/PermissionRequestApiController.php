@@ -436,7 +436,7 @@ class PermissionRequestApiController extends Controller
 
     private function approvalChainFor(User $requester): Collection
     {
-        return $this->approvalHierarchy->approvalChainFor($requester);
+        return $this->approvalHierarchy->permissionApprovalChainFor($requester);
     }
 
     private function canViewPermissionRequest(PermissionRequest $pr, User $user): bool

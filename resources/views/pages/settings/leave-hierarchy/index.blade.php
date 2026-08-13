@@ -282,6 +282,55 @@
     justify-content: flex-end;
     gap: 12px;
 }
+
+/* Select2 Custom Styling */
+.select2-container--default .select2-selection--single {
+    height: 42px;
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background-color: #ffffff;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    color: #111827;
+    font-size: 14px;
+    padding-left: 0;
+    line-height: normal;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 40px;
+    right: 10px;
+}
+.select2-dropdown {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    z-index: 99999;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: #fe5f04;
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 8px 12px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #fe5f04;
+    color: #fff;
+}
+.select2-container--open {
+    z-index: 99999 !important;
+}
 </style>
 @endpush
 
@@ -424,7 +473,7 @@
                 {{-- Role Selection --}}
                 <div class="lh-form-group">
                     <label class="lh-form-label">Target Role (Applicant) <span style="color:#dc2626;">*</span></label>
-                    <select name="role_id" id="role_id" class="lh-select" required onchange="renderPreview()">
+                    <select name="role_id" id="role_id" class="lh-select select2" required style="width:100%;" onchange="renderPreview()">
                         <option value="">-- Select Role --</option>
                         @foreach($roles as $role)
                         <option value="{{ $role->id }}" data-name="{{ $role->display_name ?? ucfirst(str_replace('_',' ', $role->name)) }}">
@@ -478,6 +527,21 @@
 const availableRoles = @json($formattedRoles);
 let currentSteps = [];
 
+$(document).ready(function() {
+    if (window.jQuery && window.jQuery.fn.select2) {
+        $('#role_id').select2({
+            placeholder: '-- Select Role --',
+            allowClear: true,
+            dropdownParent: $('#hierarchyModal'),
+            width: '100%'
+        });
+
+        $('#role_id').on('change', function() {
+            renderPreview();
+        });
+    }
+});
+
 function openEditModalFromData(btn) {
     const hierarchy = JSON.parse(btn.getAttribute('data-hierarchy'));
     openEditModal(hierarchy);
@@ -488,6 +552,9 @@ function openCreateModal() {
     document.getElementById('formMethod').value = 'POST';
     document.getElementById('hierarchyForm').action = "{{ route('settings.leave-hierarchy.store') }}";
     document.getElementById('role_id').value = '';
+    if (window.jQuery && window.jQuery.fn.select2) {
+        $('#role_id').val('').trigger('change.select2');
+    }
     document.getElementById('notes').value = '';
     currentSteps = [availableRoles[0]?.id || ''];
     renderSteps();
@@ -500,6 +567,9 @@ function openEditModal(hierarchy) {
     document.getElementById('formMethod').value = 'PUT';
     document.getElementById('hierarchyForm').action = `/settings/leave-hierarchy/${hierarchy.id}`;
     document.getElementById('role_id').value = hierarchy.role_id;
+    if (window.jQuery && window.jQuery.fn.select2) {
+        $('#role_id').val(hierarchy.role_id).trigger('change.select2');
+    }
     document.getElementById('notes').value = hierarchy.notes || '';
     currentSteps = Array.isArray(hierarchy.approval_chain) ? [...hierarchy.approval_chain] : [];
     if (currentSteps.length === 0) currentSteps.push(availableRoles[0]?.id || '');

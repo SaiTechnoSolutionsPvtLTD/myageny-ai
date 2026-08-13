@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $payload['title'] ?? 'HRMS Update' }}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,sans-serif;color:#1f2937;">
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:'Segoe UI', Arial, sans-serif;color:#1f2937;">
     @php
         $title = $payload['title'] ?? 'HRMS Update';
         $message = $payload['message'] ?? 'You have a new HRMS update.';
@@ -38,7 +38,7 @@
                         </td>
                     </tr>
                 </table>
-                <div style="margin-top:22px;font-size:28px;line-height:1.2;font-weight:800;color:#fff;">{{ $title }}</div>
+                <div style="margin-top:22px;font-size:26px;line-height:1.2;font-weight:800;color:#fff;">{{ $title }}</div>
                 <div style="margin-top:10px;font-size:14px;line-height:1.7;color:rgba(255,255,255,.9);max-width:560px;">
                     {{ $message }}
                 </div>
@@ -53,7 +53,7 @@
                     <table role="presentation" style="width:100%;border-collapse:collapse;">
                         <tr>
                             <td style="font-size:12px;color:#9a3412;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding-bottom:10px;">
-                                Status
+                                Current Status
                             </td>
                             <td style="text-align:right;padding-bottom:10px;">
                                 <span style="display:inline-block;padding:7px 12px;border-radius:999px;background:{{ $statusColors['bg'] }};color:{{ $statusColors['text'] }};border:1px solid {{ $statusColors['border'] }};font-size:12px;font-weight:800;text-transform:capitalize;">
@@ -63,7 +63,7 @@
                         </tr>
                         @if($requesterName)
                             <tr>
-                                <td style="padding:10px 0 0;font-size:13px;color:#7c5f4d;">Requester</td>
+                                <td style="padding:10px 0 0;font-size:13px;color:#7c5f4d;">Applicant User</td>
                                 <td style="padding:10px 0 0;text-align:right;font-size:14px;font-weight:700;color:#1f2937;">{{ $requesterName }}</td>
                             </tr>
                         @endif
@@ -75,7 +75,7 @@
                         @endif
                         @if($detail)
                             <tr>
-                                <td style="padding:10px 0 0;font-size:13px;color:#7c5f4d;">Summary</td>
+                                <td style="padding:10px 0 0;font-size:13px;color:#7c5f4d;">Details</td>
                                 <td style="padding:10px 0 0;text-align:right;font-size:14px;font-weight:700;color:#1f2937;">{{ $detail }}</td>
                             </tr>
                         @endif
@@ -90,21 +90,16 @@
                 @endif
 
                 @if($actionUrl)
-                    <div style="margin-top:22px;padding:18px 20px;border-radius:18px;background:#fff7f1;border:1px dashed #fdba8c;">
-                        <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#c2410c;">Open Request</div>
-                        <div style="margin-top:8px;font-size:14px;line-height:1.7;color:#7c2d12;">
-                            Please open the link below to view the full request details:
-                        </div>
-                        <div style="margin-top:10px;word-break:break-word;">
-                            <a href="{{ $actionUrl }}" style="color:#fe5f04;font-size:14px;font-weight:700;text-decoration:none;">{{ $actionUrl }}</a>
-                        </div>
+                    <div style="margin-top:28px; text-align:center;">
+                        <a href="{{ $actionUrl }}" style="display:inline-block; padding:14px 32px; background:linear-gradient(135deg,#fe5f04 0%,#ff7c30 100%); color:#ffffff; text-decoration:none; border-radius:12px; font-weight:800; font-size:15px; box-shadow:0 10px 24px rgba(254,95,4,.28);">
+                            Review & Action Request in HRMS Portal
+                        </a>
                     </div>
                 @endif
 
-                <div style="margin-top:24px;padding-top:18px;border-top:1px solid #ece5de;font-size:13px;line-height:1.8;color:#6b7280;">
+                <div style="margin-top:28px;padding-top:18px;border-top:1px solid #ece5de;font-size:13px;line-height:1.8;color:#6b7280;text-align:center;">
                     Regards,<br>
-                    <span style="font-weight:800;color:#111827;">Myagenci</span><br>
-                    <span style="color:#9ca3af;">HRMS Notifications</span>
+                    <span style="font-weight:800;color:#111827;">myAgenci.ai HRMS Workflow System</span>
                 </div>
             </div>
         </div>

@@ -89,8 +89,10 @@ class CstAllocationApiController extends Controller
                 $lead->payment_progress_pct = round($total > 0 ? ($paid / $total) * 100 : 0, 1);
             });
 
+            $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
+
             // 3. Partition — identical rule to web
-            if ($isAdmin) {
+            if ($isTl) {
                 $pending = $eligibleLeads->whereNull('customer_support_executive_id')->values();
                 $completed = $eligibleLeads->whereNotNull('customer_support_executive_id')->values();
             } else {

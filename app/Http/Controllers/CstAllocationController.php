@@ -113,8 +113,9 @@ class CstAllocationController extends Controller
 
         // 4. Partition based on assignment state and role visibility
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
 
-        if ($isAdmin) {
+        if ($isTl) {
             $pendingLeads = $eligibleLeads->whereNull('customer_support_executive_id');
             $completedLeads = $eligibleLeads->whereNotNull('customer_support_executive_id');
         } else {

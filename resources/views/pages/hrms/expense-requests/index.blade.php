@@ -97,11 +97,24 @@
     background: #fff;
     border-radius: 16px;
     padding: 18px 20px;
-    border: 1px solid #e5e7eb;
+    border: 2px solid #e5e7eb;
     box-shadow: 0 4px 14px rgba(0,0,0,0.02);
     display: flex;
     align-items: center;
     gap: 14px;
+    text-decoration: none !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.exp-stat-card:hover {
+    transform: translateY(-2px);
+    border-color: #fe5f04;
+    box-shadow: 0 8px 20px rgba(254, 95, 4, 0.12);
+}
+.exp-stat-card.is-active {
+    border-color: #fe5f04;
+    background: #fffdfb;
+    box-shadow: 0 8px 20px rgba(254, 95, 4, 0.15);
 }
 .exp-stat-icon {
     width: 44px;
@@ -249,6 +262,220 @@
     justify-content: flex-end;
     gap: 12px;
 }
+
+/* Select2 Custom Styling for Modal */
+.exp-modal-body .select2-container--default .select2-selection--single {
+    height: 42px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+}
+.exp-modal-body .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 40px;
+    padding-left: 14px;
+    padding-right: 34px;
+    font-size: 14px;
+    color: #111827;
+}
+.exp-modal-body .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 40px;
+    right: 10px;
+}
+.exp-modal-body .select2-container--default.select2-container--focus .select2-selection--single,
+.exp-modal-body .select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.select2-dropdown {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    z-index: 99999 !important;
+}
+.select2-search--dropdown {
+    padding: 8px 10px;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: #fe5f04;
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 8px 12px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #fe5f04;
+    color: #fff;
+}
+.select2-container--open {
+    z-index: 99999 !important;
+}
+
+/* Confirmation Modals */
+.exp-confirm-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(18, 24, 38, 0.5);
+    backdrop-filter: blur(4px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 20000;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.exp-confirm-modal.show {
+    display: flex;
+    opacity: 1;
+}
+.exp-confirm-card {
+    background: #ffffff;
+    border-radius: 20px;
+    width: 450px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    transform: translateY(15px);
+    transition: transform 0.25s ease;
+}
+.exp-confirm-modal.show .exp-confirm-card {
+    transform: translateY(0);
+}
+.exp-confirm-head {
+    padding: 18px 24px;
+    border-bottom: 1px solid #f3f4f6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fafafa;
+}
+.exp-confirm-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.exp-confirm-body {
+    padding: 24px;
+    text-align: center;
+}
+.exp-confirm-foot {
+    padding: 16px 24px;
+    border-top: 1px solid #f3f4f6;
+    background: #fafafa;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Process / Progress Bar Overlay (matching Support Portal) */
+.exp-process-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    animation: expFadeInOverlay 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes expFadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.exp-process-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 40px 36px;
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+    text-align: center;
+    transform: scale(0.95);
+    animation: expScaleInCard 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes expScaleInCard {
+    to { transform: scale(1); }
+}
+.exp-process-icon-wrap {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.exp-process-spinner {
+    position: absolute;
+    inset: 0;
+    border: 3.5px solid #ffe6d5;
+    border-top-color: #fe5f04;
+    border-radius: 50%;
+    animation: expSpinOverlay 0.9s linear infinite;
+}
+@keyframes expSpinOverlay {
+    to { transform: rotate(360deg); }
+}
+.exp-process-icon {
+    font-size: 32px;
+    color: #fe5f04;
+    animation: expPulseIcon 1.5s ease-in-out infinite alternate;
+}
+@keyframes expPulseIcon {
+    from { transform: scale(0.88); opacity: 0.85; }
+    to { transform: scale(1.12); opacity: 1; }
+}
+.exp-process-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: #111827;
+    margin: 0 0 6px;
+}
+.exp-process-subtitle {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 24px;
+    line-height: 1.5;
+}
+.exp-progress-wrapper { width: 100%; }
+.exp-progress-bar {
+    width: 100%;
+    height: 10px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+.exp-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #fe5f04 0%, #ff8c3a 100%);
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}
+.exp-progress-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #4b5563;
+}
 </style>
 @endpush
 
@@ -280,16 +507,20 @@
         {{ session('success') }}
     </div>
     @endif
+    @if(session('error'))
+    <div style="margin-bottom:20px; padding:14px 18px; border-radius:12px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-weight:700; font-size:14px; display:flex; align-items:center; gap:10px;">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        {{ session('error') }}
+    </div>
+    @endif
 
     {{-- Stats Cards --}}
     @php
-        $totalCount    = $requests->total();
-        $pendingCount  = \App\Models\ExpenseRequest::where('status', 'pending')->count();
-        $approvedCount = \App\Models\ExpenseRequest::where('status', 'approved')->count();
-        $rejectedCount = \App\Models\ExpenseRequest::where('status', 'rejected')->count();
+        $currentStatus = request('status');
     @endphp
     <div class="exp-stats-row">
-        <div class="exp-stat-card">
+        <a href="{{ route('hrms.expense-requests.index', array_filter(request()->except('status', 'page'))) }}"
+           class="exp-stat-card {{ empty($currentStatus) ? 'is-active' : '' }}">
             <div class="exp-stat-icon" style="background:#fff1e8; color:#fe5f04;">
                 <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
@@ -297,8 +528,10 @@
                 <div class="exp-stat-label">Total Requests</div>
                 <div class="exp-stat-val">{{ $totalCount }}</div>
             </div>
-        </div>
-        <div class="exp-stat-card">
+        </a>
+
+        <a href="{{ route('hrms.expense-requests.index', array_merge(request()->except('page'), ['status' => 'pending'])) }}"
+           class="exp-stat-card {{ $currentStatus === 'pending' ? 'is-active' : '' }}">
             <div class="exp-stat-icon" style="background:#fffbeb; color:#b45309;">
                 <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
@@ -306,8 +539,10 @@
                 <div class="exp-stat-label">Pending Approval</div>
                 <div class="exp-stat-val" style="color:#b45309;">{{ $pendingCount }}</div>
             </div>
-        </div>
-        <div class="exp-stat-card">
+        </a>
+
+        <a href="{{ route('hrms.expense-requests.index', array_merge(request()->except('page'), ['status' => 'approved'])) }}"
+           class="exp-stat-card {{ $currentStatus === 'approved' ? 'is-active' : '' }}">
             <div class="exp-stat-icon" style="background:#f0fdf4; color:#16a34a;">
                 <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
@@ -315,8 +550,10 @@
                 <div class="exp-stat-label">Approved</div>
                 <div class="exp-stat-val" style="color:#16a34a;">{{ $approvedCount }}</div>
             </div>
-        </div>
-        <div class="exp-stat-card">
+        </a>
+
+        <a href="{{ route('hrms.expense-requests.index', array_merge(request()->except('page'), ['status' => 'rejected'])) }}"
+           class="exp-stat-card {{ $currentStatus === 'rejected' ? 'is-active' : '' }}">
             <div class="exp-stat-icon" style="background:#fef2f2; color:#dc2626;">
                 <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             </div>
@@ -324,7 +561,7 @@
                 <div class="exp-stat-label">Rejected</div>
                 <div class="exp-stat-val" style="color:#dc2626;">{{ $rejectedCount }}</div>
             </div>
-        </div>
+        </a>
     </div>
 
     {{-- Main Table Card --}}
@@ -426,9 +663,14 @@
                                 Approved by {{ $req->approver?->name ?? 'Approver' }}
                             </span>
                         @else
-                            <span style="font-size:11px; color:#991b1b; font-weight:700;" title="{{ $req->rejection_reason }}">
+                            <span style="font-size:11px; color:#991b1b; font-weight:700;">
                                 Rejected by {{ $req->approver?->name ?? 'Approver' }}
                             </span>
+                            @if($req->rejection_reason)
+                                <div style="margin-top:6px; padding:6px 10px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#991b1b; font-size:11px; font-weight:600; line-height:1.4; max-width:220px;">
+                                    💬 <strong>Remarks:</strong> {{ $req->rejection_reason }}
+                                </div>
+                            @endif
                         @endif
                     </td>
                     <td>
@@ -446,9 +688,9 @@
                     <td style="text-align:right;">
                         @if($canAction)
                             <div style="display:inline-flex; gap:6px;">
-                                <form method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}">
+                                <form id="approveForm_{{ $req->id }}" method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}">
                                     @csrf
-                                    <button type="submit" class="exp-req-btn exp-req-btn-primary" style="padding:5px 12px; font-size:11px; background:#16a34a; box-shadow:none;">
+                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:5px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}')">
                                         Approve
                                     </button>
                                 </form>
@@ -492,13 +734,13 @@
             <button class="exp-modal-close" onclick="closeSendModal()">✕</button>
         </div>
 
-        <form method="POST" action="{{ route('hrms.expense-requests.store') }}" enctype="multipart/form-data">
+        <form id="createExpenseForm" method="POST" action="{{ route('hrms.expense-requests.store') }}" enctype="multipart/form-data">
             @csrf
             <div class="exp-modal-body">
                 
                 <div class="exp-form-group">
                     <label class="exp-form-label">Expense Category <span style="color:#dc2626;">*</span></label>
-                    <select name="expense_category_id" class="exp-select" required>
+                    <select name="expense_category_id" id="send_expense_category_id" class="exp-select select2" required style="width:100%;">
                         <option value="">-- Select Category --</option>
                         @foreach($categories as $cat)
                         <option value="{{ $cat->id }}">{{ $cat->name }}</option>
@@ -526,7 +768,7 @@
 
             <div class="exp-modal-foot">
                 <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeSendModal()">Cancel</button>
-                <button type="submit" class="exp-req-btn exp-req-btn-primary">Send Request</button>
+                <button type="button" class="exp-req-btn exp-req-btn-primary" onclick="showConfirmSendModal()">Send Request</button>
             </div>
         </form>
     </div>
@@ -551,9 +793,96 @@
 
             <div class="exp-modal-foot">
                 <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeRejectModal()">Cancel</button>
-                <button type="submit" class="exp-req-btn exp-req-btn-primary" style="background:#dc2626;">Reject Request</button>
+                <button type="button" class="exp-req-btn exp-req-btn-primary" style="background:#dc2626;" onclick="showConfirmRejectModal()">Reject Request</button>
             </div>
         </form>
+    </div>
+</div>
+
+{{-- Confirm Send Modal --}}
+<div id="confirmSendModal" class="exp-confirm-modal">
+    <div class="exp-confirm-card">
+        <div class="exp-confirm-head" style="background:#fff7ed; border-bottom-color:#ffedd5;">
+            <div class="exp-confirm-title" style="color:#c2410c;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                Confirm Submission
+            </div>
+            <button class="exp-modal-close" onclick="closeConfirmSendModal()">✕</button>
+        </div>
+        <div class="exp-confirm-body">
+            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:8px;">Are you sure you want to submit this expense request?</p>
+            <p style="font-size:13px; color:#6b7280; line-height:1.5;">An automated email notification will be sent to the Stage 1 approver according to the HRMS approval pipeline.</p>
+        </div>
+        <div class="exp-confirm-foot">
+            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmSendModal()">Cancel</button>
+            <button type="button" class="exp-req-btn exp-req-btn-primary" id="btnConfirmSendSubmit">Yes, Send Request</button>
+        </div>
+    </div>
+</div>
+
+{{-- Confirm Approve Modal --}}
+<div id="confirmApproveModal" class="exp-confirm-modal">
+    <div class="exp-confirm-card">
+        <div class="exp-confirm-head" style="background:#f0fdf4; border-bottom-color:#bbf7d0;">
+            <div class="exp-confirm-title" style="color:#15803d;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                Confirm Approval
+            </div>
+            <button class="exp-modal-close" onclick="closeConfirmApproveModal()">✕</button>
+        </div>
+        <div class="exp-confirm-body">
+            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:8px;">Are you sure you want to approve this expense request?</p>
+            <p style="font-size:13px; color:#6b7280; line-height:1.5;">An email notification will be sent to the next stage approver (or applicant if final stage).</p>
+        </div>
+        <div class="exp-confirm-foot">
+            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmApproveModal()">Cancel</button>
+            <button type="button" class="exp-req-btn exp-req-btn-primary" id="btnConfirmApproveSubmit" style="background:#16a34a;">Yes, Approve</button>
+        </div>
+    </div>
+</div>
+
+{{-- Confirm Reject Modal --}}
+<div id="confirmRejectModal" class="exp-confirm-modal">
+    <div class="exp-confirm-card">
+        <div class="exp-confirm-head" style="background:#fef2f2; border-bottom-color:#fecaca;">
+            <div class="exp-confirm-title" style="color:#b91c1c;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Confirm Rejection
+            </div>
+            <button class="exp-confirm-body" style="padding:0; border:none; background:none;">
+            </button>
+            <button class="exp-modal-close" onclick="closeConfirmRejectModal()">✕</button>
+        </div>
+        <div class="exp-confirm-body">
+            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:8px;">Are you sure you want to reject this expense request?</p>
+            <p style="font-size:13px; color:#6b7280; line-height:1.5;">An email notification with the rejection reason will be sent to the applicant.</p>
+        </div>
+        <div class="exp-confirm-foot">
+            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmRejectModal()">Cancel</button>
+            <button type="button" class="exp-req-btn exp-req-btn-primary" id="btnConfirmRejectSubmit" style="background:#dc2626;">Yes, Reject Request</button>
+        </div>
+    </div>
+</div>
+
+{{-- Process Overlay / Progress Bar Modal --}}
+<div id="expProcessOverlay" class="exp-process-overlay">
+    <div class="exp-process-card">
+        <div class="exp-process-icon-wrap">
+            <div class="exp-process-spinner"></div>
+            <svg class="exp-process-icon" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </div>
+        <h4 id="expProcessTitle" class="exp-process-title">Sending Email & Processing...</h4>
+        <p id="expProcessSubtitle" class="exp-process-subtitle">Please wait while the email notification is being sent...</p>
+
+        <div class="exp-progress-wrapper">
+            <div class="exp-progress-bar">
+                <div id="expProgressFill" class="exp-progress-fill"></div>
+            </div>
+            <div class="exp-progress-status">
+                <span id="expProgressText">Preparing email notification...</span>
+                <span id="expProgressPercent">0%</span>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -561,8 +890,24 @@
 
 @push('scripts')
 <script>
+let pendingApproveFormId = null;
+
+$(document).ready(function() {
+    if (window.jQuery && window.jQuery.fn.select2) {
+        $('#send_expense_category_id').select2({
+            placeholder: '-- Select Category --',
+            allowClear: true,
+            dropdownParent: $('#sendModal'),
+            width: '100%'
+        });
+    }
+});
+
 function openSendModal() {
     document.getElementById('sendModal').style.display = 'flex';
+    if (window.jQuery && window.jQuery.fn.select2) {
+        $('#send_expense_category_id').val('').trigger('change.select2');
+    }
 }
 function closeSendModal() {
     document.getElementById('sendModal').style.display = 'none';
@@ -575,6 +920,130 @@ function openRejectModal(requestId) {
 function closeRejectModal() {
     document.getElementById('rejectModal').style.display = 'none';
 }
+
+// Confirmation Modals Logic
+function showConfirmSendModal() {
+    const form = document.getElementById('createExpenseForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    document.getElementById('confirmSendModal').classList.add('show');
+}
+function closeConfirmSendModal() {
+    document.getElementById('confirmSendModal').classList.remove('show');
+}
+
+function showConfirmApproveModal(formId) {
+    pendingApproveFormId = formId;
+    document.getElementById('confirmApproveModal').classList.add('show');
+}
+function closeConfirmApproveModal() {
+    pendingApproveFormId = null;
+    document.getElementById('confirmApproveModal').classList.remove('show');
+}
+
+function showConfirmRejectModal() {
+    const form = document.getElementById('rejectForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    document.getElementById('confirmRejectModal').classList.add('show');
+}
+function closeConfirmRejectModal() {
+    document.getElementById('confirmRejectModal').classList.remove('show');
+}
+
+// Progress Overlay Logic (Matching Support Portal)
+let expProcessProgressInterval = null;
+
+function showProcessOverlay(title, subtitle) {
+    if (title) document.getElementById('expProcessTitle').innerText = title;
+    if (subtitle) document.getElementById('expProcessSubtitle').innerText = subtitle;
+
+    const overlay = document.getElementById('expProcessOverlay');
+    const fill = document.getElementById('expProgressFill');
+    const percentText = document.getElementById('expProgressPercent');
+    const statusText = document.getElementById('expProgressText');
+
+    overlay.style.display = 'flex';
+
+    let currentProgress = 5;
+    fill.style.width = currentProgress + '%';
+    percentText.innerText = currentProgress + '%';
+    statusText.innerText = 'Connecting to server...';
+
+    if (expProcessProgressInterval) clearInterval(expProcessProgressInterval);
+
+    expProcessProgressInterval = setInterval(function() {
+        if (currentProgress < 30) {
+            currentProgress += Math.floor(Math.random() * 8) + 4;
+            statusText.innerText = 'Building email notification...';
+        } else if (currentProgress < 70) {
+            currentProgress += Math.floor(Math.random() * 6) + 3;
+            statusText.innerText = 'Sending email via SMTP...';
+        } else if (currentProgress < 92) {
+            currentProgress += Math.floor(Math.random() * 3) + 1;
+            statusText.innerText = 'Finalizing expense workflow...';
+        }
+
+        if (currentProgress > 94) {
+            currentProgress = 94;
+        }
+
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+    }, 250);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Confirm Send Submit Listener
+    const btnSend = document.getElementById('btnConfirmSendSubmit');
+    if (btnSend) {
+        btnSend.addEventListener('click', function() {
+            const form = document.getElementById('createExpenseForm');
+            closeConfirmSendModal();
+            closeSendModal();
+            showProcessOverlay(
+                "Sending Email & Creating Expense Request...",
+                "Please wait while your expense request is submitted and email notification is sent..."
+            );
+            form.submit();
+        });
+    }
+
+    // Confirm Approve Submit Listener
+    const btnApprove = document.getElementById('btnConfirmApproveSubmit');
+    if (btnApprove) {
+        btnApprove.addEventListener('click', function() {
+            if (pendingApproveFormId) {
+                const form = document.getElementById(pendingApproveFormId);
+                closeConfirmApproveModal();
+                showProcessOverlay(
+                    "Sending Email & Processing Approval...",
+                    "Please wait while the expense request is approved and email notification is sent..."
+                );
+                form.submit();
+            }
+        });
+    }
+
+    // Confirm Reject Submit Listener
+    const btnReject = document.getElementById('btnConfirmRejectSubmit');
+    if (btnReject) {
+        btnReject.addEventListener('click', function() {
+            const form = document.getElementById('rejectForm');
+            closeConfirmRejectModal();
+            closeRejectModal();
+            showProcessOverlay(
+                "Sending Email & Processing Rejection...",
+                "Please wait while the expense request is rejected and email notification is sent..."
+            );
+            form.submit();
+        });
+    }
+});
 
 document.getElementById('sendModal').addEventListener('click', function(e) {
     if (e.target === this) closeSendModal();

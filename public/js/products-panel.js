@@ -199,6 +199,11 @@
             dealInp.value = '';
             dealInp.dataset.autoSuggested = '';
         }
+        var searchInp = el('pp-product-search-input');
+        if (searchInp) {
+            searchInp.value = '';
+        }
+        PP.ppFilterProducts('');
         ppState.selected = {};
         ppState.dealNameTouched = false;
         ppState.lastSuggestedDealName = '';
@@ -295,7 +300,30 @@
             var editing = findProduct(ppState.editingProductId);
             syncEditProductSelect(editing && editing.product_id);
         }
+        var searchInp = el('pp-product-search-input');
+        if (searchInp) {
+            PP.ppFilterProducts(searchInp.value);
+        }
     }
+
+    PP.ppFilterProducts = function (query) {
+        var sel = el('pp-product-multi-select');
+        var noRes = el('pp-product-no-results');
+        if (!sel) return;
+        var q = (query || '').toLowerCase().trim();
+        var matchCount = 0;
+        Array.from(sel.options).forEach(function (opt) {
+            if (opt.disabled) return;
+            var text = (opt.textContent || '').toLowerCase();
+            var matches = !q || text.indexOf(q) !== -1;
+            opt.hidden = !matches;
+            opt.style.display = matches ? '' : 'none';
+            if (matches) matchCount++;
+        });
+        if (noRes) {
+            noRes.style.display = (q && matchCount === 0) ? 'block' : 'none';
+        }
+    };
 
     function syncEditProductSelect(productId) {
         var sel = el('pp-product-multi-select');

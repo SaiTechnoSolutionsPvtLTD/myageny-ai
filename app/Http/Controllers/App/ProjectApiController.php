@@ -981,7 +981,13 @@ class ProjectApiController extends Controller
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved']);
 
-        if ($this->shouldLimitToAssignedProjects($user)) {
+        if ($user->isDevelopmentProjectCoordinator()) {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($devDeptIds) {
+                $q->whereIn('department_id', $devDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $query->where('project_allocation_status', 'allocated')
                 ->whereJsonContains('project_allocated_tl_user_ids', $user->id);
         } elseif ($this->shouldLimitToEmployeeProjects($user)) {

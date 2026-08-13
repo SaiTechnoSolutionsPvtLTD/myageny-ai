@@ -149,16 +149,27 @@
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(5px);
+    padding: 20px 12px;
+    overflow-y: auto;
 }
 .exp-modal {
     background: #ffffff;
     border-radius: 20px;
     width: 90%;
     max-width: 520px;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
     animation: popIn .2s ease;
+    overflow: hidden;
+    margin: auto;
+}
+.exp-modal form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: hidden;
 }
 @keyframes popIn {
@@ -172,6 +183,7 @@
     padding: 20px 24px;
     border-bottom: 1px solid #f3f4f6;
     background: #fafafa;
+    flex-shrink: 0;
 }
 .exp-modal-title { font-size: 18px; font-weight: 800; color: #111827; }
 .exp-modal-close {
@@ -179,9 +191,27 @@
 }
 .exp-modal-body {
     padding: 24px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 18px;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(85vh - 130px);
+}
+.exp-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.exp-modal-body::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+.exp-modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.exp-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #fe5f04;
 }
 .exp-form-group { display: flex; flex-direction: column; gap: 6px; }
 .exp-form-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: #4b5563; }
@@ -206,6 +236,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 12px;
+    flex-shrink: 0;
 }
 </style>
 @endpush

@@ -205,7 +205,14 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset')) {
+        $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
+
+        if ($quickDate === 'all') {
+            $request->merge([
+                'date_from' => null,
+                'date_to' => null,
+            ]);
+        } elseif (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset') && !$quickDate) {
             $request->merge([
                 'date_from' => $defaultFromDate,
                 'date_to' => $defaultToDate,

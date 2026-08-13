@@ -21,6 +21,7 @@ class ExpenseRequestController extends Controller
         $user = auth()->user();
         $companyId = $user?->company_id;
         $userRoleIds = $user->roles->pluck('id')->toArray();
+        $isHrOrAdmin = $user->isHrOrAdmin();
 
         $categories = ExpenseCategory::query()
             ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
@@ -28,8 +29,30 @@ class ExpenseRequestController extends Controller
             ->orderBy('name')
             ->get();
 
-        $requests = ExpenseRequest::with(['user', 'category', 'approver', 'currentApproverRole'])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+        // Base query scoped to company and user role/permissions
+        $scopedQuery = ExpenseRequest::with(['user', 'category', 'approver', 'currentApproverRole'])
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId));
+
+        // Company Admin & HR see all requests; Regular users see own submitted requests + requests to approve / approved by them
+        if (! $isHrOrAdmin) {
+            $scopedQuery->where(function ($q) use ($user, $userRoleIds) {
+                $q->where('user_id', $user->id)
+                  ->orWhere('approver_id', $user->id)
+                  ->orWhere(function ($q2) use ($userRoleIds) {
+                      $q2->whereIn('current_approver_role_id', $userRoleIds)
+                         ->where('status', 'pending');
+                  });
+            });
+        }
+
+        // Calculate card counts based on scoped query
+        $totalCount    = (clone $scopedQuery)->count();
+        $pendingCount  = (clone $scopedQuery)->where('status', 'pending')->count();
+        $approvedCount = (clone $scopedQuery)->where('status', 'approved')->count();
+        $rejectedCount = (clone $scopedQuery)->where('status', 'rejected')->count();
+
+        // Apply search and status filters for main paginated table
+        $requests = $scopedQuery
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
             ->when($request->filled('expense_category_id'), fn($q) => $q->where('expense_category_id', $request->expense_category_id))
             ->when($request->filled('search'), function ($query) use ($request) {
@@ -45,7 +68,16 @@ class ExpenseRequestController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('pages.hrms.expense-requests.index', compact('requests', 'categories', 'userRoleIds'));
+        return view('pages.hrms.expense-requests.index', compact(
+            'requests',
+            'categories',
+            'userRoleIds',
+            'totalCount',
+            'pendingCount',
+            'approvedCount',
+            'rejectedCount',
+            'isHrOrAdmin'
+        ));
     }
 
     /**
@@ -68,13 +100,12 @@ class ExpenseRequestController extends Controller
             $attachmentPath = $request->file('attachment')->store('expense_attachments', 'public');
         }
 
-        // Determine approval pipeline for user's role
-        $userRole = $user->roles->first();
-        $userRoleId = $userRole?->id;
+        // Determine approval pipeline for applicant user's role hierarchy
+        $userRoleIds = $user->roles->pluck('id')->toArray();
 
         $pipeline = null;
-        if ($userRoleId) {
-            $pipeline = ExpensePipeline::where('role_id', $userRoleId)
+        if (!empty($userRoleIds)) {
+            $pipeline = ExpensePipeline::whereIn('role_id', $userRoleIds)
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->where('is_active', true)
                 ->first();
@@ -96,53 +127,135 @@ class ExpenseRequestController extends Controller
             'status'                   => 'pending',
         ]);
 
-        // Send Email Notification to the mapped Approver(s)
+        // Send Email Notification to the Stage 1 Approver(s)
         $this->sendApproverNotification($expenseRequest);
 
         return redirect()
             ->route('hrms.expense-requests.index')
-            ->with('success', 'Expense request submitted successfully. Email notification sent to approver.');
+            ->with('success', 'Expense request submitted successfully. Email notification sent to the mapped approver.');
     }
 
     /**
-     * Approve an expense request.
+     * Direct email approve action link.
+     */
+    public function emailApprove(Request $request, ExpenseRequest $expenseRequest): RedirectResponse
+    {
+        $user = auth()->user();
+        $userRoleIds = $user->roles->pluck('id')->toArray();
+        $canApprove = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
+
+        if (! $canApprove) {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', 'You are not authorized to approve this expense request.');
+        }
+
+        if ($expenseRequest->status !== 'pending') {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', "This expense request is already {$expenseRequest->status}.");
+        }
+
+        return $this->approve($request, $expenseRequest);
+    }
+
+    /**
+     * Direct email reject action page or 1-click preset reason rejection.
+     */
+    public function emailRejectPage(Request $request, ExpenseRequest $expenseRequest)
+    {
+        $user = auth()->user();
+        $userRoleIds = $user->roles->pluck('id')->toArray();
+        $canReject = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
+
+        if (! $canReject) {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', 'You are not authorized to reject this expense request.');
+        }
+
+        if ($expenseRequest->status !== 'pending') {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', "This expense request is already {$expenseRequest->status}.");
+        }
+
+        // Handle 1-click preset reason or inline email form GET submission
+        if ($request->has('reason') && !empty(trim($request->query('reason')))) {
+            $reason = trim($request->query('reason'));
+
+            $expenseRequest->update([
+                'status'           => 'rejected',
+                'approver_id'      => auth()->id(),
+                'rejection_reason' => $reason,
+                'actioned_at'      => now(),
+            ]);
+
+            // Notify applicant of rejection
+            $this->sendApplicantStatusNotification($expenseRequest, 'rejected', $reason);
+
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('success', "Expense request rejected with reason: '{$reason}'.");
+        }
+
+        return view('pages.hrms.expense-requests.reject_page', compact('expenseRequest'));
+    }
+
+    /**
+     * Approve an expense request through the pipeline hierarchy.
      */
     public function approve(Request $request, ExpenseRequest $expenseRequest): RedirectResponse
     {
         $user = auth()->user();
+        $userRoleIds = $user->roles->pluck('id')->toArray();
+        $canApprove = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
+
+        if (! $canApprove) {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', 'You are not authorized to approve this expense request.');
+        }
+
         $applicantUser = $expenseRequest->user;
-        $userRole = $applicantUser?->roles->first();
+        $applicantCompanyId = $applicantUser?->company_id ?: $expenseRequest->company_id;
+        $applicantRoleIds = $applicantUser?->roles->pluck('id')->toArray() ?? [];
 
         $pipeline = null;
-        if ($userRole) {
-            $pipeline = ExpensePipeline::where('role_id', $userRole->id)
+        if (!empty($applicantRoleIds)) {
+            $pipeline = ExpensePipeline::whereIn('role_id', $applicantRoleIds)
+                ->when($applicantCompanyId, fn($q) => $q->where('company_id', $applicantCompanyId))
                 ->where('is_active', true)
                 ->first();
         }
 
         $approvalChain = $pipeline->approval_chain ?? [];
         $currentStep = $expenseRequest->current_step;
-        $nextStepIndex = $currentStep; // 1-indexed next is array index currentStep
+        $nextStepIndex = $currentStep; // 1-indexed stage currentStep matches 0-indexed next array element
 
         if (isset($approvalChain[$nextStepIndex])) {
-            // Move to next approval stage in pipeline
+            // Move to next approval stage in the pipeline hierarchy
             $expenseRequest->update([
                 'current_step'             => $currentStep + 1,
                 'current_approver_role_id' => (int) $approvalChain[$nextStepIndex],
             ]);
 
+            // Notify next stage approvers via email
             $this->sendApproverNotification($expenseRequest);
 
-            $msg = "Expense request approved for Stage {$currentStep}. Moved to Stage " . ($currentStep + 1) . " approval.";
+            $msg = "Expense request approved for Stage {$currentStep}. Email sent to Stage " . ($currentStep + 1) . " approvers.";
         } else {
-            // Final Approval reached!
+            // Final Stage Approval reached (last level role in pipeline chain)
             $expenseRequest->update([
                 'status'      => 'approved',
                 'approver_id' => $user->id,
                 'actioned_at' => now(),
             ]);
 
-            $msg = "Expense request fully approved!";
+            // Notify applicant of final approval
+            $this->sendApplicantStatusNotification($expenseRequest, 'approved');
+
+            $msg = "Expense request fully approved across all pipeline stages!";
         }
 
         return redirect()
@@ -155,24 +268,39 @@ class ExpenseRequestController extends Controller
      */
     public function reject(Request $request, ExpenseRequest $expenseRequest): RedirectResponse
     {
+        $user = auth()->user();
+        $userRoleIds = $user->roles->pluck('id')->toArray();
+        $canReject = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
+
+        if (! $canReject) {
+            return redirect()
+                ->route('hrms.expense-requests.index')
+                ->with('error', 'You are not authorized to reject this expense request.');
+        }
+
         $validated = $request->validate([
-            'rejection_reason' => 'nullable|string|max:1000',
+            'rejection_reason' => 'required|string|max:1000',
         ]);
+
+        $reason = $validated['rejection_reason'];
 
         $expenseRequest->update([
             'status'           => 'rejected',
             'approver_id'      => auth()->id(),
-            'rejection_reason' => $validated['rejection_reason'] ?? 'Request rejected by approver.',
+            'rejection_reason' => $reason,
             'actioned_at'      => now(),
         ]);
 
+        // Notify applicant of rejection
+        $this->sendApplicantStatusNotification($expenseRequest, 'rejected', $reason);
+
         return redirect()
             ->route('hrms.expense-requests.index')
-            ->with('success', 'Expense request rejected.');
+            ->with('success', 'Expense request rejected successfully with remarks saved.');
     }
 
     /**
-     * Helper to find candidate approver users and trigger email notification.
+     * Helper to find candidate approver users and trigger email notification for current pipeline stage.
      */
     private function sendApproverNotification(ExpenseRequest $expenseRequest): void
     {
@@ -190,7 +318,7 @@ class ExpenseRequestController extends Controller
         $applicantDepartmentId = $applicantUser->department_id;
         $companyId = $expenseRequest->company_id;
 
-        // Query users matching the approver role
+        // Query users matching the current approver role
         $query = User::whereHas('roles', function ($q) use ($approverRoleId) {
             $q->where('id', $approverRoleId);
         })->when($companyId, fn($q) => $q->where('company_id', $companyId));
@@ -231,6 +359,9 @@ class ExpenseRequestController extends Controller
         $amount = $expenseRequest->amount;
         $description = $expenseRequest->description;
         $actionUrl = route('hrms.expense-requests.index');
+        $approveUrl = route('hrms.expense-requests.email-approve', $expenseRequest);
+        $rejectUrl  = route('hrms.expense-requests.email-reject', $expenseRequest);
+        $stepNumber = $expenseRequest->current_step ?? 1;
 
         try {
             Mail::send('emails.expense_request_notification', [
@@ -241,12 +372,53 @@ class ExpenseRequestController extends Controller
                 'amount'          => $amount,
                 'description'     => $description,
                 'actionUrl'       => $actionUrl,
-            ], function ($message) use ($emails, $applicantName) {
+                'approveUrl'      => $approveUrl,
+                'rejectUrl'       => $rejectUrl,
+                'stepNumber'      => $stepNumber,
+            ], function ($message) use ($emails, $applicantName, $stepNumber) {
                 $message->to($emails)
-                        ->subject("Expense Approval Request from {$applicantName} - myAgenci.ai HRMS");
+                        ->subject("Expense Approval Request (Stage {$stepNumber}) from {$applicantName} - myAgenci.ai HRMS");
             });
         } catch (\Throwable $e) {
             \Log::error('Expense request email failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper to notify applicant when request status is finalized (Approved or Rejected).
+     */
+    private function sendApplicantStatusNotification(ExpenseRequest $expenseRequest, string $status, ?string $rejectionReason = null): void
+    {
+        $applicantUser = $expenseRequest->user;
+        if (! $applicantUser || ! $applicantUser->email) {
+            return;
+        }
+
+        $approverUser = auth()->user();
+        $categoryName = $expenseRequest->category?->name ?? 'General Expense';
+        $amount = $expenseRequest->amount;
+        $actionUrl = route('hrms.expense-requests.index');
+
+        try {
+            Mail::send('emails.hrms.approval-flow', [
+                'notifiable' => $applicantUser,
+                'payload'    => [
+                    'title'        => "Expense Request " . ucfirst($status),
+                    'message'      => $status === 'approved' 
+                        ? "Your expense request of ₹" . number_format($amount, 2) . " for {$categoryName} has been fully approved."
+                        : "Your expense request of ₹" . number_format($amount, 2) . " for {$categoryName} was rejected.",
+                    'status'       => $status,
+                    'request_type' => 'Expense Request',
+                    'detail'       => $status === 'rejected' ? "Reason: " . ($rejectionReason ?: 'No reason provided') : "Category: {$categoryName} | Amount: ₹" . number_format($amount, 2),
+                    'action_url'   => $actionUrl,
+                    'actor_name'   => $approverUser?->name ?? 'Approver',
+                ],
+            ], function ($message) use ($applicantUser, $status) {
+                $message->to($applicantUser->email)
+                        ->subject("Your Expense Request has been " . ucfirst($status) . " - myAgenci.ai HRMS");
+            });
+        } catch (\Throwable $e) {
+            \Log::error('Expense applicant status email failed: ' . $e->getMessage());
         }
     }
 }

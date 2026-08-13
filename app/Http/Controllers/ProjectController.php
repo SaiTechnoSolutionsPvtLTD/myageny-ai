@@ -556,7 +556,11 @@ class ProjectController extends Controller
         $isAdminLike = $user->hasAdminLikeRole();
 
         $allUsers = $isAdminLike ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) : collect();
-        $departments = $isAdminLike ? \App\Models\Department::orderBy('name')->get(['id', 'name']) : collect();
+        $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
+            ? ($user->isDevelopmentProjectCoordinator()
+                ? \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orderBy('name')->get(['id', 'name'])
+                : \App\Models\Department::orderBy('name')->get(['id', 'name']))
+            : collect();
 
         if ($isAdminLike) {
             $assignedProjects = ProductionInitiation::query()
@@ -1797,7 +1801,13 @@ class ProjectController extends Controller
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved']);
 
-        if ($this->shouldLimitToAssignedProjects($user)) {
+        if ($user->isDevelopmentProjectCoordinator()) {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($devDeptIds) {
+                $q->whereIn('department_id', $devDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $query
                 ->where('project_allocation_status', 'allocated')
                 ->whereJsonContains('project_allocated_tl_user_ids', $user->id);
@@ -2134,6 +2144,10 @@ class ProjectController extends Controller
     private function ensureProjectIsVisibleToUser(ProductionInitiation $productionInitiation, User $user): void
     {
         $productionInitiation->loadMissing($this->projectRelations());
+
+        if ($user->isDevelopmentProjectCoordinator()) {
+            abort_unless($this->isDevelopmentProject($productionInitiation), 403, 'Development Project Coordinator can only view Development Department projects.');
+        }
 
         abort_unless($this->resolveBucketForUser($productionInitiation, $user) !== null, 404);
 

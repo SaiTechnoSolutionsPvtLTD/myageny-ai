@@ -212,11 +212,17 @@ class DashboardController extends Controller
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
+        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
+        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
+            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+
         $overdueQuery = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()));
         $overdueCount = (clone $overdueQuery)->where('remind_at', '<', now())->count();
 
         $todayReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
@@ -233,6 +239,28 @@ class DashboardController extends Controller
                 'type_icon'   => $r->type_icon,
                 'priority'    => $r->priority,
                 'is_overdue'  => $r->is_overdue,
+                'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
+                'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
+            ]);
+
+        $overdueReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
+            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
+            ->with(['lead:id,company_name', 'user:id,name'])
+            ->orderBy('remind_at', 'desc')
+            ->take(15)
+            ->get()
+            ->map(fn($r) => [
+                'id'          => $r->id,
+                'title'       => $r->title,
+                'description' => $r->description,
+                'remind_at'   => $r->remind_at->toISOString(),
+                'type'        => $r->type,
+                'type_label'  => $r->type_label,
+                'type_icon'   => $r->type_icon,
+                'priority'    => $r->priority,
+                'is_overdue'  => true,
                 'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
@@ -419,6 +447,7 @@ class DashboardController extends Controller
                     'overdue_count' => $overdueCount,
                     'today_count'   => $todayReminders->count(),
                     'items'         => $todayReminders,
+                    'overdue_items' => $overdueReminders,
                 ],
 
                 'recent_leads' => $recentLeads,

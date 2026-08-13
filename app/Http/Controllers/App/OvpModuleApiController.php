@@ -16,8 +16,24 @@ use App\Services\NotificationService;
 
 class OvpModuleApiController extends Controller
 {
-    private const OVP_TL_ROLE_KEYS = ['customer_support_team_tl'];
-    private const OVP_EXECUTIVE_ROLE_KEYS = ['customer_support_team_executive'];
+    private const OVP_TL_ROLE_KEYS = [
+        'customer_support_team_tl',
+        'senior_customer_success_team_executive',
+        'senior_customer_success_executive',
+        'senior_success_executive',
+        'senior_customer_support_executive',
+        'senior_support_executive',
+        'senior_cst_executive',
+    ];
+    private const OVP_EXECUTIVE_ROLE_KEYS = [
+        'customer_support_team_executive',
+        'customer_support_executive',
+        'customer_success_executive',
+        'senior_customer_success_team_executive',
+        'cst_executive',
+        'support_executive',
+        'executive',
+    ];
 
     public function __construct(private readonly NotificationService $notifications)
     {
@@ -551,22 +567,18 @@ class OvpModuleApiController extends Controller
         };
 
         $managed = $user->hasAdminLikeRole() ? collect() : $user->managedUsers()->where('users.is_active', true)->with(['roles.department'])->get();
-        if ($this->isTlScopedUser($user) && $user->is_active) {
-            $user->loadMissing(['roles.department']);
-            $managed = $managed->prepend($user)->unique('id')->values();
-        }
-
-        $result = $format($managed);
-        if ($result->isNotEmpty()) return $result;
-
         $company = User::where('is_active', true)
             ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
             ->with(['roles.department'])->get();
+
+        $allCandidates = $managed->concat($company)->unique('id')->values();
+
         if ($this->isTlScopedUser($user) && $user->is_active) {
-            $company = $company->prepend($user)->unique('id')->values();
+            $user->loadMissing(['roles.department']);
+            $allCandidates = $allCandidates->prepend($user)->unique('id')->values();
         }
 
-        return $format($company);
+        return $format($allCandidates);
     }
 
     private function hasAnyRoleKey(User $user, array $keys): bool

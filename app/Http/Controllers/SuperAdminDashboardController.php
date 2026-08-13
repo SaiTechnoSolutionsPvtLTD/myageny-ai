@@ -143,16 +143,29 @@ class SuperAdminDashboardController extends ApiController
             ];
         }
 
-        // ── 5. Today's follow-ups ─────────────────────────────────
-        $todayFollowups = LeadCallUpdate::whereDate('next_follow_up', today())
-            ->whereHas('lead', function ($q) use ($request, $branchId, $userId, $stage, $source, $dateFrom, $dateTo) {
+        // ── 5. Today's follow-ups / Scheduled Followups ───────────
+        $currentUser = $request->user();
+        $isUserAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $effectiveUserId = $request->filled('user_id') ? (int) $request->user_id : ($isUserAdmin ? null : (int) $currentUser->id);
+
+        $todayFollowupsQuery = LeadCallUpdate::whereDate('next_follow_up', today())
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
                     ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
                     ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
-            })
+            });
+
+        if ($effectiveUserId) {
+            $todayFollowupsQuery->where(function ($q) use ($effectiveUserId) {
+                $q->where('user_id', $effectiveUserId)
+                  ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+            });
+        }
+
+        $todayFollowups = $todayFollowupsQuery
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
                 'lead.branch:id,name',
@@ -160,11 +173,11 @@ class SuperAdminDashboardController extends ApiController
                 'user:id,name'
             ])
             ->latest()
-            ->take(10)
+            ->take(15)
             ->get()
             ->map(fn($fu) => [
                 'id'              => $fu->id,
-                'called_at'       => $fu->called_at->toISOString(),
+                'called_at'       => $fu->called_at?->toISOString(),
                 'call_type'       => $fu->call_type,
                 'call_type_label' => $fu->call_type_label,
                 'outcome'         => $fu->outcome,
@@ -186,11 +199,17 @@ class SuperAdminDashboardController extends ApiController
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
+        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
+        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
+            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+
         $overdueCount = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->where('remind_at', '<', now())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
@@ -206,7 +225,28 @@ class SuperAdminDashboardController extends ApiController
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,
                 'priority'    => $r->priority,
-                'is_overdue'  => $r->is_overdue,
+                'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
+                'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
+            ]);
+
+        $overdueReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
+            ->with(['lead:id,company_name', 'user:id,name'])
+            ->orderBy('remind_at', 'desc')
+            ->take(15)
+            ->get()
+            ->map(fn($r) => [
+                'id'          => $r->id,
+                'title'       => $r->title,
+                'description' => $r->description,
+                'remind_at'   => $r->remind_at->toISOString(),
+                'type'        => $r->type,
+                'type_label'  => $r->type_label,
+                'type_icon'   => $r->type_icon,
+                'priority'    => $r->priority,
+                'is_overdue'  => true,
                 'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
@@ -372,6 +412,7 @@ class SuperAdminDashboardController extends ApiController
                 'converted_value'   => $convertedValue,
                 'converted_percentage' => $convertedPercentage,
                 'followups_count'   => $followupsCount,
+                'scheduled_followups_count' => $todayFollowups->count(),
             ],
 
             'financials' => [
@@ -400,10 +441,16 @@ class SuperAdminDashboardController extends ApiController
                 'items'  => $todayFollowups,
             ],
 
+            'today_scheduled_followups' => [
+                'count'  => $todayFollowups->count(),
+                'items'  => $todayFollowups,
+            ],
+
             'reminders' => [
                 'overdue_count' => $overdueCount,
                 'today_count'   => $todayReminders->count(),
                 'items'         => $todayReminders,
+                'overdue_items' => $overdueReminders,
             ],
 
             'recent_leads' => $recentLeads,
@@ -760,16 +807,29 @@ class SuperAdminDashboardController extends ApiController
             ];
         }
 
-        // ── 5. Today's follow-ups ─────────────────────────────────
-        $todayFollowups = LeadCallUpdate::whereDate('next_follow_up', today())
-            ->whereHas('lead', function ($q) use ($request, $branchId, $userId, $stage, $source, $dateFrom, $dateTo) {
+        // ── 5. Today's follow-ups / Scheduled Followups ───────────
+        $currentUser = $request->user();
+        $isUserAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $effectiveUserId = $request->filled('user_id') ? (int) $request->user_id : ($isUserAdmin ? null : (int) $currentUser->id);
+
+        $todayFollowupsQuery = LeadCallUpdate::whereDate('next_follow_up', today())
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId))
+                    ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
                     ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
                     ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
-            })
+            });
+
+        if ($effectiveUserId) {
+            $todayFollowupsQuery->where(function ($q) use ($effectiveUserId) {
+                $q->where('user_id', $effectiveUserId)
+                  ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+            });
+        }
+
+        $todayFollowups = $todayFollowupsQuery
             ->with([
                 'lead:id,company_name,contact_name,mobile_number,lead_status,branch_id,assigned_to',
                 'lead.branch:id,name',
@@ -777,11 +837,11 @@ class SuperAdminDashboardController extends ApiController
                 'user:id,name'
             ])
             ->latest()
-            ->take(10)
+            ->take(15)
             ->get()
             ->map(fn($fu) => [
                 'id'              => $fu->id,
-                'called_at'       => $fu->called_at->toISOString(),
+                'called_at'       => $fu->called_at?->toISOString(),
                 'call_type'       => $fu->call_type,
                 'call_type_label' => $fu->call_type_label,
                 'outcome'         => $fu->outcome,
@@ -803,11 +863,17 @@ class SuperAdminDashboardController extends ApiController
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
+        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
+        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
+            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+
         $overdueCount = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->where('remind_at', '<', now())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
@@ -824,6 +890,28 @@ class SuperAdminDashboardController extends ApiController
                 'type_icon'   => $r->type_icon,
                 'priority'    => $r->priority,
                 'is_overdue'  => $r->is_overdue,
+                'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
+                'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
+            ]);
+
+        $overdueReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
+            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
+            ->with(['lead:id,company_name', 'user:id,name'])
+            ->orderBy('remind_at', 'desc')
+            ->take(15)
+            ->get()
+            ->map(fn($r) => [
+                'id'          => $r->id,
+                'title'       => $r->title,
+                'description' => $r->description,
+                'remind_at'   => $r->remind_at->toISOString(),
+                'type'        => $r->type,
+                'type_label'  => $r->type_label,
+                'type_icon'   => $r->type_icon,
+                'priority'    => $r->priority,
+                'is_overdue'  => true,
                 'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
@@ -1010,6 +1098,7 @@ class SuperAdminDashboardController extends ApiController
                 'upcoming_amount'   => $upcomingAmount,
                 'converted_value'   => $convertedValue,
                 'converted_percentage' => $convertedPercentage,
+                'scheduled_followups_count' => $todayFollowups->count(),
             ],
 
             'trends' => [
@@ -1055,10 +1144,16 @@ class SuperAdminDashboardController extends ApiController
                 'items'  => $todayFollowups,
             ],
 
+            'today_scheduled_followups' => [
+                'count'  => $todayFollowups->count(),
+                'items'  => $todayFollowups,
+            ],
+
             'reminders' => [
                 'overdue_count' => $overdueCount,
                 'today_count'   => $todayReminders->count(),
                 'items'         => $todayReminders,
+                'overdue_items' => $overdueReminders,
             ],
 
             'recent_leads' => $recentLeads,

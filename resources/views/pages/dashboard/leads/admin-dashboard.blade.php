@@ -531,7 +531,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 7; $i++)
+                @for($i = 0; $i < 8; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -724,6 +724,17 @@
             </div>
         </div>
 
+        {{-- ── Today Scheduled Followups Card ── --}}
+        <div class="da-card" style="margin-bottom:24px">
+            <div class="da-card-head">
+                <div class="da-card-title">📅 Today Scheduled Followups</div>
+                <span class="da-badge" id="daScheduledFollowupBadge">–</span>
+            </div>
+            <div id="daScheduledFollowupBody" style="max-height:420px;overflow-y:auto">
+                <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
+            </div>
+        </div>
+
         {{-- ── Follow-ups + Reminders ── --}}
         <div class="da-two-col">
             <div class="da-card">
@@ -737,8 +748,10 @@
             </div>
             <div class="da-card">
                 <div class="da-card-head">
-                    <div class="da-card-title">🔔 Pending Reminders Today</div>
-                    <span class="da-badge" id="daReminderBadge">–</span>
+                    <div class="da-card-title">🔔 Pending Reminders</div>
+                    <div id="daReminderBadge" style="display:flex;gap:6px;align-items:center">
+                        <span class="da-badge">–</span>
+                    </div>
                 </div>
                 <div id="daReminderBody" style="max-height:400px;overflow-y:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
@@ -999,6 +1012,7 @@ function renderAll(d) {
     renderBranchPerf(d.branch_performance);
     renderTeamPerf(d.team_performance);
     renderFollowups(d.today_followups);
+    renderScheduledFollowups(d.today_scheduled_followups || d.today_followups);
     renderReminders(d.reminders);
     renderRecentLeads(d.recent_leads);
 }
@@ -1123,6 +1137,8 @@ function renderKpis(k, filters) {
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
         { accent:'rose',   val:k.followups_count,  label:'Followups Count',   sub:'Today\'s reminders count',
           svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
+        { accent:'orange', val:(k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0), label:'Today Scheduled Followups', sub:'Followups set for today',
+          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
     ];
 
     var html = kpis.map(function(kpi) {
@@ -1207,6 +1223,9 @@ window.navigateToFunnelStage = function(stageVal) {
     if (stageVal) {
         params.set('product_status', stageVal);
     }
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
     if (dates.from) {
         params.set('date_from', dates.from);
     }
@@ -1290,6 +1309,9 @@ window.navigateToSource = function(sourceVal) {
 
     if (sourceVal) {
         params.set('lead_source', sourceVal);
+    }
+    if (state.quick) {
+        params.set('quick_date', state.quick);
     }
     if (dates.from) {
         params.set('date_from', dates.from);
@@ -1459,30 +1481,105 @@ function renderFollowups(fu) {
     document.getElementById('daFollowupBody').innerHTML = html;
 }
 
-/* ── Reminders ── */
-function renderReminders(r) {
-    var badge = r.overdue_count > 0 ? r.today_count + ' today · <span style="color:var(--da-red)">' + r.overdue_count + ' overdue</span>' : r.today_count + ' pending';
-    document.getElementById('daReminderBadge').innerHTML = badge;
+/* ── Today Scheduled Followups ── */
+function renderScheduledFollowups(fu) {
+    var count = fu ? (fu.count !== undefined ? fu.count : (fu.items ? fu.items.length : 0)) : 0;
+    var badgeEl = document.getElementById('daScheduledFollowupBadge');
+    if (badgeEl) {
+        badgeEl.textContent = count + ' scheduled today';
+    }
 
-    if (!r.items.length) { document.getElementById('daReminderBody').innerHTML = empty('✅','No pending reminders today'); return; }
+    if (!fu || !fu.items || !fu.items.length) {
+        document.getElementById('daScheduledFollowupBody').innerHTML = empty('📅', 'No follow-ups scheduled for today');
+        return;
+    }
+
+    var html = fu.items.map(function(f) {
+        var oc = f.outcome_color || { bg:'#f5f4f6', text:'#7c7c7c' };
+        var leadId = f.lead?.id;
+        var clickAttr = leadId ? 'onclick="window.location=\'' + LEAD_BASE + '/' + leadId + '\'" style="cursor:pointer;"' : '';
+
+        return '<div class="da-followup-item" ' + clickAttr + '>' +
+            '<div class="da-followup-dot" style="background:' + oc.text + '"></div>' +
+            '<div class="da-followup-body">' +
+            '<div class="da-followup-company" style="font-weight:700;color:var(--da-dark);font-size:14px">' + (f.lead?.company_name || f.lead?.contact_name || ('Lead #' + (f.lead?.id || ''))) + '</div>' +
+            '<div class="da-followup-meta">' + (f.lead?.contact_name || '') + (f.lead?.mobile_number ? ' · ' + f.lead.mobile_number : '') + '</div>' +
+            '<div class="da-followup-tags" style="margin-top:4px">' +
+            '<span class="da-pill" style="font-size:10px;background:' + oc.bg + ';color:' + oc.text + '">' + (f.outcome_label || f.outcome || 'Scheduled') + '</span>' +
+            (f.notes ? '<span style="font-size:11px;color:var(--da-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px">' + f.notes + '</span>' : '') +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--da-muted);margin-top:4px">' +
+            (f.lead?.assigned_to?.name ? 'Assigned to: <strong>' + f.lead.assigned_to.name + '</strong>' : '') +
+            (f.logged_by?.name ? ' · Scheduled by: ' + f.logged_by.name : '') +
+            '</div>' +
+            '</div>' +
+            '<div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
+            '<span class="da-pill" style="background:#fff7ed;color:#ea580c;font-weight:700;font-size:11px">Today</span>' +
+            (leadId ? '<span style="font-size:11px;color:var(--da-orange);font-weight:700">View Lead →</span>' : '') +
+            '</div></div>';
+    }).join('');
+
+    document.getElementById('daScheduledFollowupBody').innerHTML = html;
+}
+
+/* ── Reminders ── */
+var _remindersData = null;
+var _activeReminderTab = 'today';
+
+window.switchReminderTab = function(tab) {
+    _activeReminderTab = tab;
+    if (_remindersData) {
+        drawRemindersList(_remindersData);
+    }
+};
+
+function renderReminders(r) {
+    _remindersData = r;
+    drawRemindersList(r);
+}
+
+function drawRemindersList(r) {
+    var todayCnt = r.today_count || (r.items ? r.items.length : 0);
+    var overdueCnt = r.overdue_count || (r.overdue_items ? r.overdue_items.length : 0);
+
+    var badgeContainer = document.getElementById('daReminderBadge');
+    if (badgeContainer) {
+        badgeContainer.innerHTML =
+            '<button type="button" onclick="switchReminderTab(\'today\')" style="cursor:pointer;border:none;border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;' +
+            (_activeReminderTab === 'today' ? 'background:var(--da-orange);color:#fff;' : 'background:#f5f4f6;color:var(--da-dark);') + '">Today (' + todayCnt + ')</button>' +
+            '<button type="button" onclick="switchReminderTab(\'overdue\')" style="cursor:pointer;border:none;border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;' +
+            (_activeReminderTab === 'overdue' ? 'background:var(--da-red);color:#fff;' : 'background:#fef2f2;color:var(--da-red);') + '">Overdue (' + overdueCnt + ')</button>';
+    }
+
+    var items = _activeReminderTab === 'overdue' ? (r.overdue_items || []) : (r.items || []);
+
+    if (!items.length) {
+        var emptyMsg = _activeReminderTab === 'overdue' ? 'No overdue reminders' : 'No pending reminders today';
+        document.getElementById('daReminderBody').innerHTML = empty(_activeReminderTab === 'overdue' ? '🎉' : '✅', emptyMsg);
+        return;
+    }
 
     var priBg  = { low:'#f0fdf4', medium:'#fffbeb', high:'#fef2f2' };
     var priClr = { low:'#16a34a', medium:'#b45309', high:'#dc2626' };
 
-    var html = r.items.map(function(rem) {
+    var html = items.map(function(rem) {
         var bg  = priBg[rem.priority]  || '#f5f4f6';
         var clr = priClr[rem.priority] || '#7c7c7c';
-        var overdue = rem.is_overdue;
-        return '<div class="da-rem-item" style="' + (overdue ? 'background:#fffafa' : '') + '">' +
+        var overdue = rem.is_overdue || _activeReminderTab === 'overdue';
+        var leadId = rem.lead?.id;
+        var dateStr = new Date(rem.remind_at).toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+        return '<div class="da-rem-item" ' + (leadId ? 'onclick="window.location=\'' + LEAD_BASE + '/' + leadId + '\'" style="cursor:pointer;' + (overdue ? 'background:#fffafa' : '') + '"' : 'style="' + (overdue ? 'background:#fffafa' : '') + '"') + '>' +
             '<div class="da-rem-ico" style="background:' + (overdue ? '#fef2f2' : '#f5f4f6') + '">' + (rem.type_icon || '📌') + '</div>' +
             '<div class="da-rem-body">' +
-            '<div class="da-rem-title">' + rem.title + '</div>' +
-            '<div class="da-rem-meta">' + (rem.lead?.company_name || '—') + (rem.user?.name ? ' · ' + rem.user.name : '') + '</div>' +
+            '<div class="da-rem-title" style="font-weight:700;color:var(--da-dark)">' + rem.title + '</div>' +
+            '<div class="da-rem-meta">' + (rem.lead?.company_name ? '<strong>' + rem.lead.company_name + '</strong>' : '—') + (rem.user?.name ? ' · ' + rem.user.name : '') + '</div>' +
             '<div class="da-rem-tags">' +
-            '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' +
-            new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + (overdue ? ' (Overdue)' : '') + '</span>' +
+            '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' + dateStr + (overdue ? ' (Overdue)' : '') + '</span>' +
             '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + (rem.priority ? (rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1)) : '—') + '</span>' +
-            '</div></div></div>';
+            '</div></div>' +
+            (leadId ? '<div style="margin-left:auto;font-size:11px;color:var(--da-orange);font-weight:700;white-space:nowrap;padding-left:6px">View Lead →</div>' : '') +
+            '</div>';
     }).join('');
     document.getElementById('daReminderBody').innerHTML = html;
 }

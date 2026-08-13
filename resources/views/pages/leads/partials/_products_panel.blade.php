@@ -495,6 +495,19 @@
                 <label class="ppf-lbl">Select Products <span class="ppf-req">*</span>
                     <span style="font-weight:400;text-transform:none;color:#9e9e9e;margin-left:6px">Hold Ctrl/Cmd to select multiple</span>
                 </label>
+
+                {{-- Product Search Box --}}
+                <div class="ppf-rel" style="margin-bottom:8px;">
+                    <svg class="ppf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" id="pp-product-search-input" class="ppf-inp"
+                           placeholder="🔍 Search products by name, category..."
+                           onkeyup="PP.ppFilterProducts(this.value)"
+                           oninput="PP.ppFilterProducts(this.value)">
+                </div>
+
                 <div id="pp-product-loading" class="pp-loading-wrap" style="display:none;padding:12px 0">
                     <div class="pp-spinner"></div>
                     <span style="font-size:12px;color:#9e9e9e">Loading products…</span>
@@ -503,6 +516,9 @@
                         multiple onchange="PP.ppOnProductSelect()">
                     <option disabled>Loading products…</option>
                 </select>
+                <div id="pp-product-no-results" style="display:none; font-size:12px; color:#ef4444; margin-top:6px;">
+                    No products match your search query.
+                </div>
             </div>
 
             {{-- Dynamic selected products table --}}

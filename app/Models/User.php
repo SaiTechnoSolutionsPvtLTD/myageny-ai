@@ -475,7 +475,13 @@ class User extends Authenticatable
             'design_team_lead',
             'team_lead_digital_marketing',
             'software_team_leader',
-            'human_resource'
+            'human_resource',
+            'senior_customer_success_team_executive',
+            'senior_customer_success_executive',
+            'senior_success_executive',
+            'senior_customer_support_executive',
+            'senior_support_executive',
+            'senior_cst_executive',
         ])->isNotEmpty()) {
             return true;
         }
@@ -504,6 +510,27 @@ class User extends Authenticatable
             'chief_business_officer',
             'development_project_coordinator'
         ])->isNotEmpty();
+    }
+
+    public function isDevelopmentProjectCoordinator(): bool
+    {
+        $keys = collect($this->roleKeys()->all());
+        if ($keys->contains('development_project_coordinator')) {
+            return true;
+        }
+
+        return $this->resolvedRoles(withDepartment: true)->contains(function ($role) {
+            $roleNameKey = \Illuminate\Support\Str::slug((string) $role->name, '_');
+            $displayNameKey = \Illuminate\Support\Str::slug((string) ($role->display_name ?? ''), '_');
+            $deptKey = \Illuminate\Support\Str::slug((string) ($role->department?->name ?? ''), '_');
+
+            if ($roleNameKey === 'development_project_coordinator' || $displayNameKey === 'development_project_coordinator') {
+                return true;
+            }
+
+            $isPc = collect([$roleNameKey, $displayNameKey])->intersect(['project_coordinator', 'project_coordination', 'pc'])->isNotEmpty();
+            return $isPc && \Illuminate\Support\Str::contains($deptKey, 'develop');
+        });
     }
 
     public function canViewBudgetApprovalDetails(): bool

@@ -10,6 +10,7 @@
         || request()->routeIs('projects.my-accounts.show');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
         || request()->routeIs('hrms.petty-cash.*')
+        || request()->routeIs('hrms.expense-requests.*')
         || request()->routeIs('hrms.masters.*')
         || request()->routeIs('employee-onboarding.*')
         || request()->routeIs('recruitment.*')
@@ -47,8 +48,24 @@
         $currentUser = auth()->user();
 
         if ($currentUser->can('ovp_module.menuview')) {
-            $ovpTlRoleKeys = ['customer_support_team_tl'];
-            $ovpExecutiveRoleKeys = ['customer_support_team_executive'];
+            $ovpTlRoleKeys = [
+                'customer_support_team_tl',
+                'senior_customer_success_team_executive',
+                'senior_customer_success_executive',
+                'senior_success_executive',
+                'senior_customer_support_executive',
+                'senior_support_executive',
+                'senior_cst_executive',
+            ];
+            $ovpExecutiveRoleKeys = [
+                'customer_support_team_executive',
+                'customer_support_executive',
+                'customer_success_executive',
+                'senior_customer_success_team_executive',
+                'cst_executive',
+                'support_executive',
+                'executive',
+            ];
 
             $normalizeRole = function(string $value): string {
                 $value = \Illuminate\Support\Str::contains($value, '__') ? \Illuminate\Support\Str::afterLast($value, '__') : $value;
@@ -379,7 +396,8 @@
                 @endcan
                 @endif
 
-                {{--  <a href="{{ route('hrms.expense-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.expense-requests.*') ? 'active' : '' }}">
+                @can('expense_request.menuview')
+                <a href="{{ route('hrms.expense-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.expense-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.expense-requests.*'))
                         <div class="active-indicator"></div>
                     @endif
@@ -389,7 +407,8 @@
                         </svg>
                         <span>Expense Request</span>
                     </div>
-                </a>  --}}
+                </a>
+                @endcan
 
                 @if(! $hrmsSelfService)
                 @can('announcements.menuview')

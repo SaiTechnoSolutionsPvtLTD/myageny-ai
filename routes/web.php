@@ -306,6 +306,8 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('hrms/expense-requests')->name('hrms.expense-requests.')->group(function () {
         Route::get('/', [\App\Http\Controllers\ExpenseRequestController::class, 'index'])->name('index');
         Route::post('/', [\App\Http\Controllers\ExpenseRequestController::class, 'store'])->name('store');
+        Route::get('/{expenseRequest}/email-approve', [\App\Http\Controllers\ExpenseRequestController::class, 'emailApprove'])->name('email-approve');
+        Route::get('/{expenseRequest}/email-reject', [\App\Http\Controllers\ExpenseRequestController::class, 'emailRejectPage'])->name('email-reject');
         Route::post('/{expenseRequest}/approve', [\App\Http\Controllers\ExpenseRequestController::class, 'approve'])->name('approve');
         Route::post('/{expenseRequest}/reject', [\App\Http\Controllers\ExpenseRequestController::class, 'reject'])->name('reject');
     });
@@ -350,11 +352,19 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:house_keeping.menuview')
         ->name('house-keeping.attendances.destroy');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/leave-requests/{leaveRequest}/approvals/{approval}/email-approve', [LeaveRequestController::class, 'emailApprove'])
+        ->name('leave-requests.email-approve');
+    Route::get('/leave-requests/{leaveRequest}/approvals/{approval}/email-reject', [LeaveRequestController::class, 'emailRejectPage'])
+        ->name('leave-requests.email-reject');
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
         ->name('leave-requests.approve');
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/reject', [LeaveRequestController::class, 'reject'])
         ->name('leave-requests.reject');
     Route::resource('permission-requests', PermissionRequestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/permission-requests/{permissionRequest}/approvals/{approval}/email-approve', [PermissionRequestController::class, 'emailApprove'])
+        ->name('permission-requests.email-approve');
+    Route::get('/permission-requests/{permissionRequest}/approvals/{approval}/email-reject', [PermissionRequestController::class, 'emailRejectPage'])
+        ->name('permission-requests.email-reject');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestController::class, 'approve'])
         ->name('permission-requests.approve');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/reject', [PermissionRequestController::class, 'reject'])

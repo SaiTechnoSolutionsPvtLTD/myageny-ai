@@ -318,6 +318,7 @@
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickToday" onclick="setQ('today')">Today</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickWeek" onclick="setQ('week')">Week</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickMonth" onclick="setQ('month')">Month</button>
+                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickQuarter" onclick="setQ('quarter')">Quarter</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickYear" onclick="setQ('year')">Year</button>
                         <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickAll" onclick="setQ('all')">Show All</button>
                     </div>
@@ -463,6 +464,13 @@ function updateFilters() {
     const yearStart = `${parts[0]}-01-01`;
     const yearEnd = `${parts[0]}-12-31`;
     document.getElementById('quickYear')?.classList.toggle('active', from === yearStart && to === yearEnd);
+
+    const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+    const firstQ = new Date(parts[0], qStartMonth, 1);
+    const lastQ = new Date(parts[0], qStartMonth + 3, 0);
+    const qStart = fmt(firstQ);
+    const qEnd = fmt(lastQ);
+    document.getElementById('quickQuarter')?.classList.toggle('active', from === qStart && to === qEnd);
 }
 
 function setQ(p) {
@@ -502,6 +510,12 @@ function setQ(p) {
     } else if (p === 'month') {
         targetFrom = defaultFromDate;
         targetTo = defaultToDate;
+    } else if (p === 'quarter') {
+        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(parts[0], qStartMonth, 1);
+        const lastQ = new Date(parts[0], qStartMonth + 3, 0);
+        targetFrom = fmt(firstQ);
+        targetTo = fmt(lastQ);
     } else if (p === 'year') {
         targetFrom = `${parts[0]}-01-01`;
         targetTo = `${parts[0]}-12-31`;

@@ -89,7 +89,7 @@ class DataVisibilityService
             return RoleMapping::ACCESS_COMPANY;
         }
 
-        if ($keys->intersect(['tl', 'team_leader', 'teamlead', 'manager', 'sales_manager', 'sales_head', 'branch_manager'])->isNotEmpty()) {
+        if ($keys->intersect(['tl', 'team_leader', 'teamlead', 'manager', 'sales_manager', 'sales_head', 'branch_manager', 'senior_customer_success_team_executive', 'senior_customer_success_executive', 'senior_success_executive', 'senior_customer_support_executive', 'senior_support_executive', 'senior_cst_executive'])->isNotEmpty()) {
             return RoleMapping::ACCESS_TEAM;
         }
 

@@ -19,6 +19,11 @@ class OvpModuleController extends Controller
     private const OVP_TL_ROLE_KEYS = [
         'customer_support_team_tl',
         'senior_customer_success_team_executive',
+        'senior_customer_success_executive',
+        'senior_success_executive',
+        'senior_customer_support_executive',
+        'senior_support_executive',
+        'senior_cst_executive',
     ];
 
     private const OVP_EXECUTIVE_ROLE_KEYS = [
@@ -407,11 +412,6 @@ class OvpModuleController extends Controller
                 ->values();
         }
 
-        $managedExecutives = $formatCandidates($managedUsers);
-        if ($managedExecutives->isNotEmpty()) {
-            return $managedExecutives;
-        }
-
         $companyUsers = User::query()
             ->where('is_active', true)
             ->where(function ($q) {
@@ -422,14 +422,17 @@ class OvpModuleController extends Controller
             ->with(['roles.department'])
             ->get();
 
+        $allCandidates = $managedUsers->concat($companyUsers)->unique('id')->values();
+
         if ($this->isTlScopedUser($user) && $user->is_active) {
-            $companyUsers = $companyUsers
+            $user->loadMissing(['roles.department']);
+            $allCandidates = $allCandidates
                 ->prepend($user)
                 ->unique('id')
                 ->values();
         }
 
-        return $formatCandidates($companyUsers);
+        return $formatCandidates($allCandidates);
     }
 
     private function hasAnyRoleKey(User $user, array $keys): bool
