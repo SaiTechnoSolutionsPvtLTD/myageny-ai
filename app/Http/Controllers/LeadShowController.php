@@ -32,15 +32,18 @@ class LeadShowController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
+        $outcomeCat = \App\Models\OutcomeCategory::find($request->outcome);
+        $isNotInterested = false;
+        if ($outcomeCat && strtolower(trim($outcomeCat->name)) === 'not interested') {
+            $isNotInterested = true;
+        }
+
         $data = $request->validate([
-            // 'called_at'        => ['required', 'date'],
-            // 'call_type'        => ['required', 'in:outgoing,incoming,missed'],
-            // 'duration_minutes' => ['nullable', 'integer', 'min:0'],
-            'outcome'          => ['required'],
-            'outcome_sub_category_id'          => ['required'],
-            'notes'            => ['nullable', 'string', 'max:1000'],
-            'next_follow_up'   => ['nullable', 'date', 'after_or_equal:today'],
-            'followup_time'   => ['required'],
+            'outcome'                 => ['required'],
+            'outcome_sub_category_id' => ['required'],
+            'notes'                   => ['nullable', 'string', 'max:1000'],
+            'next_follow_up'          => [$isNotInterested ? 'nullable' : 'required', 'nullable', 'date'],
+            'followup_time'           => [$isNotInterested ? 'nullable' : 'required'],
         ]);
 
         $data['lead_id'] = $lead->id;

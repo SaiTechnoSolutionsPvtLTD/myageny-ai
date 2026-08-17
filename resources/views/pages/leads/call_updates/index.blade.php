@@ -152,9 +152,11 @@
                 <div class="cu-quick-filters">
                     <span style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#9e9e9e; margin-right:4px;">Quick:</span>
                     <button type="button" class="cu-qbtn" data-preset="today">Today</button>
+                    <button type="button" class="cu-qbtn" data-preset="week">This Week</button>
                     <button type="button" class="cu-qbtn" data-preset="month">This Month</button>
                     <button type="button" class="cu-qbtn" data-preset="quarter">This Quarter</button>
                     <button type="button" class="cu-qbtn" data-preset="year">This Year</button>
+                    <button type="button" class="cu-qbtn" data-preset="all">Show All</button>
                 </div>
                 <div class="cu-row">
                     <div class="cu-group">
@@ -369,16 +371,29 @@ function closeCuModal() {
 }
 
 (() => {
-    const fmtDate = (d) => d.toISOString().slice(0, 10);
+    const fmtDate = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
     const today = new Date();
     const y = today.getFullYear(), m = today.getMonth(), q = Math.floor(m / 3);
+    const day = today.getDay();
+    const diffToMon = (day + 6) % 7;
+    const mon = new Date(y, m, today.getDate() - diffToMon);
+    const sun = new Date(y, m, today.getDate() - diffToMon + 6);
+
     const presets = {
         today:   { from: fmtDate(today), to: fmtDate(today) },
+        week:    { from: fmtDate(mon), to: fmtDate(sun) },
         month:   { from: fmtDate(new Date(y, m, 1)), to: fmtDate(new Date(y, m + 1, 0)) },
         quarter: { from: fmtDate(new Date(y, q * 3, 1)), to: fmtDate(new Date(y, q * 3 + 3, 0)) },
         year:    { from: fmtDate(new Date(y, 0, 1)), to: fmtDate(new Date(y, 11, 31)) },
+        all:     { from: '', to: '' },
     };
     const urlParams = new URLSearchParams(window.location.search);
+    const hasDateParam = urlParams.has('date_from');
     const currentFrom = urlParams.get('date_from') || '';
     const currentTo   = urlParams.get('date_to')   || '';
     const fromInput = document.getElementById('date_from');
@@ -387,12 +402,16 @@ function closeCuModal() {
 
     const defaultFrom = '{{ now()->startOfMonth()->toDateString() }}';
     const defaultTo   = '{{ now()->endOfMonth()->toDateString() }}';
-    const activeFrom  = currentFrom || defaultFrom;
-    const activeTo    = currentTo   || defaultTo;
+    const activeFrom  = hasDateParam ? currentFrom : defaultFrom;
+    const activeTo    = hasDateParam ? currentTo : defaultTo;
 
     document.querySelectorAll('.cu-qbtn').forEach(btn => {
         const preset = presets[btn.dataset.preset];
-        if (preset && activeFrom === preset.from && activeTo === preset.to) {
+        if (btn.dataset.preset === 'all') {
+            if (hasDateParam && !currentFrom && !currentTo) {
+                btn.classList.add('is-active');
+            }
+        } else if (preset && activeFrom === preset.from && activeTo === preset.to) {
             btn.classList.add('is-active');
         }
         btn.addEventListener('click', () => {

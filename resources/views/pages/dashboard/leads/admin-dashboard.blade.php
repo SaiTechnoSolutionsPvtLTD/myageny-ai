@@ -436,6 +436,7 @@
                 <button type="button" class="da-qb" data-val="month"   onclick="setQuick('month')">This Month</button>
                 <button type="button" class="da-qb" data-val="quarter" onclick="setQuick('quarter')">Quarter</button>
                 <button type="button" class="da-qb" data-val="year"    onclick="setQuick('year')">This Year</button>
+                <button type="button" class="da-qb" data-val="all"     onclick="setQuick('all')">Show All</button>
             </div>
 
             <div class="da-sep"></div>
@@ -530,7 +531,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 7; $i++)
+                @for($i = 0; $i < 8; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -708,7 +709,7 @@
                     <div class="da-card-title">🏢 Branch-wise Performance</div>
                     <span class="da-badge">Highest → Lowest</span>
                 </div>
-                <div id="daBranchBody">
+                <div id="daBranchBody" style="overflow-x:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:200px"></div></div>
                 </div>
             </div>
@@ -720,6 +721,17 @@
                 <div id="daTeamBody">
                     <div style="padding:16px"><div class="da-skel" style="height:200px"></div></div>
                 </div>
+            </div>
+        </div>
+
+        {{-- ── Today Scheduled Followups Card ── --}}
+        <div class="da-card" style="margin-bottom:24px">
+            <div class="da-card-head">
+                <div class="da-card-title">📅 Today Scheduled Followups</div>
+                <span class="da-badge" id="daScheduledFollowupBadge">–</span>
+            </div>
+            <div id="daScheduledFollowupBody" style="max-height:420px;overflow-y:auto">
+                <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
             </div>
         </div>
 
@@ -736,8 +748,10 @@
             </div>
             <div class="da-card">
                 <div class="da-card-head">
-                    <div class="da-card-title">🔔 Pending Reminders Today</div>
-                    <span class="da-badge" id="daReminderBadge">–</span>
+                    <div class="da-card-title">🔔 Pending Reminders</div>
+                    <div id="daReminderBadge" style="display:flex;gap:6px;align-items:center">
+                        <span class="da-badge">–</span>
+                    </div>
                 </div>
                 <div id="daReminderBody" style="max-height:400px;overflow-y:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
@@ -772,6 +786,7 @@
 var API_URL   = '{{ $apiBase ?? url("/api") }}/dashboard-data';
 var API_TOKEN = '{{ $apiToken ?? "" }}';   // Server-issued Sanctum token (2h expiry)
 var LEAD_BASE = '{{ $leadBase ?? url("/leads") }}';
+var LEAD_PRODUCTS_BASE = '{{ route("leads.products.index") }}';
 // Avatar colors
 var AV_COLORS = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b45309','#0f766e'];
 var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
@@ -997,6 +1012,7 @@ function renderAll(d) {
     renderBranchPerf(d.branch_performance);
     renderTeamPerf(d.team_performance);
     renderFollowups(d.today_followups);
+    renderScheduledFollowups(d.today_scheduled_followups || d.today_followups);
     renderReminders(d.reminders);
     renderRecentLeads(d.recent_leads);
 }
@@ -1005,7 +1021,7 @@ function renderAll(d) {
 function renderTargetStats(ts) {
     const cardEl = document.getElementById('daTargetCard');
     if (!cardEl) return;
-    
+
     if (!ts || ts.target <= 0) {
         cardEl.style.display = 'none';
         return;
@@ -1092,7 +1108,7 @@ function empty(icon, title) { return '<div class="da-empty"><div class="da-empty
 
 /* ── KPIs ── */
 function renderKpis(k, filters) {
-    var period = filters.quick_date ? ({ today:'Today', week:'This Week', month:'This Month', quarter:'This Quarter', year:'This Year' })[filters.quick_date] || '' : (filters.date_from ? filters.date_from + ' → ' + (filters.date_to || '…') : 'All Time');
+    var period = filters.quick_date ? ({ all:'All Time', today:'Today', week:'This Week', month:'This Month', quarter:'This Quarter', year:'This Year' })[filters.quick_date] || '' : (filters.date_from ? filters.date_from + ' → ' + (filters.date_to || '…') : 'All Time');
     document.getElementById('daKpiPeriod').textContent = period;
 
     var gradients = {
@@ -1121,6 +1137,8 @@ function renderKpis(k, filters) {
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
         { accent:'rose',   val:k.followups_count,  label:'Followups Count',   sub:'Today\'s reminders count',
           svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
+        { accent:'orange', val:(k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0), label:'Today Scheduled Followups', sub:'Followups set for today',
+          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
     ];
 
     var html = kpis.map(function(kpi) {
@@ -1138,10 +1156,10 @@ function renderKpis(k, filters) {
 /* ── Financials ── */
 function renderFinancials(f) {
     var cards = [
-        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% collected', bar:100 },
-        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of total',  bar:f.payment_percent },
+        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Collected', bar:100 },
+        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of Total',  bar:f.payment_percent },
         { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
-        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0 },
+        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0 },
     ];
     var html = cards.map(function(c) {
         return '<div class="da-fin" style="border-left-color:' + c.bc + '">' +
@@ -1152,6 +1170,77 @@ function renderFinancials(f) {
     }).join('');
     document.getElementById('daFinGrid').innerHTML = html;
 }
+
+function getFilterDates() {
+    var from = state.dateFrom || '';
+    var to = state.dateTo || '';
+
+    if (!from && !to && state.quick) {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = now.getMonth();
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        var formatDate = function(d) {
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        };
+
+        if (state.quick === 'today') {
+            from = formatDate(now);
+            to = formatDate(now);
+        } else if (state.quick === 'week') {
+            var day = now.getDay();
+            var diffToMon = (day + 6) % 7;
+            var mon = new Date(y, m, now.getDate() - diffToMon);
+            var sun = new Date(y, m, now.getDate() - diffToMon + 6);
+            from = formatDate(mon);
+            to = formatDate(sun);
+        } else if (state.quick === 'month') {
+            var first = new Date(y, m, 1);
+            var last = new Date(y, m + 1, 0);
+            from = formatDate(first);
+            to = formatDate(last);
+        } else if (state.quick === 'quarter') {
+            var qStartMonth = Math.floor(m / 3) * 3;
+            var firstQ = new Date(y, qStartMonth, 1);
+            var lastQ = new Date(y, qStartMonth + 3, 0);
+            from = formatDate(firstQ);
+            to = formatDate(lastQ);
+        } else if (state.quick === 'year') {
+            var firstY = new Date(y, 0, 1);
+            var lastY = new Date(y, 11, 31);
+            from = formatDate(firstY);
+            to = formatDate(lastY);
+        }
+    }
+
+    return { from: from, to: to };
+}
+
+window.navigateToFunnelStage = function(stageVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+
+    if (stageVal) {
+        params.set('product_status', stageVal);
+    }
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+
+    window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
+};
 
 /* ── Pipeline Funnel ── */
 function renderFunnel(f) {
@@ -1179,12 +1268,17 @@ function renderFunnel(f) {
         var bgColor = c.bg || '#eff6ff';
         var borderColor = c.border || '#bfdbfe';
 
-        return '<div class="da-funnel-row">' +
+        var stageKey = s.key || s.id || s.label || '';
+        var safeKey  = String(stageKey).replace(/'/g, "\\'");
+
+        return '<div class="da-funnel-row" onclick="navigateToFunnelStage(\'' + safeKey + '\')" style="cursor:pointer;transition:transform .15s ease;" title="Click to view ' + (s.label || 'Stage') + ' leads">' +
             '<div class="da-funnel-top">' +
-            '<div class="da-funnel-label" style="color:' + textColor + '">' + (s.label || 'Stage') + '</div>' +
+            '<div class="da-funnel-label" style="color:' + textColor + ';cursor:pointer;">' +
+            (s.label || 'Stage') +
+            '</div>' +
             '<div class="da-funnel-right">' +
             '<span class="da-funnel-pct" style="background:' + bgColor + ';color:' + textColor + ';border:1px solid ' + borderColor + '">' + (s.percent || 0) + '%</span>' +
-            '<span class="da-funnel-count" style="color:' + textColor + '">' + cnt + '</span></div></div>' +
+            '<span class="da-funnel-count" style="color:' + textColor + ';">' + cnt + '</span></div></div>' +
             '<div class="da-bar-outer"><div class="da-bar-inner" style="width:' + barW + '%;background:' + textColor + '"></div></div></div>';
     }).join('');
 
@@ -1196,8 +1290,10 @@ function renderFunnel(f) {
             var c  = s.color || { text: '#fe5f04' };
             var textColor = c.text || '#fe5f04';
             var cnt = Number(s.count) || 0;
+            var stageKey = s.key || s.id || s.label || '';
+            var safeKey  = String(stageKey).replace(/'/g, "\\'");
 
-            return '<div class="da-funnel-step" style="margin-left:' + ml + '%;width:' + w + '%;margin-bottom:3px">' +
+            return '<div class="da-funnel-step" onclick="navigateToFunnelStage(\'' + safeKey + '\')" style="margin-left:' + ml + '%;width:' + w + '%;margin-bottom:3px;cursor:pointer;" title="Click to view ' + (s.label || 'Stage') + ' leads">' +
                 '<div class="da-funnel-step-inner" style="background:' + textColor + ';opacity:' + (0.65 + i * 0.07) + '">' +
                 '<span>' + (s.label || 'Stage') + '</span><span>' + cnt + '</span></div></div>';
         }).join('') + '</div>';
@@ -1206,6 +1302,35 @@ function renderFunnel(f) {
         document.getElementById('daFunnelBody').innerHTML = rows + visual;
     }
 }
+
+window.navigateToSource = function(sourceVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+
+    if (sourceVal) {
+        params.set('lead_source', sourceVal);
+    }
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+    if (state.stage) {
+        params.set('lead_status', state.stage);
+    }
+
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
 
 /* ── Source Distribution ── */
 function renderSources(sd, payModes) {
@@ -1218,12 +1343,15 @@ function renderSources(sd, payModes) {
         var barW  = Math.round(s.count / maxSrc * 100);
         var color = colorMap[s.key] || '#7c7c7c';
         var emoji = emojiMap[s.key] || '📌';
-        return '<div class="da-source-row">' +
+        var sourceKey = s.key || s.id || s.label || '';
+        var safeKey  = String(sourceKey).replace(/'/g, "\\'");
+
+        return '<div class="da-source-row" onclick="navigateToSource(\'' + safeKey + '\')" style="cursor:pointer;transition:transform .15s ease;" title="Click to view ' + (s.label || 'Source') + ' leads">' +
             '<div class="da-source-top">' +
-            '<div class="da-source-label"><span>' + emoji + '</span>' + s.label + '</div>' +
+            '<div class="da-source-label" style="cursor:pointer;"><span>' + emoji + '</span>' + (s.label || 'Source') + '</div>' +
             '<div style="display:flex;align-items:center;gap:7px">' +
-            '<span style="font-size:10px;color:var(--da-muted);font-weight:600">' + s.percent + '%</span>' +
-            '<span style="font-size:14px;font-weight:800;color:' + color + '">' + s.count + '</span></div></div>' +
+            '<span style="font-size:10px;color:var(--da-muted);font-weight:600">' + (s.percent || 0) + '%</span>' +
+            '<span style="font-size:14px;font-weight:800;color:' + color + ';">' + s.count + '</span></div></div>' +
             '<div class="da-bar-outer" style="height:6px"><div class="da-bar-inner" style="width:' + barW + '%;background:' + color + '"></div></div></div>';
     }).join('');
 
@@ -1274,26 +1402,33 @@ function renderTrend(months) {
 function renderBranchPerf(branches) {
     if (!branches.length) { document.getElementById('daBranchBody').innerHTML = empty('🏢','No branch data'); return; }
     var rankColors = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#b45309'];
-    var maxVal = branches.reduce(function(m, b) { return Math.max(m, b.won_value); }, 1);
+    var maxVal = branches.reduce(function(m, b) {
+        var val = b.converted_value !== undefined ? b.converted_value : (b.won_value || 0);
+        return Math.max(m, val);
+    }, 1);
 
     var rows = branches.map(function(b, i) {
-        var rc   = rankColors[i] || '#9ca3af';
-        var bpct = Math.round(b.won_value / maxVal * 100);
+        var rc        = rankColors[i] || '#9ca3af';
+        var convVal   = b.converted_value !== undefined ? b.converted_value : (b.won_value || 0);
+        var convCnt   = b.converted_count !== undefined ? b.converted_count : (b.converted_leads !== undefined ? b.converted_leads : (b.won_leads || 0));
+        var convPct   = b.converted_percentage !== undefined ? b.converted_percentage : (b.conversion_rate || 0);
+        var bpct      = Math.round(convVal / maxVal * 100);
+
         return '<tr>' +
             '<td><div class="da-rank" style="background:' + rc + '20;color:' + rc + '">' + (i+1) + '</div></td>' +
             '<td><div style="font-size:13px;font-weight:700;color:var(--da-text)">' + b.branch_name + '</div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:5px;width:100%"><div style="height:100%;width:' + bpct + '%;background:' + rc + ';border-radius:2px"></div></div></td>' +
             '<td style="text-align:right;font-weight:700;color:#374151">' + b.total_leads + '</td>' +
-            '<td style="text-align:right;font-weight:700;color:var(--da-green)">' + b.won_leads + '</td>' +
-            '<td style="text-align:right;font-weight:800;color:' + rc + '">' + fmtL(b.won_value) + '</td>' +
+            '<td style="text-align:right;font-weight:700;color:var(--da-green)">' + convCnt + '</td>' +
+            '<td style="text-align:right;font-weight:800;color:' + rc + '">' + fmtL(convVal) + '</td>' +
             '<td style="text-align:right">' +
-            '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + (b.conversion_rate>=50?'#f0fdf4':'#fffbeb') + ';color:' + (b.conversion_rate>=50?'#16a34a':'#b45309') + '">' + b.conversion_rate + '%</span>' +
+            '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + (convPct>=50?'#f0fdf4':'#fffbeb') + ';color:' + (convPct>=50?'#16a34a':'#b45309') + '">' + convPct + '%</span>' +
             '</td></tr>';
     }).join('');
 
     document.getElementById('daBranchBody').innerHTML =
         '<table class="da-perf-tbl"><thead><tr>' +
-        '<th>#</th><th>Branch</th><th style="text-align:right">Leads</th><th style="text-align:right">Won</th><th style="text-align:right">Won Value</th><th style="text-align:right">Conv.</th>' +
+        '<th>#</th><th>Branch</th><th style="text-align:right">Leads</th><th style="text-align:right">Converted Count</th><th style="text-align:right">Converted Value</th><th style="text-align:right">Converted %</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -1346,30 +1481,105 @@ function renderFollowups(fu) {
     document.getElementById('daFollowupBody').innerHTML = html;
 }
 
-/* ── Reminders ── */
-function renderReminders(r) {
-    var badge = r.overdue_count > 0 ? r.today_count + ' today · <span style="color:var(--da-red)">' + r.overdue_count + ' overdue</span>' : r.today_count + ' pending';
-    document.getElementById('daReminderBadge').innerHTML = badge;
+/* ── Today Scheduled Followups ── */
+function renderScheduledFollowups(fu) {
+    var count = fu ? (fu.count !== undefined ? fu.count : (fu.items ? fu.items.length : 0)) : 0;
+    var badgeEl = document.getElementById('daScheduledFollowupBadge');
+    if (badgeEl) {
+        badgeEl.textContent = count + ' scheduled today';
+    }
 
-    if (!r.items.length) { document.getElementById('daReminderBody').innerHTML = empty('✅','No pending reminders today'); return; }
+    if (!fu || !fu.items || !fu.items.length) {
+        document.getElementById('daScheduledFollowupBody').innerHTML = empty('📅', 'No follow-ups scheduled for today');
+        return;
+    }
+
+    var html = fu.items.map(function(f) {
+        var oc = f.outcome_color || { bg:'#f5f4f6', text:'#7c7c7c' };
+        var leadId = f.lead?.id;
+        var clickAttr = leadId ? 'onclick="window.location=\'' + LEAD_BASE + '/' + leadId + '\'" style="cursor:pointer;"' : '';
+
+        return '<div class="da-followup-item" ' + clickAttr + '>' +
+            '<div class="da-followup-dot" style="background:' + oc.text + '"></div>' +
+            '<div class="da-followup-body">' +
+            '<div class="da-followup-company" style="font-weight:700;color:var(--da-dark);font-size:14px">' + (f.lead?.company_name || f.lead?.contact_name || ('Lead #' + (f.lead?.id || ''))) + '</div>' +
+            '<div class="da-followup-meta">' + (f.lead?.contact_name || '') + (f.lead?.mobile_number ? ' · ' + f.lead.mobile_number : '') + '</div>' +
+            '<div class="da-followup-tags" style="margin-top:4px">' +
+            '<span class="da-pill" style="font-size:10px;background:' + oc.bg + ';color:' + oc.text + '">' + (f.outcome_label || f.outcome || 'Scheduled') + '</span>' +
+            (f.notes ? '<span style="font-size:11px;color:var(--da-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px">' + f.notes + '</span>' : '') +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--da-muted);margin-top:4px">' +
+            (f.lead?.assigned_to?.name ? 'Assigned to: <strong>' + f.lead.assigned_to.name + '</strong>' : '') +
+            (f.logged_by?.name ? ' · Scheduled by: ' + f.logged_by.name : '') +
+            '</div>' +
+            '</div>' +
+            '<div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
+            '<span class="da-pill" style="background:#fff7ed;color:#ea580c;font-weight:700;font-size:11px">Today</span>' +
+            (leadId ? '<span style="font-size:11px;color:var(--da-orange);font-weight:700">View Lead →</span>' : '') +
+            '</div></div>';
+    }).join('');
+
+    document.getElementById('daScheduledFollowupBody').innerHTML = html;
+}
+
+/* ── Reminders ── */
+var _remindersData = null;
+var _activeReminderTab = 'today';
+
+window.switchReminderTab = function(tab) {
+    _activeReminderTab = tab;
+    if (_remindersData) {
+        drawRemindersList(_remindersData);
+    }
+};
+
+function renderReminders(r) {
+    _remindersData = r;
+    drawRemindersList(r);
+}
+
+function drawRemindersList(r) {
+    var todayCnt = r.today_count || (r.items ? r.items.length : 0);
+    var overdueCnt = r.overdue_count || (r.overdue_items ? r.overdue_items.length : 0);
+
+    var badgeContainer = document.getElementById('daReminderBadge');
+    if (badgeContainer) {
+        badgeContainer.innerHTML =
+            '<button type="button" onclick="switchReminderTab(\'today\')" style="cursor:pointer;border:none;border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;' +
+            (_activeReminderTab === 'today' ? 'background:var(--da-orange);color:#fff;' : 'background:#f5f4f6;color:var(--da-dark);') + '">Today (' + todayCnt + ')</button>' +
+            '<button type="button" onclick="switchReminderTab(\'overdue\')" style="cursor:pointer;border:none;border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;' +
+            (_activeReminderTab === 'overdue' ? 'background:var(--da-red);color:#fff;' : 'background:#fef2f2;color:var(--da-red);') + '">Overdue (' + overdueCnt + ')</button>';
+    }
+
+    var items = _activeReminderTab === 'overdue' ? (r.overdue_items || []) : (r.items || []);
+
+    if (!items.length) {
+        var emptyMsg = _activeReminderTab === 'overdue' ? 'No overdue reminders' : 'No pending reminders today';
+        document.getElementById('daReminderBody').innerHTML = empty(_activeReminderTab === 'overdue' ? '🎉' : '✅', emptyMsg);
+        return;
+    }
 
     var priBg  = { low:'#f0fdf4', medium:'#fffbeb', high:'#fef2f2' };
     var priClr = { low:'#16a34a', medium:'#b45309', high:'#dc2626' };
 
-    var html = r.items.map(function(rem) {
+    var html = items.map(function(rem) {
         var bg  = priBg[rem.priority]  || '#f5f4f6';
         var clr = priClr[rem.priority] || '#7c7c7c';
-        var overdue = rem.is_overdue;
-        return '<div class="da-rem-item" style="' + (overdue ? 'background:#fffafa' : '') + '">' +
+        var overdue = rem.is_overdue || _activeReminderTab === 'overdue';
+        var leadId = rem.lead?.id;
+        var dateStr = new Date(rem.remind_at).toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+        return '<div class="da-rem-item" ' + (leadId ? 'onclick="window.location=\'' + LEAD_BASE + '/' + leadId + '\'" style="cursor:pointer;' + (overdue ? 'background:#fffafa' : '') + '"' : 'style="' + (overdue ? 'background:#fffafa' : '') + '"') + '>' +
             '<div class="da-rem-ico" style="background:' + (overdue ? '#fef2f2' : '#f5f4f6') + '">' + (rem.type_icon || '📌') + '</div>' +
             '<div class="da-rem-body">' +
-            '<div class="da-rem-title">' + rem.title + '</div>' +
-            '<div class="da-rem-meta">' + (rem.lead?.company_name || '—') + (rem.user?.name ? ' · ' + rem.user.name : '') + '</div>' +
+            '<div class="da-rem-title" style="font-weight:700;color:var(--da-dark)">' + rem.title + '</div>' +
+            '<div class="da-rem-meta">' + (rem.lead?.company_name ? '<strong>' + rem.lead.company_name + '</strong>' : '—') + (rem.user?.name ? ' · ' + rem.user.name : '') + '</div>' +
             '<div class="da-rem-tags">' +
-            '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' +
-            new Date(rem.remind_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + (overdue ? ' (Overdue)' : '') + '</span>' +
+            '<span style="font-size:10px;font-weight:700;color:' + (overdue ? 'var(--da-red)' : 'var(--da-muted)') + '">' + dateStr + (overdue ? ' (Overdue)' : '') + '</span>' +
             '<span class="da-pill" style="font-size:10px;background:' + bg + ';color:' + clr + '">' + (rem.priority ? (rem.priority.charAt(0).toUpperCase() + rem.priority.slice(1)) : '—') + '</span>' +
-            '</div></div></div>';
+            '</div></div>' +
+            (leadId ? '<div style="margin-left:auto;font-size:11px;color:var(--da-orange);font-weight:700;white-space:nowrap;padding-left:6px">View Lead →</div>' : '') +
+            '</div>';
     }).join('');
     document.getElementById('daReminderBody').innerHTML = html;
 }

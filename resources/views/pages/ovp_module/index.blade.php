@@ -5,6 +5,69 @@
 @push('styles')
 <style>
 .ovp-page { min-height:100%; background:linear-gradient(180deg,#f7f8fb 0%,#f3f5f9 100%); font-family:'Inter',sans-serif; }
+
+/* Progress Bar & Processing Overlay for OVP Module */
+.support-process-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+.support-process-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 36px 40px;
+    width: 440px;
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.support-process-icon-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.support-process-spinner {
+    position: absolute;
+    inset: 0;
+    border: 3px solid #f1f5f9;
+    border-top-color: #fe5f04;
+    border-radius: 50%;
+    animation: processSpin 1s linear infinite;
+}
+@keyframes processSpin { to { transform: rotate(360deg); } }
+.support-process-icon {
+    font-size: 32px;
+    color: #fe5f04;
+    animation: pulseIcon 1.5s ease-in-out infinite alternate;
+}
+@keyframes pulseIcon {
+    from { transform: scale(0.88); opacity: 0.85; }
+    to { transform: scale(1.12); opacity: 1; }
+}
+.support-process-title { font-size: 19px; font-weight: 800; color: #111827; margin: 0 0 6px; }
+.support-process-subtitle { font-size: 13px; color: #6b7280; margin: 0 0 24px; line-height: 1.5; }
+.support-progress-wrapper { width: 100%; }
+.support-progress-bar {
+    width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; position: relative;
+}
+.support-progress-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #059669 0%, #34d399 50%, #059669 100%);
+    background-size: 200% 100%; border-radius: 999px; transition: width 0.3s ease; animation: gradientMove 2s linear infinite;
+}
+@keyframes gradientMove { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+.support-progress-status {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; font-weight: 700; color: #4b5563;
+}
 .ovp-topbar { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:0 28px; height:64px; background:#fff; border-bottom:1px solid #e5e7eb; }
 .ovp-title { font-size:20px; font-weight:900; color:#111827; }
 .ovp-breadcrumb { font-size:12px; color:#6b7280; margin-top:3px; }
@@ -291,12 +354,12 @@
         @endif
 
         @php
-            $hasActiveFilters = request()->filled('start_date') || 
-                                request()->filled('end_date') || 
-                                request()->filled('product_id') || 
-                                request()->filled('status') || 
-                                request()->filled('user_id') || 
-                                request()->filled('company_id') || 
+            $hasActiveFilters = request()->filled('start_date') ||
+                                request()->filled('end_date') ||
+                                request()->filled('product_id') ||
+                                request()->filled('status') ||
+                                request()->filled('user_id') ||
+                                request()->filled('company_id') ||
                                 request()->filled('department_id');
         @endphp
 
@@ -344,7 +407,7 @@
                             <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Status</label>
                             <div class="ovp-select-wrap">
                                 <select name="status" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
-                                    <option value="">All Statuses</option>
+                                    <option value="">All Status</option>
                                     <option value="ovp_pending" {{ request('status') == 'ovp_pending' ? 'selected' : '' }}>OVP Pending</option>
                                     <option value="initiated" {{ request('status') == 'initiated' ? 'selected' : '' }}>Initiated</option>
                                     <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
@@ -472,6 +535,18 @@
                                     $branchName = $item->lead?->branch?->name ?: 'Not available';
                                     $totalAmount = (float) ($item->leadProduct?->total_price ?? 0);
                                     $receivedAmount = (float) ($item->leadProduct?->amount_paid ?? 0);
+                                    if ($receivedAmount <= 0 && $item->lead_id) {
+                                        $leadPaymentsSum = (float) \App\Models\LeadProductPayment::where('lead_id', $item->lead_id)->sum('amount');
+                                        if ($leadPaymentsSum > 0) {
+                                            $receivedAmount = $leadPaymentsSum;
+                                        }
+                                    }
+                                    if ($totalAmount <= 0 && $item->lead_id) {
+                                        $leadTotalSum = (float) \App\Models\LeadProduct::where('lead_id', $item->lead_id)->sum('total_price');
+                                        if ($leadTotalSum > 0) {
+                                            $totalAmount = $leadTotalSum;
+                                        }
+                                    }
                                     $pendingAmount = max(0, $totalAmount - $receivedAmount);
                                     $ovpSchema = $item->product?->ovpFormFields
                                         ? $item->product->ovpFormFields
@@ -501,10 +576,14 @@
                                     <td>{{ $item->department?->name ?: 'No department' }}</td>
                                     <td>{{ $item->lead?->company_name ?: ($item->lead?->contact_name ?: 'No lead') }}</td>
                                     <td><span class="ovp-status-pill {{ $statusBucket }}">{{ ucfirst(str_replace('_', ' ', $statusBucket)) }}</span></td>
+                                    @php
+                                        $assignedExecName = $item->ovpAllocatedTo?->name
+                                            ?: ($item->ovp_allocated_to ? (\App\Models\User::withTrashed()->find($item->ovp_allocated_to)?->name ?: 'Not allocated') : 'Not allocated');
+                                    @endphp
                                     <td>
-                                        @if($item->ovpAllocatedTo)
+                                        @if($assignedExecName !== 'Not allocated')
                                             <div class="ovp-assign-meta">
-                                                <div class="ovp-assign-name">{{ $item->ovpAllocatedTo->name }}</div>
+                                                <div class="ovp-assign-name">{{ $assignedExecName }}</div>
                                                 <div class="ovp-assign-sub">
                                                     Allocated by {{ $item->ovpAllocatedBy?->name ?: 'Not available' }}<br>
                                                     {{ optional($item->ovp_allocated_at)->format('d M Y h:i A') ?: 'Pending' }}
@@ -542,6 +621,7 @@
                                                             data-converted-date="{{ optional($item->created_at)->format('d M Y h:i A') ?: 'Not available' }}"
                                                             data-sales-person="{{ $salesPersonName }}"
                                                             data-branch-name="{{ $branchName }}"
+                                                            data-assigned-executive="{{ $assignedExecName }}"
                                                             data-schema='@json($ovpSchema)'
                                                             data-custom-form='@json($item->custom_form_data ?? [])'
                                                         >
@@ -609,14 +689,22 @@
                             {{--  <div class="ovp-panel-title">Mapped Custom Fields</div>  --}}
 
                             <div id="ovp-custom-form-wrap" class="ovp-custom-list"></div>
+
+                            <div id="ovp-remarks-field-wrap" style="margin-top: 20px; background: #fff5f5; border: 1px solid #fca5a5; border-radius: 12px; padding: 16px;">
+                                <label class="ovp-label" style="color: #991b1b; font-weight: 800; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Rejection Reason / Remarks <span style="color: #dc2626;">* (Mandatory for Rejection)</span>
+                                </label>
+                                <textarea name="remarks" id="ovp-remarks-input" class="ovp-input" rows="3" placeholder="Enter mandatory reason if rejecting this OVP review..." style="margin-top: 6px; border-color: #fca5a5; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; border-radius: 8px; padding: 10px;"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="ovp-modal-actions">
                     <button type="button" class="ovp-btn" data-ovp-close>Cancel</button>
-                    <button type="submit" class="ovp-btn reject" data-decision="rejected">Reject</button>
-                    <button type="submit" class="ovp-btn approve" data-decision="approval">Approve</button>
+                    <button type="button" class="ovp-btn reject" id="ovp-review-reject-btn" data-decision="rejected">Reject</button>
+                    <button type="button" class="ovp-btn approve" id="ovp-review-approve-btn" data-decision="approval">Approve</button>
                 </div>
             </form>
         </div>
@@ -657,6 +745,87 @@
                     <button type="submit" class="ovp-btn allocate">Save Allocation</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    {{-- OVP APPROVE CONFIRMATION MODAL --}}
+    <div id="ovpApproveConfirmModal" class="support-process-overlay" style="display: none;">
+        <div class="support-process-card" style="width: 480px; text-align: left; padding: 28px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
+                <div style="font-size:18px; font-weight:800; color:#166534; display:flex; align-items:center; gap:8px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    Confirm OVP Approval
+                </div>
+                <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748b;" onclick="closeOvpApproveConfirmModal()">&times;</button>
+            </div>
+
+            <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to APPROVE this OVP review?</p>
+            <p style="font-size: 13px; color: #6b7280; margin: 0 0 16px; line-height: 1.5;">
+                An approval email notification will be sent to:<br>
+                <strong style="color:#0f172a;">tamilarasan@saitechnosolutions.net</strong> with all filled OVP details.
+            </p>
+
+            <div id="ovp-confirm-details-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:20px; font-size:13px; line-height:1.6;">
+                <!-- Filled dynamically by JS -->
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="ovp-btn" onclick="closeOvpApproveConfirmModal()">Cancel</button>
+                <button type="button" class="ovp-btn approve" id="ovp-confirm-submit-btn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); color:#fff; font-weight:700; border:none;">
+                    Yes, Approve OVP
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- OVP REJECT CONFIRMATION MODAL --}}
+    <div id="ovpRejectConfirmModal" class="support-process-overlay" style="display: none;">
+        <div class="support-process-card" style="width: 480px; text-align: left; padding: 28px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #fee2e2; padding-bottom:12px;">
+                <div style="font-size:18px; font-weight:800; color:#dc2626; display:flex; align-items:center; gap:8px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    Confirm OVP Rejection
+                </div>
+                <button type="button" style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748b;" onclick="closeOvpRejectConfirmModal()">&times;</button>
+            </div>
+
+            <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to REJECT this OVP review?</p>
+            <p style="font-size: 13px; color: #6b7280; margin: 0 0 16px; line-height: 1.5;">
+                A rejection email notification will be sent to the <strong>Lead's Allocated / Assigned Person</strong> with the specified rejection reason.
+            </p>
+
+            <div id="ovp-reject-confirm-details-box" style="background:#fef2f2; border:1px solid #fca5a5; border-radius:12px; padding:14px 16px; margin-bottom:20px; font-size:13px; line-height:1.6; color:#7f1d1d;">
+                <!-- Filled dynamically by JS -->
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="ovp-btn" onclick="closeOvpRejectConfirmModal()">Cancel</button>
+                <button type="button" class="ovp-btn reject" id="ovp-confirm-reject-submit-btn" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color:#fff; font-weight:700; border:none;">
+                    Yes, Reject OVP
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- OVP APPROVAL PROCESS OVERLAY LOADER --}}
+    <div id="ovpApproveProcessOverlay" class="support-process-overlay" style="display: none;">
+        <div class="support-process-card">
+            <div class="support-process-icon-wrap">
+                <div class="support-process-spinner"></div>
+                <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+            </div>
+            <h4 id="ovpProcessOverlayTitle" class="support-process-title">Approving OVP & Sending Email...</h4>
+            <p id="ovpProcessOverlaySubtitle" class="support-process-subtitle">Please wait while OVP approval email notification is being sent to tamilarasan@saitechnosolutions.net...</p>
+
+            <div class="support-progress-wrapper">
+                <div class="support-progress-bar">
+                    <div id="ovpProcessProgressFill" class="support-progress-fill"></div>
+                </div>
+                <div class="support-progress-status">
+                    <span id="ovpProcessProgressText">Preparing OVP approval notification...</span>
+                    <span id="ovpProcessProgressPercent">0%</span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -716,6 +885,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const fields = [
             { label: 'Product Name', value: button.dataset.product || 'Not available' },
+            { label: 'Assigned Executive', value: button.dataset.assignedExecutive || 'Not allocated' },
             { label: 'Total Amount', value: formatCurrency(button.dataset.totalAmount) },
             { label: 'Received Amount', value: formatCurrency(button.dataset.receivedAmount) },
             { label: 'Pending Amount', value: formatCurrency(button.dataset.pendingAmount) },
@@ -814,6 +984,8 @@ document.addEventListener('DOMContentLoaded', function () {
             JSON.parse(button.dataset.customForm || '[]')
         );
         decisionInput.value = '';
+        isConfirmedApprove = false;
+        isConfirmedReject = false;
         modal.classList.add('is-open');
     }
 
@@ -891,11 +1063,136 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    form.querySelectorAll('[data-decision]').forEach(function (button) {
-        button.addEventListener('click', function () {
-            decisionInput.value = button.dataset.decision || '';
+    const approveConfirmModal = document.getElementById('ovpApproveConfirmModal');
+    const rejectConfirmModal = document.getElementById('ovpRejectConfirmModal');
+    const processOverlay = document.getElementById('ovpApproveProcessOverlay');
+
+    window.closeOvpApproveConfirmModal = function () {
+        if (approveConfirmModal) approveConfirmModal.style.display = 'none';
+    };
+
+    window.closeOvpRejectConfirmModal = function () {
+        if (rejectConfirmModal) rejectConfirmModal.style.display = 'none';
+    };
+
+    const approveBtn = document.getElementById('ovp-review-approve-btn');
+    const rejectBtn = document.getElementById('ovp-review-reject-btn');
+
+    if (approveBtn) {
+        approveBtn.addEventListener('click', function () {
+            decisionInput.value = 'approval';
+            const contextText = modalContext ? modalContext.textContent : '';
+            const detailsBox = document.getElementById('ovp-confirm-details-box');
+            if (detailsBox) {
+                detailsBox.innerHTML = '<div><strong>OVP Context:</strong> ' + escapeHtml(contextText) + '</div>';
+            }
+            if (approveConfirmModal) {
+                approveConfirmModal.style.display = 'flex';
+            }
         });
-    });
+    }
+
+    if (rejectBtn) {
+        rejectBtn.addEventListener('click', function () {
+            decisionInput.value = 'rejected';
+            const remarksInput = document.getElementById('ovp-remarks-input');
+            const remarksValue = remarksInput ? remarksInput.value.trim() : '';
+
+            if (!remarksValue) {
+                alert('Please enter a mandatory Rejection Reason / Remarks before rejecting.');
+                if (remarksInput) remarksInput.focus();
+                return;
+            }
+
+            const detailsBox = document.getElementById('ovp-reject-confirm-details-box');
+            if (detailsBox) {
+                detailsBox.innerHTML = '<div><strong>Rejection Reason:</strong> ' + escapeHtml(remarksValue) + '</div>';
+            }
+            if (rejectConfirmModal) {
+                rejectConfirmModal.style.display = 'flex';
+            }
+        });
+    }
+
+    const confirmApproveSubmitBtn = document.getElementById('ovp-confirm-submit-btn');
+    if (confirmApproveSubmitBtn) {
+        confirmApproveSubmitBtn.onclick = function () {
+            closeOvpApproveConfirmModal();
+            modal.classList.remove('is-open');
+
+            if (processOverlay) {
+                processOverlay.style.display = 'flex';
+                const fill = document.getElementById('ovpProcessProgressFill');
+                const percentText = document.getElementById('ovpProcessProgressPercent');
+                const statusText = document.getElementById('ovpProcessProgressText');
+
+                let progress = 10;
+                if (fill) fill.style.width = progress + '%';
+                if (percentText) percentText.innerText = progress + '%';
+                if (statusText) statusText.innerText = 'Preparing OVP approval email...';
+
+                const interval = setInterval(function () {
+                    if (progress < 40) {
+                        progress += 8;
+                        if (statusText) statusText.innerText = 'Building OVP details & form summary...';
+                    } else if (progress < 85) {
+                        progress += 6;
+                        if (statusText) statusText.innerText = 'Sending email to tamilarasan@saitechnosolutions.net...';
+                    } else if (progress < 95) {
+                        progress += 1;
+                        if (statusText) statusText.innerText = 'Updating OVP item status in database...';
+                    }
+                    if (progress > 95) progress = 95;
+                    if (fill) fill.style.width = progress + '%';
+                    if (percentText) percentText.innerText = progress + '%';
+                }, 200);
+            }
+
+            setTimeout(function () {
+                form.submit();
+            }, 600);
+        };
+    }
+
+    const confirmRejectSubmitBtn = document.getElementById('ovp-confirm-reject-submit-btn');
+    if (confirmRejectSubmitBtn) {
+        confirmRejectSubmitBtn.onclick = function () {
+            closeOvpRejectConfirmModal();
+            modal.classList.remove('is-open');
+
+            if (processOverlay) {
+                processOverlay.style.display = 'flex';
+                const fill = document.getElementById('ovpProcessProgressFill');
+                const percentText = document.getElementById('ovpProcessProgressPercent');
+                const statusText = document.getElementById('ovpProcessProgressText');
+
+                let progress = 10;
+                if (fill) fill.style.width = progress + '%';
+                if (percentText) percentText.innerText = progress + '%';
+                if (statusText) statusText.innerText = 'Preparing OVP rejection notification...';
+
+                const interval = setInterval(function () {
+                    if (progress < 40) {
+                        progress += 8;
+                        if (statusText) statusText.innerText = 'Packaging rejection reason & lead details...';
+                    } else if (progress < 85) {
+                        progress += 6;
+                        if (statusText) statusText.innerText = 'Sending email notification to Lead Assigned Person...';
+                    } else if (progress < 95) {
+                        progress += 1;
+                        if (statusText) statusText.innerText = 'Updating OVP item status in database...';
+                    }
+                    if (progress > 95) progress = 95;
+                    if (fill) fill.style.width = progress + '%';
+                    if (percentText) percentText.innerText = progress + '%';
+                }, 200);
+            }
+
+            setTimeout(function () {
+                form.submit();
+            }, 600);
+        };
+    }
 
     document.querySelectorAll('.ovp-row').forEach(function (row) {
         row.addEventListener('click', function (event) {

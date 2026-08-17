@@ -85,11 +85,11 @@ class DataVisibilityService
             ->filter()
             ->map(fn (string $name) => $this->roleKey($name));
 
-        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'])->isNotEmpty()) {
+        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo', 'pre_sale_executive', 'pre_sales_executive', 'pre_sale', 'pre_sales'])->isNotEmpty()) {
             return RoleMapping::ACCESS_COMPANY;
         }
 
-        if ($keys->intersect(['tl', 'team_leader', 'teamlead', 'manager', 'sales_manager', 'sales_head', 'branch_manager'])->isNotEmpty()) {
+        if ($keys->intersect(['tl', 'team_leader', 'teamlead', 'manager', 'sales_manager', 'sales_head', 'branch_manager', 'senior_customer_success_team_executive', 'senior_customer_success_executive', 'senior_success_executive', 'senior_customer_support_executive', 'senior_support_executive', 'senior_cst_executive'])->isNotEmpty()) {
             return RoleMapping::ACCESS_TEAM;
         }
 
@@ -98,6 +98,23 @@ class DataVisibilityService
         }
 
         return RoleMapping::ACCESS_SELF;
+    }
+
+    public function hasBranchAdminRole(?User $user = null): bool
+    {
+        $user ??= auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isBranchAdmin()) {
+            return true;
+        }
+
+        return $user->roles->contains(function ($role) {
+            return in_array($this->roleKey($role->name), ['branch_admin', 'branch_manager'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['branch_admin', 'branch_manager'], true);
+        });
     }
 
     public function hasBranchAdminRole(?User $user = null): bool
@@ -214,7 +231,7 @@ class DataVisibilityService
     public function visibleAssignableUsers(?User $user = null): Collection
     {
         $user ??= auth()->user();
-        $visibleIds = $this->visibleUserIds($user);
+        $visibleIds = ($user && $user->hasPreSalesLikeRole()) ? null : $this->visibleUserIds($user);
         $companyId = $this->companyIdFor($user);
 
         $users = User::query()
@@ -278,6 +295,11 @@ class DataVisibilityService
             return false;
         }
 
+        $actor ??= auth()->user();
+        if ($actor && $actor->hasPreSalesLikeRole()) {
+            return true;
+        }
+
         $visibleIds = $this->visibleUserIds($actor);
 
         return $visibleIds === null || in_array((int) $userId, $visibleIds, true);
@@ -288,6 +310,10 @@ class DataVisibilityService
         $this->applyCompanyVisibility($query, $user, 'company_id');
 
         $user ??= auth()->user();
+        if ($user && $user->hasPreSalesLikeRole() && !$this->isCompanyWideUser($user)) {
+            return $query->where($assignedColumn, $user->id);
+        }
+
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             return $query->where(function ($q) use ($user) {
                 $q->where('customer_support_tl_id', $user->id)
@@ -392,6 +418,10 @@ class DataVisibilityService
         }
 
         $user ??= auth()->user();
+        if ($user && $user->hasPreSalesLikeRole() && !$this->isCompanyWideUser($user)) {
+            return (int) $lead->assigned_to === $user->id || (int) $lead->pre_sale_executive_id === $user->id;
+        }
+
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             return (int) $lead->customer_support_tl_id === $user->id
                 || (int) $lead->customer_support_executive_id === $user->id;
@@ -522,6 +552,31 @@ class DataVisibilityService
         return $user->roles->contains(function ($role) {
             return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
                 || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
+        });
+    }
+
+    public function isCompanyWideUser(User $user): bool
+    {
+        if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
+            return true;
+        }
+
+        if ($user->company_id) {
+            try {
+                if (DB::table('companies')
+                    ->where('id', $user->company_id)
+                    ->where('super_admin_user_id', $user->id)
+                    ->exists()) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                // Table might not exist in unit test
+            }
+        }
+
+        return $user->roles->contains(function ($role) {
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
         });
     }
 

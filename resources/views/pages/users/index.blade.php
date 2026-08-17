@@ -198,12 +198,12 @@
         <div class="usr-search-wrap">
             <svg class="usr-search-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" name="search" class="usr-search-input" placeholder="Search name, email, phone…"
-                   value="{{ request('search') }}" oninput="delaySubmit()">
+                   value="{{ request('search') }}">
         </div>
 
         <div class="usr-filter-wrap">
             <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            <select name="branch_id" class="usr-filter-select" onchange="this.form.submit()">
+            <select name="branch_id" class="usr-filter-select">
                 <option value="">All Branches</option>
                 @foreach($branches as $branch)
                 <option value="{{ $branch->id }}" {{ request('branch_id') == $branch->id ? 'selected' : '' }}>
@@ -216,7 +216,7 @@
 
         <div class="usr-filter-wrap">
             <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-            <select name="role" class="usr-filter-select" onchange="this.form.submit()">
+            <select name="role" class="usr-filter-select">
                 <option value="">All Roles</option>
                 @foreach($roles as $role)
                 <option value="{{ $role->name }}" {{ request('role') == $role->name ? 'selected' : '' }}>
@@ -228,8 +228,8 @@
         </div>
 
         <div class="usr-filter-wrap">
-            <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
-            <select name="status" class="usr-filter-select" onchange="this.form.submit()">
+            <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 14 14"/></svg>
+            <select name="status" class="usr-filter-select">
                 <option value="">All Status</option>
                 <option value="1" {{ request('status') === '1' ? 'selected' : '' }}>Active</option>
                 <option value="0" {{ request('status') === '0' ? 'selected' : '' }}>Inactive</option>
@@ -237,7 +237,23 @@
             <svg class="usr-filter-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
 
-        @if(request()->hasAny(['search','branch_id','role','status']))
+        <div class="usr-filter-wrap">
+            <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 16 14"/></svg>
+            <select name="activity" class="usr-filter-select">
+                <option value="">All Activity</option>
+                <option value="last_seen" {{ request('activity') === 'last_seen' ? 'selected' : '' }}>🕒 Last Seen (Recent First)</option>
+                <option value="recent_login" {{ request('activity') === 'recent_login' ? 'selected' : '' }}>⚡ Recent Login (24h)</option>
+                <option value="inactive_3days" {{ request('activity') === 'inactive_3days' ? 'selected' : '' }}>⚠️ Inactive (3+ Days)</option>
+            </select>
+            <svg class="usr-filter-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <button type="submit" class="usr-btn usr-btn-primary" style="padding:7px 16px; font-size:12px; height:34px; border-radius:9px;">
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Apply
+        </button>
+
+        @if(request()->hasAny(['search','branch_id','role','status','activity']))
         <a href="{{ route('users.index') }}" class="usr-filter-reset">
             <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
             Reset
@@ -266,10 +282,12 @@
         {{-- Stats --}}
         <div class="usr-stats-row">
             @php
-                $totalUsers  = \App\Models\User::count();
-                $activeUsers = \App\Models\User::where('is_active', true)->count();
-                $inactiveUsers = $totalUsers - $activeUsers;
-                $newThisMonth = \App\Models\User::whereMonth('created_at', now()->month)->count();
+                $totalUsers    = \App\Models\User::count();
+                $activeUsers   = \App\Models\User::where('is_active', true)->count();
+                $recentLogins  = \App\Models\User::where('last_login_at', '>=', now()->subHours(24))->count();
+                $inactive3Days = \App\Models\User::where(function($q) {
+                    $q->whereNull('last_login_at')->orWhere('last_login_at', '<=', now()->subDays(3));
+                })->count();
             @endphp
             <div class="usr-stat">
                 <div class="usr-stat-icon" style="background:#fff0e6">
@@ -285,26 +303,26 @@
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
                 <div>
-                    <div class="usr-stat-label">Active</div>
+                    <div class="usr-stat-label">Active Users</div>
                     <div class="usr-stat-value" style="color:#16a34a">{{ $activeUsers }}</div>
                 </div>
             </div>
-            <div class="usr-stat">
-                <div class="usr-stat-icon" style="background:#fef2f2">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg>
+            <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'recent_login']) }}'">
+                <div class="usr-stat-icon" style="background:#eff6ff">
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
                 <div>
-                    <div class="usr-stat-label">Inactive</div>
-                    <div class="usr-stat-value" style="color:#dc2626">{{ $inactiveUsers }}</div>
+                    <div class="usr-stat-label">Recent Login (24h)</div>
+                    <div class="usr-stat-value" style="color:#2563eb">{{ $recentLogins }}</div>
                 </div>
             </div>
-            <div class="usr-stat">
-                <div class="usr-stat-icon" style="background:#eef2ff">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#4f46e5" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'inactive_3days']) }}'">
+                <div class="usr-stat-icon" style="background:#fef2f2">
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 </div>
                 <div>
-                    <div class="usr-stat-label">New This Month</div>
-                    <div class="usr-stat-value" style="color:#4f46e5">{{ $newThisMonth }}</div>
+                    <div class="usr-stat-label">Inactive (3+ Days)</div>
+                    <div class="usr-stat-value" style="color:#dc2626">{{ $inactive3Days }}</div>
                 </div>
             </div>
         </div>
@@ -339,7 +357,7 @@
                             <th>Branch</th>
                             <th>Role</th>
                             <th>Status</th>
-                            <th>Last Login</th>
+                            <th>Last Seen / Login</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -419,8 +437,22 @@
                                 </span>
                                 @endcan
                             </td>
-                            <td style="font-size:12px;color:#9e9e9e;">
-                                {{ $user->last_login_at ? $user->last_login_at->diffForHumans() : 'Never' }}
+                            <td>
+                                @if(!$user->last_login_at)
+                                    <span class="usr-badge ub-inactive" style="font-size:11px;">Never</span>
+                                @elseif($user->last_login_at->gte(now()->subHours(24)))
+                                    <span class="usr-badge ub-active" style="font-size:11px;" title="{{ $user->last_login_at->format('d M Y, h:i A') }}">
+                                        ⚡ {{ $user->last_login_at->diffForHumans() }}
+                                    </span>
+                                @elseif($user->last_login_at->lte(now()->subDays(3)))
+                                    <span class="usr-badge ub-inactive" style="font-size:11px;" title="{{ $user->last_login_at->format('d M Y, h:i A') }}">
+                                        ⚠️ {{ $user->last_login_at->diffForHumans() }}
+                                    </span>
+                                @else
+                                    <span class="usr-badge ub-default" style="font-size:11px;" title="{{ $user->last_login_at->format('d M Y, h:i A') }}">
+                                        🕒 {{ $user->last_login_at->diffForHumans() }}
+                                    </span>
+                                @endif
                             </td>
                             <td>
                                 <div class="usr-actions">

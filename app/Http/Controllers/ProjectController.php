@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\DesignSettingTarget;
 use App\Models\Lead;
 use App\Models\LeadProduct;
+use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\ProjectTimesheet;
@@ -19,6 +20,8 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class ProjectController extends Controller
@@ -41,14 +44,67 @@ class ProjectController extends Controller
     {
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
-        $selectedDashboard = $request->query('dashboard_type');
-        if ($selectedDashboard) {
-            session(['selected_dashboard_type' => $selectedDashboard]);
-        } else {
-            $selectedDashboard = session('selected_dashboard_type', 'production');
+        $canViewSwitcher = $user->canViewProjectsDashboardSwitcher();
+        $selectedDashboard = null;
+
+        if ($canViewSwitcher) {
+            $selectedDashboard = $request->query('dashboard_type');
+            if ($selectedDashboard) {
+                session(['selected_dashboard_type' => $selectedDashboard]);
+            } else {
+                $selectedDashboard = session('selected_dashboard_type');
+            }
         }
 
-        if ($user->belongsToDesigningDepartment() || ($isAdminLike && $selectedDashboard === 'design')) {
+        if (! $selectedDashboard) {
+            if ($user->belongsToTestingDepartment() || $user->hasTestingLikeRole()) {
+                $selectedDashboard = 'testing';
+            } elseif ($user->belongsToDesigningDepartment()) {
+                $selectedDashboard = 'design';
+            } elseif ($user->belongsToDigitalMarketingDepartment()) {
+                $selectedDashboard = 'dm';
+            } else {
+                $selectedDashboard = 'development';
+            }
+        }
+
+        if (in_array($selectedDashboard, ['testing', 'qa'], true)) {
+            $testingHandovers = \App\Models\ProjectTestingDetail::with([
+                'productionInitiation.leadProduct',
+                'productionInitiation.product',
+                'productionInitiation.lead',
+                'productionInitiation.bugs',
+                'movedBy',
+                'testingTl'
+            ])->latest()->get();
+
+            $activeStatus = (string) $request->query('status', 'open');
+
+            $openCount = $testingHandovers->whereIn('status', ['moved_to_testing', 'open'])->count();
+            $ongoingCount = $testingHandovers->where('status', 'ongoing')->count();
+            $retestingCount = $testingHandovers->where('status', 'retesting')->count();
+            $completedCount = $testingHandovers->where('status', 'completed')->count();
+
+            $filteredHandovers = match ($activeStatus) {
+                'ongoing' => $testingHandovers->where('status', 'ongoing'),
+                'retesting' => $testingHandovers->where('status', 'retesting'),
+                'completed' => $testingHandovers->where('status', 'completed'),
+                default => $testingHandovers->filter(fn($h) => in_array($h->status, ['moved_to_testing', 'open'], true)),
+            };
+
+            return view('pages.projects.testing-dashboard', [
+                'selectedDashboard' => 'testing',
+                'canViewSwitcher' => $canViewSwitcher,
+                'activeStatus' => $activeStatus,
+                'openCount' => $openCount,
+                'ongoingCount' => $ongoingCount,
+                'retestingCount' => $retestingCount,
+                'completedCount' => $completedCount,
+                'handovers' => $filteredHandovers->values(),
+            ]);
+        }
+
+        if (in_array($selectedDashboard, ['design', 'designing'], true)) {
             $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
 
             // Get visible Designing projects
@@ -354,8 +410,34 @@ class ProjectController extends Controller
                 return $project;
             })
             ->values();
+
+        if (in_array($selectedDashboard, ['dm', 'digital_marketing'], true)) {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+
+            $projects = $projects->filter(function ($project) use ($dmDeptIds) {
+                if ($project->department_id && in_array((int) $project->department_id, $dmDeptIds, true)) {
+                    return true;
+                }
+                $deptName = strtolower((string) ($project->department?->name ?? ''));
+                return str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm');
+            })->values();
+        } else {
+            // Default or 'development' / 'production'
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+
+            $projects = $projects->filter(function ($project) use ($devDeptIds) {
+                if ($project->department_id && in_array((int) $project->department_id, $devDeptIds, true)) {
+                    return true;
+                }
+                return $this->isDevelopmentProject($project);
+            })->values();
+        }
+
         $quickUpdateProjects = $projects
-            ->filter(fn (ProductionInitiation $project) => $this->isDevelopmentProject($project))
             ->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
@@ -403,7 +485,6 @@ class ProjectController extends Controller
         }
 
         $developmentProductWiseStats = $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters)
-            ->filter(fn ($p) => $this->isDevelopmentProject($p))
             ->groupBy('product_name')
             ->map(function ($group) {
                 return [
@@ -475,7 +556,11 @@ class ProjectController extends Controller
         $isAdminLike = $user->hasAdminLikeRole();
 
         $allUsers = $isAdminLike ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) : collect();
-        $departments = $isAdminLike ? \App\Models\Department::orderBy('name')->get(['id', 'name']) : collect();
+        $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
+            ? ($user->isDevelopmentProjectCoordinator()
+                ? \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orderBy('name')->get(['id', 'name'])
+                : \App\Models\Department::orderBy('name')->get(['id', 'name']))
+            : collect();
 
         if ($isAdminLike) {
             $assignedProjects = ProductionInitiation::query()
@@ -927,6 +1012,19 @@ class ProjectController extends Controller
         $user = auth()->user();
         $isTlScopedView = $this->shouldLimitToAssignedProjects($user);
         $isContributorScopedView = $this->shouldLimitToEmployeeProjects($user);
+
+        $products = Product::query()->orderBy('product_name')->get(['id', 'product_name']);
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+
+        $filters = [
+            'search' => trim((string) $request->query('search', '')),
+            'product_id' => trim((string) $request->query('product_id', '')),
+            'department_id' => trim((string) $request->query('department_id', '')),
+            'project_category' => trim((string) $request->query('project_category', '')),
+            'delivery_from' => trim((string) $request->query('delivery_from', '')),
+            'delivery_to' => trim((string) $request->query('delivery_to', '')),
+        ];
+
         if ($isContributorScopedView) {
             $projects = $this->visibleProjectsQuery($user)
                 ->get()
@@ -935,13 +1033,6 @@ class ProjectController extends Controller
 
                     return $project;
                 });
-
-            $filters = [
-                'search' => trim((string) $request->query('search', '')),
-                'project_category' => trim((string) $request->query('project_category', '')),
-                'delivery_from' => trim((string) $request->query('delivery_from', '')),
-                'delivery_to' => trim((string) $request->query('delivery_to', '')),
-            ];
 
             $filteredProjects = $this->filterEmployeeProjects($projects, $filters);
 
@@ -958,6 +1049,8 @@ class ProjectController extends Controller
                 'isContributorScopedView' => true,
                 'employeeProjects' => $filteredProjects,
                 'projectFilters' => $filters,
+                'products' => $products,
+                'departments' => $departments,
                 'projectCategories' => $projects
                     ->map(fn (ProductionInitiation $project) => $project->product?->category?->name)
                     ->filter()
@@ -970,6 +1063,41 @@ class ProjectController extends Controller
         $initiations = $this->visibleProjectsQuery($user)
             ->get()
             ->map(fn (ProductionInitiation $initiation) => $this->decorateProjectForUser($initiation, $user));
+
+        // Filter initiations by Product, Department, and Search (Lead/Company/Client/ID)
+        $filteredInitiations = $initiations->filter(function (ProductionInitiation $item) use ($filters) {
+            if ($filters['product_id'] !== '') {
+                if ((string) $item->product_id !== $filters['product_id']) {
+                    return false;
+                }
+            }
+
+            if ($filters['department_id'] !== '') {
+                if ((string) $item->department_id !== $filters['department_id']) {
+                    return false;
+                }
+            }
+
+            if ($filters['search'] !== '') {
+                $search = Str::lower($filters['search']);
+                $haystack = Str::lower(implode(' ', [
+                    $item->product_name,
+                    $item->client_name,
+                    $item->company_name,
+                    $item->lead?->contact_name,
+                    $item->lead?->company_name,
+                    $item->lead?->mobile_number,
+                    $item->lead_id ? 'LD-' . $item->lead_id : '',
+                    $item->lead_id ? (string) $item->lead_id : '',
+                ]));
+
+                if (! Str::contains($haystack, $search)) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
 
         $buckets = [
             'allocation_pending' => [
@@ -986,7 +1114,7 @@ class ProjectController extends Controller
             ],
         ];
 
-        foreach ($initiations as $initiation) {
+        foreach ($filteredInitiations as $initiation) {
             $bucket = $this->resolveBucketForUser($initiation, $user);
 
             if (! $bucket) {
@@ -1012,6 +1140,9 @@ class ProjectController extends Controller
             'selectedCard' => $buckets[$selectedBucket],
             'isTlScopedView' => $isTlScopedView,
             'isContributorScopedView' => false,
+            'projectFilters' => $filters,
+            'products' => $products,
+            'departments' => $departments,
         ]);
     }
 
@@ -1056,6 +1187,35 @@ class ProjectController extends Controller
         $tlAllocationSummaries = $this->tlAllocationSummaries($productionInitiation);
         $projectDeliveryDate = $this->projectDeliveryDate($productionInitiation);
 
+        $testingTlUsers = User::with(['roles.department', 'branch'])
+            ->where('is_active', true)
+            ->get()
+            ->filter(function ($u) {
+                $deptNames = strtolower($u->roles->map(fn($r) => $r->department?->name)->filter()->implode(' '));
+                $roleNames = strtolower($u->roles->implode('display_name', ' ') . ' ' . $u->roles->implode('name', ' '));
+
+                return str_contains($deptNames, 'testing') || str_contains($roleNames, 'testing');
+            })
+            ->values();
+
+        if ($testingTlUsers->isEmpty()) {
+            $testingTlUsers = User::with(['roles.department', 'branch'])
+                ->where('is_active', true)
+                ->get()
+                ->filter(fn($u) => $u->hasTlLikeRole() || $u->isSuperAdmin() || $u->isCompanyAdmin())
+                ->values();
+        }
+
+        $testingDetails = $productionInitiation->testingDetails()
+            ->with(['movedBy', 'testingTl'])
+            ->latest()
+            ->get();
+
+        $bugs = $productionInitiation->bugs()
+            ->with('createdBy')
+            ->latest()
+            ->get();
+
         return view('pages.projects.show', [
             'projectItem' => $productionInitiation,
             'projectDeliveryDate' => $projectDeliveryDate,
@@ -1073,7 +1233,187 @@ class ProjectController extends Controller
             'projectUpdateCounts' => $projectUpdateCounts,
             'selectedUpdateType' => $selectedUpdateType,
             'selectedUpdateDate' => $selectedUpdateDate,
+            'testingTlUsers' => $testingTlUsers,
+            'testingDetails' => $testingDetails,
+            'bugs' => $bugs,
         ]);
+    }
+
+    public function storeBug(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'description' => ['required', 'string', 'max:5000'],
+            'priority'    => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
+            'attachment'  => ['nullable', 'file', 'max:10240'],
+        ]);
+
+        // Prevent duplicate bug submissions within 15 seconds
+        $existingBug = \App\Models\ProjectBug::where('production_initiation_id', $productionInitiation->id)
+            ->where('created_by_user_id', auth()->id())
+            ->where('description', $validated['description'])
+            ->where('created_at', '>=', now()->subSeconds(15))
+            ->first();
+
+        if ($existingBug) {
+            return redirect()
+                ->back()
+                ->with('info', 'Bug report already submitted.');
+        }
+
+        $attachmentPath = null;
+        $attachmentName = null;
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $attachmentName = $file->getClientOriginalName();
+
+            $folder = public_path('uploads/project-bugs');
+            if (! file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            $fileName = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+            $file->move($folder, $fileName);
+            $attachmentPath = 'uploads/project-bugs/' . $fileName;
+        }
+
+        $productionInitiation->bugs()->create([
+            'company_id' => auth()->user()?->company_id,
+            'lead_id' => $productionInitiation->lead_id,
+            'lead_product_id' => $productionInitiation->lead_product_id,
+            'description' => $validated['description'],
+            'priority' => $validated['priority'],
+            'attachment_path' => $attachmentPath,
+            'attachment_original_name' => $attachmentName,
+            'status' => 'open',
+            'created_by_user_id' => auth()->id(),
+        ]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Bug reported successfully to project testing.');
+    }
+
+    public function testingDetails(Request $request, ProductionInitiation $productionInitiation): View
+    {
+        $productionInitiation->load([
+            'leadProduct',
+            'product',
+            'lead',
+            'testingDetails.movedBy',
+            'testingDetails.testingTl',
+            'bugs.createdBy',
+        ]);
+
+        $latestHandover = $productionInitiation->testingDetails()->latest()->first();
+        $bugs = $productionInitiation->bugs()->with('createdBy')->latest()->get();
+
+        return view('pages.projects.testing-details', [
+            'projectItem' => $productionInitiation,
+            'handover' => $latestHandover,
+            'bugs' => $bugs,
+        ]);
+    }
+
+    public function updateTestingStatus(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed'])],
+        ]);
+
+        $latestHandover = $productionInitiation->testingDetails()->latest()->first();
+        if ($latestHandover) {
+            $latestHandover->update([
+                'status' => $validated['status'],
+            ]);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', 'Testing status updated successfully.');
+    }
+
+    public function updateBugStatus(Request $request, \App\Models\ProjectBug $bug): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'fixed', 'closed'])],
+        ]);
+
+        $bug->update([
+            'status' => $validated['status'],
+        ]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Bug status updated successfully.');
+    }
+
+    public function moveToTesting(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'credentials'  => ['nullable', 'string', 'max:5000'],
+            'notes'        => ['nullable', 'string', 'max:5000'],
+            'testing_tl_id' => ['nullable', 'exists:users,id'],
+        ]);
+
+        $testingDetail = $productionInitiation->testingDetails()->create([
+            'company_id' => auth()->user()?->company_id,
+            'lead_id' => $productionInitiation->lead_id,
+            'lead_product_id' => $productionInitiation->lead_product_id,
+            'credentials' => $validated['credentials'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'status' => 'moved_to_testing',
+            'moved_by_user_id' => auth()->id(),
+            'testing_tl_id' => $validated['testing_tl_id'] ?? null,
+        ]);
+
+        // 1. TO Email: Selected Testing TL Mail
+        $testingTl = !empty($validated['testing_tl_id']) ? User::find($validated['testing_tl_id']) : null;
+        $toEmail = $testingTl?->email ?: 'projects@saitechnosolutions.net';
+
+        // 2. CC Emails:
+        // - Default: projects@saitechnosolutions.net
+        // - Development Department TL Mails (from mappedManagers & allocatedTlUsers)
+        $filterDevUsers = function ($collection) {
+            return $collection->filter(function ($u) {
+                if (!is_object($u)) return false;
+                $roles = method_exists($u, 'resolvedRoles') ? $u->resolvedRoles(true) : ($u->roles ?? collect());
+                $deptNames = strtolower($roles->map(fn($r) => $r->department?->name)->filter()->implode(' '));
+                $roleNames = strtolower($roles->implode('display_name', ' ') . ' ' . $roles->implode('name', ' '));
+                return str_contains($deptNames, 'development') 
+                    || str_contains($roleNames, 'development') 
+                    || str_contains($roleNames, 'software') 
+                    || str_contains($roleNames, 'web') 
+                    || str_contains($roleNames, 'app');
+            })->pluck('email')->filter()->all();
+        };
+
+        $userDevTlUsers = auth()->user()?->mappedManagers()->get() ?? collect();
+        $allocatedDevTlUsers = $this->allocatedTlUsers($productionInitiation);
+
+        $userDevTlEmails = $filterDevUsers($userDevTlUsers);
+        $allocatedDevTlEmails = $filterDevUsers($allocatedDevTlUsers);
+
+        $ccEmails = array_values(array_unique(array_filter(array_merge(
+            ['projects@saitechnosolutions.net'],
+            $userDevTlEmails,
+            $allocatedDevTlEmails
+        ))));
+
+        // Exclude TO email from CC list if present
+        $ccEmails = array_values(array_diff($ccEmails, [$toEmail]));
+
+        try {
+            Mail::to($toEmail)
+                ->cc($ccEmails)
+                ->send(new \App\Mail\ProjectTestingNotificationMail($productionInitiation, $testingDetail));
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Project Testing notification mail: ' . $e->getMessage());
+        }
+
+        return redirect()
+            ->route('projects.show', ['productionInitiation' => $productionInitiation, 'tab' => 'testing'])
+            ->with('success', 'Project details updated and moved to Testing. Notification email sent to Testing TL.');
     }
 
     public function allocate(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
@@ -1122,9 +1462,35 @@ class ProjectController extends Controller
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
+        try {
+            $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+            $allocatedTls = User::whereIn('id', $selectedTlIds)
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->get();
+            $tlEmails = $allocatedTls->pluck('email')->filter()->unique()->values()->all();
+
+            if (!empty($tlEmails)) {
+                $allocatedBy = auth()->user();
+                Mail::send('emails.tl_allocation', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'allocatedBy' => $allocatedBy,
+                    'allocatedTls' => $allocatedTls,
+                ], function ($message) use ($tlEmails, $productionInitiation) {
+                    $message->to($tlEmails)
+                        ->subject('New Project TL Allocation - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed sending TL Allocation email: ' . $e->getMessage());
+        }
+
         return redirect()
             ->route('projects.show', $productionInitiation)
-            ->with('success', 'Project moved to TL allocation successfully.');
+            ->with('success', 'Project moved to TL allocation successfully. Notification email sent to allocated Team Lead(s).');
     }
 
     public function allocateEmployees(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
@@ -1162,9 +1528,35 @@ class ProjectController extends Controller
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
+        try {
+            $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+            $allocatedEmployees = User::whereIn('id', $selectedEmployeeIds)
+                ->where('is_active', true)
+                ->whereNotNull('email')
+                ->get();
+            $empEmails = $allocatedEmployees->pluck('email')->filter()->unique()->values()->all();
+
+            if (!empty($empEmails)) {
+                $allocatedBy = auth()->user();
+                Mail::send('emails.team_allocation', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'allocatedBy' => $allocatedBy,
+                    'allocatedEmployees' => $allocatedEmployees,
+                ], function ($message) use ($empEmails, $productionInitiation) {
+                    $message->to($empEmails)
+                        ->subject('New Team Project Assignment - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Team Allocation email: ' . $e->getMessage());
+        }
+
         return redirect()
             ->route('projects.show', $productionInitiation)
-            ->with('success', 'Employees allocated to this project successfully.');
+            ->with('success', 'Employees allocated to this project successfully. Notification email sent to assigned team members.');
     }
 
     public function updateSchedule(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
@@ -1409,7 +1801,13 @@ class ProjectController extends Controller
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved']);
 
-        if ($this->shouldLimitToAssignedProjects($user)) {
+        if ($user->isDevelopmentProjectCoordinator()) {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($devDeptIds) {
+                $q->whereIn('department_id', $devDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $query
                 ->where('project_allocation_status', 'allocated')
                 ->whereJsonContains('project_allocated_tl_user_ids', $user->id);
@@ -1546,6 +1944,14 @@ class ProjectController extends Controller
                     if (! Str::contains($haystack, $search)) {
                         return false;
                     }
+                }
+
+                if (($filters['product_id'] ?? '') !== '' && (string) $project->product_id !== (string) $filters['product_id']) {
+                    return false;
+                }
+
+                if (($filters['department_id'] ?? '') !== '' && (string) $project->department_id !== (string) $filters['department_id']) {
+                    return false;
                 }
 
                 if (($filters['project_category'] ?? '') !== '' && $project->product?->category?->name !== $filters['project_category']) {
@@ -1738,6 +2144,10 @@ class ProjectController extends Controller
     private function ensureProjectIsVisibleToUser(ProductionInitiation $productionInitiation, User $user): void
     {
         $productionInitiation->loadMissing($this->projectRelations());
+
+        if ($user->isDevelopmentProjectCoordinator()) {
+            abort_unless($this->isDevelopmentProject($productionInitiation), 403, 'Development Project Coordinator can only view Development Department projects.');
+        }
 
         abort_unless($this->resolveBucketForUser($productionInitiation, $user) !== null, 404);
 
@@ -2241,15 +2651,9 @@ class ProjectController extends Controller
         $user = auth()->user();
         abort_unless($user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment(), 403);
 
-        $renewals = LeadProduct::where('lead_id', $lead->id)
-            ->whereHas('product', function ($query) {
-                $query->where('count_wise_report', true);
-            })
-            ->with(['product'])
-            ->get();
+        $renewals = LeadProduct::where('lead_id', $lead->id)->with(['product'])->get();
 
         $projects = ProductionInitiation::where('lead_id', $lead->id)
-            ->whereIn('lead_product_id', $renewals->pluck('id'))
             ->with(['department', 'timesheets', 'leadProduct.product'])
             ->get()
             ->map(function ($project) {
@@ -2300,10 +2704,47 @@ class ProjectController extends Controller
                 return $project;
             });
 
-        // Construct flat rows mapping renewals and their projects
+        // ── Section 1 Projects: count_wise_report = true AND is_this_renewal_product = true ──
+        $countWiseProjects = $projects->filter(function ($project) {
+            $product = $project->leadProduct?->product;
+            $deptName = strtolower(trim((string) ($project->department?->name ?? '')));
+            $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'digital') || str_contains($deptName, 'marketing');
+
+            if ($product) {
+                return (bool) $product->count_wise_report && (bool) $product->is_this_renewal_product;
+            }
+
+            // Fallback if product model link is missing: posters/videos count > 0 AND design/DM dept
+            return $isDesignOrDm && ($project->onboarded_posters > 0 || $project->onboarded_videos > 0);
+        });
+
+        // ── Section 2 Projects: count_wise_report = false AND is_this_renewal_product = true ──
+        $nonCountWiseProjects = $projects->filter(function ($project) {
+            $product = $project->leadProduct?->product;
+            $deptName = strtolower(trim((string) ($project->department?->name ?? '')));
+            $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'digital') || str_contains($deptName, 'marketing');
+
+            if ($product) {
+                return (! (bool) $product->count_wise_report) && (bool) $product->is_this_renewal_product;
+            }
+
+            // Fallback if product model link is missing: no poster/video count AND design/DM dept
+            return $isDesignOrDm && ($project->onboarded_posters == 0 && $project->onboarded_videos == 0);
+        });
+
+        // Construct flat rows mapping renewals and Section 1 count-wise projects
         $tableRows = collect();
         foreach ($renewals as $renewal) {
-            $renewalProjects = $projects->where('lead_product_id', $renewal->id);
+            $product = $renewal->product;
+            $isCountWiseRenewal = $product
+                ? ((bool) $product->count_wise_report && (bool) $product->is_this_renewal_product)
+                : true;
+
+            if (! $isCountWiseRenewal) {
+                continue;
+            }
+
+            $renewalProjects = $countWiseProjects->where('lead_product_id', $renewal->id);
             if ($renewalProjects->isNotEmpty()) {
                 foreach ($renewalProjects as $project) {
                     $tableRows->push([
@@ -2313,28 +2754,33 @@ class ProjectController extends Controller
                         'project' => $project,
                     ]);
                 }
-            } else {
+            }
+        }
+
+        // Push any matching count-wise projects not linked directly to a renewal row
+        foreach ($countWiseProjects as $project) {
+            if (! $tableRows->pluck('project.id')->contains($project->id)) {
                 $tableRows->push([
-                    'renewal_id' => $renewal->id,
-                    'renewal_name' => $renewal->product?->product_name ?: ($renewal->product_name ?: '—'),
-                    'has_project' => false,
-                    'project' => null,
+                    'renewal_id' => $project->lead_product_id,
+                    'renewal_name' => $project->product_name ?: ($project->leadProduct?->product_name ?? 'Count-Wise Renewal Project'),
+                    'has_project' => true,
+                    'project' => $project,
                 ]);
             }
         }
 
-        // Compute overall aggregates
-        $totalPosters = $projects->sum('onboarded_posters');
-        $completedPosters = $projects->sum('delivered_posters');
+        // Compute overall aggregates for count-wise projects
+        $totalPosters = $countWiseProjects->sum('onboarded_posters');
+        $completedPosters = $countWiseProjects->sum('delivered_posters');
         $pendingPosters = max(0, $totalPosters - $completedPosters);
-        $overduePosters = $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_posters - $p->delivered_posters));
+        $overduePosters = $countWiseProjects->filter(fn ($p) => $p->is_overdue)->sum(fn ($p) => max(0, $p->onboarded_posters - $p->delivered_posters));
 
-        $totalVideos = $projects->sum('onboarded_videos');
-        $completedVideos = $projects->sum('delivered_videos');
+        $totalVideos = $countWiseProjects->sum('onboarded_videos');
+        $completedVideos = $countWiseProjects->sum('delivered_videos');
         $pendingVideos = max(0, $totalVideos - $completedVideos);
-        $overdueVideos = $projects->filter(fn($p) => $p->is_overdue)->sum(fn($p) => max(0, $p->onboarded_videos - $p->delivered_videos));
+        $overdueVideos = $countWiseProjects->filter(fn ($p) => $p->is_overdue)->sum(fn ($p) => max(0, $p->onboarded_videos - $p->delivered_videos));
 
-        $totalRenewals = $renewals->count();
+        $totalRenewals = $tableRows->count();
 
         $stats = [
             'total_posters' => $totalPosters,
@@ -2351,6 +2797,7 @@ class ProjectController extends Controller
         return view('pages.projects.show-my-account', [
             'lead' => $lead,
             'tableRows' => $tableRows,
+            'nonCountWiseProjects' => $nonCountWiseProjects,
             'stats' => $stats,
             'isDesigningDashboard' => $user->belongsToDesigningDepartment(),
         ]);

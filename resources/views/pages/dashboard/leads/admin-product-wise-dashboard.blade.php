@@ -207,7 +207,7 @@
             <div class="filter-group">
                 <label>Status</label>
                 <select id="f_status">
-                    <option value="">All Statuses</option>
+                    <option value="">All Status</option>
                     @foreach($statuses as $st)
                         <option value="{{ $st }}">{{ ucfirst($st) }}</option>
                     @endforeach

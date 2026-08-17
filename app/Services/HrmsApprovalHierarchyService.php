@@ -30,8 +30,47 @@ class HrmsApprovalHierarchyService
         return $chain->values();
     }
 
+    public function permissionApprovalChainFor(User $requester): Collection
+    {
+        return $this->leaveApprovalChainFor($requester);
+    }
+
     public function leaveApprovalChainFor(User $requester): Collection
     {
+        $companyId = $requester->company_id;
+        $userRoleIds = $requester->roles->pluck('id')->toArray();
+
+        $hierarchy = null;
+        if (!empty($userRoleIds)) {
+            $hierarchy = \App\Models\LeaveHierarchy::whereIn('role_id', $userRoleIds)
+                ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->where('is_active', true)
+                ->first();
+        }
+
+        if ($hierarchy && !empty($hierarchy->approval_chain)) {
+            $approverUsers = collect();
+            foreach ($hierarchy->approval_chain as $roleId) {
+                $users = User::whereHas('roles', fn($q) => $q->where('id', $roleId))
+                    ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->where('is_active', true)
+                    ->get()
+                    ->sortBy(function ($u) use ($requester) {
+                        return ($u->branch_id && $requester->branch_id && (int)$u->branch_id === (int)$requester->branch_id) ? 0 : 1;
+                    });
+
+                $approver = $users->first(fn($u) => (int)$u->id !== (int)$requester->id);
+                if ($approver) {
+                    $approverUsers->push($approver);
+                }
+            }
+
+            if ($approverUsers->isNotEmpty()) {
+                return $approverUsers->values();
+            }
+        }
+
+        // Fallback to hierarchy approvers if no specific LeaveHierarchy setting is mapped
         $hierarchyApprovers = $this->approvalChainFor($requester)->take(2)->values();
 
         if ($hierarchyApprovers->isEmpty()) {

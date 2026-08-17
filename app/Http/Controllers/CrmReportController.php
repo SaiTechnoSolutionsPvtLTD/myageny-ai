@@ -376,9 +376,18 @@ class CrmReportController extends Controller
         $paymentModes = LeadProduct::PAYMENT_MODES;
         $customers = $this->paymentCollectionCustomerOptions();
         $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
+        $companyOptions = Lead::query()
+            ->whereNotNull('company_name')
+            ->where('company_name', '!=', '')
+            ->distinct()
+            ->orderBy('company_name')
+            ->pluck('company_name');
+        $salesExecutives = $this->visibility->visibleAssignableUsers();
 
         $filterPanelOpen =
             $request->filled('customer_id')
+            || $request->filled('company_name')
+            || $request->filled('sales_executive_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
             || $request->filled('date_from')
@@ -391,6 +400,8 @@ class CrmReportController extends Controller
             'paymentModes',
             'customers',
             'branches',
+            'companyOptions',
+            'salesExecutives',
             'filterPanelOpen'
         ));
     }
@@ -411,6 +422,7 @@ class CrmReportController extends Controller
                 'Payment Date' => $row->payment_date ? Carbon::parse($row->payment_date)->format('d-m-Y') : '-',
                 'Receipt No' => 'RCT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
                 'Customer ID' => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
+                'Company Name' => $row->company_name ?: '-',
                 'Customer Name' => $row->customer_name ?: '-',
                 'Total Amount' => number_format((float) ($row->total_amount ?? 0), 2, '.', ''),
                 'Received Amount' => number_format((float) ($row->received_amount ?? 0), 2, '.', ''),
@@ -629,6 +641,7 @@ class CrmReportController extends Controller
                 'lead_product_payments.reference_number as transaction_reference',
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
+                'leads.company_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0) as outstanding_amount'),
@@ -650,6 +663,14 @@ class CrmReportController extends Controller
 
         if ($request->filled('customer_id')) {
             $query->where('leads.id', $request->customer_id);
+        }
+
+        if ($request->filled('company_name')) {
+            $query->where('leads.company_name', $request->company_name);
+        }
+
+        if ($request->filled('sales_executive_id')) {
+            $query->where('leads.assigned_to', $request->sales_executive_id);
         }
 
         if ($request->filled('payment_mode')) {

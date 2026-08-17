@@ -19,8 +19,24 @@ class MenuService
     // ── OVP role scoping — mirrors resources/views/layouts/sidebar.blade.php
     // (the $ovpNewCount block) and App\Http\Controllers\App\OvpModuleApiController
     // exactly, so the badge always agrees with what the OVP list itself shows.
-    private const OVP_TL_ROLE_KEYS = ['customer_support_team_tl'];
-    private const OVP_EXECUTIVE_ROLE_KEYS = ['customer_support_team_executive'];
+    private const OVP_TL_ROLE_KEYS = [
+        'customer_support_team_tl',
+        'senior_customer_success_team_executive',
+        'senior_customer_success_executive',
+        'senior_success_executive',
+        'senior_customer_support_executive',
+        'senior_support_executive',
+        'senior_cst_executive',
+    ];
+    private const OVP_EXECUTIVE_ROLE_KEYS = [
+        'customer_support_team_executive',
+        'customer_support_executive',
+        'customer_success_executive',
+        'senior_customer_success_team_executive',
+        'cst_executive',
+        'support_executive',
+        'executive',
+    ];
 
     /**
      * Build the ordered, permission-filtered menu tree for one module.

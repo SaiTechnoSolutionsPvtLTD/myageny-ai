@@ -25,6 +25,7 @@ class UpdateLeadRequest extends FormRequest
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'product_name'   => ['nullable', 'string', 'max:100'],
             'assigned_to'    => ['required', 'exists:users,id'],
+            'pre_sale_executive_id' => ['nullable', 'integer', 'exists:users,id'],
             'priority'       => ['required', 'in:low,medium,high'],
             'deal_value'     => ['nullable', 'numeric', 'min:0'],
             'remarks'        => ['nullable', 'string', 'max:2000'],

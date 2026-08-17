@@ -66,30 +66,14 @@ class CstAllocationController extends Controller
                 ->where('product_status', 'converted')
                 ->whereNull('deleted_at')
                 ->selectRaw('COALESCE(SUM(amount_paid), 0)');
-        }, 'payment_amount_paid')
-        ->whereRaw('
-            (
-                SELECT COALESCE(SUM(amount_paid), 0)
-                FROM lead_products
-                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
-            ) >= 0.4 * (
-                SELECT COALESCE(SUM(total_price), 0)
-                FROM lead_products
-                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
-            )
-        ')
-        ->whereRaw('
-            (
-                SELECT COALESCE(SUM(total_price), 0)
-                FROM lead_products
-                WHERE lead_id = leads.id AND product_status = \'converted\' AND deleted_at IS NULL
-            ) > 0
-        ');
+        }, 'payment_amount_paid');
 
-        // 2. Apply Filters in SQL (Branch, Product, CST User)
-        $fBranch = $request->get('branch_id');
-        $fProduct = $request->get('product_id');
-        $fCstUser = $request->get('cst_user_id');
+        // 2. Apply Filters in SQL (Branch, Product, CST User, Lead Account)
+        $fBranch      = $request->get('branch_id');
+        $fProduct     = $request->get('product_id');
+        $fCstUser     = $request->get('cst_user_id');
+        $fLeadId      = $request->get('lead_id');
+        $fLeadAccount = $request->get('lead_account');
 
         if ($fBranch) {
             $leadsQuery->where('branch_id', $fBranch);
@@ -106,6 +90,15 @@ class CstAllocationController extends Controller
                   ->orWhere('customer_support_tl_id', $fCstUser);
             });
         }
+        if ($fLeadId) {
+            $leadsQuery->where('leads.id', $fLeadId);
+        }
+        if ($fLeadAccount) {
+            $leadsQuery->where(function($q) use ($fLeadAccount) {
+                $q->where('company_name', 'like', "%{$fLeadAccount}%")
+                  ->orWhere('contact_name', 'like', "%{$fLeadAccount}%");
+            });
+        }
 
         $eligibleLeads = $leadsQuery->get();
 
@@ -120,8 +113,9 @@ class CstAllocationController extends Controller
 
         // 4. Partition based on assignment state and role visibility
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
 
-        if ($isAdmin) {
+        if ($isTl) {
             $pendingLeads = $eligibleLeads->whereNull('customer_support_executive_id');
             $completedLeads = $eligibleLeads->whereNotNull('customer_support_executive_id');
         } else {
@@ -145,6 +139,15 @@ class CstAllocationController extends Controller
                 });
             })->orderBy('name')->get(['id', 'name']);
 
+        // Fetch Lead Accounts for filter dropdown
+        $leadAccounts = Lead::whereHas('products', function($q) {
+                $q->where('product_status', '=', 'converted');
+            })
+            ->select('id', 'company_name', 'contact_name')
+            ->orderBy('company_name')
+            ->orderBy('contact_name')
+            ->get();
+
         // Fetch Branches and Products for filter bars
         $branches = $this->visibility->visibleBranches($currentUser);
         $products = Product::query();
@@ -157,6 +160,7 @@ class CstAllocationController extends Controller
             'cstUsers'          => $cstUsers,
             'branches'          => $branches,
             'products'          => $products,
+            'leadAccounts'      => $leadAccounts,
             'isAdmin'           => $isAdmin
         ]);
     }
@@ -167,12 +171,12 @@ class CstAllocationController extends Controller
     public function allocateTl(Request $request, Lead $lead): RedirectResponse
     {
         $currentUser = Auth::user();
-        $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        // $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
 
         // Verify authorization
-        if (!$isAdmin) {
-            abort(403, 'Unauthorized action.');
-        }
+        // if (!$isAdmin) {
+        //     abort(403, 'Unauthorized action.');
+        // }
 
         $request->validate([
             'cst_user_id' => 'required|exists:users,id',

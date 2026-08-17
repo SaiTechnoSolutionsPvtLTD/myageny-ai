@@ -19,7 +19,9 @@ use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\FacilityManagementController;
 use App\Http\Controllers\FacilityTitleController;
 use App\Http\Controllers\HolidayCalendarController;
+use App\Http\Controllers\HouseKeepingAttendanceController;
 use App\Http\Controllers\HouseKeepingCategoryController;
+use App\Http\Controllers\HouseKeepingEmployeeController;
 use App\Http\Controllers\HouseKeepingManagementController;
 use App\Http\Controllers\HouseKeepingWorkController;
 use App\Http\Controllers\HrmsAnnouncementController;
@@ -226,6 +228,16 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.schedule.update');
         Route::post('/projects-details/{productionInitiation}/updates', [ProjectController::class, 'storeUpdate'])
             ->name('projects.updates.store');
+        Route::post('/projects-details/{productionInitiation}/move-to-testing', [ProjectController::class, 'moveToTesting'])
+            ->name('projects.move-to-testing');
+        Route::post('/projects-details/{productionInitiation}/bugs', [ProjectController::class, 'storeBug'])
+            ->name('projects.bugs.store');
+        Route::get('/testing-details/{productionInitiation}', [ProjectController::class, 'testingDetails'])
+            ->name('projects.testing-details');
+        Route::post('/testing-details/{productionInitiation}/status', [ProjectController::class, 'updateTestingStatus'])
+            ->name('projects.testing-details.update-status');
+        Route::patch('/testing-details/bugs/{bug}/status', [ProjectController::class, 'updateBugStatus'])
+            ->name('projects.bugs.update-status');
         Route::post('/projects-details/updates/quick', [ProjectController::class, 'storeQuickUpdate'])
             ->name('projects.updates.quick-store');
         Route::patch('/projects-details/{productionInitiation}/content-calendar-sheet', [ProjectController::class, 'updateContentCalendarSheet'])
@@ -289,6 +301,28 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+
+    // Expense Requests
+    Route::prefix('hrms/expense-requests')->name('hrms.expense-requests.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ExpenseRequestController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\ExpenseRequestController::class, 'store'])->name('store');
+        Route::get('/{expenseRequest}/email-approve', [\App\Http\Controllers\ExpenseRequestController::class, 'emailApprove'])->name('email-approve');
+        Route::get('/{expenseRequest}/email-reject', [\App\Http\Controllers\ExpenseRequestController::class, 'emailRejectPage'])->name('email-reject');
+        Route::post('/{expenseRequest}/approve', [\App\Http\Controllers\ExpenseRequestController::class, 'approve'])->name('approve');
+        Route::post('/{expenseRequest}/reject', [\App\Http\Controllers\ExpenseRequestController::class, 'reject'])->name('reject');
+    });
+    
+    // Petty Cash Report & Transactions
+    Route::get('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'report'])->name('hrms.petty-cash.index');
+    Route::post('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'store'])->name('hrms.petty-cash.store');
+    Route::put('/hrms/petty-cash/{entry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'update'])->name('hrms.petty-cash.update');
+    Route::get('/hrms/petty-cash/export-excel', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportExcel'])->name('hrms.petty-cash.export-excel');
+    Route::get('/hrms/petty-cash/export-pdf', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportPdf'])->name('hrms.petty-cash.export-pdf');
+
+    // Rani Petty Cash Entries
+    Route::post('/hrms/petty-cash/rani', [\App\Http\Controllers\HRMS\PettyCashController::class, 'storeRani'])->name('hrms.petty-cash.rani.store');
+    Route::put('/hrms/petty-cash/rani/{raniEntry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'updateRani'])->name('hrms.petty-cash.rani.update');
+    Route::delete('/hrms/petty-cash/rani/{raniEntry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'destroyRani'])->name('hrms.petty-cash.rani.destroy');
     Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
     Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
     Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
@@ -305,12 +339,32 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/house-keeping-management/completions', [HouseKeepingManagementController::class, 'updateCompletion'])
         ->middleware('can:house_keeping.menuview')
         ->name('house-keeping.completions.update');
+    Route::resource('house-keeping-employees', HouseKeepingEmployeeController::class)
+        ->middleware('can:house_keeping.menuview')
+        ->names('house-keeping.employees');
+    Route::get('/house-keeping-attendances', [HouseKeepingAttendanceController::class, 'index'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.index');
+    Route::post('/house-keeping-attendances', [HouseKeepingAttendanceController::class, 'storeOrUpdate'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.store');
+    Route::delete('/house-keeping-attendances/{attendance}', [HouseKeepingAttendanceController::class, 'destroy'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.attendances.destroy');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/leave-requests/{leaveRequest}/approvals/{approval}/email-approve', [LeaveRequestController::class, 'emailApprove'])
+        ->name('leave-requests.email-approve');
+    Route::get('/leave-requests/{leaveRequest}/approvals/{approval}/email-reject', [LeaveRequestController::class, 'emailRejectPage'])
+        ->name('leave-requests.email-reject');
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/approve', [LeaveRequestController::class, 'approve'])
         ->name('leave-requests.approve');
     Route::patch('/leave-requests/{leaveRequest}/approvals/{approval}/reject', [LeaveRequestController::class, 'reject'])
         ->name('leave-requests.reject');
     Route::resource('permission-requests', PermissionRequestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/permission-requests/{permissionRequest}/approvals/{approval}/email-approve', [PermissionRequestController::class, 'emailApprove'])
+        ->name('permission-requests.email-approve');
+    Route::get('/permission-requests/{permissionRequest}/approvals/{approval}/email-reject', [PermissionRequestController::class, 'emailRejectPage'])
+        ->name('permission-requests.email-reject');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestController::class, 'approve'])
         ->name('permission-requests.approve');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/reject', [PermissionRequestController::class, 'reject'])
@@ -319,16 +373,19 @@ Route::middleware(['auth'])->group(function () {
         ->name('notifications.mark-all-read');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
         ->name('notifications.read');
-    Route::resource('recruitment', RecruitmentController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+    Route::resource('recruitment', RecruitmentController::class);
     Route::post('/recruitment/{recruitment}/call-updates', [RecruitmentController::class, 'storeCallUpdate'])
         ->name('recruitment.call-updates.store');
     Route::post('/recruitment/{recruitment}/interviews', [RecruitmentController::class, 'storeInterview'])
         ->name('recruitment.interviews.store');
+    Route::put('/recruitment/{recruitment}/interviews/{interview}', [RecruitmentController::class, 'updateInterview'])
+        ->name('recruitment.interviews.update');
     Route::patch('/recruitment/{recruitment}/status', [RecruitmentController::class, 'updateStatus'])
         ->name('recruitment.status.update');
     Route::resource('assets', AssetEntryController::class);
     Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::post('employee-onboarding/{employee_onboarding}/update-photo', [EmployeeOnboardingController::class, 'updatePhoto'])->name('employee-onboarding.update-photo');
+    Route::post('employee-onboarding/{employee_onboarding}/update-document', [EmployeeOnboardingController::class, 'updateDocument'])->name('employee-onboarding.update-document');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
@@ -366,6 +423,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:price_requests.reject')
         ->name('lead-price-requests.reject');
 
+    // ── Pre Sales Management ─────────────────────────────────────
+    Route::get('/pre-sales', [\App\Http\Controllers\PreSalesController::class, 'index'])->name('pre-sales.index');
+    Route::post('/pre-sales/allocate', [\App\Http\Controllers\PreSalesController::class, 'allocate'])->name('pre-sales.allocate');
+
     // ── Main Lead CRUD ─────────────────────────────────────────
    Route::prefix('leads')->name('leads.')->group(function () {
 
@@ -380,10 +441,14 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/{lead}',      [LeadController::class, 'update'])->middleware('can:leads.edit')->name('update');
         Route::delete('/{lead}',   [LeadController::class, 'destroy'])->middleware('can:leads.delete')->name('destroy');
         Route::patch('/{lead}/status', [LeadController::class, 'updateStatus'])->middleware('can:leads.update')->name('update-status');
+        Route::post('/{lead}/reassign', [LeadController::class, 'reassign'])->name('reassign');
 
         // ── Call Updates ──────────────────────────────────────
         Route::post('/{lead}/calls',             [LeadShowController::class, 'storeCall'])->middleware('can:call_updates.create')->name('calls.store');
         Route::delete('/{lead}/calls/{call}',    [LeadShowController::class, 'destroyCall'])->middleware('can:call_updates.delete')->name('calls.destroy');
+
+        // ── CST Updates ───────────────────────────────────────
+        Route::post('/{lead}/cst-updates',       [LeadController::class, 'storeCstUpdate'])->name('cst-updates.store');
 
         // ── Reminders ─────────────────────────────────────────
         Route::post('/{lead}/reminders',                  [LeadShowController::class, 'storeReminder'])->middleware('can:leads.edit')->name('reminders.store');
@@ -560,6 +625,28 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
         Route::get('/', [\App\Http\Controllers\LeadReallocationController::class, 'index'])->name('index');
         Route::post('/reallocate', [\App\Http\Controllers\LeadReallocationController::class, 'reallocate'])->name('reallocate');
     });
+
+    // Expense Pipeline Settings
+    Route::prefix('expense-pipeline')->name('expense-pipeline.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ExpensePipelineController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\ExpensePipelineController::class, 'store'])->name('store');
+        Route::put('/{expensePipeline}', [\App\Http\Controllers\ExpensePipelineController::class, 'update'])->name('update');
+        Route::delete('/{expensePipeline}', [\App\Http\Controllers\ExpensePipelineController::class, 'destroy'])->name('destroy');
+        Route::patch('/{expensePipeline}/toggle', [\App\Http\Controllers\ExpensePipelineController::class, 'toggleStatus'])->name('toggle-status');
+    });
+
+    // Leave Hierarchy Settings
+    Route::prefix('leave-hierarchy')->name('leave-hierarchy.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'index'])->name('index');
+        Route::post('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'store'])->name('store');
+        Route::put('/{leaveHierarchy}', [\App\Http\Controllers\LeaveHierarchyController::class, 'update'])->name('update');
+        Route::delete('/{leaveHierarchy}', [\App\Http\Controllers\LeaveHierarchyController::class, 'destroy'])->name('destroy');
+        Route::patch('/{leaveHierarchy}/toggle', [\App\Http\Controllers\LeaveHierarchyController::class, 'toggleStatus'])->name('toggle-status');
+    });
+
+    // Expense Category Master
+    Route::resource('expense-categories', \App\Http\Controllers\ExpenseCategoryController::class)->except(['create', 'show', 'edit']);
+    Route::patch('expense-categories/{expenseCategory}/toggle', [\App\Http\Controllers\ExpenseCategoryController::class, 'toggleStatus'])->name('expense-categories.toggle-status');
 
     // Lead Source
     Route::resource('lead-sources', LeadSourceController::class)

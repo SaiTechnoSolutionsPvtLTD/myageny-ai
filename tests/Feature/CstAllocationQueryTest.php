@@ -204,7 +204,7 @@ class CstAllocationQueryTest extends TestCase
         $lp1->total_price = 1000;
         $lp1->save();
 
-        // Lead 2: 30% paid progress (should be filtered out)
+        // Lead 2: 30% paid progress (converted - should also match now)
         $lead2 = Lead::create(['company_id' => $company->id, 'company_name' => 'Lead Two']);
         $lp2 = new LeadProduct([
             'company_id' => $company->id,
@@ -233,9 +233,51 @@ class CstAllocationQueryTest extends TestCase
 
         $pendingLeads = $response->viewData('pendingLeads');
         
-        $this->assertCount(1, $pendingLeads);
+        $this->assertCount(2, $pendingLeads);
         $this->assertEquals($lead1->id, $pendingLeads->first()->id);
         $this->assertEquals(50.0, $pendingLeads->first()->payment_progress_pct);
+        $this->assertEquals(30.0, $pendingLeads->get(1)->payment_progress_pct);
+    }
+
+    /** @test */
+    public function test_cst_allocation_filters_by_lead_account()
+    {
+        $company = Company::create(['company_name' => 'Test Co 3', 'company_status' => 'active']);
+        $adminUser = User::create([
+            'company_id' => $company->id,
+            'name' => 'Admin User',
+            'email' => 'admin3@test.com',
+            'password' => \Illuminate\Support\Facades\Hash::make('password'),
+            'is_active' => true,
+        ]);
+        $roleId = DB::table('roles')->insertGetId(['company_id' => $company->id, 'name' => 'super_admin']);
+        DB::table('model_has_roles')->insert(['role_id' => $roleId, 'model_type' => User::class, 'model_id' => $adminUser->id]);
+
+        $leadA = Lead::create(['company_id' => $company->id, 'company_name' => 'Alpha Corp']);
+        $lpA = new LeadProduct(['company_id' => $company->id, 'lead_id' => $leadA->id, 'product_status' => 'converted', 'amount_paid' => 500]);
+        $lpA->total_price = 1000;
+        $lpA->save();
+
+        $leadB = Lead::create(['company_id' => $company->id, 'company_name' => 'Beta Solutions']);
+        $lpB = new LeadProduct(['company_id' => $company->id, 'lead_id' => $leadB->id, 'product_status' => 'converted', 'amount_paid' => 500]);
+        $lpB->total_price = 1000;
+        $lpB->save();
+
+        $this->actingAs($adminUser);
+
+        // Filter by lead_id
+        $res1 = $this->get(route('cst-allocation.index', ['lead_id' => $leadA->id]));
+        $res1->assertStatus(200);
+        $pending1 = $res1->viewData('pendingLeads');
+        $this->assertCount(1, $pending1);
+        $this->assertEquals($leadA->id, $pending1->first()->id);
+
+        // Filter by search string
+        $res2 = $this->get(route('cst-allocation.index', ['lead_account' => 'Beta']));
+        $res2->assertStatus(200);
+        $pending2 = $res2->viewData('pendingLeads');
+        $this->assertCount(1, $pending2);
+        $this->assertEquals($leadB->id, $pending2->first()->id);
     }
 
     /** @test */

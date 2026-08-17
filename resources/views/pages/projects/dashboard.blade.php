@@ -108,12 +108,13 @@
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                @if($isAdminLike ?? false)
+                @if(auth()->user()?->canViewProjectsDashboardSwitcher())
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
-                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:160px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
-                            <option value="production" @selected(($selectedDashboard ?? 'design') === 'production')>Production</option>
-                            <option value="design" @selected(($selectedDashboard ?? 'design') === 'design')>Designing</option>
+                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:170px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
+                            <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
+                            <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
+                            <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
                         </select>
                     </div>
                 @endif
@@ -252,7 +253,7 @@
                         <div class="pjd-field">
                             <label class="pjd-label">Status</label>
                             <select name="status" class="pjd-select">
-                                <option value="">All Statuses</option>
+                                <option value="">All Status</option>
                                 <option value="waiting_approval" @selected($filters['status'] === 'waiting_approval')>Waiting for content approval</option>
                                 <option value="inprogress" @selected($filters['status'] === 'inprogress')>In Progress</option>
                                 <option value="waiting_review" @selected($filters['status'] === 'waiting_review')>Waiting for Review</option>
@@ -635,15 +636,18 @@
 @else
     @php
         $hasUpdateErrors = $errors->has('production_initiation_id') || $errors->has('type') || $errors->has('content');
+        $deptTitle = match($selectedDashboard ?? 'development') {
+            'dm', 'digital_marketing' => 'Digital Marketing',
+            'design', 'designing' => 'Designing',
+            default => 'Development',
+        };
         $pageTitle = $isTlScopedView
-            ? 'TL Project Dashboard'
-            : ($isContributorScopedView ? 'Executive Project Dashboard' : 'Projects Dashboard');
-        $pageCrumb = $isTlScopedView
-            ? 'Modules > Projects > TL Dashboard'
-            : ($isContributorScopedView ? 'Modules > Projects > Executive Dashboard' : 'Modules > Projects Dashboard');
+            ? $deptTitle . ' TL Dashboard'
+            : ($isContributorScopedView ? $deptTitle . ' Executive Dashboard' : $deptTitle . ' Projects Dashboard');
+        $pageCrumb = 'Modules > Projects > ' . $deptTitle . ' Dashboard';
         $workspaceLabel = $isTlScopedView
-            ? 'TL Allocation Overview'
-            : ($isContributorScopedView ? 'Executive Allocation Overview' : 'Project Allocation Overview');
+            ? $deptTitle . ' TL Allocation Overview'
+            : ($isContributorScopedView ? $deptTitle . ' Executive Allocation Overview' : $deptTitle . ' Project Allocation Overview');
         $currency = fn ($value) => 'Rs ' . number_format((float) $value, 2);
     @endphp
 
@@ -654,12 +658,13 @@
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                @if($isAdminLike ?? false)
+                @if(auth()->user()?->canViewProjectsDashboardSwitcher())
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
-                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:160px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
-                            <option value="production" @selected(($selectedDashboard ?? 'production') === 'production')>Production</option>
-                            <option value="design" @selected(($selectedDashboard ?? 'production') === 'design')>Designing</option>
+                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:170px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
+                            <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
+                            <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
+                            <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
                         </select>
                     </div>
                 @endif

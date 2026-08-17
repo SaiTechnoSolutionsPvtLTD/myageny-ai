@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -18,11 +19,21 @@ class OvpModuleController extends Controller
     private const OVP_TL_ROLE_KEYS = [
         'customer_support_team_tl',
         'senior_customer_success_team_executive',
+        'senior_customer_success_executive',
+        'senior_success_executive',
+        'senior_customer_support_executive',
+        'senior_support_executive',
+        'senior_cst_executive',
     ];
 
     private const OVP_EXECUTIVE_ROLE_KEYS = [
         'customer_support_team_executive',
+        'customer_support_executive',
+        'customer_success_executive',
         'senior_customer_success_team_executive',
+        'cst_executive',
+        'support_executive',
+        'executive',
     ];
 
     public function index(Request $request): View
@@ -38,11 +49,12 @@ class OvpModuleController extends Controller
                 'lead.assignedTo:id,name',
                 'lead.createdBy:id,name',
                 'leadProduct:id,lead_id,amount_paid,total_price,created_at',
+                'leadProduct.payments',
                 'department:id,name',
                 'product.ovpFormFields',
-                'ovpAllocatedTo:id,name',
-                'ovpAllocatedBy:id,name',
-                'reviewedBy:id,name',
+                'ovpAllocatedTo' => fn ($q) => $q->withTrashed()->select('id', 'name'),
+                'ovpAllocatedBy' => fn ($q) => $q->withTrashed()->select('id', 'name'),
+                'reviewedBy' => fn ($q) => $q->withTrashed()->select('id', 'name'),
             ]);
 
         // Apply filters
@@ -183,22 +195,81 @@ class OvpModuleController extends Controller
 
         $validated = $request->validate([
             'decision' => ['required', 'in:approval,rejected'],
+            'remarks' => ['required_if:decision,rejected', 'nullable', 'string', 'max:2000'],
+        ], [
+            'remarks.required_if' => 'Please provide a rejection reason when rejecting an OVP item.',
         ]);
 
         $customFormData = $validated['decision'] === 'approval'
             ? $this->prepareOvpCustomFormData($request, $productionInitiation)
             : ($productionInitiation->custom_form_data ?? []);
 
+        $rejectionReason = trim((string) ($request->input('remarks') ?: $request->input('rejection_reason', '')));
+
         $productionInitiation->update([
             'status' => $validated['decision'] === 'approval' ? 'approved' : 'rejected',
             'ovp_allocation_status' => 'submitted',
             'custom_form_data' => $customFormData,
+            'production_approval_remarks' => $validated['decision'] === 'rejected' ? $rejectionReason : $productionInitiation->production_approval_remarks,
             'reviewed_at' => Carbon::now(),
             'reviewed_by' => auth()->id(),
             'production_approval_status' => $validated['decision'] === 'approval' ? 'pending' : null,
             'production_approval_reviewed_at' => null,
             'production_approval_reviewed_by' => null,
         ]);
+
+        if ($validated['decision'] === 'approval') {
+            try {
+                $recipientEmail = 'tamilarasan@saitechnosolutions.net';
+                // $recipientEmail = 'kesavaraj@saitechnosolutions.net';
+                $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+                $reviewedBy = auth()->user();
+
+                Mail::send('emails.ovp_approved', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'reviewedBy' => $reviewedBy,
+                ], function ($message) use ($recipientEmail, $productionInitiation) {
+                    $message->to($recipientEmail, 'Tamilarasan')
+                        ->subject('OVP Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            } catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::error('Failed to send OVP approval email.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        } elseif ($validated['decision'] === 'rejected') {
+            try {
+                $productionInitiation->loadMissing(['lead.assignedTo', 'lead.createdBy', 'leadProduct', 'department']);
+                $assignedUser = $productionInitiation->lead?->assignedTo ?: $productionInitiation->lead?->createdBy;
+                $recipientEmail = $assignedUser?->email;
+
+                if ($recipientEmail) {
+                    $reviewedBy = auth()->user();
+
+                    Mail::send('emails.ovp_rejected', [
+                        'initiation' => $productionInitiation,
+                        'lead' => $productionInitiation->lead,
+                        'leadProduct' => $productionInitiation->leadProduct,
+                        'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                        'reviewedBy' => $reviewedBy,
+                        'assignedUser' => $assignedUser,
+                        'rejectionReason' => $rejectionReason ?: 'No reason specified.',
+                    ], function ($message) use ($recipientEmail, $assignedUser, $productionInitiation) {
+                        $message->to($recipientEmail, $assignedUser?->name ?? 'Team Member')
+                            ->subject('OVP Rejected - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                    });
+                }
+            } catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::error('Failed to send OVP rejection email.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
 
         return redirect()
             ->route('ovp-module.index', ['bucket' => $validated['decision'] === 'approval' ? 'approved' : 'reject'])
@@ -270,7 +341,9 @@ class OvpModuleController extends Controller
         return $user
             && ! $user->hasAdminLikeRole()
             && ! $this->isTlScopedUser($user)
-            && ($this->hasAnyRoleKey($user, self::OVP_EXECUTIVE_ROLE_KEYS) || $user->hasExecutiveLikeRole());
+            && ($this->hasAnyRoleKey($user, self::OVP_EXECUTIVE_ROLE_KEYS)
+                || $user->hasCustomerSupportLikeRole()
+                || $user->hasExecutiveLikeRole());
     }
 
     private function availableExecutiveUsers(?User $user): Collection
@@ -282,15 +355,18 @@ class OvpModuleController extends Controller
         $formatCandidates = function (Collection $candidates): Collection {
             return $candidates
                 ->filter(function (User $candidate) {
-                    $isSelfTlOption = (int) $candidate->id === (int) auth()->id() && $this->isTlScopedUser($candidate);
-                    $isSeniorExec = $this->hasAnyRoleKey($candidate, ['senior_customer_success_team_executive']);
+                    $isActive = (bool) $candidate->is_active && ($candidate->user_status ? $candidate->user_status === 'active' : true);
+                    if (! $isActive) {
+                        return false;
+                    }
 
-                    return ! $candidate->hasAdminLikeRole()
-                        && (! $this->isTlScopedUser($candidate) || $isSelfTlOption || $isSeniorExec)
-                        && ($isSelfTlOption
-                            || $isSeniorExec
-                            || $this->hasAnyRoleKey($candidate, self::OVP_EXECUTIVE_ROLE_KEYS)
-                            || $candidate->hasExecutiveLikeRole());
+                    if ($candidate->hasAdminLikeRole()) {
+                        return false;
+                    }
+
+                    return $candidate->belongsToCustomerSupportDepartment()
+                        || $candidate->hasCustomerSupportLikeRole()
+                        || $this->hasAnyRoleKey($candidate, self::OVP_EXECUTIVE_ROLE_KEYS);
                 })
                 ->map(function (User $candidate) {
                     $roles = $candidate->resolvedRoles(withDepartment: true);
@@ -310,7 +386,7 @@ class OvpModuleController extends Controller
                             ->implode(', ') ?: 'Mapped User',
                         'department_label' => $departments->isNotEmpty()
                             ? $departments->implode(', ')
-                            : 'All Departments',
+                            : 'Customer Support',
                     ];
                 })
                 ->sortBy('name')
@@ -321,6 +397,10 @@ class OvpModuleController extends Controller
             ? collect()
             : $user->managedUsers()
                 ->where('users.is_active', true)
+                ->where(function ($q) {
+                    $q->where('users.user_status', 'active')
+                        ->orWhereNull('users.user_status');
+                })
                 ->with(['roles.department'])
                 ->get();
 
@@ -332,25 +412,27 @@ class OvpModuleController extends Controller
                 ->values();
         }
 
-        $managedExecutives = $formatCandidates($managedUsers);
-        if ($managedExecutives->isNotEmpty()) {
-            return $managedExecutives;
-        }
-
         $companyUsers = User::query()
             ->where('is_active', true)
+            ->where(function ($q) {
+                $q->where('user_status', 'active')
+                    ->orWhereNull('user_status');
+            })
             ->when($user->company_id, fn ($query) => $query->where('company_id', $user->company_id))
             ->with(['roles.department'])
             ->get();
 
+        $allCandidates = $managedUsers->concat($companyUsers)->unique('id')->values();
+
         if ($this->isTlScopedUser($user) && $user->is_active) {
-            $companyUsers = $companyUsers
+            $user->loadMissing(['roles.department']);
+            $allCandidates = $allCandidates
                 ->prepend($user)
                 ->unique('id')
                 ->values();
         }
 
-        return $formatCandidates($companyUsers);
+        return $formatCandidates($allCandidates);
     }
 
     private function hasAnyRoleKey(User $user, array $keys): bool

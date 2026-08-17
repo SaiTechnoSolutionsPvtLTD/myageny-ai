@@ -110,12 +110,12 @@ class ProductionInitiation extends Model
 
     public function ovpAllocatedTo(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'ovp_allocated_to');
+        return $this->belongsTo(User::class, 'ovp_allocated_to')->withTrashed();
     }
 
     public function ovpAllocatedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'ovp_allocated_by');
+        return $this->belongsTo(User::class, 'ovp_allocated_by')->withTrashed();
     }
 
     public function productionApprovalReviewedBy(): BelongsTo
@@ -136,6 +136,16 @@ class ProductionInitiation extends Model
     public function projectUpdates(): HasMany
     {
         return $this->hasMany(ProjectUpdate::class)->latest();
+    }
+
+    public function testingDetails(): HasMany
+    {
+        return $this->hasMany(ProjectTestingDetail::class, 'production_initiation_id')->latest();
+    }
+
+    public function bugs(): HasMany
+    {
+        return $this->hasMany(ProjectBug::class, 'production_initiation_id')->latest();
     }
 
     public function timesheets(): HasMany

@@ -414,7 +414,7 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-kanban ld-fi"></i>
                                 <select name="lead_status" class="ld-fs" id="f_status" onchange="autoSubmit()">
-                                    <option value="">All Statuses</option>
+                                    <option value="">All Status</option>
                                     @foreach(\App\Models\Lead::statusOptions() as $key => $label)
                                         <option value="{{ $key }}" {{ request('lead_status') == $key ? 'selected':'' }}>{{ $label }}</option>
                                     @endforeach
@@ -445,6 +445,20 @@
                                     <option value="">All Users</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ request('assigned_to') == $u->id ? 'selected':'' }}>{{ $u->name }}</option>
+                                    @endforeach
+                                </select>
+                                <i class="bi bi-chevron-down ld-fc"></i>
+                            </div>
+                        </div>
+
+                        <div class="ld-fw">
+                            <label class="ld-field-label" for="f_pre_sales">Pre Sales Exec</label>
+                            <div class="ld-input-wrap">
+                                <i class="bi bi-person-badge ld-fi"></i>
+                                <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales" onchange="autoSubmit()">
+                                    <option value="">All Pre Sales</option>
+                                    @foreach($preSaleExecutives as $pse)
+                                        <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
                                     @endforeach
                                 </select>
                                 <i class="bi bi-chevron-down ld-fc"></i>
@@ -487,6 +501,7 @@
                                 <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
                                 <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
                                 <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
+                                <button type="button" class="ld-qb" id="quickAll" onclick="setQ('all')">Show All</button>
                             </div>
                         </div>
 
@@ -571,6 +586,18 @@
                     <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
 
+                {{-- Pre Sales Exec Filter --}}
+                <div class="ld-fw">
+                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                    <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales_inline" onchange="autoSubmit()">
+                        <option value="">All Pre Sales</option>
+                        @foreach($preSaleExecutives as $pse)
+                        <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
+                        @endforeach
+                    </select>
+                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+
                 {{-- Date Range --}}
                 <div class="ld-date-range">
                     <div class="ld-fw">
@@ -578,7 +605,7 @@
                         <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
                                value="{{ request('date_from') }}" onchange="updateFilters()" style="min-width:130px;">
                     </div>
-                    <span class="ld-date-sep">â†’</span>
+                    <span class="ld-date-sep">→</span>
                     <div class="ld-fw">
                         <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                         <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
@@ -595,7 +622,7 @@
             </div>
 
             {{-- Reset --}}
-            @if(request()->hasAny(['search','branch_id','mobile_number','lead_source','assigned_to','date_from','date_to']))
+            @if(request()->hasAny(['search','branch_id','mobile_number','lead_source','assigned_to','pre_sale_executive_id','date_from','date_to']))
             <a href="{{ route('leads.index') }}" class="ld-reset-btn">
                 <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
                 Reset
@@ -751,6 +778,11 @@
                                 @else
                                 <span style="color:#9e9e9e;font-size:12px">Unassigned</span>
                                 @endif
+                                @if($lead->preSaleExecutive)
+                                <div style="font-size:10px; color:#475569; font-weight:700; margin-top:4px; display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;">
+                                    <i class="bi bi-headset" style="font-size:10px; color:#ea580c;"></i> Pre-Sales: {{ $lead->preSaleExecutive->name }}
+                                </div>
+                                @endif
                             </td>
                             <td><span class="ld-branch">{{ $lead->branch?->name ?? '-' }}</span></td>
                             <td><span class="ld-date">{{ $lead->lead_date->format('d M Y') }}</span></td>
@@ -887,10 +919,11 @@ function updateFilters() {
 
     const from = document.getElementById('f_date_from')?.value;
     const to = document.getElementById('f_date_to')?.value;
-    
+
     // Toggle active state for quick buttons
     document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
     document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
+    document.getElementById('quickAll')?.classList.toggle('active', !from && !to);
 
     // Calculate dynamic values for Week and Year active states
     const parts = defaultToDate.split('-').map(Number);
@@ -901,7 +934,7 @@ function updateFilters() {
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     };
-    
+
     const mon = new Date(today);
     mon.setDate(today.getDate() - today.getDay() + 1);
     const sun = new Date(mon);
@@ -947,6 +980,13 @@ function setQ(p) {
     const f = document.getElementById('f_date_from');
     const t = document.getElementById('f_date_to');
     if (!f || !t) return;
+
+    if (p === 'all') {
+        f.value = '';
+        t.value = '';
+        autoSubmit();
+        return;
+    }
 
     let targetFrom = '';
     let targetTo = '';

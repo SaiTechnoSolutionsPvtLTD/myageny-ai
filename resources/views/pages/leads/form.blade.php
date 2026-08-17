@@ -387,14 +387,14 @@
             <div class="lf-card-head" style="border-bottom-color:#334155">
                 <div>
                     <div class="lf-card-title" style="color:#f1f5f9">Lead Summary</div>
-                    <div class="lf-card-sub" style="color:#94a3b8">Created {{ $lead->created_at->diffForHumans() }}</div>
+                    <div class="lf-card-sub" style="color:#94a3b8">Created {{ $lead->created_at?->diffForHumans() ?? '—' }}</div>
                 </div>
             </div>
             <div class="lf-card-body">
                 @php $items = [
                     ['label'=>'Created by',   'val'=> $lead->createdBy?->name ?? 'System'],
                     ['label'=>'Assigned to',  'val'=> $lead->assignedTo?->name ?? 'Unassigned'],
-                    ['label'=>'Last updated', 'val'=> $lead->updated_at->diffForHumans()],
+                    ['label'=>'Last updated', 'val'=> $lead->updated_at?->diffForHumans() ?? '—'],
                     ['label'=>'Lead ID',      'val'=> 'LD-'.str_pad($lead->id,4,'0',STR_PAD_LEFT)],
                 ]; @endphp
                 @foreach($items as $item)

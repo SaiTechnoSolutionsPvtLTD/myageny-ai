@@ -60,7 +60,10 @@
             <p class="hk-subtitle">Manage cleaning categories, maintain work items under each category, and review the monthly cleaning sheet in the format you shared.</p>
 
             <div class="hk-actions">
-                <a href="{{ route('settings.house-keeping-categories.index') }}" class="hk-btn hk-btn-primary">House Keeping Category</a>
+                <a href="{{ route('house-keeping.index') }}" class="hk-btn hk-btn-primary">Cleaning Sheet</a>
+                <a href="{{ route('house-keeping.employees.index') }}" class="hk-btn hk-btn-ghost">Employee Entry</a>
+                <a href="{{ route('house-keeping.attendances.index') }}" class="hk-btn hk-btn-ghost">Attendance</a>
+                <a href="{{ route('settings.house-keeping-categories.index') }}" class="hk-btn hk-btn-ghost">House Keeping Category</a>
                 <a href="{{ route('settings.house-keeping-works.index') }}" class="hk-btn hk-btn-ghost">House Keeping Works</a>
                 <a href="{{ route('hrms.dashboard') }}" class="hk-btn hk-btn-ghost">Back to HRMS</a>
             </div>

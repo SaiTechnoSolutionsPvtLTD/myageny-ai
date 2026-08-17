@@ -239,6 +239,16 @@
                             @endforeach
                         </select>
                     </div>
+
+                    <div class="crm-pay-field">
+                        <label class="crm-pay-label" for="sales_executive_id">Sales Executive</label>
+                        <select id="sales_executive_id" name="sales_executive_id" class="crm-pay-select select2">
+                            <option value="">All Sales Executives</option>
+                            @foreach($salesExecutives as $exec)
+                                <option value="{{ $exec->id }}" @selected((string) request('sales_executive_id') === (string) $exec->id)>{{ $exec->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="payment_mode">Payment Mode</label>
                         <select id="payment_mode" name="payment_mode" class="crm-pay-select">
@@ -291,6 +301,7 @@
                                     <th>Payment Date</th>
                                     <th>Receipt No</th>
                                     <th>Customer ID</th>
+                                    <th>Company Name</th>
                                     <th>Customer Name</th>
                                     <th>Total Amount</th>
                                     <th>Received Amount</th>
@@ -302,12 +313,25 @@
                             </thead>
                             <tbody>
                                 @foreach($reportRows as $row)
-                                    <tr>
+                                    <tr style="cursor:pointer;" onclick="window.location='{{ route('leads.show', $row->customer_id) }}'" title="Click to view lead details for {{ $row->company_name ?: $row->customer_name }}">
                                         <td><span class="crm-pay-code">PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
                                         <td>{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('d M Y') : '-' }}</td>
                                         <td><span class="crm-pay-code">RCT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
-                                        <td><span class="crm-pay-code">LD-{{ str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT) }}</span></td>
-                                        <td><span class="crm-pay-name">{{ $row->customer_name ?: '-' }}</span></td>
+                                        <td>
+                                            <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-code" style="color:#ea580c; font-weight:800; text-decoration:none;">
+                                                LD-{{ str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT) }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-name" style="color:#0f172a; font-weight:800; text-decoration:none;">
+                                                {{ $row->company_name ?: '-' }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-name" style="color:#334155; text-decoration:none;">
+                                                {{ $row->customer_name ?: '-' }}
+                                            </a>
+                                        </td>
                                         <td class="crm-pay-money">Rs {{ number_format((float) ($row->total_amount ?? 0), 2) }}</td>
                                         <td class="crm-pay-money" style="color:#047857;">Rs {{ number_format((float) ($row->received_amount ?? 0), 2) }}</td>
                                         <td class="crm-pay-money" style="color:#dc2626;">Rs {{ number_format((float) ($row->outstanding_amount ?? 0), 2) }}</td>
@@ -510,16 +534,18 @@
     });
     // Initialize Select2 with custom layout matching select fields
     if (window.jQuery && window.jQuery.fn.select2) {
-        const $customerSelect = $('#customer_id');
-        if ($customerSelect.hasClass('select2-hidden-accessible')) {
-            $customerSelect.select2('destroy');
-        }
-        $customerSelect.select2({
-            allowClear: true,
-            placeholder: "Search Customer",
-            width: '100%'
+        $('.crm-pay-select.select2').each(function() {
+            const $el = $(this);
+            if ($el.hasClass('select2-hidden-accessible')) {
+                $el.select2('destroy');
+            }
+            $el.select2({
+                allowClear: true,
+                placeholder: $el.find('option:first').text(),
+                width: '100%'
+            });
+            $el.next('.select2-container').find('.select2-selection--single').addClass('pay-select2-selection');
         });
-        $customerSelect.next('.select2-container').find('.select2-selection--single').addClass('pay-select2-selection');
     }
 
     // ── Quick Date Preset Buttons ──────────────────────────────────────────

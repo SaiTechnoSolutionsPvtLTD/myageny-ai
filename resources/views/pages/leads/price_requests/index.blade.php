@@ -17,8 +17,10 @@
 .btn-primary,.btn-reset,.btn-approve,.btn-reject{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid transparent;text-decoration:none;cursor:pointer}
 .btn-primary{background:#fe5f04;color:#fff}
 .btn-reset{background:#fff;border-color:#e1dee3;color:#444}
-.btn-approve{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
-.btn-reject{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
+.btn-approve{background:#f0fdf4;border-color:#bbf7d0;color:#166534;transition:all 0.15s ease;}
+.btn-approve:hover{background:#dcfce7;border-color:#86efac;}
+.btn-reject{background:#fef2f2;border-color:#fecaca;color:#b91c1c;transition:all 0.15s ease;}
+.btn-reject:hover{background:#fee2e2;border-color:#fca5a5;}
 .table-responsive{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
 th,td{padding:14px 16px;border-bottom:1px solid #f1f1f1;text-align:left;vertical-align:top}
@@ -37,6 +39,51 @@ td{font-size:13px;color:#121212}
 .empty{padding:56px 20px;text-align:center;color:#9e9e9e}
 @media (max-width:1200px){.filter-form{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:768px){.page-head{flex-direction:column;align-items:flex-start}.filter-form{grid-template-columns:1fr}}
+
+/* Modals & Progress Overlay */
+.pr-modal-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.pr-modal-box {
+    background: #fff; border-radius: 18px; width: 90%; max-width: 520px; box-shadow: 0 25px 50px rgba(0,0,0,0.25); overflow: hidden; animation: prIn 0.2s ease-out;
+}
+@keyframes prIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.pr-modal-head {
+    padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 16px;
+}
+.pr-modal-head.approve { background: #f0fdf4; border-bottom: 1px solid #bbf7d0; color: #166534; }
+.pr-modal-head.reject { background: #fef2f2; border-bottom: 1px solid #fecaca; color: #991b1b; }
+.pr-modal-body { padding: 22px; font-size: 14px; color: #374151; }
+.pr-modal-foot { padding: 14px 20px; background: #fafafa; border-top: 1px solid #f1f1f1; display: flex; justify-content: flex-end; gap: 10px; }
+
+.support-process-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(6px);
+    display: flex; justify-content: center; align-items: center; z-index: 99999;
+}
+.support-process-card {
+    background: #ffffff; border-radius: 24px; padding: 36px 40px; width: 440px; max-width: 90vw; text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.support-process-icon-wrap {
+    position: relative; width: 72px; height: 72px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;
+}
+.support-process-spinner {
+    position: absolute; inset: 0; border: 3px solid #f1f5f9; border-top-color: #fe5f04; border-radius: 50%; animation: processSpin 1s linear infinite;
+}
+@keyframes processSpin { to { transform: rotate(360deg); } }
+.support-process-icon { font-size: 32px; color: #fe5f04; animation: pulseIcon 1.5s ease-in-out infinite alternate; }
+@keyframes pulseIcon { from { transform: scale(0.88); opacity: 0.85; } to { transform: scale(1.12); opacity: 1; } }
+.support-process-title { font-size: 19px; font-weight: 800; color: #111827; margin: 0 0 6px; }
+.support-process-subtitle { font-size: 13px; color: #6b7280; margin: 0 0 24px; line-height: 1.5; }
+.support-progress-wrapper { width: 100%; }
+.support-progress-bar { width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; position: relative; }
+.support-progress-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #fe5f04 0%, #ff8c3a 50%, #fe5f04 100%);
+    background-size: 200% 100%; border-radius: 999px; transition: width 0.3s ease; animation: gradientMove 2s linear infinite;
+}
+@keyframes gradientMove { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+.support-progress-status { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; font-weight: 700; color: #4b5563; }
 </style>
 @endpush
 
@@ -65,32 +112,37 @@ td{font-size:13px;color:#121212}
                 <select name="status" class="filter-select">
                     <option value="">All Status</option>
                     @foreach(\App\Models\LeadProductPriceRequest::STATUSES as $key => $label)
-                        <option value="{{ $key }}" @selected(request('status') === $key)>{{ $label }}</option>
+                        <option value="{{ $key }}" {{ request('status') === $key ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
                 </select>
             </div>
-            <div class="filter-group">
-                <label class="filter-label">Lead ID</label>
-                <input type="number" name="lead_id" value="{{ request('lead_id') }}" class="filter-input" placeholder="Lead ID">
-            </div>
+
             <div class="filter-group">
                 <label class="filter-label">Requested By</label>
                 <select name="requested_by" class="filter-select">
                     <option value="">All Users</option>
-                    @foreach($requesters as $requester)
-                        <option value="{{ $requester->id }}" @selected((string) request('requested_by') === (string) $requester->id)>{{ $requester->name }}</option>
+                    @foreach($requesters as $user)
+                        <option value="{{ $user->id }}" {{ request('requested_by') == $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
                     @endforeach
                 </select>
             </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Lead ID</label>
+                <input type="text" name="lead_id" value="{{ request('lead_id') }}" placeholder="Lead ID" class="filter-input">
+            </div>
+
             <div class="filter-group">
                 <label class="filter-label">From Date</label>
                 <input type="date" name="date_from" value="{{ request('date_from') }}" class="filter-input">
             </div>
+
             <div class="filter-group">
                 <label class="filter-label">To Date</label>
                 <input type="date" name="date_to" value="{{ request('date_to') }}" class="filter-input">
             </div>
-            <button type="submit" class="btn-primary">Apply Filter</button>
+
+            <button type="submit" class="btn-primary">Filter</button>
             <a href="{{ route('lead-price-requests.index') }}" class="btn-reset">Reset</a>
         </form>
     </div>
@@ -100,14 +152,14 @@ td{font-size:13px;color:#121212}
             <table>
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Lead / Deal</th>
-                        <th>Product</th>
+                        <th>Lead</th>
+                        <th>Product & Deal</th>
                         <th>Requested By</th>
-                        <th>Price Change</th>
-                        <th>Qty / Disc</th>
+                        <th>Original Unit Price</th>
+                        <th>Requested Unit Price</th>
+                        <th>Qty & Disc</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -115,12 +167,15 @@ td{font-size:13px;color:#121212}
                         @php
                             $difference = $priceRequest->price_difference;
                             $badgeClass = $priceRequest->status === 'approved' ? 'badge-approved' : ($priceRequest->status === 'rejected' ? 'badge-rejected' : 'badge-pending');
+
+                            $allocatedUser = $priceRequest->lead?->assignedTo ?? $priceRequest->requestedBy;
+                            $recipientName = $allocatedUser?->name ?? 'Allocated Person';
+                            $recipientEmail = $allocatedUser?->email ?? '';
                         @endphp
                         <tr>
-                            <td>{{ $loop->iteration + ($requests->firstItem() - 1) }}</td>
                             <td>
                                 <strong>Lead #{{ $priceRequest->lead_id }}</strong>
-                                <div class="meta">{{ $priceRequest->lead?->company_name ?? 'Lead' }}</div>
+                                <div class="meta">{{ $priceRequest->lead?->company_name ?? $priceRequest->lead?->contact_name ?? 'Lead' }}</div>
                                 <div class="meta">Deal: {{ $priceRequest->deal_name }}</div>
                             </td>
                             <td>
@@ -134,11 +189,15 @@ td{font-size:13px;color:#121212}
                                 <div class="meta">{{ $priceRequest->created_at->format('d M Y h:i A') }}</div>
                             </td>
                             <td>
-                                <div class="money-old">Base: ₹{{ number_format($priceRequest->original_unit_price, 2) }}</div>
-                                <div class="money-new">Asked: ₹{{ number_format($priceRequest->requested_unit_price, 2) }}</div>
-                                <div class="{{ $difference > 0 ? 'money-diff-up' : 'money-diff-down' }}">
-                                    {{ $difference > 0 ? '+' : '' }}₹{{ number_format($difference, 2) }}
-                                </div>
+                                <div class="money-old">₹{{ number_format($priceRequest->original_unit_price, 2) }}</div>
+                            </td>
+                            <td>
+                                <div class="money-new">₹{{ number_format($priceRequest->requested_unit_price, 2) }}</div>
+                                @if($difference > 0)
+                                    <div class="money-diff-up">+₹{{ number_format($difference, 2) }}</div>
+                                @elseif($difference < 0)
+                                    <div class="money-diff-down">-₹{{ number_format(abs($difference), 2) }}</div>
+                                @endif
                             </td>
                             <td>
                                 <strong>{{ $priceRequest->quantity }}</strong> qty
@@ -157,17 +216,25 @@ td{font-size:13px;color:#121212}
                             <td>
                                 <div class="actions">
                                     @if($priceRequest->status === 'pending')
-                                        <form method="POST" action="{{ route('lead-price-requests.approve', $priceRequest) }}">
+                                        <form id="approve-form-{{ $priceRequest->id }}" method="POST" action="{{ route('lead-price-requests.approve', $priceRequest) }}" style="display:none;">
                                             @csrf
                                             @method('PATCH')
-                                            <button type="submit" class="btn-approve" style="width:100%">Approve</button>
                                         </form>
-                                        <form method="POST" action="{{ route('lead-price-requests.reject', $priceRequest) }}">
+
+                                        <form id="reject-form-{{ $priceRequest->id }}" method="POST" action="{{ route('lead-price-requests.reject', $priceRequest) }}" style="display:none;">
                                             @csrf
                                             @method('PATCH')
-                                            <input type="text" name="rejection_reason" class="table-input" placeholder="Reject reason (optional)">
-                                            <button type="submit" class="btn-reject" style="width:100%;margin-top:8px">Reject</button>
+                                            <input type="hidden" name="rejection_reason" id="reject-reason-input-{{ $priceRequest->id }}">
                                         </form>
+
+                                        <button type="button" class="btn-approve" style="width:100%"
+                                                onclick="confirmApprove('{{ $priceRequest->id }}', '{{ $priceRequest->lead_id }}', '{{ addslashes($priceRequest->deal_name) }}', '{{ addslashes($priceRequest->product_name) }}', '₹{{ number_format($priceRequest->requested_unit_price, 2) }}', '{{ addslashes($recipientName) }}', '{{ $recipientEmail }}')">
+                                            Approve
+                                        </button>
+                                        <button type="button" class="btn-reject" style="width:100%;margin-top:4px"
+                                                onclick="confirmReject('{{ $priceRequest->id }}', '{{ $priceRequest->lead_id }}', '{{ addslashes($priceRequest->deal_name) }}', '{{ addslashes($priceRequest->product_name) }}', '₹{{ number_format($priceRequest->requested_unit_price, 2) }}', '{{ addslashes($recipientName) }}', '{{ $recipientEmail }}')">
+                                            Reject
+                                        </button>
                                     @else
                                         <a href="{{ route('leads.show', $priceRequest->lead_id) }}" class="btn-reset">View Lead</a>
                                     @endif
@@ -190,4 +257,186 @@ td{font-size:13px;color:#121212}
         @endif
     </div>
 </div>
+
+{{-- APPROVE CONFIRMATION MODAL --}}
+<div id="approveConfirmModal" class="pr-modal-overlay" style="display: none;">
+    <div class="pr-modal-box">
+        <div class="pr-modal-head approve">
+            <span>✓ Confirm Price Request Approval</span>
+            <button type="button" style="background:none;border:none;font-size:18px;cursor:pointer;color:#166534;" onclick="closeApproveModal()">&times;</button>
+        </div>
+        <div class="pr-modal-body">
+            <p style="margin: 0 0 14px; font-weight:700; font-size:15px; color:#111827;">Are you sure you want to APPROVE this price change request?</p>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:13px; line-height:1.6;">
+                <div><strong>Lead ID:</strong> <span id="approve_lead_info"></span></div>
+                <div><strong>Deal Name:</strong> <span id="approve_deal_name"></span></div>
+                <div><strong>Product:</strong> <span id="approve_product_name"></span></div>
+                <div><strong>Approved Price:</strong> <span id="approve_asked_price" style="color:#16a34a; font-weight:800;"></span></div>
+            </div>
+
+            <p style="margin:0; font-size:13px; color:#6b7280; line-height:1.5;">
+                An email notification will be sent to the allocated person: <strong id="approve_recipient_info" style="color:#111827;"></strong>.
+            </p>
+        </div>
+        <div class="pr-modal-foot">
+            <button type="button" class="btn-reset" onclick="closeApproveModal()">Cancel</button>
+            <button type="button" class="btn-approve" onclick="executeApprove()">Yes, Approve Request</button>
+        </div>
+    </div>
+</div>
+
+{{-- REJECT CONFIRMATION MODAL --}}
+<div id="rejectConfirmModal" class="pr-modal-overlay" style="display: none;">
+    <div class="pr-modal-box">
+        <div class="pr-modal-head reject">
+            <span>✕ Confirm Price Request Rejection</span>
+            <button type="button" style="background:none;border:none;font-size:18px;cursor:pointer;color:#991b1b;" onclick="closeRejectModal()">&times;</button>
+        </div>
+        <div class="pr-modal-body">
+            <input type="hidden" id="reject_form_id_holder">
+            <p style="margin: 0 0 14px; font-weight:700; font-size:15px; color:#111827;">Are you sure you want to REJECT this price change request?</p>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:13px; line-height:1.6;">
+                <div><strong>Lead ID:</strong> <span id="reject_lead_info"></span></div>
+                <div><strong>Deal Name:</strong> <span id="reject_deal_name"></span></div>
+                <div><strong>Product:</strong> <span id="reject_product_name"></span></div>
+                <div><strong>Requested Price:</strong> <span id="reject_asked_price" style="color:#dc2626; font-weight:800;"></span></div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151;">Rejection Reason (Optional)</label>
+                <input type="text" id="modal_rejection_reason" class="filter-input" placeholder="Enter reason for rejecting this price request...">
+            </div>
+
+            <p style="margin:0; font-size:13px; color:#6b7280; line-height:1.5;">
+                A rejection email notification will be sent to the allocated person: <strong id="reject_recipient_info" style="color:#111827;"></strong>.
+            </p>
+        </div>
+        <div class="pr-modal-foot">
+            <button type="button" class="btn-reset" onclick="closeRejectModal()">Cancel</button>
+            <button type="button" class="btn-reject" onclick="executeReject()">Yes, Reject Request</button>
+        </div>
+    </div>
+</div>
+
+{{-- MAIL PROCESS OVERLAY LOADER --}}
+<div id="priceRequestStatusOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner"></div>
+            <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+        </div>
+        <h4 id="prStatusOverlayTitle" class="support-process-title">Processing Price Request...</h4>
+        <p id="prStatusOverlaySubtitle" class="support-process-subtitle">Please wait while the status update email notification is sent...</p>
+
+        <div class="support-progress-wrapper">
+            <div class="support-progress-bar">
+                <div id="prStatusProgressFill" class="support-progress-fill"></div>
+            </div>
+            <div class="support-progress-status">
+                <span id="prStatusProgressText">Preparing email notification...</span>
+                <span id="prStatusProgressPercent">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
+
+@push('scripts')
+<script>
+let currentSubmitFormId = null;
+let progressInterval = null;
+
+function confirmApprove(id, leadId, dealName, productName, askedPrice, recipientName, recipientEmail) {
+    document.getElementById('approve_lead_info').innerText = '#' + leadId;
+    document.getElementById('approve_deal_name').innerText = dealName;
+    document.getElementById('approve_product_name').innerText = productName;
+    document.getElementById('approve_asked_price').innerText = askedPrice;
+    document.getElementById('approve_recipient_info').innerText = recipientName + (recipientEmail ? ' (' + recipientEmail + ')' : '');
+
+    currentSubmitFormId = 'approve-form-' + id;
+    document.getElementById('approveConfirmModal').style.display = 'flex';
+}
+
+function confirmReject(id, leadId, dealName, productName, askedPrice, recipientName, recipientEmail) {
+    document.getElementById('reject_lead_info').innerText = '#' + leadId;
+    document.getElementById('reject_deal_name').innerText = dealName;
+    document.getElementById('reject_product_name').innerText = productName;
+    document.getElementById('reject_asked_price').innerText = askedPrice;
+    document.getElementById('reject_recipient_info').innerText = recipientName + (recipientEmail ? ' (' + recipientEmail + ')' : '');
+    document.getElementById('modal_rejection_reason').value = '';
+
+    currentSubmitFormId = 'reject-form-' + id;
+    document.getElementById('reject_form_id_holder').value = id;
+    document.getElementById('rejectConfirmModal').style.display = 'flex';
+}
+
+function closeApproveModal() {
+    document.getElementById('approveConfirmModal').style.display = 'none';
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectConfirmModal').style.display = 'none';
+}
+
+function executeApprove() {
+    closeApproveModal();
+    startProgressAndSubmit('Approving Price Request...', 'Sending confirmation email to allocated team member...');
+}
+
+function executeReject() {
+    const reqId = document.getElementById('reject_form_id_holder').value;
+    const reason = document.getElementById('modal_rejection_reason').value;
+    if (reqId && document.getElementById('reject-reason-input-' + reqId)) {
+        document.getElementById('reject-reason-input-' + reqId).value = reason;
+    }
+    closeRejectModal();
+    startProgressAndSubmit('Rejecting Price Request...', 'Sending rejection notification email to allocated team member...');
+}
+
+function startProgressAndSubmit(title, subtitle) {
+    const overlay = document.getElementById('priceRequestStatusOverlay');
+    const fill = document.getElementById('prStatusProgressFill');
+    const percentText = document.getElementById('prStatusProgressPercent');
+    const statusText = document.getElementById('prStatusProgressText');
+    const titleText = document.getElementById('prStatusOverlayTitle');
+    const subText = document.getElementById('prStatusOverlaySubtitle');
+
+    if (titleText) titleText.innerText = title;
+    if (subText) subText.innerText = subtitle;
+
+    overlay.style.display = 'flex';
+    let currentProgress = 10;
+    fill.style.width = currentProgress + '%';
+    percentText.innerText = currentProgress + '%';
+    statusText.innerText = 'Preparing email notification...';
+
+    progressInterval = setInterval(function() {
+        if (currentProgress < 40) {
+            currentProgress += Math.floor(Math.random() * 8) + 5;
+            statusText.innerText = 'Building status update email...';
+        } else if (currentProgress < 85) {
+            currentProgress += Math.floor(Math.random() * 6) + 3;
+            statusText.innerText = 'Sending email notification to allocated user...';
+        } else if (currentProgress < 95) {
+            currentProgress += 1;
+            statusText.innerText = 'Updating price request record in database...';
+        }
+
+        if (currentProgress > 95) {
+            currentProgress = 95;
+        }
+
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+    }, 180);
+
+    setTimeout(function() {
+        if (currentSubmitFormId && document.getElementById(currentSubmitFormId)) {
+            document.getElementById(currentSubmitFormId).submit();
+        }
+    }, 1000);
+}
+</script>
+@endpush

@@ -250,12 +250,12 @@
         @endif
 
         @php
-            $hasActiveFilters = request()->filled('start_date') || 
-                                request()->filled('end_date') || 
-                                request()->filled('product_id') || 
-                                request()->filled('status') || 
-                                request()->filled('user_id') || 
-                                request()->filled('company_id') || 
+            $hasActiveFilters = request()->filled('start_date') ||
+                                request()->filled('end_date') ||
+                                request()->filled('product_id') ||
+                                request()->filled('status') ||
+                                request()->filled('user_id') ||
+                                request()->filled('company_id') ||
                                 request()->filled('department_id');
         @endphp
 
@@ -303,7 +303,7 @@
                             <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Status</label>
                             <div style="position:relative;">
                                 <select name="status" class="pa-input select2" style="padding:9px 12px; background:#fff;">
-                                    <option value="">All Statuses</option>
+                                    <option value="">All Status</option>
                                     <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
                                     <option value="approval" {{ request('status') == 'approval' ? 'selected' : '' }}>Approval</option>
                                     <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
@@ -437,6 +437,8 @@
                                                 class="pa-action-btn"
                                                 data-pa-open
                                                 data-action="{{ route('production-approvals.review', $item) }}"
+                                                data-product-name="{{ $item->product_name }}"
+                                                data-company-name="{{ $displayCompany }}"
                                                 data-approval-remarks="{{ $item->production_approval_remarks }}"
                                                 data-custom-form='@json($item->custom_form_data ?? [])'
                                                 data-is-budget-approval-needed="{{ optional($item->product)->is_budget_approval_needed ? 1 : 0 }}"
@@ -503,7 +505,7 @@
                         </div>
 
                         <div class="pa-remarks-panel">
-                            <label class="pa-label" for="pa-approval-remarks">Production Approval Remarks</label>
+                            <label class="pa-label" for="pa-approval-remarks">Production Approval Remarks <span style="color:#dc2626;">*</span></label>
                             <textarea id="pa-approval-remarks" name="production_approval_remarks" class="pa-input pa-textarea" required></textarea>
                         </div>
                     </div>
@@ -517,6 +519,191 @@
             </form>
         </div>
     </div>
+
+    {{-- Production Approval Confirmation Modal (Approval) --}}
+    <div class="pa-modal" id="pa-confirm-modal">
+        <div class="pa-modal-card" style="width: min(100%, 520px); height: auto; max-height: 90vh;">
+            <div class="pa-modal-head" style="background:#f0fdf4; border-bottom:1px solid #bbf7d0;">
+                <div>
+                    <div class="pa-modal-title" style="color:#166534; display:flex; align-items:center; gap:8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Confirm Production Approval
+                    </div>
+                </div>
+                <button type="button" class="pa-modal-close" id="pa-confirm-close">&times;</button>
+            </div>
+            <div style="padding: 24px;">
+                <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to approve this production request?</p>
+                <p style="font-size: 13px; color: #4b5563; margin: 0 0 16px; line-height: 1.5;">
+                    An email notification will be dispatched automatically to:<br>
+                    <span style="display:inline-flex; align-items:center; gap:6px; margin-top:8px; font-weight:700; color:#047857; background:#ecfdf5; padding:6px 12px; border-radius:8px; border:1px solid #a7f3d0; font-size:12px;">
+                        📧 Lead Sales Person &amp; projects@saitechnosolutions.net
+                    </span>
+                </p>
+                <div id="pa-confirm-details-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; font-size:13px; color:#334155; line-height:1.6;">
+                    <!-- Filled dynamically by JS -->
+                </div>
+            </div>
+            <div class="pa-modal-actions" style="justify-content: flex-end; gap: 10px; padding: 16px 24px 20px;">
+                <button type="button" class="pa-btn" id="pa-confirm-cancel">Cancel</button>
+                <button type="button" class="pa-btn approve" id="pa-confirm-submit-btn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); color:#fff; font-weight:800; padding:10px 20px;">
+                    Yes, Approve &amp; Send Mail
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Production Approval Confirmation Modal (Rejection) --}}
+    <div class="pa-modal" id="pa-reject-confirm-modal">
+        <div class="pa-modal-card" style="width: min(100%, 520px); height: auto; max-height: 90vh;">
+            <div class="pa-modal-head" style="background:#fef2f2; border-bottom:1px solid #fecaca;">
+                <div>
+                    <div class="pa-modal-title" style="color:#b91c1c; display:flex; align-items:center; gap:8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                        Confirm Production Rejection
+                    </div>
+                </div>
+                <button type="button" class="pa-modal-close" id="pa-reject-confirm-close">&times;</button>
+            </div>
+            <div style="padding: 24px;">
+                <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to REJECT this production approval request?</p>
+                <p style="font-size: 13px; color: #4b5563; margin: 0 0 16px; line-height: 1.5;">
+                    An email notification will be dispatched automatically to:<br>
+                    <span style="display:inline-flex; align-items:center; gap:6px; margin-top:8px; font-weight:700; color:#b91c1c; background:#fef2f2; padding:6px 12px; border-radius:8px; border:1px solid #fecaca; font-size:11px; line-height:1.4;">
+                        📧 customersuccessteam.sts@gmail.com, customersuccess@saitechnosolutions.net &amp; Sales Person
+                    </span>
+                </p>
+                <div id="pa-reject-confirm-details-box" style="background:#fff1f2; border:1px solid #fecdd3; border-radius:12px; padding:14px 16px; font-size:13px; color:#881337; line-height:1.6;">
+                    <!-- Filled dynamically by JS -->
+                </div>
+            </div>
+            <div class="pa-modal-actions" style="justify-content: flex-end; gap: 10px; padding: 16px 24px 20px;">
+                <button type="button" class="pa-btn" id="pa-reject-confirm-cancel">Cancel</button>
+                <button type="button" class="pa-btn reject" id="pa-reject-confirm-submit-btn" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color:#fff; font-weight:800; padding:10px 20px;">
+                    Yes, Reject &amp; Send Mail
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Support Portal Style Preloader Overlay --}}
+    <div id="paLoadingOverlay" class="support-process-overlay" style="display: none;">
+        <div class="support-process-card">
+            <div class="support-process-icon-wrap">
+                <div id="paSpinner" class="support-process-spinner"></div>
+                <i id="paIcon" class="bi bi-envelope-paper-fill support-process-icon"></i>
+            </div>
+            <h4 id="paLoadingTitle" class="support-process-title">Processing Request &amp; Sending Email...</h4>
+            <p id="paLoadingText" class="support-process-subtitle">Please wait while status is updated and email notifications are dispatched...</p>
+
+            <div class="support-progress-wrapper">
+                <div class="support-progress-bar">
+                    <div id="paProgressFill" class="support-progress-fill"></div>
+                </div>
+                <div class="support-progress-status">
+                    <span id="paProgressText">Connecting to server...</span>
+                    <span id="paProgressPercent">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    .support-process-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 99999;
+        animation: fadeInOverlay 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes fadeInOverlay {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    .support-process-card {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 40px 36px;
+        width: 460px;
+        max-width: calc(100vw - 32px);
+        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+        text-align: center;
+        transform: scale(0.95);
+        animation: scaleInCard 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes scaleInCard {
+        to { transform: scale(1); }
+    }
+    .support-process-icon-wrap {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .support-process-spinner {
+        position: absolute;
+        inset: 0;
+        border: 3.5px solid #e2e8f0;
+        border-top-color: #166534;
+        border-radius: 50%;
+        animation: spinOverlay 0.8s linear infinite;
+    }
+    @keyframes spinOverlay {
+        to { transform: rotate(360deg); }
+    }
+    .support-process-icon {
+        font-size: 32px;
+        color: #166534;
+    }
+    .support-process-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 8px;
+    }
+    .support-process-subtitle {
+        font-size: 13px;
+        color: #64748b;
+        margin: 0 0 28px;
+        line-height: 1.5;
+    }
+    .support-progress-wrapper {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 16px 20px;
+    }
+    .support-progress-bar {
+        height: 8px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        margin-bottom: 12px;
+    }
+    .support-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #166534 0%, #22c55e 100%);
+        border-radius: 999px;
+        transition: width 0.3s ease;
+    }
+    .support-progress-status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #475569;
+    }
+    </style>
 </div>
 @endsection
 
@@ -543,6 +730,23 @@ document.addEventListener('DOMContentLoaded', function () {
     const decisionInput = document.getElementById('pa-decision-input');
     const approvalRemarksInput = document.getElementById('pa-approval-remarks');
     const customFormWrap = document.getElementById('pa-custom-form-wrap');
+
+    const confirmModal = document.getElementById('pa-confirm-modal');
+    const confirmCloseBtn = document.getElementById('pa-confirm-close');
+    const confirmCancelBtn = document.getElementById('pa-confirm-cancel');
+    const confirmSubmitBtn = document.getElementById('pa-confirm-submit-btn');
+    const confirmDetailsBox = document.getElementById('pa-confirm-details-box');
+
+    const rejectConfirmModal = document.getElementById('pa-reject-confirm-modal');
+    const rejectConfirmCloseBtn = document.getElementById('pa-reject-confirm-close');
+    const rejectConfirmCancelBtn = document.getElementById('pa-reject-confirm-cancel');
+    const rejectConfirmSubmitBtn = document.getElementById('pa-reject-confirm-submit-btn');
+    const rejectConfirmDetailsBox = document.getElementById('pa-reject-confirm-details-box');
+
+    const loadingOverlay = document.getElementById('paLoadingOverlay');
+    let paProgressInterval = null;
+
+    let currentButton = null;
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -600,6 +804,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function openModal(button) {
+        currentButton = button;
         form.action = button.dataset.action || '';
         approvalRemarksInput.value = button.dataset.approvalRemarks || '';
         renderCustomFormData(JSON.parse(button.dataset.customForm || '[]'));
@@ -665,6 +870,135 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        var prodName = (currentButton && currentButton.dataset.productName) || 'Product';
+        var companyName = (currentButton && currentButton.dataset.companyName) || '';
+        var remarks = approvalRemarksInput.value || 'None';
+
+        if (decisionInput.value === 'approval') {
+            var bAmount = budgetAmount.value;
+            var bType = budgetType.value === 'custom' ? budgetCustom.value : budgetType.value;
+
+            var detailsHtml = '<div><strong>Product:</strong> ' + escapeHtml(prodName) + '</div>';
+            if (companyName) detailsHtml += '<div><strong>Client/Company:</strong> ' + escapeHtml(companyName) + '</div>';
+            if (bAmount) detailsHtml += '<div><strong>Approved Budget:</strong> ₹' + escapeHtml(bAmount) + ' (' + escapeHtml(bType) + ')</div>';
+            detailsHtml += '<div><strong>Approval Remarks:</strong> ' + escapeHtml(remarks) + '</div>';
+
+            if (confirmDetailsBox) confirmDetailsBox.innerHTML = detailsHtml;
+            if (confirmModal) confirmModal.classList.add('is-open');
+        } else if (decisionInput.value === 'rejected') {
+            var rejectDetailsHtml = '<div><strong>Product:</strong> ' + escapeHtml(prodName) + '</div>';
+            if (companyName) rejectDetailsHtml += '<div><strong>Client/Company:</strong> ' + escapeHtml(companyName) + '</div>';
+            rejectDetailsHtml += '<div style="margin-top:6px; color:#b91c1c; font-weight:700;"><strong>Rejection Reason:</strong> "' + escapeHtml(remarks) + '"</div>';
+
+            if (rejectConfirmDetailsBox) rejectConfirmDetailsBox.innerHTML = rejectDetailsHtml;
+            if (rejectConfirmModal) rejectConfirmModal.classList.add('is-open');
+        }
+    });
+
+    if (confirmSubmitBtn) {
+        confirmSubmitBtn.addEventListener('click', function () {
+            if (confirmModal) confirmModal.classList.remove('is-open');
+            if (modal) modal.classList.remove('is-open');
+            showPaProgressOverlay('approval');
+            setTimeout(function () {
+                form.submit();
+            }, 600);
+        });
+    }
+
+    if (rejectConfirmSubmitBtn) {
+        rejectConfirmSubmitBtn.addEventListener('click', function () {
+            if (rejectConfirmModal) rejectConfirmModal.classList.remove('is-open');
+            if (modal) modal.classList.remove('is-open');
+            showPaProgressOverlay('rejection');
+            setTimeout(function () {
+                form.submit();
+            }, 600);
+        });
+    }
+
+    function closeConfirmModal() {
+        if (confirmModal) confirmModal.classList.remove('is-open');
+    }
+
+    function closeRejectConfirmModal() {
+        if (rejectConfirmModal) rejectConfirmModal.classList.remove('is-open');
+    }
+
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeConfirmModal);
+    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', closeConfirmModal);
+
+    if (rejectConfirmCloseBtn) rejectConfirmCloseBtn.addEventListener('click', closeRejectConfirmModal);
+    if (rejectConfirmCancelBtn) rejectConfirmCancelBtn.addEventListener('click', closeRejectConfirmModal);
+
+    function showPaProgressOverlay(type) {
+        var fill = document.getElementById('paProgressFill');
+        var percentText = document.getElementById('paProgressPercent');
+        var statusText = document.getElementById('paProgressText');
+        var titleText = document.getElementById('paLoadingTitle');
+        var subtitleText = document.getElementById('paLoadingText');
+        var spinner = document.getElementById('paSpinner');
+        var icon = document.getElementById('paIcon');
+
+        if (!loadingOverlay || !fill || !percentText || !statusText) return;
+
+        if (type === 'rejection') {
+            if (titleText) titleText.innerText = 'Rejecting & Sending Rejection Email...';
+            if (subtitleText) subtitleText.innerText = 'Please wait while rejection email is sent to Customer Success Team & Sales Person...';
+            if (spinner) spinner.style.borderTopColor = '#dc2626';
+            if (icon) {
+                icon.className = 'bi bi-x-circle-fill support-process-icon';
+                icon.style.color = '#dc2626';
+            }
+            if (fill) fill.style.background = 'linear-gradient(90deg, #dc2626 0%, #ef4444 100%)';
+        } else {
+            if (titleText) titleText.innerText = 'Approving & Sending Email...';
+            if (subtitleText) subtitleText.innerText = 'Please wait while approval email is sent to Sales Person & projects@saitechnosolutions.net...';
+            if (spinner) spinner.style.borderTopColor = '#166534';
+            if (icon) {
+                icon.className = 'bi bi-check-circle-fill support-process-icon';
+                icon.style.color = '#166534';
+            }
+            if (fill) fill.style.background = 'linear-gradient(90deg, #166534 0%, #22c55e 100%)';
+        }
+
+        loadingOverlay.style.display = 'flex';
+        var currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (paProgressInterval) clearInterval(paProgressInterval);
+
+        paProgressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = type === 'rejection' ? 'Updating production status to rejected...' : 'Updating production approval status...';
+            } else if (currentProgress < 75) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = type === 'rejection' ? 'Sending email to Customer Success Team & Sales Person...' : 'Sending email to Sales Person & projects@saitechnosolutions.net...';
+            } else if (currentProgress < 94) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing request review...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
 });
 </script>
 @endpush

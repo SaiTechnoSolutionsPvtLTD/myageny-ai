@@ -229,8 +229,12 @@
                                                 </a>
                                             </td>
                                         @else
-                                            <td colspan="2" style="color: #64748b; font-style: italic; font-weight: 600; vertical-align: middle;">
-                                                Not Initiated
+                                            <td>
+                                                <div class="pjd-product">{{ $row['renewal_name'] ?: 'Purchased Product' }}</div>
+                                                <div class="pjd-meta" style="color:#d97706; font-weight:700;">Initiation Pending</div>
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:600; color:#94a3b8; font-style:italic;">Not Initiated</div>
                                             </td>
                                             <td style="vertical-align: middle;">—</td>
                                             <td style="vertical-align: middle;">—</td>
@@ -256,6 +260,79 @@
                     </div>
                 @else
                     <div style="text-align:center; padding:40px; color:#64748b;">No renewals or associated projects found for this account.</div>
+                @endif
+            </div>
+        </div>
+
+        {{-- Section 2: Non-Count Renewal Projects (count_wise_report = false & is_this_renewal_product = true) --}}
+        <h2 style="font-size:18px; font-weight:900; color:#111827; margin: 28px 0 8px 0; display:flex; align-items:center; gap:8px;">
+            <span>📢</span> Non-Count Renewal Projects (Lead Generation & Campaign Management)
+        </h2>
+
+        <div class="pjd-card">
+            <div class="pjd-card-body" style="padding:0;">
+                @if(isset($nonCountWiseProjects) && $nonCountWiseProjects->isNotEmpty())
+                    <div class="pjd-table-wrap">
+                        <table class="pjd-table">
+                            <thead>
+                                <tr>
+                                    <th>Project / Product Name</th>
+                                    <th>Department</th>
+                                    <th>Start Date</th>
+                                    <th>Delivery Date</th>
+                                    <th>Allocated Employee</th>
+                                    <th>Status</th>
+                                    <th>Overdue Alert</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($nonCountWiseProjects as $project)
+                                    <tr>
+                                        <td>
+                                            <div class="pjd-product">{{ $project->product_name ?: ($project->leadProduct?->product_name ?? '—') }}</div>
+                                            <div class="pjd-meta">ID: #{{ $project->id }}</div>
+                                        </td>
+                                        <td>
+                                            <div style="font-weight:600; color:#475569;">{{ $project->department?->name ?: 'Digital Marketing' }}</div>
+                                        </td>
+                                        <td>
+                                            <div style="color:#475569; white-space: nowrap;">{{ $project->start_date ? $project->start_date->format('d M Y') : '—' }}</div>
+                                        </td>
+                                        <td>
+                                            <div style="color:#475569; white-space: nowrap;">{{ $project->project_delivery_date ? $project->project_delivery_date->format('d M Y') : '—' }}</div>
+                                        </td>
+                                        <td>
+                                            <div style="font-weight:600; color:#475569; font-size:12px;">{{ $project->allocated_names }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="pjd-pill {{ $project->project_execution_status === 'delivered' ? 'allocated' : 'pending' }}">
+                                                {{ $project->project_execution_status ?: 'Pending' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if($project->is_overdue)
+                                                <span class="badge-overdue">
+                                                    ⚠️ Overdue
+                                                </span>
+                                            @else
+                                                <span style="color:#64748b; font-size:12px; font-weight:600;">No</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <a href="{{ route('projects.show', ['productionInitiation' => $project->id]) }}" class="pjd-btn">
+                                                View Project
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div style="text-align:center; padding:35px; color:#64748b; font-size:13px;">
+                        No non-count renewal projects (count_wise_report = false & is_this_renewal_product = true) found for this account.
+                    </div>
                 @endif
             </div>
         </div>

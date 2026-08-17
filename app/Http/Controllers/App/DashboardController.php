@@ -67,7 +67,7 @@ class DashboardController extends Controller
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:today,week,month,quarter,year'],
+            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -212,11 +212,17 @@ class DashboardController extends Controller
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
+        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
+        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
+            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+
         $overdueQuery = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()));
         $overdueCount = (clone $overdueQuery)->where('remind_at', '<', now())->count();
 
         $todayReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
@@ -233,6 +239,28 @@ class DashboardController extends Controller
                 'type_icon'   => $r->type_icon,
                 'priority'    => $r->priority,
                 'is_overdue'  => $r->is_overdue,
+                'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
+                'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
+            ]);
+
+        $overdueReminders = LeadReminder::where('is_completed', false)
+            ->where($reminderUserConstraint)
+            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+            ->where('remind_at', '<', now())
+            ->with(['lead:id,company_name', 'user:id,name'])
+            ->orderBy('remind_at', 'desc')
+            ->take(15)
+            ->get()
+            ->map(fn($r) => [
+                'id'          => $r->id,
+                'title'       => $r->title,
+                'description' => $r->description,
+                'remind_at'   => $r->remind_at->toISOString(),
+                'type'        => $r->type,
+                'type_label'  => $r->type_label,
+                'type_icon'   => $r->type_icon,
+                'priority'    => $r->priority,
+                'is_overdue'  => true,
                 'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
@@ -273,24 +301,34 @@ class DashboardController extends Controller
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
-                $total    = (clone $q)->count();
-                $won      = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal   = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
-                $pipeline = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
+                $total          = (clone $q)->count();
+                $leadIds        = (clone $q)->pluck('id');
+                $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+                $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
+                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
+                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+
+                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
+                $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
+                $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
+                $pipeline       = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
 
                 return [
-                    'branch_id'       => $branch->id,
-                    'branch_name'     => $branch->name,
-                    'branch_code'     => $branch->code,
-                    'total_leads'     => $total,
-                    'won_leads'       => $won,
-                    'lost_leads'      => (clone $q)->where('lead_status', 'lost')->count(),
-                    'won_value'       => $wonVal,
-                    'pipeline_value'  => $pipeline,
-                    'conversion_rate' => $total > 0 ? round($won / $total * 100, 1) : 0,
+                    'branch_id'            => $branch->id,
+                    'branch_name'          => $branch->name,
+                    'branch_code'          => $branch->code,
+                    'total_leads'          => $total,
+                    'converted_count'      => $convertedCount,
+                    'converted_value'      => $convertedVal,
+                    'converted_percentage' => $convRate,
+                    'won_leads'            => $wonLeads,
+                    'won_value'            => $wonVal,
+                    'lost_leads'           => (clone $q)->where('lead_status', 'lost')->count(),
+                    'pipeline_value'       => $pipeline,
+                    'conversion_rate'      => $convRate,
                 ];
             })
-            ->sortByDesc('won_value')
+            ->sortByDesc('converted_value')
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────
@@ -409,6 +447,7 @@ class DashboardController extends Controller
                     'overdue_count' => $overdueCount,
                     'today_count'   => $todayReminders->count(),
                     'items'         => $todayReminders,
+                    'overdue_items' => $overdueReminders,
                 ],
 
                 'recent_leads' => $recentLeads,
@@ -441,6 +480,7 @@ class DashboardController extends Controller
     {
         if ($request->filled('quick_date')) {
             return match ($request->quick_date) {
+                'all'     => [null, null],
                 'today'   => [today()->toDateString(), today()->toDateString()],
                 'week'    => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
                 'month'   => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],

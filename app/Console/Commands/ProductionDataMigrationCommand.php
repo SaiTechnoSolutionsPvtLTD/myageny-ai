@@ -120,6 +120,26 @@ class ProductionDataMigrationCommand extends Command
                     ->first();
 
                 if ($existingInitiation) {
+                    // Update status on existing initiation if it has legacy/invalid status values
+                    if (!$dryRun) {
+                        $updateFields = [];
+                        if (in_array($existingInitiation->production_approval_status, ['approve', 'pending', null], true)) {
+                            $updateFields['production_approval_status'] = 'approved';
+                        }
+                        if ($existingInitiation->project_allocation_status === 'pending') {
+                            $updateFields['project_allocation_status'] = !empty($existingInitiation->project_allocated_tl_user_ids) && $existingInitiation->project_allocated_tl_user_ids !== '[]' ? 'allocated' : 'allocation_pending';
+                        }
+                        if ($existingInitiation->employee_allocation_status === 'pending') {
+                            $updateFields['employee_allocation_status'] = !empty($existingInitiation->project_allocated_employee_user_ids) && $existingInitiation->project_allocated_employee_user_ids !== '[]' ? 'allocated' : 'allocation_pending';
+                        }
+
+                        if (!empty($updateFields)) {
+                            DB::connection('mysql')->table('production_initiations')
+                                ->where('id', $existingInitiation->id)
+                                ->update($updateFields);
+                        }
+                    }
+
                     // Store mapping so updates can still be resolved if needed
                     if ($legacyProduction && $legacyProduction->project_id) {
                         $this->projectIdToNewIdMap[$legacyProduction->project_id] = $existingInitiation->id;
@@ -127,7 +147,7 @@ class ProductionDataMigrationCommand extends Command
                     $this->leadIdToNewIdMap[$legacyLp->leadid] = $existingInitiation->id;
 
                     $skippedCount++;
-                    DB::connection('mysql')->rollBack();
+                    DB::connection('mysql')->commit();
                     $bar->advance();
                     continue;
                 }
@@ -213,8 +233,8 @@ class ProductionDataMigrationCommand extends Command
                     ['type' => 'text', 'label' => 'Working Days', 'value' => (string)$workingDays, 'field_id' => 3, 'field_name' => 'ovp_working_days']
                 ];
 
-                $allocationStatus = !empty($projectAllocatedTlUserIds) ? 'allocated' : 'pending';
-                $employeeAllocationStatus = !empty($projectAllocatedEmployeeUserIds) ? 'allocated' : 'pending';
+                $allocationStatus = !empty($projectAllocatedTlUserIds) ? 'allocated' : 'allocation_pending';
+                $employeeAllocationStatus = !empty($projectAllocatedEmployeeUserIds) ? 'allocated' : 'allocation_pending';
 
                 // Insert production initiation row
                 $prodInitiationData = [
@@ -242,7 +262,7 @@ class ProductionDataMigrationCommand extends Command
                     'company_name' => $companyName,
                     'reviewed_at' => $createdAt,
                     'reviewed_by' => 1,
-                    'production_approval_status' => 'approve',
+                    'production_approval_status' => 'approved',
                     'production_approval_remarks' => 'Database migration',
                     'production_approval_reviewed_at' => $createdAt,
                     'production_approval_reviewed_by' => 1,

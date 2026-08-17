@@ -110,6 +110,37 @@ class LeaveRequestController extends Controller
         return view('pages.hrms.leave_requests.show', compact('leaveRequest', 'approvalActions'));
     }
 
+    public function emailApprove(Request $request, LeaveRequest $leaveRequest, LeaveApproval $approval): RedirectResponse
+    {
+        $this->authorizeApprovalAction($leaveRequest, $approval);
+
+        if ($approval->status !== LeaveApproval::STATUS_PENDING) {
+            return redirect()
+                ->route('leave-requests.show', $leaveRequest)
+                ->with('error', "This approval step is already {$approval->status}.");
+        }
+
+        return $this->approve($request, $leaveRequest, $approval);
+    }
+
+    public function emailRejectPage(Request $request, LeaveRequest $leaveRequest, LeaveApproval $approval)
+    {
+        $this->authorizeApprovalAction($leaveRequest, $approval);
+
+        if ($approval->status !== LeaveApproval::STATUS_PENDING) {
+            return redirect()
+                ->route('leave-requests.show', $leaveRequest)
+                ->with('error', "This approval step is already {$approval->status}.");
+        }
+
+        if ($request->has('remarks') && !empty(trim($request->query('remarks')))) {
+            $request->merge(['remarks' => trim($request->query('remarks'))]);
+            return $this->reject($request, $leaveRequest, $approval);
+        }
+
+        return view('pages.hrms.leave_requests.reject_page', compact('leaveRequest', 'approval'));
+    }
+
     public function approve(Request $request, LeaveRequest $leaveRequest, LeaveApproval $approval): RedirectResponse
     {
         $this->validateApprovalAction($request);

@@ -414,14 +414,49 @@ class User extends Authenticatable
     public function belongsToCustomerSupportDepartment(): bool
     {
         return collect($this->departmentKeys()->all())->contains(function ($key) {
-            return str_contains($key, 'support') || str_contains($key, 'success');
+            return str_contains($key, 'support') || str_contains($key, 'success') || str_contains($key, 'cst');
         });
     }
 
     public function hasCustomerSupportLikeRole(): bool
     {
         return collect($this->roleKeys()->all())->contains(function ($key) {
-            return str_contains($key, 'support') || str_contains($key, 'success');
+            return str_contains($key, 'support') || str_contains($key, 'success') || str_contains($key, 'cst');
+        });
+    }
+
+    public function hasPreSalesLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'pre_sale') || str_contains($key, 'presale');
+        });
+    }
+
+    public function belongsToTestingDepartment(): bool
+    {
+        return collect($this->departmentKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'testing') || str_contains($key, 'qa');
+        });
+    }
+
+    public function hasTestingLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'testing') || str_contains($key, 'qa');
+        });
+    }
+
+    public function belongsToDevelopmentDepartment(): bool
+    {
+        return collect($this->departmentKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'development') || str_contains($key, 'dev') || str_contains($key, 'software') || str_contains($key, 'web') || str_contains($key, 'app');
+        });
+    }
+
+    public function hasDevelopmentLikeRole(): bool
+    {
+        return collect($this->roleKeys()->all())->contains(function ($key) {
+            return str_contains($key, 'developer') || str_contains($key, 'development') || str_contains($key, 'software') || str_contains($key, 'web') || str_contains($key, 'app');
         });
     }
 
@@ -440,7 +475,13 @@ class User extends Authenticatable
             'design_team_lead',
             'team_lead_digital_marketing',
             'software_team_leader',
-            'human_resource'
+            'human_resource',
+            'senior_customer_success_team_executive',
+            'senior_customer_success_executive',
+            'senior_success_executive',
+            'senior_customer_support_executive',
+            'senior_support_executive',
+            'senior_cst_executive',
         ])->isNotEmpty()) {
             return true;
         }
@@ -469,6 +510,27 @@ class User extends Authenticatable
             'chief_business_officer',
             'development_project_coordinator'
         ])->isNotEmpty();
+    }
+
+    public function isDevelopmentProjectCoordinator(): bool
+    {
+        $keys = collect($this->roleKeys()->all());
+        if ($keys->contains('development_project_coordinator')) {
+            return true;
+        }
+
+        return $this->resolvedRoles(withDepartment: true)->contains(function ($role) {
+            $roleNameKey = \Illuminate\Support\Str::slug((string) $role->name, '_');
+            $displayNameKey = \Illuminate\Support\Str::slug((string) ($role->display_name ?? ''), '_');
+            $deptKey = \Illuminate\Support\Str::slug((string) ($role->department?->name ?? ''), '_');
+
+            if ($roleNameKey === 'development_project_coordinator' || $displayNameKey === 'development_project_coordinator') {
+                return true;
+            }
+
+            $isPc = collect([$roleNameKey, $displayNameKey])->intersect(['project_coordinator', 'project_coordination', 'pc'])->isNotEmpty();
+            return $isPc && \Illuminate\Support\Str::contains($deptKey, 'develop');
+        });
     }
 
     public function canViewBudgetApprovalDetails(): bool
@@ -509,12 +571,44 @@ class User extends Authenticatable
             || $this->hasExecutiveLikeRole();
     }
 
+    public function canViewProjectsDashboardSwitcher(): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->intersect([
+            'company_admin',
+            'cto',
+            'chief_technology_officer',
+            'cheif_technology_officer',
+            'coo',
+            'chief_operating_officer',
+            'cheif_operating_officer',
+            'development_project_coordinator',
+            'project_coordinator',
+            'project_coordination',
+            'pc',
+        ])->isNotEmpty();
+    }
+
     public function canAccessCstModule(): bool
     {
         return $this->isCompanyAdmin()
             || $this->hasAdminLikeRole()
             || $this->belongsToCustomerSupportDepartment()
             || $this->hasCustomerSupportLikeRole();
+    }
+
+    public function isCustomerSuccessUser(): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin()) {
+            return true;
+        }
+
+        return $this->belongsToCustomerSupportDepartment() || $this->hasCustomerSupportLikeRole();
     }
 
     public function canAccessCrmModule(): bool

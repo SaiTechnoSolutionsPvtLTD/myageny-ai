@@ -270,6 +270,12 @@
                 </svg>
                 Attendance Rules
             </div>
+            <div class="masters-glance-item">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+                Expense Categories
+            </div>
         </div>
     </div>
 
@@ -357,6 +363,25 @@
             <p class="masters-card-text">Maintain the selectable category master used while creating and filtering asset entries.</p>
             <span class="masters-card-link">
                 Manage Asset Categories
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.expense-categories.index') }}" class="masters-card facility-title">
+            <div class="masters-card-icon facility-title">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+            </div>
+            <h4 class="masters-card-title">Expense Categories</h4>
+            <p class="masters-card-text">Maintain expense categories used in petty cash entries and expense claim workflows.</p>
+            <span class="masters-card-link">
+                Manage Expense Categories
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

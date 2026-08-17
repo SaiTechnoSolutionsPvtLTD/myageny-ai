@@ -43,7 +43,22 @@ class UserController extends Controller
             ->when($request->status !== null && $request->status !== '', fn($q) =>
                 $q->where('is_active', $request->status)
             )
-            ->latest()
+            ->when($request->activity, function ($q) use ($request) {
+                if ($request->activity === 'last_seen') {
+                    $q->whereNotNull('last_login_at')
+                      ->orderByDesc('last_login_at');
+                } elseif ($request->activity === 'recent_login') {
+                    $q->whereNotNull('last_login_at')
+                      ->where('last_login_at', '>=', now()->subHours(24))
+                      ->orderByDesc('last_login_at');
+                } elseif ($request->activity === 'inactive_3days') {
+                    $q->where(function ($q2) {
+                        $q2->whereNull('last_login_at')
+                           ->orWhere('last_login_at', '<=', now()->subDays(3));
+                    })->orderByRaw('last_login_at IS NULL DESC, last_login_at ASC');
+                }
+            })
+            ->when(!$request->activity, fn($q) => $q->latest())
             ->paginate(15)
             ->withQueryString();
 

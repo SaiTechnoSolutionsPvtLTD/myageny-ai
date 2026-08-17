@@ -249,7 +249,7 @@
                     <div class="crm-summary-field">
                         <label class="crm-summary-label" for="lead_status">Lead Status</label>
                         <select id="lead_status" name="lead_status" class="crm-summary-select">
-                            <option value="">All Statuses</option>
+                            <option value="">All Status</option>
                             @foreach($statusOptions as $status)
                                 <option value="{{ $status }}" @selected(request('lead_status') === $status)>{{ $status }}</option>
                             @endforeach

@@ -108,7 +108,7 @@
                                     </div>
                                     <div class="eob-group">
                                         <label class="eob-label">Department <span class="eob-label-required">*</span></label>
-                                        <select name="department_id" class="eob-select" required>
+                                        <select name="department_id" class="eob-select" id="convertDepartmentSelect" required>
                                             <option value="">Select Department</option>
                                             @foreach($departments as $department)
                                                 <option value="{{ $department->id }}" @selected((string) old('department_id') === (string) $department->id)>{{ $department->name }}</option>
@@ -118,10 +118,14 @@
                                     </div>
                                     <div class="eob-group">
                                         <label class="eob-label">Role <span class="eob-label-required">*</span></label>
-                                        <select name="role_id" class="eob-select" required>
+                                        <select name="role_id" class="eob-select" id="convertRoleSelect" required>
                                             <option value="">Select Role</option>
                                             @foreach($roles as $role)
-                                                <option value="{{ $role->id }}" @selected((string) old('role_id') === (string) $role->id)>
+                                                <option value="{{ $role->id }}"
+                                                    data-department-id="{{ $role->department_id }}"
+                                                    data-parent-role-id="{{ $role->roleParentMapping?->parent_role_id }}"
+                                                    data-parent-role-name="{{ $role->roleParentMapping?->parentRole?->display_name ?: $role->roleParentMapping?->parentRole?->name }}"
+                                                    @selected((string) old('role_id') === (string) $role->id)>
                                                     {{ $role->display_name ?: $role->name }}{{ $role->department ? ' - ' . $role->department->name : '' }}
                                                 </option>
                                             @endforeach
@@ -130,7 +134,7 @@
                                     </div>
                                     <div class="eob-group full">
                                         <label class="eob-label">Team Lead <span class="eob-label-required">*</span></label>
-                                        <select name="tl_user_id" class="eob-select" required>
+                                        <select name="tl_user_id" class="eob-select" id="convertTlSelect" data-selected-tl="{{ old('tl_user_id') }}" required>
                                             <option value="">Select Team Lead</option>
                                             @foreach($tlUsers as $tlUser)
                                                 <option value="{{ $tlUser['id'] }}" @selected((string) old('tl_user_id') === (string) $tlUser['id'])>
@@ -162,7 +166,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const branchSelect = document.getElementById('convertBranchSelect');
+    const departmentSelect = document.getElementById('convertDepartmentSelect');
+    const roleSelect = document.getElementById('convertRoleSelect');
+    const tlSelect = document.getElementById('convertTlSelect');
     const isConverted = {{ $form->convertedEmployee ? 'true' : 'false' }};
+    const tlUsersData = @json($tlUsers);
 
     if (branchSelect && !isConverted) {
         branchSelect.addEventListener('change', function () {
@@ -178,8 +186,97 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 })
                 .catch(err => console.error('Error fetching generated Employee ID:', err));
+            filterTlOptions();
         });
     }
+
+    function filterRolesByDepartment() {
+        if (!roleSelect) return;
+        const selectedDeptId = departmentSelect ? departmentSelect.value : '';
+
+        Array.from(roleSelect.options).forEach(option => {
+            if (!option.value) return;
+            const deptId = option.getAttribute('data-department-id');
+            if (!selectedDeptId || !deptId || String(deptId) === String(selectedDeptId)) {
+                option.style.display = '';
+                option.disabled = false;
+            } else {
+                option.style.display = 'none';
+                option.disabled = true;
+            }
+        });
+
+        const selectedOpt = roleSelect.options[roleSelect.selectedIndex];
+        if (selectedOpt && selectedOpt.value && selectedOpt.disabled) {
+            roleSelect.value = '';
+        }
+    }
+
+    function filterTlOptions() {
+        if (!tlSelect) return;
+        const selectedDeptId = departmentSelect ? departmentSelect.value : '';
+        const selectedBranchId = branchSelect ? branchSelect.value : '';
+        const selectedRoleOpt = roleSelect && roleSelect.selectedIndex >= 0 ? roleSelect.options[roleSelect.selectedIndex] : null;
+        const parentRoleId = selectedRoleOpt ? selectedRoleOpt.getAttribute('data-parent-role-id') : null;
+        const previousVal = tlSelect.value || tlSelect.getAttribute('data-selected-tl') || '';
+
+        tlSelect.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select Team Lead';
+        tlSelect.appendChild(placeholder);
+
+        const filtered = tlUsersData.filter(user => {
+            const matchesBranch = !selectedBranchId || !user.branch_id || String(user.branch_id) === String(selectedBranchId) || user.is_super_admin;
+            const depts = Array.isArray(user.department_ids) ? user.department_ids.map(String) : [];
+            const matchesDept = !selectedDeptId || depts.includes(String(selectedDeptId)) || depts.includes('') || user.is_super_admin;
+
+            let matchesRoleMapping = true;
+            if (parentRoleId && Array.isArray(user.role_ids)) {
+                matchesRoleMapping = user.role_ids.map(String).includes(String(parentRoleId)) || user.is_super_admin;
+            }
+
+            return matchesDept && matchesBranch && matchesRoleMapping;
+        });
+
+        filtered.forEach(user => {
+            const opt = document.createElement('option');
+            opt.value = user.id;
+            opt.textContent = user.name + ' - ' + (user.role_label || 'Team Lead') + (user.branch_name ? ' - ' + user.branch_name : '');
+            if (String(user.id) === String(previousVal)) {
+                opt.selected = true;
+            }
+            tlSelect.appendChild(opt);
+        });
+
+        if (previousVal && !filtered.some(u => String(u.id) === String(previousVal))) {
+            tlSelect.value = '';
+        }
+    }
+
+    if (departmentSelect) {
+        departmentSelect.addEventListener('change', function () {
+            filterRolesByDepartment();
+            filterTlOptions();
+        });
+    }
+
+    if (roleSelect) {
+        roleSelect.addEventListener('change', function () {
+            const selectedOpt = roleSelect.options[roleSelect.selectedIndex];
+            if (selectedOpt && selectedOpt.value) {
+                const roleDeptId = selectedOpt.getAttribute('data-department-id');
+                if (roleDeptId && departmentSelect && !departmentSelect.value) {
+                    departmentSelect.value = roleDeptId;
+                    filterRolesByDepartment();
+                }
+            }
+            filterTlOptions();
+        });
+    }
+
+    filterRolesByDepartment();
+    filterTlOptions();
 });
 </script>
 @endpush

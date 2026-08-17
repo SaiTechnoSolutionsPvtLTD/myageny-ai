@@ -142,6 +142,65 @@
     border-color: var(--cst-border) !important;
     cursor: not-allowed;
 }
+
+/* Select2 Custom Styles for Filter Bar */
+.select2-container--default .select2-selection--single {
+    height: 38px;
+    border: 1px solid var(--cst-border);
+    border-radius: 10px;
+    background: #fafafa;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 12px;
+    padding-right: 28px;
+    font-size: 13px;
+    color: var(--cst-text);
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+    right: 8px;
+}
+.select2-container--default .select2-selection--single .select2-selection__clear {
+    margin-right: 8px;
+    color: var(--cst-muted);
+}
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--open .select2-selection--single {
+    border-color: var(--cst-orange);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.select2-dropdown {
+    border: 1px solid var(--cst-border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+    z-index: 9999;
+}
+.select2-search--dropdown {
+    padding: 8px;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid var(--cst-border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: var(--cst-orange);
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 8px 12px;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: var(--cst-orange);
+    color: #ffffff;
+}
 </style>
 @endpush
 
@@ -154,7 +213,7 @@
             <span class="crumb-item active" style="color:var(--cst-text);font-weight:700;">CST Lead Allocation</span>
         </div>
         <div style="font-size:12px;color:var(--cst-muted);font-weight:500;">
-            📊 Converted & Payment Completed (>= 40%)
+            📊 Converted Product Leads
         </div>
     </header>
 
@@ -175,6 +234,18 @@
         <div style="background:var(--cst-card-bg); border:1px solid var(--cst-border); border-radius:14px; padding:18px 24px; display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; box-shadow:0 4px 6px -1px rgba(0,0,0,0.04);">
             <form method="GET" action="{{ route('cst-allocation.index') }}" style="display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; width:100%;">
                 <input type="hidden" name="tab" id="active_tab_field" value="{{ request('tab', 'pending') }}">
+
+                <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:200px;">
+                    <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">Lead Account</label>
+                    <select name="lead_id" id="filter_lead_id" class="select2" style="width:100%;">
+                        <option value="">All Lead Accounts</option>
+                        @foreach($leadAccounts as $acc)
+                            <option value="{{ $acc->id }}" {{ request('lead_id') == $acc->id ? 'selected' : '' }}>
+                                {{ $acc->company_name ?: ($acc->contact_name ?: 'Lead #'.$acc->id) }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
                 <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:180px;">
                     <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">Branch</label>
@@ -277,11 +348,11 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isAdmin)
+
                                                 <button class="btn-action btn-primary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}')">
                                                     👥 Allocate CST User
                                                 </button>
-                                            @endif
+
                                         </div>
                                     </td>
                                 </tr>
@@ -363,11 +434,11 @@
                                     </td>
                                     <td style="text-align:right;">
                                         <div style="display:flex;gap:6px;justify-content:flex-end;">
-                                            @if($isAdmin)
+
                                                 <button class="btn-action btn-secondary" onclick="openAllocateCstModal({{ $lead->id }}, '{{ addslashes($lead->company_name ?: $lead->contact_name) }}', '{{ $lead->customer_support_executive_id }}')">
                                                     Re-allocate CS User
                                                 </button>
-                                            @endif
+
                                         </div>
                                     </td>
                                 </tr>
@@ -477,6 +548,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (activeTab === 'completed') {
         const btn = document.querySelector("button[onclick*='panelCompleted']");
         if (btn) switchTab(btn, 'panelCompleted');
+    }
+
+    // Initialize Select2 on Lead Account dropdown
+    if (window.jQuery && window.jQuery.fn.select2) {
+        window.jQuery('#filter_lead_id').select2({
+            placeholder: 'Search Lead Account...',
+            allowClear: true,
+            width: '100%'
+        });
     }
 });
 

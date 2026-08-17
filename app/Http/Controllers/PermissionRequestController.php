@@ -98,14 +98,43 @@ class PermissionRequestController extends Controller
     {
         $permissionRequest->load(['user.roles', 'employee.role', 'employee.department', 'approvals.approver.roles', 'approvals.actionedBy.roles']);
 
-        abort_unless($this->canViewPermissionRequest($permissionRequest, auth()->user()), 403);
-
         $approvalActions = $permissionRequest->approvals
             ->mapWithKeys(fn (PermissionApproval $approval) => [
                 $approval->id => $this->canActOnApproval($approval, auth()->user()),
             ]);
 
         return view('pages.hrms.permission_requests.show', compact('permissionRequest', 'approvalActions'));
+    }
+
+    public function emailApprove(Request $request, PermissionRequest $permissionRequest, PermissionApproval $approval): RedirectResponse
+    {
+        $this->authorizeApprovalAction($permissionRequest, $approval);
+
+        if ($approval->status !== PermissionApproval::STATUS_PENDING) {
+            return redirect()
+                ->route('permission-requests.show', $permissionRequest)
+                ->with('error', "This approval step is already {$approval->status}.");
+        }
+
+        return $this->approve($request, $permissionRequest, $approval);
+    }
+
+    public function emailRejectPage(Request $request, PermissionRequest $permissionRequest, PermissionApproval $approval)
+    {
+        $this->authorizeApprovalAction($permissionRequest, $approval);
+
+        if ($approval->status !== PermissionApproval::STATUS_PENDING) {
+            return redirect()
+                ->route('permission-requests.show', $permissionRequest)
+                ->with('error', "This approval step is already {$approval->status}.");
+        }
+
+        if ($request->has('remarks') && !empty(trim($request->query('remarks')))) {
+            $request->merge(['remarks' => trim($request->query('remarks'))]);
+            return $this->reject($request, $permissionRequest, $approval);
+        }
+
+        return view('pages.hrms.permission_requests.reject_page', compact('permissionRequest', 'approval'));
     }
 
     public function approve(Request $request, PermissionRequest $permissionRequest, PermissionApproval $approval): RedirectResponse
@@ -270,7 +299,7 @@ class PermissionRequestController extends Controller
 
     private function approvalChainFor(User $requester): Collection
     {
-        return $this->approvalHierarchy->approvalChainFor($requester);
+        return $this->approvalHierarchy->permissionApprovalChainFor($requester);
     }
 
     private function resolveEmployee(User $user): ?EmployeeOnboarding

@@ -27,6 +27,7 @@ class RecruitmentInterview extends Model
         'company_id',
         'recruitment_candidate_id',
         'scheduled_by',
+        'interviewer_id',
         'scheduled_at',
         'round',
         'mode',
@@ -48,6 +49,11 @@ class RecruitmentInterview extends Model
     public function scheduler(): BelongsTo
     {
         return $this->belongsTo(User::class, 'scheduled_by');
+    }
+
+    public function interviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'interviewer_id');
     }
 
     public function getModeLabelAttribute(): string

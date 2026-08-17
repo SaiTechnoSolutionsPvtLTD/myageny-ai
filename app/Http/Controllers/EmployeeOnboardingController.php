@@ -658,6 +658,40 @@ class EmployeeOnboardingController extends Controller
         return back()->with('success', 'Profile photo updated successfully.');
     }
 
+    public function updateDocument(Request $request, EmployeeOnboarding $employee_onboarding): RedirectResponse
+    {
+        $user = auth()->user();
+        $isOwnProfile = $user && (int) $employee_onboarding->portal_user_id === (int) $user->id;
+        $isHrOrAdmin = $user && $user->isHrOrAdmin();
+
+        abort_unless($isHrOrAdmin || $isOwnProfile, 403, 'Unauthorized action.');
+
+        $request->validate([
+            'document_field' => ['required', 'string', 'in:' . implode(',', EmployeeOnboarding::DOCUMENT_FIELDS)],
+            'document_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,txt', 'max:10240'],
+        ]);
+
+        $field = $request->input('document_field');
+
+        if ($request->hasFile('document_file')) {
+            $this->deleteStoredFile($employee_onboarding->{$field});
+            $employee_onboarding->{$field} = $this->uploadToPublicFolder($request->file('document_file'));
+            $employee_onboarding->save();
+
+            if ($field === 'photograph') {
+                $portalUser = $employee_onboarding->portalUser;
+                if ($portalUser) {
+                    $portalUser->photo = $employee_onboarding->photograph;
+                    $portalUser->save();
+                }
+            }
+        }
+
+        $label = self::DOCUMENT_LABELS[$field] ?? 'Document';
+
+        return back()->with('success', "{$label} updated successfully.");
+    }
+
     private function generateNextEmployeeId(?int $branchId = null): string
     {
         $branchCode = null;

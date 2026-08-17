@@ -48,10 +48,15 @@ class LeadReallocationController extends Controller
                 ->where('leads.assigned_to', $fromUserId)
                 ->count();
 
+            $updateLeadData = ['assigned_to' => $toUserId];
+            if (auth()->check() && auth()->user()?->hasPreSalesLikeRole()) {
+                $updateLeadData['pre_sale_executive_id'] = auth()->id();
+            }
+
             // Reallocate leads
             DB::table('leads')
                 ->where('assigned_to', $fromUserId)
-                ->update(['assigned_to' => $toUserId]);
+                ->update($updateLeadData);
 
             // Reallocate lead_products (though they inherit from leads)
             DB::table('lead_products')

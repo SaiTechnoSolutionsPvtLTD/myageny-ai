@@ -295,7 +295,7 @@ class AdminDashboardService
         // Fill in missing months
         $months = [];
         for ($i = 5; $i >= 0; $i--) {
-            $months[Carbon::now()->subMonths($i)->format('Y-m')] = 0;
+            $months[Carbon::now()->startOfMonth()->subMonths($i)->format('Y-m')] = 0;
         }
 
         foreach ($rows as $row) {

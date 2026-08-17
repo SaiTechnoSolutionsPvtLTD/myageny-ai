@@ -39,6 +39,7 @@ class Lead extends Model
         'customer_support_tl_id',
         'customer_support_executive_id',
         'customer_support_allocated_at',
+        'pre_sale_executive_id',
     ];
 
     protected $casts = [
@@ -115,6 +116,16 @@ class Lead extends Model
     public function customerSupportExecutive()
     {
         return $this->belongsTo(User::class, 'customer_support_executive_id');
+    }
+
+    public function preSaleExecutive()
+    {
+        return $this->belongsTo(User::class, 'pre_sale_executive_id');
+    }
+
+    public function cstUpdates(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(LeadCstUpdate::class)->latest();
     }
 
     /**
@@ -264,6 +275,10 @@ class Lead extends Model
 
             if (!$lead->company_id && auth()->check()) {
                 $lead->company_id = auth()->user()?->company_id;
+            }
+
+            if (!$lead->pre_sale_executive_id && auth()->check() && auth()->user()?->hasPreSalesLikeRole()) {
+                $lead->pre_sale_executive_id = auth()->id();
             }
 
             if (!$lead->lead_date) {

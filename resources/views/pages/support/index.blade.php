@@ -154,6 +154,10 @@
     background-color: #fff1e8;
     color: #c2410c;
 }
+.status-badge.onprocess {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+}
 .status-badge.resolved {
     background-color: #ecfdf5;
     color: #047857;
@@ -339,6 +343,127 @@
     font-size: 14px;
     font-weight: 600;
 }
+
+/* Process / Progress Bar Overlay */
+.support-process-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    animation: fadeInOverlay 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.support-process-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 40px 36px;
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+    text-align: center;
+    transform: scale(0.95);
+    animation: scaleInCard 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scaleInCard {
+    to { transform: scale(1); }
+}
+
+.support-process-icon-wrap {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.support-process-spinner {
+    position: absolute;
+    inset: 0;
+    border: 3.5px solid #ffe6d5;
+    border-top-color: #fe5f04;
+    border-radius: 50%;
+    animation: spinOverlay 0.9s linear infinite;
+}
+
+@keyframes spinOverlay {
+    to { transform: rotate(360deg); }
+}
+
+.support-process-icon {
+    font-size: 32px;
+    color: #fe5f04;
+    animation: pulseIcon 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulseIcon {
+    from { transform: scale(0.88); opacity: 0.85; }
+    to { transform: scale(1.12); opacity: 1; }
+}
+
+.support-process-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: #111827;
+    margin: 0 0 6px;
+}
+
+.support-process-subtitle {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 24px;
+    line-height: 1.5;
+}
+
+.support-progress-wrapper {
+    width: 100%;
+}
+
+.support-progress-bar {
+    width: 100%;
+    height: 10px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+
+.support-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #fe5f04 0%, #ff8c3a 50%, #fe5f04 100%);
+    background-size: 200% 100%;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+    animation: gradientMove 2s linear infinite;
+}
+
+@keyframes gradientMove {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+}
+
+.support-progress-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #4b5563;
+}
 </style>
 @endpush
 
@@ -347,6 +472,11 @@
     @if(session('success'))
         <div class="alert-success">
             {{ session('success') }}
+        </div>
+    @endif
+    @if(session('error'))
+        <div class="alert-error" style="background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 14px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 600;">
+            {{ session('error') }}
         </div>
     @endif
 
@@ -404,7 +534,7 @@
                                        data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
-                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
@@ -416,7 +546,7 @@
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
                             <td>
                                 <span class="status-badge {{ $ticket->status }}">
-                                    {{ $ticket->status }}
+                                    {{ $ticket->status === 'onprocess' ? 'On Process' : ucfirst($ticket->status) }}
                                 </span>
                             </td>
                             <td>
@@ -428,7 +558,7 @@
                             </td>
                             <td>
                                 @if($ticket->attachment_path)
-                                    <a href="{{ asset('storage/' . $ticket->attachment_path) }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
+                                    <a href="{{ $ticket->attachment_url }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
                                         <i class="bi bi-file-earmark-arrow-down"></i> View File
                                     </a>
                                 @else
@@ -436,10 +566,16 @@
                                 @endif
                             </td>
                             <td style="text-align: center;">
-                                <button type="button" class="btn-update-status" 
-                                        onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
-                                    <i class="bi bi-pencil-square"></i> Update Status
-                                </button>
+                                @if($ticket->status === 'closed')
+                                    <button type="button" class="btn-update-status" disabled style="opacity: 0.55; cursor: not-allowed; background-color: #e5e7eb; border-color: #d1d5db; color: #6b7280;" title="Ticket is closed and cannot be updated.">
+                                        <i class="bi bi-lock-fill"></i> Closed
+                                    </button>
+                                @else
+                                    <button type="button" class="btn-update-status" 
+                                            onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                        <i class="bi bi-pencil-square"></i> Update Status
+                                    </button>
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -483,7 +619,7 @@
                                        data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
-                                       data-attachment="{{ $ticket->attachment_path ? asset('storage/' . $ticket->attachment_path) : '' }}"
+                                       data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
@@ -495,7 +631,7 @@
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
                             <td>
                                 <span class="status-badge {{ $ticket->status }}">
-                                    {{ $ticket->status }}
+                                    {{ $ticket->status === 'onprocess' ? 'On Process' : ucfirst($ticket->status) }}
                                 </span>
                             </td>
                             <td>
@@ -507,7 +643,7 @@
                             </td>
                             <td>
                                 @if($ticket->attachment_path)
-                                    <a href="{{ asset('storage/' . $ticket->attachment_path) }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
+                                    <a href="{{ $ticket->attachment_url }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
                                         <i class="bi bi-file-earmark-arrow-down"></i> View File
                                     </a>
                                 @else
@@ -587,6 +723,7 @@
                     <label for="ticket_status">Status</label>
                     <select name="status" id="ticket_status" class="form-control" required>
                         <option value="pending">Pending</option>
+                        <option value="onprocess">On Process</option>
                         <option value="resolved">Resolved</option>
                         <option value="closed">Closed</option>
                     </select>
@@ -690,6 +827,28 @@
     </div>
 </div>
 
+<!-- PROCESS OVERLAY / PROGRESS BAR MODAL -->
+<div id="supportProcessOverlay" class="support-process-overlay" style="display: none;">
+    <div class="support-process-card">
+        <div class="support-process-icon-wrap">
+            <div class="support-process-spinner"></div>
+            <i class="bi bi-envelope-paper-fill support-process-icon"></i>
+        </div>
+        <h4 id="processOverlayTitle" class="support-process-title">Sending Email & Processing...</h4>
+        <p id="processOverlaySubtitle" class="support-process-subtitle">Please wait while the email notification is being sent...</p>
+
+        <div class="support-progress-wrapper">
+            <div class="support-progress-bar">
+                <div id="supportProgressFill" class="support-progress-fill"></div>
+            </div>
+            <div class="support-progress-status">
+                <span id="supportProgressText">Preparing email notification...</span>
+                <span id="supportProgressPercent">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -783,7 +942,7 @@
 
         // Status Badge
         const statusBadge = document.getElementById('vt_status');
-        statusBadge.innerText = ticket.status;
+        statusBadge.innerText = ticket.status === 'onprocess' ? 'On Process' : (ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1));
         statusBadge.className = 'status-badge ' + ticket.status;
 
         // Attachment section
@@ -852,12 +1011,67 @@
         }
     });
 
-    // Add confirmation click listener
+    // Progress bar overlay logic
+    let processProgressInterval = null;
+
+    function showProcessOverlay(title, subtitle) {
+        if (title) document.getElementById('processOverlayTitle').innerText = title;
+        if (subtitle) document.getElementById('processOverlaySubtitle').innerText = subtitle;
+
+        const overlay = document.getElementById('supportProcessOverlay');
+        const fill = document.getElementById('supportProgressFill');
+        const percentText = document.getElementById('supportProgressPercent');
+        const statusText = document.getElementById('supportProgressText');
+
+        overlay.style.display = 'flex';
+
+        let currentProgress = 5;
+        fill.style.width = currentProgress + '%';
+        percentText.innerText = currentProgress + '%';
+        statusText.innerText = 'Connecting to server...';
+
+        if (processProgressInterval) clearInterval(processProgressInterval);
+
+        processProgressInterval = setInterval(function() {
+            if (currentProgress < 30) {
+                currentProgress += Math.floor(Math.random() * 8) + 4;
+                statusText.innerText = 'Building email notification...';
+            } else if (currentProgress < 70) {
+                currentProgress += Math.floor(Math.random() * 6) + 3;
+                statusText.innerText = 'Sending email via SMTP...';
+            } else if (currentProgress < 92) {
+                currentProgress += Math.floor(Math.random() * 3) + 1;
+                statusText.innerText = 'Finalizing support ticket process...';
+            }
+
+            if (currentProgress > 94) {
+                currentProgress = 94;
+            }
+
+            fill.style.width = currentProgress + '%';
+            percentText.innerText = currentProgress + '%';
+        }, 250);
+    }
+
+    // Add confirmation click listener for Status Update
     document.addEventListener('DOMContentLoaded', function() {
         const btnConfirmSubmit = document.getElementById('btn-confirm-submit');
         if (btnConfirmSubmit) {
             btnConfirmSubmit.addEventListener('click', function() {
-                document.getElementById('updateStatusForm').submit();
+                const updateForm = document.getElementById('updateStatusForm');
+                if (updateForm && !updateForm.checkValidity()) {
+                    updateForm.reportValidity();
+                    return;
+                }
+
+                closeConfirmModal();
+                closeUpdateModal();
+                showProcessOverlay(
+                    "Sending Email & Updating Ticket Status...",
+                    "Please wait while the ticket status is updated and email notification is sent..."
+                );
+
+                HTMLFormElement.prototype.submit.call(updateForm);
             });
         }
     });
@@ -891,17 +1105,39 @@
         });
     });
 
-    // Form submission confirmation prompt
+    // Form submission validation & progress bar trigger for Ticket Create
     document.getElementById('createTicketForm').addEventListener('submit', function(e) {
-        // Ensure tinymce content is synced before confirmation check
         if (window.tinymce) {
             window.tinymce.triggerSave();
         }
-        
-        const confirmMsg = "Are you sure you want to submit this support ticket?";
-        if (!confirm(confirmMsg)) {
+
+        const toUser = document.getElementById('to_user_id')?.value;
+        const subject = document.getElementById('subject')?.value;
+        const message = document.getElementById('ticketMessage')?.value;
+
+        if (!toUser) {
+            alert('Please select a person to submit the ticket to.');
             e.preventDefault();
+            return;
         }
+
+        if (!subject || !subject.trim()) {
+            alert('Please enter a ticket subject.');
+            e.preventDefault();
+            return;
+        }
+
+        if (!message || !message.trim() || message === '<p></p>') {
+            alert('Please enter a ticket message.');
+            e.preventDefault();
+            return;
+        }
+
+        closeCreateModal();
+        showProcessOverlay(
+            "Sending Email & Creating Support Ticket...",
+            "Please wait while your support ticket is created and email notification is sent..."
+        );
     });
 </script>
 @endpush

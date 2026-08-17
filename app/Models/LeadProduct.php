@@ -155,10 +155,13 @@ protected static function booted()
     // ── Accessors ─────────────────────────────────────────────────────
     public function getAmountPaidAttribute(): float
     {
+        $rawAmount = (float) ($this->attributes['amount_paid'] ?? 0);
         if ($this->relationLoaded('payments')) {
-            return max(0, (float) $this->payments->sum('amount'));
+            $sum = (float) $this->payments->sum('amount');
+            return max($rawAmount, $sum);
         }
-        return (float) ($this->attributes['amount_paid'] ?? 0);
+        $sum = (float) $this->payments()->sum('amount');
+        return max($rawAmount, $sum);
     }
 
     public function getAmountPendingAttribute(): float
@@ -279,6 +282,7 @@ protected static function booted()
                 'department_name' => $latestProductionInitiation->department?->name,
                 'moved_at' => optional($latestProductionInitiation->created_at)->format('d M Y h:i A'),
                 'view_url' => route('projects.show', $latestProductionInitiation),
+                'remarks' => $latestProductionInitiation->production_approval_remarks,
             ] : null,
             'payments' => $this->payments->map(fn($p) => $p->toJsPayload())->toArray(),
         ];
