@@ -38,7 +38,7 @@
         </div>
         @endif
 
-        <form method="POST" action="{{ route('leads.update', $lead) }}" id="leadForm">
+        <form method="POST" action="{{ route('leads.update', $lead) }}" id="leadForm" enctype="multipart/form-data">
             @csrf @method('PUT')
             @include('pages.leads.form', ['lead' => $lead])
         </form>

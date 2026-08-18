@@ -241,6 +241,7 @@
             </summary>
             <div class="lpd-filter-body" id="leadProductFiltersBody">
             <form method="GET" action="{{ route('leads.products.index') }}" class="lpd-filter-form">
+                <input type="hidden" name="quick_date" id="quick_date_input" value="{{ request('quick_date', 'month') }}">
                 <div class="lpd-field">
                     <label class="lpd-label" for="lead_id">Lead ID</label>
                     <input id="lead_id" type="text" name="lead_id" class="lpd-input" value="{{ request('lead_id') }}" placeholder="Example: 25">
@@ -437,12 +438,13 @@ const defaultFromDate = @json($defaultFromDate);
 const defaultToDate = @json($defaultToDate);
 
 function updateFilters() {
+    const qVal = document.getElementById('quick_date_input')?.value;
     const from = document.getElementById('date_from')?.value;
     const to = document.getElementById('date_to')?.value;
 
-    document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
-    document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
-    document.getElementById('quickAll')?.classList.toggle('active', !from && !to);
+    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (from === todayDate && to === todayDate));
+    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (from === defaultFromDate && to === defaultToDate));
+    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && qVal !== 'month'));
 
     const parts = defaultToDate.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -459,21 +461,24 @@ function updateFilters() {
     sun.setDate(mon.getDate() + 6);
     const weekStart = fmt(mon);
     const weekEnd = fmt(sun);
-    document.getElementById('quickWeek')?.classList.toggle('active', from === weekStart && to === weekEnd);
+    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (from === weekStart && to === weekEnd));
 
     const yearStart = `${parts[0]}-01-01`;
     const yearEnd = `${parts[0]}-12-31`;
-    document.getElementById('quickYear')?.classList.toggle('active', from === yearStart && to === yearEnd);
+    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (from === yearStart && to === yearEnd));
 
     const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
     const firstQ = new Date(parts[0], qStartMonth, 1);
     const lastQ = new Date(parts[0], qStartMonth + 3, 0);
     const qStart = fmt(firstQ);
     const qEnd = fmt(lastQ);
-    document.getElementById('quickQuarter')?.classList.toggle('active', from === qStart && to === qEnd);
+    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (from === qStart && to === qEnd));
 }
 
 function setQ(p) {
+    const qEl = document.getElementById('quick_date_input');
+    if (qEl) qEl.value = p;
+
     const parts = defaultToDate.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
     const fmt = d => {
@@ -521,13 +526,8 @@ function setQ(p) {
         targetTo = `${parts[0]}-12-31`;
     }
 
-    if (f.value === targetFrom && t.value === targetTo) {
-        f.value = '';
-        t.value = '';
-    } else {
-        f.value = targetFrom;
-        t.value = targetTo;
-    }
+    f.value = targetFrom;
+    t.value = targetTo;
 
     updateFilters();
     f.closest('form').submit();

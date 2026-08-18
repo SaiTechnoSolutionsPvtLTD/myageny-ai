@@ -469,6 +469,28 @@
             </span>
         </a>
         @endcan
+
+        @can('settings.manage')
+        <a href="{{ route('settings.lead-import.index') }}" class="settings-card source">
+            <div class="settings-card-icon source">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <polyline points="9 15 12 12 15 15"></polyline>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Lead Import</h4>
+            <p class="settings-card-text">Import leads in bulk from Excel or CSV files with custom field mapping, product assignment, and sales/presales team allocation.</p>
+            <span class="settings-card-link">
+                Open Lead Import
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
     </div>
 </div>
 @endsection

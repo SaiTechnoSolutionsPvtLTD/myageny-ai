@@ -654,23 +654,10 @@ class ProjectController extends Controller
             'waiting_posters' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_videos' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'day_closing_update' => [
-                'nullable',
+                'required',
                 'string',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
-                    $projectType = $request->input('project_type');
-                    $isRecurring = $projectType === 'recurring';
-
-                    $projectId = $request->input('production_initiation_id');
-                    $project = \App\Models\ProductionInitiation::with('department')->find($projectId);
-                    $isDesignOrDm = false;
-                    if ($project) {
-                        $deptName = $project->department ? strtolower($project->department->name) : '';
-                        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
-                    }
-
-                    $isRequired = !$isDesignOrDm || !$isRecurring;
-
-                    if ($isRequired && empty(trim((string) $value))) {
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (empty(trim((string) $value))) {
                         $fail('The day closing update is required.');
                         return;
                     }
@@ -680,8 +667,8 @@ class ProjectController extends Controller
                             ->map(fn (string $line) => trim($line))
                             ->filter();
 
-                        if ($lines->count() < 5) {
-                            $fail('Please add at least 5 task lines in the day closing update.');
+                        if ($lines->count() < 1) {
+                            $fail('Please add at least 1 task line in the day closing update.');
                         }
                     }
                 },
@@ -859,21 +846,7 @@ class ProjectController extends Controller
             $dayClosingUpdate = "";
         }
 
-        // Enforce 5 lines rule for day closing update if not already meeting it (or pad it)
-        $lines = collect(preg_split('/\R/', (string) $dayClosingUpdate))
-            ->map(fn (string $line) => trim($line))
-            ->filter();
-
-        if ($lines->count() < 5) {
-            $paddedLines = $lines->toArray();
-            $filler = [
-
-            ];
-            while (count($paddedLines) < 5) {
-                $paddedLines[] = array_shift($filler) ?: '';
-            }
-            $dayClosingUpdate = implode("\n", $paddedLines);
-        }
+        $dayClosingUpdate = (string) $dayClosingUpdate;
 
         if ($timesheet) {
             $timesheet->update([

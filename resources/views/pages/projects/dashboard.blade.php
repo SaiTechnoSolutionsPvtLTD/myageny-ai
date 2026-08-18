@@ -540,7 +540,7 @@
                     <div class="pjd-field">
                         <label class="ps-label">Day Closing Update (Optional)</label>
                         <textarea name="day_closing_update" id="taskModalDayClosingUpdate" class="ps-textarea" placeholder="Add details about your day closing update (optional)..." style="min-height: 120px;"></textarea>
-                        <small style="color: #64748b; font-size: 11px;">Note: Day closing updates require at least 5 lines of tasks to submit successfully.</small>
+                        <small style="color: #64748b; font-size: 11px;">Note: Provide details for your day closing update.</small>
                     </div>
 
                     <div class="ps-actions">

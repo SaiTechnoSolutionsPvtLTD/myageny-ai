@@ -24,7 +24,7 @@ class UserController extends Controller
     {
         // $this->authorize('users.view');
 
-        $query = User::with(['branch', 'roles'])
+        $query = User::with(['branch', 'branches', 'roles'])
             ->when($request->search, fn($q) =>
                 $q->where(fn($q2) =>
                     $q2->where('name', 'like', '%'.$request->search.'%')

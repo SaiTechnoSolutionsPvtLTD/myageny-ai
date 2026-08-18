@@ -101,8 +101,15 @@ class AttendanceApiController extends Controller
 
         if ($this->shouldFilterByBranch()) {
             $branchIds = auth()->user()?->getMyBranchIds() ?? [];
-            $employeeQuery->whereHas('portalUser', function ($q) use ($branchIds) {
-                $q->whereIn('branch_id', $branchIds);
+            $employeeQuery->where(function ($q) use ($branchIds) {
+                $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                    $puQ->whereIn('branch_id', $branchIds);
+                })
+                ->orWhereHas('portalUser.roles', function ($rq) {
+                    $rq->whereIn('name', ['branch_admin', 'branch_manager', 'bm'])
+                       ->orWhere('display_name', 'like', '%Branch Manager%')
+                       ->orWhere('display_name', 'like', '%Branch Admin%');
+                });
             });
         }
 

@@ -211,7 +211,7 @@ tbody tr:last-child td { border-bottom: none; }
     $prodCount     = $lead->products->count();
     $qtCount       = $lead->quotations->count();
     $customFieldValues = $lead->customFieldValues
-        ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active)
+        ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active && $fieldValue->field->show_on_lead_create)
         ->sortBy(fn ($fieldValue) => [$fieldValue->field->sort_order ?? 9999, strtolower($fieldValue->field->label ?? '')]);
     $productionUpdateTypeMeta = [
         'production_update' => ['label' => 'Production Update', 'title' => 'Execution Progress', 'bg' => '#eff6ff', 'border' => '#bfdbfe', 'text' => '#1d4ed8'],
@@ -401,14 +401,25 @@ tbody tr:last-child td { border-bottom: none; }
                                 <div class="lsp-info-item">
                                     <div class="lsp-il">{{ $fieldValue->field->label }}</div>
                                     <div class="lsp-iv">
-                                        @php
-                                            $displayValue = $fieldValue->value;
-                                            $decodedValue = json_decode((string) $fieldValue->value, true);
-                                            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedValue)) {
-                                                $displayValue = implode(', ', array_filter($decodedValue, fn ($value) => $value !== null && $value !== ''));
-                                            }
-                                        @endphp
-                                        {{ $displayValue !== '' ? $displayValue : '—' }}
+                                        @if($fieldValue->field->field_type === 'file')
+                                            @if(!empty($fieldValue->value))
+                                                <a href="{{ asset('storage/' . $fieldValue->value) }}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#f0e8f8;color:#60308c;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;transition:background 0.15s;">
+                                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                                    View / Download File ({{ basename($fieldValue->value) }})
+                                                </a>
+                                            @else
+                                                —
+                                            @endif
+                                        @else
+                                            @php
+                                                $displayValue = $fieldValue->value;
+                                                $decodedValue = json_decode((string) $fieldValue->value, true);
+                                                if (json_last_error() === JSON_ERROR_NONE && is_array($decodedValue)) {
+                                                    $displayValue = implode(', ', array_filter($decodedValue, fn ($value) => $value !== null && $value !== ''));
+                                                }
+                                            @endphp
+                                            {{ $displayValue !== '' ? $displayValue : '—' }}
+                                        @endif
                                     </div>
                                 </div>
                                 @endforeach
@@ -1645,10 +1656,16 @@ $(document).ready(function() {
         let categoryText = $('#outcome_category option:selected').text().trim().toLowerCase();
         let subCategoryText = $('#outcome_sub_category option:selected').text().trim().toLowerCase();
 
-        let isNotInterested = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
-                              (subCategoryText === 'not interested' || subCategoryText.includes('not interested'));
+        let isNoFollowupNeeded = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
+                                  (categoryText === 'closed' || categoryText.includes('closed')) ||
+                                  (categoryText === 'won' || categoryText.includes('won')) ||
+                                  (categoryText === 'lost' || categoryText.includes('lost')) ||
+                                  (subCategoryText === 'not interested' || subCategoryText.includes('not interested')) ||
+                                  (subCategoryText === 'closed' || subCategoryText.includes('closed')) ||
+                                  (subCategoryText === 'won' || subCategoryText.includes('won')) ||
+                                  (subCategoryText === 'lost' || subCategoryText.includes('lost'));
 
-        if (isNotInterested) {
+        if (isNoFollowupNeeded) {
             $('#next_followup_date_input').removeAttr('required').val('');
             $('#next_followup_time_input').removeAttr('required').val('');
             $('#next_followup_date_req').hide();

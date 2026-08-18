@@ -61,7 +61,7 @@
                     <h2 class="pm-card-title">Edit — {{ $product->package_name }}</h2>
                     <p class="pm-card-subtitle">
                         <span class="pm-sku">{{ $product->sku }}</span>
-                        &bull; {{ $product->category->name }}
+                        &bull; {{ $product->category?->name ?? 'Uncategorized' }}
                         &bull; Created {{ $product->created_at->format('d M Y') }}
                     </p>
                 </div>

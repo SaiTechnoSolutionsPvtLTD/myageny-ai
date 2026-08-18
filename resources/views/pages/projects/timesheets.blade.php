@@ -458,8 +458,8 @@
 
                 <div class="pts-grid-col-12" id="dayClosingUpdateContainer">
                     <label class="pts-label">Day Closing Update</label>
-                    <textarea name="day_closing_update" id="dayClosingUpdateTextarea" class="pts-textarea" rows="7" required placeholder="Task 1&#10;Task 2&#10;Task 3&#10;Task 4&#10;Task 5">{{ old('day_closing_update') }}</textarea>
-                    <div class="pts-help">Add at least 5 task lines before saving.</div>
+                    <textarea name="day_closing_update" id="dayClosingUpdateTextarea" class="pts-textarea" rows="7" required placeholder="Enter your day closing update details...">{{ old('day_closing_update') }}</textarea>
+                    <div class="pts-help">Enter your day closing update details.</div>
                     @error('day_closing_update')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
@@ -555,17 +555,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 el.style.display = showCounts ? '' : 'none';
             });
 
-            // Show or hide Day Closing Update text area
+            // Day Closing Update is always shown and required regardless of project type (Recurring / Onetime)
             const dayClosingContainer = document.getElementById('dayClosingUpdateContainer');
             const dayClosingTextarea = document.getElementById('dayClosingUpdateTextarea');
             if (dayClosingContainer && dayClosingTextarea) {
-                const showDayClosing = !isDesignOrDm || !isRecurring;
-                dayClosingContainer.style.display = showDayClosing ? '' : 'none';
-                if (showDayClosing) {
-                    dayClosingTextarea.setAttribute('required', 'required');
-                } else {
-                    dayClosingTextarea.removeAttribute('required');
-                }
+                dayClosingContainer.style.display = '';
+                dayClosingTextarea.setAttribute('required', 'required');
             }
         } else {
             // Hide both type selector and counts if no project is selected

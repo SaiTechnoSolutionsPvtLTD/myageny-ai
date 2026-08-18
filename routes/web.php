@@ -626,6 +626,14 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
         Route::post('/reallocate', [\App\Http\Controllers\LeadReallocationController::class, 'reallocate'])->name('reallocate');
     });
 
+    // Lead Import Settings
+    Route::prefix('lead-import')->name('lead-import.')->middleware('can:settings.manage')->group(function () {
+        Route::get('/', [\App\Http\Controllers\LeadImportController::class, 'index'])->name('index');
+        Route::post('/parse', [\App\Http\Controllers\LeadImportController::class, 'parseFile'])->name('parse');
+        Route::post('/process', [\App\Http\Controllers\LeadImportController::class, 'processImport'])->name('process');
+        Route::get('/sample', [\App\Http\Controllers\LeadImportController::class, 'downloadSample'])->name('sample');
+    });
+
     // Expense Pipeline Settings
     Route::prefix('expense-pipeline')->name('expense-pipeline.')->group(function () {
         Route::get('/', [\App\Http\Controllers\ExpensePipelineController::class, 'index'])->name('index');

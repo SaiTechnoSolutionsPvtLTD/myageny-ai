@@ -78,6 +78,11 @@ class UpdateLeadRequest extends FormRequest
                         $fieldRules[] = Rule::in($options);
                     }
                     break;
+                case 'file':
+                    $hasExisting = !empty($this->input("existing_custom_files.{$field->id}"));
+                    $isRequired = $field->is_required && !$hasExisting;
+                    $fieldRules = [$isRequired ? 'required' : 'nullable', 'file', 'max:10240'];
+                    break;
                 case 'textarea':
                     $fieldRules[] = 'string';
                     $fieldRules[] = 'max:5000';

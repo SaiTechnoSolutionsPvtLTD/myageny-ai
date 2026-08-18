@@ -408,9 +408,26 @@
                                 @if($user->branch)
                                 <div class="usr-branch">
                                     <div class="usr-branch-dot"></div>
-                                    {{ $user->branch->name }}
+                                    <strong style="color:#1e293b;">{{ $user->branch->name }}</strong>
                                 </div>
-                                @else
+                                @endif
+
+                                @if($user->branches && $user->branches->isNotEmpty())
+                                    @php
+                                        $addBranches = $user->branches->reject(fn($b) => $user->branch_id && $b->id == $user->branch_id);
+                                    @endphp
+                                    @if($addBranches->isNotEmpty())
+                                        <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                                            @foreach($addBranches as $addBranch)
+                                                <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 700; border: 1px solid #bfdbfe;" title="Additional Branch">
+                                                    + {{ $addBranch->name }}
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                @endif
+
+                                @if(!$user->branch && ($user->branches->isEmpty()))
                                 <span style="color:#9e9e9e;font-size:12px;">—</span>
                                 @endif
                             </td>

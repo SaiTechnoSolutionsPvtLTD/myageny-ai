@@ -27,7 +27,7 @@
     </div>
 
     <div class="lf-body">
-    <form method="POST" action="{{ route('leads.store') }}" id="leadForm">
+    <form method="POST" action="{{ route('leads.store') }}" id="leadForm" enctype="multipart/form-data">
         @csrf
         @include('pages.leads.form', ['lead' => null])
     </form>

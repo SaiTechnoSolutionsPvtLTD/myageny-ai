@@ -742,12 +742,7 @@ class ProjectApiController extends Controller
 
         // Mirrors web: day closing update required unless the project is
         // Design/DM AND project_type is 'recurring'.
-        $deptName = strtolower((string) $project->department?->name);
-        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
-        $isRecurring = ($validated['project_type'] ?? 'recurring') === 'recurring';
-        $dayClosingRequired = !$isDesignOrDm || !$isRecurring;
-
-        if ($dayClosingRequired && trim((string) ($validated['day_closing_update'] ?? '')) === '') {
+        if (trim((string) ($validated['day_closing_update'] ?? '')) === '') {
             return response()->json([
                 'success' => false,
                 'message' => 'The day closing update is required.',
@@ -757,11 +752,11 @@ class ProjectApiController extends Controller
         if (filled($validated['day_closing_update'] ?? null)) {
             $lines = collect(preg_split('/\R/', (string) $validated['day_closing_update']))
                 ->map(fn($l) => trim($l))->filter();
-            if ($lines->count() < 5) {
+            if ($lines->count() < 1) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Please add at least 5 task lines in the day closing update.',
-                    'errors'  => ['day_closing_update' => ['Please add at least 5 task lines in the day closing update.']],
+                    'message' => 'Please add at least 1 task line in the day closing update.',
+                    'errors'  => ['day_closing_update' => ['Please add at least 1 task line in the day closing update.']],
                 ], 422);
             }
         }

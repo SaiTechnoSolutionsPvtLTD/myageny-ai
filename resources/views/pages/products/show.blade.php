@@ -69,7 +69,7 @@
             <div class="pm-summary-card">
 
                 {{-- Category ribbon --}}
-                <div class="pm-summary-ribbon">{{ $product->category->name }}</div>
+                <div class="pm-summary-ribbon">{{ $product->category?->name ?? 'Uncategorized' }}</div>
 
                 {{-- Package badge --}}
                 <div class="pm-summary-badge">
