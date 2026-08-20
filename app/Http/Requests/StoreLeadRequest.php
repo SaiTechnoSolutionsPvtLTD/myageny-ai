@@ -82,6 +82,9 @@ class StoreLeadRequest extends FormRequest
                         $fieldRules[] = Rule::in($options);
                     }
                     break;
+                case 'file':
+                    $fieldRules = [$field->is_required ? 'required' : 'nullable', 'file', 'max:10240'];
+                    break;
                 case 'textarea':
                     $fieldRules[] = 'string';
                     $fieldRules[] = 'max:5000';

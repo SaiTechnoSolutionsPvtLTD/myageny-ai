@@ -102,7 +102,7 @@
                                     </a>
                                 </td>
                                 <td>
-                                    <span class="pm-category-chip">{{ $product->category->name }}</span>
+                                    <span class="pm-category-chip">{{ $product->category?->name ?? 'Uncategorized' }}</span>
                                 </td>
                                 <td class="pm-price">₹{{ number_format($product->base_price, 2) }}</td>
                                 <td class="pm-muted">

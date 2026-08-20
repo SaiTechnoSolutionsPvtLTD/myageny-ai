@@ -45,6 +45,10 @@ class FacebookLeadIntegration extends Command
                 $summary['failed'] ?? 0
             ));
 
+            if (!empty($summary['failed']) && !empty($summary['errors'])) {
+                $this->warn('Failed reason(s): ' . implode('; ', $summary['errors']));
+            }
+
             return self::SUCCESS;
         } catch (\Throwable $e) {
             $this->error('Facebook lead import failed: ' . $e->getMessage());

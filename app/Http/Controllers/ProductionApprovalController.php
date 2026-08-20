@@ -156,9 +156,20 @@ class ProductionApprovalController extends Controller
                 $salesPerson = $productionInitiation->lead?->assignedTo ?: $productionInitiation->lead?->createdBy;
                 $salesPersonEmail = $salesPerson?->email;
 
+                $deptName = strtolower(trim((string) ($productionInitiation->department?->name ?? '')));
+                if (! $deptName && $productionInitiation->product_name) {
+                    $deptName = strtolower(trim((string) $productionInitiation->product_name));
+                }
+
+                $isDigitalMarketing = str_contains($deptName, 'digital')
+                    || str_contains($deptName, 'marketing')
+                    || str_contains($deptName, 'dm');
+
+                $departmentEmail = $isDigitalMarketing ? 'dm@saitechnosolutions.net' : 'projects@saitechnosolutions.net';
+
                 $toEmails = array_values(array_filter(array_unique([
                     $salesPersonEmail,
-                    'projects@saitechnosolutions.net',
+                    $departmentEmail,
                 ])));
 
                 $reviewedBy = auth()->user();
@@ -170,6 +181,7 @@ class ProductionApprovalController extends Controller
                     'departmentName' => $productionInitiation->department?->name ?? 'Production',
                     'reviewedBy' => $reviewedBy,
                     'salesPerson' => $salesPerson,
+                    'departmentEmail' => $departmentEmail,
                 ], function ($message) use ($toEmails, $productionInitiation) {
                     $message->to($toEmails)
                         ->subject('Production Approval Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');

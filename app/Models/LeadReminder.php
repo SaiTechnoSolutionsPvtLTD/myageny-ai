@@ -43,7 +43,7 @@ class LeadReminder extends Model
 
     public function getIsOverdueAttribute(): bool
     {
-        return !$this->is_completed && $this->remind_at->isPast();
+        return !$this->is_completed && $this->remind_at && $this->remind_at->startOfDay()->lt(today());
     }
 
     public function getTypeLabelAttribute(): string
@@ -63,6 +63,6 @@ class LeadReminder extends Model
 
     public function scopeOverdue($query)
     {
-        return $query->where('is_completed', false)->where('remind_at', '<', now());
+        return $query->where('is_completed', false)->whereDate('remind_at', '<', today());
     }
 }

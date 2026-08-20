@@ -218,7 +218,7 @@ class LeadProductController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
         $defaultStatus = $this->defaultStatusForLead($lead);
 
-        if (!$this->isAdmin($user)) {
+        if ($user->allowsPriceRequests() && !$this->isAdmin($user)) {
             foreach ($request->products as $row) {
                 $product = Product::findOrFail($row['product_id']);
                 abort_unless($this->visibility->canAccessProduct($product), 403);
@@ -378,7 +378,7 @@ class LeadProductController extends Controller
             ? $currentPrice
             : round((float) $catalogProduct->final_price, 2);
 
-        if (!$this->isAdmin($user) && $requestedPrice !== $baselinePrice) {
+        if ($user->allowsPriceRequests() && !$this->isAdmin($user) && $requestedPrice !== $baselinePrice) {
             return response()->json([
                 'message' => 'Price was changed. Please send a price change request for admin approval.',
             ], 422);

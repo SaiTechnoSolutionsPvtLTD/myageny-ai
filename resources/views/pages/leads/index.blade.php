@@ -362,6 +362,7 @@
 
             <div class="ld-filter-body">
                 <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
+                    <input type="hidden" name="quick_date" id="f_quick_date" value="{{ request('quick_date', 'month') }}">
                     <div class="ld-filter-bar">
                         <div class="ld-fw">
                             <label class="ld-field-label" for="f_search">Search</label>
@@ -500,6 +501,7 @@
                                 <button type="button" class="ld-qb" id="quickToday" onclick="setQ('today')">Today</button>
                                 <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
                                 <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
+                                <button type="button" class="ld-qb" id="quickQuarter" onclick="setQ('quarter')">Quarter</button>
                                 <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
                                 <button type="button" class="ld-qb" id="quickAll" onclick="setQ('all')">Show All</button>
                             </div>
@@ -917,13 +919,14 @@ function updateFilters() {
         bar.innerHTML = chips.join('');
     }
 
+    const qVal = document.getElementById('f_quick_date')?.value;
     const from = document.getElementById('f_date_from')?.value;
     const to = document.getElementById('f_date_to')?.value;
 
     // Toggle active state for quick buttons
-    document.getElementById('quickToday')?.classList.toggle('active', from === todayDate && to === todayDate);
-    document.getElementById('quickMonth')?.classList.toggle('active', from === defaultFromDate && to === defaultToDate);
-    document.getElementById('quickAll')?.classList.toggle('active', !from && !to);
+    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (from === todayDate && to === todayDate));
+    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (from === defaultFromDate && to === defaultToDate));
+    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && qVal !== 'month'));
 
     // Calculate dynamic values for Week and Year active states
     const parts = defaultToDate.split('-').map(Number);
@@ -941,11 +944,18 @@ function updateFilters() {
     sun.setDate(mon.getDate() + 6);
     const weekStart = fmt(mon);
     const weekEnd = fmt(sun);
-    document.getElementById('quickWeek')?.classList.toggle('active', from === weekStart && to === weekEnd);
+    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (from === weekStart && to === weekEnd));
 
     const yearStart = `${parts[0]}-01-01`;
     const yearEnd = `${parts[0]}-12-31`;
-    document.getElementById('quickYear')?.classList.toggle('active', from === yearStart && to === yearEnd);
+    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (from === yearStart && to === yearEnd));
+
+    const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+    const firstQ = new Date(parts[0], qStartMonth, 1);
+    const lastQ = new Date(parts[0], qStartMonth + 3, 0);
+    const qStart = fmt(firstQ);
+    const qEnd = fmt(lastQ);
+    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (from === qStart && to === qEnd));
 }
 
 function clearF(id) {
@@ -969,6 +979,9 @@ function delaySubmit() {
 }
 
 function setQ(p) {
+    const qEl = document.getElementById('f_quick_date');
+    if (qEl) qEl.value = p;
+
     const parts = defaultToDate.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
     const fmt = d => {
@@ -1004,19 +1017,19 @@ function setQ(p) {
     } else if (p === 'month') {
         targetFrom = defaultFromDate;
         targetTo = defaultToDate;
+    } else if (p === 'quarter') {
+        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(parts[0], qStartMonth, 1);
+        const lastQ = new Date(parts[0], qStartMonth + 3, 0);
+        targetFrom = fmt(firstQ);
+        targetTo = fmt(lastQ);
     } else if (p === 'year') {
         targetFrom = `${parts[0]}-01-01`;
         targetTo = `${parts[0]}-12-31`;
     }
 
-    // Toggle logic: if active date range matches, clear date filter completely
-    if (f.value === targetFrom && t.value === targetTo) {
-        f.value = '';
-        t.value = '';
-    } else {
-        f.value = targetFrom;
-        t.value = targetTo;
-    }
+    f.value = targetFrom;
+    t.value = targetTo;
 
     updateFilters();
     document.getElementById('filterForm').submit();

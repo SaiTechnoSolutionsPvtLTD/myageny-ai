@@ -28,7 +28,7 @@ class StoreLeadFormFieldRequest extends FormRequest
                     return $query;
                 })
             ],
-            'field_type'           => ['required', Rule::in(['text','number','select','radio','textarea','date','email','phone'])],
+            'field_type'           => ['required', Rule::in(['text','number','select','radio','textarea','date','email','phone','file'])],
             'placeholder'          => ['nullable', 'string', 'max:255'],
             'default_value'        => ['nullable', 'string'],
             'is_required'          => ['boolean'],

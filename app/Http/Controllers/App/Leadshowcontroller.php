@@ -95,6 +95,8 @@ class LeadShowController extends Controller
             'outcome_subcategory_id'   => ['required'],
             'notes'                    => ['nullable', 'string', 'max:1000'],
             'next_follow_up'           => ['nullable', 'date', 'after_or_equal:today'],
+            'followup_time'            => ['nullable'],
+            'reminder_remarks'         => ['nullable', 'string', 'max:500'],
         ]);
 
         $data['lead_id']             = $lead->id;
@@ -107,6 +109,24 @@ class LeadShowController extends Controller
         $data['company_id']          = $lead->company_id;
 
         $call = LeadCallUpdate::create($data);
+
+        if (! empty($request->next_follow_up)) {
+            $reminderTitle = trim((string) $request->reminder_remarks);
+            if ($reminderTitle === '') {
+                $reminderTitle = 'Follow-up Call: ' . ($request->outcome ?: 'Lead Follow-up');
+            }
+
+            \App\Models\LeadReminder::create([
+                'lead_id'        => $lead->id,
+                'user_id'        => $request->user()->id,
+                'title'          => \Illuminate\Support\Str::limit($reminderTitle, 150),
+                'description'    => $request->notes ? \Illuminate\Support\Str::limit((string) $request->notes, 500) : null,
+                'remind_at'      => $request->next_follow_up,
+                'remainder_time' => $request->followup_time ?: '10:00:00',
+                'type'           => 'follow_up',
+                'priority'       => 'high',
+            ]);
+        }
 
         return response()->json([
             'status'  => true,
@@ -1121,6 +1141,10 @@ class LeadShowController extends Controller
 
     public function priceRequest(Request $request): JsonResponse
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['status' => false, 'message' => 'Price request feature is disabled for your company.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'lead_id'                          => ['required', 'exists:leads,id'],
             'deal_name'                        => ['required', 'string', 'max:255'],

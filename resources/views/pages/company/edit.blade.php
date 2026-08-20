@@ -88,12 +88,6 @@
                         @error('expiry_date')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="cform-group full">
-                        <label class="cform-label">Address</label>
-                        <textarea name="address" class="cform-textarea" required>{{ old('address', $company->address) }}</textarea>
-                        @error('address')<div class="cform-error">{{ $message }}</div>@enderror
-                    </div>
-
                     <div class="cform-group">
                         <label class="cform-label">Company Status</label>
                         <select name="company_status" class="cform-select" required>
@@ -103,7 +97,11 @@
                         @error('company_status')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="cform-group"></div>
+                    <div class="cform-group full">
+                        <label class="cform-label">Address</label>
+                        <textarea name="address" class="cform-textarea" required>{{ old('address', $company->address) }}</textarea>
+                        @error('address')<div class="cform-error">{{ $message }}</div>@enderror
+                    </div>
 
                     <div class="cform-group">
                         <label class="cform-label">Facebook Client ID</label>
@@ -115,6 +113,33 @@
                         <label class="cform-label">Facebook Client Secret</label>
                         <input type="text" name="facebook_client_secret" class="cform-input" value="{{ old('facebook_client_secret', $company->facebook_client_secret) }}" required>
                         @error('facebook_client_secret')<div class="cform-error">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="cform-group full" style="margin-top:12px; padding-top:16px; border-top:1px dashed #e1dee3;">
+                        <label class="cform-label" style="font-size:14px;color:#121212;">Company Feature Settings</label>
+                        <div style="font-size:12px;color:#9e9e9e;">Select which features/sections should be enabled and visible for this company.</div>
+                    </div>
+
+                    <div class="cform-group full" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; background:#fafafa; padding:16px; border-radius:12px; border:1px solid #f0eef2;">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">
+                            <input type="checkbox" name="show_price_request" value="1" {{ old('show_price_request', $company->allowsPriceRequests()) ? 'checked' : '' }} style="width:18px; height:18px; accent-color:#fe5f04;">
+                            Price Request Option
+                        </label>
+
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">
+                            <input type="checkbox" name="show_production_update" value="1" {{ old('show_production_update', $company->allowsProductionUpdates()) ? 'checked' : '' }} style="width:18px; height:18px; accent-color:#fe5f04;">
+                            Move to Production Option
+                        </label>
+
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">
+                            <input type="checkbox" name="show_approval_history" value="1" {{ old('show_approval_history', $company->allowsApprovalHistory()) ? 'checked' : '' }} style="width:18px; height:18px; accent-color:#fe5f04;">
+                            Approval History
+                        </label>
+
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">
+                            <input type="checkbox" name="show_cst_updates" value="1" {{ old('show_cst_updates', $company->allowsCstUpdates()) ? 'checked' : '' }} style="width:18px; height:18px; accent-color:#fe5f04;">
+                            CST Updates
+                        </label>
                     </div>
                 </div>
 

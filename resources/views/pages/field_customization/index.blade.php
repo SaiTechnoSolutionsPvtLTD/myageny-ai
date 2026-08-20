@@ -103,6 +103,7 @@ table.fields-table tbody td { padding:14px 16px; font-size:13px; color:#121212; 
 .type-date      { background:#e3f2fd; color:#1565c0; }
 .type-email     { background:#fff8e1; color:#f57f17; }
 .type-phone     { background:#e8eaf6; color:#283593; }
+.type-file      { background:#e0f2fe; color:#0369a1; }
 
 /* Toggle switch */
 .toggle-switch { position:relative; width:36px; height:20px; }
@@ -275,6 +276,9 @@ select.form-control { appearance:none; cursor:pointer; }
             <div class="type-tab" data-type="date" onclick="filterByType('date', this)">
                 <i class="bi bi-calendar3"></i> Date
             </div>
+            <div class="type-tab" data-type="file" onclick="filterByType('file', this)">
+                <i class="bi bi-file-earmark-arrow-up"></i> File Upload
+            </div>
         </div>
 
         <!-- Table -->
@@ -360,6 +364,7 @@ select.form-control { appearance:none; cursor:pointer; }
                         <option value="date">Date Picker</option>
                         <option value="email">Email</option>
                         <option value="phone">Phone Number</option>
+                        <option value="file">File Upload</option>
                     </select>
                 </div>
             </div>
@@ -559,7 +564,8 @@ function renderTable() {
 function typeBadge(type) {
     const map = {
         text:'Text', number:'Number', select:'Select', radio:'Radio',
-        textarea:'Textarea', date:'Date', email:'Email', phone:'Phone'
+        textarea:'Textarea', date:'Date', email:'Email', phone:'Phone',
+        file:'File Upload'
     };
     return `<span class="type-badge type-${type}">${map[type] ?? type}</span>`;
 }

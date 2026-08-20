@@ -209,8 +209,25 @@
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                             </div>
                             <div>
-                                <div class="ushow-meta-label">Branch</div>
+                                <div class="ushow-meta-label">Primary Branch</div>
                                 <div class="ushow-meta-value">{{ $user->branch?->name ?? 'Not Assigned' }}</div>
+                                @if($user->branches && $user->branches->isNotEmpty())
+                                    @php
+                                        $addBranches = $user->branches->reject(fn($b) => $user->branch_id && $b->id == $user->branch_id);
+                                    @endphp
+                                    @if($addBranches->isNotEmpty())
+                                        <div style="margin-top: 6px;">
+                                            <div class="ushow-meta-label" style="font-size: 10px; margin-bottom: 3px;">Additional Branches</div>
+                                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                                @foreach($addBranches as $addBranch)
+                                                    <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 700; border: 1px solid #bfdbfe;">
+                                                        + {{ $addBranch->name }}
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+                                @endif
                             </div>
                         </div>
 

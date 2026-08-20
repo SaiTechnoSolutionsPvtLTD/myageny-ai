@@ -101,9 +101,10 @@ class QuotationController extends Controller
         ]);
 
         $selectedLeadId = $leadId;
+        $companyId = $lead?->company_id ?? auth()->user()?->company_id;
 
         $defaults = [
-            'quotation_no'   => Quotation::generateQuotationNo(),
+            'quotation_no'   => Quotation::generateQuotationNo($companyId),
             'quotation_date' => now()->toDateString(),
             'valid_until'    => now()->addDays(7)->toDateString(),
             'tax'            => Quotation::GST_RATE,
@@ -148,6 +149,8 @@ class QuotationController extends Controller
                 abort_unless($this->visibility->canAccessLead($lead), 403);
             }
 
+            $companyId = $lead?->company_id ?? auth()->user()?->company_id;
+
             foreach ($validated['items'] as $item) {
                 Product::findOrFail($item['product_id']);
             }
@@ -169,7 +172,7 @@ class QuotationController extends Controller
             $taxBreakup = Quotation::calculateTaxBreakup($subtotal, $customerState, $sellerState);
 
             $quotation = Quotation::create([
-                'quotation_no'    => Quotation::generateQuotationNo(),
+                'quotation_no'    => Quotation::generateQuotationNo($companyId),
                 'quotation_date'  => $validated['quotation_date'],
                 'valid_until'     => $validated['valid_until'],
                 'tax'             => $taxBreakup['tax_rate'],
@@ -177,7 +180,7 @@ class QuotationController extends Controller
                 'tax_amount'      => $taxBreakup['tax_amount'],
                 'total_amount'    => $taxBreakup['total_amount'],
                 'lead_id'         => $validated['lead_id'] ?? null,
-                'company_id'      => auth()->user()?->company_id,
+                'company_id'      => $companyId,
                 'notes'           => $validated['notes'] ?? null,
                 'is_approved'     => false,
                 'created_by'      => auth()->id(),
@@ -404,6 +407,8 @@ class QuotationController extends Controller
             $lead = Lead::with('branch')->findOrFail($request->lead_id);
             abort_unless($this->visibility->canAccessLead($lead), 403);
 
+            $companyId = $lead->company_id ?? $request->user()?->company_id;
+
             foreach ($request->items as $item) {
                 Product::findOrFail($item['product_id']);
             }
@@ -421,7 +426,7 @@ class QuotationController extends Controller
             $taxBreakup = Quotation::calculateTaxBreakup($subtotal, $customerState, $sellerState);
 
             $quotation = Quotation::create([
-                'quotation_no'   => Quotation::generateQuotationNo(),
+                'quotation_no'   => Quotation::generateQuotationNo($companyId),
                 'quotation_date' => $request->quotation_date,
                 'valid_until'    => $request->valid_until,
                 'tax'            => $taxBreakup['tax_rate'],
@@ -429,7 +434,7 @@ class QuotationController extends Controller
                 'tax_amount'     => $taxBreakup['tax_amount'],
                 'total_amount'   => $taxBreakup['total_amount'],
                 'lead_id'        => $request->lead_id,
-                'company_id'     => $request->user()?->company_id,
+                'company_id'     => $companyId,
                 'notes'          => $request->notes,
                 'is_approved'    => false,
                 'created_by'     => $request->user_id,

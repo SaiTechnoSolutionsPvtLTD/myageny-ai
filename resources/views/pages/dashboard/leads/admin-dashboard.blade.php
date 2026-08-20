@@ -1135,10 +1135,12 @@ function renderKpis(k, filters) {
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
         { accent:'amber',  val:k.converted_percentage + '%', label:'Converted Percentage', sub:'Converted ÷ Total Products',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
-        { accent:'rose',   val:k.followups_count,  label:'Followups Count',   sub:'Today\'s reminders count',
-          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
-        { accent:'orange', val:(k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0), label:'Today Scheduled Followups', sub:'Followups set for today',
+        { accent:'orange', val:(k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0), label:'Today Planned Followups', sub:'Reminders & followups set for today',
           svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+        { accent:'rose',   val:(k.overdue_reminders_count !== undefined ? k.overdue_reminders_count : 0), label:'Overdue Reminders', sub:'Pending reminders past due',
+          svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+        { accent:'teal',   val:(k.today_completed_calls_count !== undefined ? k.today_completed_calls_count : 0), label:'Today Completed Calls', sub:'Call updates logged today',
+          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
     ];
 
     var html = kpis.map(function(kpi) {

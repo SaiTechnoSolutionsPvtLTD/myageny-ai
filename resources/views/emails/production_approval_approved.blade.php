@@ -103,7 +103,7 @@
 
         {{-- Footer --}}
         <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 36px; text-align: center; font-size: 12px; color: #94a3b8;">
-            <p style="margin: 0 0 4px;">Sent to: <strong>{{ $salesPerson?->email ?: 'Sales Team' }}</strong> &amp; <strong>projects@saitechnosolutions.net</strong></p>
+            <p style="margin: 0 0 4px;">Sent to: <strong>{{ $salesPerson?->email ?: 'Sales Team' }}</strong> &amp; <strong>{{ $departmentEmail ?? 'projects@saitechnosolutions.net' }}</strong></p>
             <p style="margin: 0;">Automated System Notification | {{ config('app.name', 'My Agency') }} CRM</p>
         </div>
     </div>

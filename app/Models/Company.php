@@ -22,6 +22,10 @@ class Company extends Model
         'facebook_client_id',
         'facebook_client_secret',
         'super_admin_user_id',
+        'show_price_request',
+        'show_production_update',
+        'show_approval_history',
+        'show_cst_updates',
     ];
 
     protected function casts(): array
@@ -29,7 +33,31 @@ class Company extends Model
         return [
             'number_of_accounts' => 'integer',
             'expiry_date' => 'date',
+            'show_price_request' => 'boolean',
+            'show_production_update' => 'boolean',
+            'show_approval_history' => 'boolean',
+            'show_cst_updates' => 'boolean',
         ];
+    }
+
+    public function allowsPriceRequests(): bool
+    {
+        return (bool) ($this->show_price_request ?? true);
+    }
+
+    public function allowsProductionUpdates(): bool
+    {
+        return (bool) ($this->show_production_update ?? true);
+    }
+
+    public function allowsApprovalHistory(): bool
+    {
+        return (bool) ($this->show_approval_history ?? true);
+    }
+
+    public function allowsCstUpdates(): bool
+    {
+        return (bool) ($this->show_cst_updates ?? true);
     }
 
     public function getStatusLabelAttribute(): string

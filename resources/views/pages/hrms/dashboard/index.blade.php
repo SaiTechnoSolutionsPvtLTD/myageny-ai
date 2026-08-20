@@ -884,6 +884,7 @@
                 </div>
             </div>
 
+
             <!-- Announcements -->
             <div class="hrms-card hrms-panel" style="grid-column: span 2;">
                 <div class="hrms-panel-head">

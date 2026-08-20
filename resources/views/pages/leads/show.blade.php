@@ -207,11 +207,11 @@ tbody tr:last-child td { border-bottom: none; }
     $incomingCallCount     = $lead->callUpdates->where('call_type', 'incoming')->count();
     $outGoingcallCount     = $lead->callUpdates->where('call_type', 'outgoing')->count();
     $remCount      = $lead->reminders->where('is_completed', false)->count();
-    $overdueRem    = $lead->reminders->where('is_completed', false)->filter(fn($r) => $r->remind_at->isPast())->count();
+    $overdueRem    = $lead->reminders->where('is_completed', false)->filter(fn($r) => $r->is_overdue)->count();
     $prodCount     = $lead->products->count();
     $qtCount       = $lead->quotations->count();
     $customFieldValues = $lead->customFieldValues
-        ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active)
+        ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active && $fieldValue->field->show_on_lead_create)
         ->sortBy(fn ($fieldValue) => [$fieldValue->field->sort_order ?? 9999, strtolower($fieldValue->field->label ?? '')]);
     $productionUpdateTypeMeta = [
         'production_update' => ['label' => 'Production Update', 'title' => 'Execution Progress', 'bg' => '#eff6ff', 'border' => '#bfdbfe', 'text' => '#1d4ed8'],
@@ -325,21 +325,29 @@ tbody tr:last-child td { border-bottom: none; }
                 Quotations
                 <span class="lsp-tab-count">{{ $qtCount }}</span>
             </button>
+            @if(auth()->user()?->allowsProductionUpdates())
             <button class="lsp-tab" onclick="switchTab('production-updates', this)">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="m18 20-6-6-6 6"/><path d="M6 4h12"/></svg>
                 Production Update
                 <span class="lsp-tab-count">{{ $productionUpdateCount }}</span>
             </button>
+            @endif
+
+            @if(auth()->user()?->allowsApprovalHistory())
             <button class="lsp-tab" onclick="switchTab('approval-history', this)">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 Approval History
                 <span class="lsp-tab-count">{{ $approvalHistoryCount }}</span>
             </button>
+            @endif
+
+            @if(auth()->user()?->allowsCstUpdates())
             <button class="lsp-tab" onclick="switchTab('cst-updates', this)">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 CST Updates
                 <span class="lsp-tab-count">{{ $cstUpdatesCount }}</span>
             </button>
+            @endif
         </div>
     </div>
 
@@ -401,14 +409,30 @@ tbody tr:last-child td { border-bottom: none; }
                                 <div class="lsp-info-item">
                                     <div class="lsp-il">{{ $fieldValue->field->label }}</div>
                                     <div class="lsp-iv">
-                                        @php
-                                            $displayValue = $fieldValue->value;
-                                            $decodedValue = json_decode((string) $fieldValue->value, true);
-                                            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedValue)) {
-                                                $displayValue = implode(', ', array_filter($decodedValue, fn ($value) => $value !== null && $value !== ''));
-                                            }
-                                        @endphp
-                                        {{ $displayValue !== '' ? $displayValue : '—' }}
+                                        @if($fieldValue->field->field_type === 'file')
+                                            @if(!empty($fieldValue->value))
+                                                @php
+                                                    $fileUrl = (str_starts_with($fieldValue->value, 'uploads/') || str_starts_with($fieldValue->value, 'http'))
+                                                        ? asset($fieldValue->value)
+                                                        : asset('storage/' . $fieldValue->value);
+                                                @endphp
+                                                <a href="{{ $fileUrl }}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#f0e8f8;color:#60308c;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;transition:background 0.15s;">
+                                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                                    View / Download File ({{ basename($fieldValue->value) }})
+                                                </a>
+                                            @else
+                                                —
+                                            @endif
+                                        @else
+                                            @php
+                                                $displayValue = $fieldValue->value;
+                                                $decodedValue = json_decode((string) $fieldValue->value, true);
+                                                if (json_last_error() === JSON_ERROR_NONE && is_array($decodedValue)) {
+                                                    $displayValue = implode(', ', array_filter($decodedValue, fn ($value) => $value !== null && $value !== ''));
+                                                }
+                                            @endphp
+                                            {{ $displayValue !== '' ? $displayValue : '—' }}
+                                        @endif
                                     </div>
                                 </div>
                                 @endforeach
@@ -665,11 +689,16 @@ tbody tr:last-child td { border-bottom: none; }
                                                  <input type="time" name="followup_time" id="next_followup_time_input" class="lsp-inp" required>
                                              </div>
                                           </div>
+                                    </div>
 
-                                     </div>
-
-
-
+                                    {{-- Reminder Remarks Section --}}
+                                    <div class="lsp-group mb-3" id="call_update_reminder_box">
+                                        <label class="lsp-label">Reminder Remarks / Task Title</label>
+                                        <div class="lsp-fw">
+                                            <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                            <input type="text" name="reminder_remarks" id="reminder_remarks_input" class="lsp-inp" placeholder="e.g. Call client regarding proposal feedback...">
+                                        </div>
+                                    </div>
 
                                     <button type="submit" class="lsp-btn lsp-btn-primary" style="justify-content:center;">
                                         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
@@ -723,7 +752,7 @@ tbody tr:last-child td { border-bottom: none; }
                                 </div>
                             </div>
                             <div class="lsp-rem-actions">
-                                <form method="POST" action="{{ route('leads.reminders.complete', [$lead, $rem]) }}">
+                                <form method="POST" action="{{ route('leads.reminders.complete', [$lead, $rem]) }}" onsubmit="return confirm('Are you sure you want to mark this reminder as completed?');">
                                     @csrf @method('PATCH')
                                     <button type="submit" class="lsp-rem-done-btn">✓ Done</button>
                                 </form>
@@ -861,6 +890,7 @@ tbody tr:last-child td { border-bottom: none; }
          @include('pages.leads.partials._products_panel')
         </div>
 
+        @if(auth()->user()?->allowsProductionUpdates())
         <div class="lsp-panel" id="panel-production-updates">
             <div class="lsp-card">
                 <div class="lsp-card-head">
@@ -941,10 +971,12 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
             </div>
         </div>
+        @endif
 
         {{-- ════════════════════════════════════════
              TAB 5 — QUOTATIONS
         ════════════════════════════════════════ --}}
+        @if(auth()->user()?->allowsApprovalHistory())
         <div class="lsp-panel" id="panel-approval-history">
             <div class="lsp-card">
                 <div class="lsp-card-head">
@@ -1050,8 +1082,10 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
             </div>
         </div>
+        @endif
 
         {{-- PANEL: CST UPDATES --}}
+        @if(auth()->user()?->allowsCstUpdates())
         <div class="lsp-panel" id="panel-cst-updates">
             <div class="lsp-card">
                 <div class="lsp-card-head" style="display:flex;justify-content:space-between;align-items:center;">
@@ -1171,6 +1205,7 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
             </div>
         </div>
+        @endif
 
         <div class="lsp-panel" id="panel-quotations">
 
@@ -1645,19 +1680,27 @@ $(document).ready(function() {
         let categoryText = $('#outcome_category option:selected').text().trim().toLowerCase();
         let subCategoryText = $('#outcome_sub_category option:selected').text().trim().toLowerCase();
 
-        let isNotInterested = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
-                              (subCategoryText === 'not interested' || subCategoryText.includes('not interested'));
+        let isNoFollowupNeeded = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
+                                  (categoryText === 'closed' || categoryText.includes('closed')) ||
+                                  (categoryText === 'won' || categoryText.includes('won')) ||
+                                  (categoryText === 'lost' || categoryText.includes('lost')) ||
+                                  (subCategoryText === 'not interested' || subCategoryText.includes('not interested')) ||
+                                  (subCategoryText === 'closed' || subCategoryText.includes('closed')) ||
+                                  (subCategoryText === 'won' || subCategoryText.includes('won')) ||
+                                  (subCategoryText === 'lost' || subCategoryText.includes('lost'));
 
-        if (isNotInterested) {
+        if (isNoFollowupNeeded) {
             $('#next_followup_date_input').removeAttr('required').val('');
             $('#next_followup_time_input').removeAttr('required').val('');
             $('#next_followup_date_req').hide();
             $('#next_followup_time_req').hide();
+            $('#call_update_reminder_box').hide();
         } else {
             $('#next_followup_date_input').attr('required', 'required');
             $('#next_followup_time_input').attr('required', 'required');
             $('#next_followup_date_req').show();
             $('#next_followup_time_req').show();
+            $('#call_update_reminder_box').show();
         }
     }
 

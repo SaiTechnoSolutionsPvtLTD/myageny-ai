@@ -172,10 +172,30 @@
     white-space: normal;
     overflow-wrap: break-word;
     pointer-events: none; /* click-through */
-}
+  }
+
+    @page {
+      margin-bottom: 45px;
+    }
+
+    .page-number-footer {
+      position: fixed;
+      bottom: -30px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 9.5px;
+      color: #5a6472;
+      font-weight: bold;
+    }
+    .page-number-footer::before {
+      content: "Page No : " counter(page);
+    }
   </style>
 </head>
 <body>
+
+<div class="page-number-footer"></div>
 
 {{-- HEADER --}}
 <div class="header clearfix">

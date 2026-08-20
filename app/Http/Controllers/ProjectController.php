@@ -654,23 +654,10 @@ class ProjectController extends Controller
             'waiting_posters' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_videos' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'day_closing_update' => [
-                'nullable',
+                'required',
                 'string',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
-                    $projectType = $request->input('project_type');
-                    $isRecurring = $projectType === 'recurring';
-
-                    $projectId = $request->input('production_initiation_id');
-                    $project = \App\Models\ProductionInitiation::with('department')->find($projectId);
-                    $isDesignOrDm = false;
-                    if ($project) {
-                        $deptName = $project->department ? strtolower($project->department->name) : '';
-                        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
-                    }
-
-                    $isRequired = !$isDesignOrDm || !$isRecurring;
-
-                    if ($isRequired && empty(trim((string) $value))) {
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (empty(trim((string) $value))) {
                         $fail('The day closing update is required.');
                         return;
                     }
@@ -680,8 +667,8 @@ class ProjectController extends Controller
                             ->map(fn (string $line) => trim($line))
                             ->filter();
 
-                        if ($lines->count() < 5) {
-                            $fail('Please add at least 5 task lines in the day closing update.');
+                        if ($lines->count() < 1) {
+                            $fail('Please add at least 1 task line in the day closing update.');
                         }
                     }
                 },
@@ -859,21 +846,7 @@ class ProjectController extends Controller
             $dayClosingUpdate = "";
         }
 
-        // Enforce 5 lines rule for day closing update if not already meeting it (or pad it)
-        $lines = collect(preg_split('/\R/', (string) $dayClosingUpdate))
-            ->map(fn (string $line) => trim($line))
-            ->filter();
-
-        if ($lines->count() < 5) {
-            $paddedLines = $lines->toArray();
-            $filler = [
-
-            ];
-            while (count($paddedLines) < 5) {
-                $paddedLines[] = array_shift($filler) ?: '';
-            }
-            $dayClosingUpdate = implode("\n", $paddedLines);
-        }
+        $dayClosingUpdate = (string) $dayClosingUpdate;
 
         if ($timesheet) {
             $timesheet->update([
@@ -1795,6 +1768,15 @@ class ProjectController extends Controller
             ->with('success', 'Project update added successfully.');
     }
 
+    private function digitalMarketingDepartmentIds(): array
+    {
+        return Department::where(function ($q) {
+            $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+              ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+              ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+        })->pluck('id')->toArray();
+    }
+
     private function visibleProjectsQuery(User $user): Builder
     {
         $query = ProductionInitiation::query()
@@ -1806,6 +1788,13 @@ class ProjectController extends Controller
             $query->where(function ($q) use ($devDeptIds) {
                 $q->whereIn('department_id', $devDeptIds)
                   ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($user->isDigitalMarketingTl()) {
+            $dmDeptIds = $this->digitalMarketingDepartmentIds();
+            $query->where(function ($q) use ($dmDeptIds, $user) {
+                $q->whereIn('department_id', $dmDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
+                  ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
             })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
         } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $query
@@ -2149,6 +2138,17 @@ class ProjectController extends Controller
             abort_unless($this->isDevelopmentProject($productionInitiation), 403, 'Development Project Coordinator can only view Development Department projects.');
         }
 
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($productionInitiation->department_id && in_array((int) $productionInitiation->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $productionInitiation->department?->name), ['digital', 'marketing', 'dm'])
+                || $this->isAssignedTlForProject($productionInitiation, $user);
+
+            abort_unless($isDmProject, 403, 'Digital Marketing Team Leader can only view Digital Marketing Department projects.');
+            abort_unless($this->resolveBucketForUser($productionInitiation, $user) !== null, 404);
+
+            return;
+        }
+
         abort_unless($this->resolveBucketForUser($productionInitiation, $user) !== null, 404);
 
         if ($this->shouldLimitToAssignedProjects($user)) {
@@ -2278,6 +2278,18 @@ class ProjectController extends Controller
 
     private function resolveBucketForUser(ProductionInitiation $productionInitiation, User $user): ?string
     {
+        if ($user->isDigitalMarketingTl()) {
+            if (strtolower(trim((string) $productionInitiation->project_allocation_status)) === 'allocation_pending') {
+                return 'allocation_pending';
+            }
+
+            if ($this->isAssignedTlForProject($productionInitiation, $user)) {
+                return $this->resolveBucket((string) ($productionInitiation->current_team_status ?? $this->tlEmployeeAllocationStatusForUser($productionInitiation, $user)));
+            }
+
+            return $this->resolveBucket((string) $productionInitiation->project_allocation_status);
+        }
+
         if ($this->shouldLimitToAssignedProjects($user)) {
             return $this->resolveBucket((string) ($productionInitiation->current_team_status ?? $this->tlEmployeeAllocationStatusForUser($productionInitiation, $user)));
         }
@@ -2302,6 +2314,20 @@ class ProjectController extends Controller
 
     private function canAllocateTl(ProductionInitiation $productionInitiation, User $user): bool
     {
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($productionInitiation->department_id && in_array((int) $productionInitiation->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $productionInitiation->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject) {
+                $isApproved = in_array(strtolower(trim((string) $productionInitiation->production_approval_status)), ['approval', 'approved'], true);
+                if (! $isApproved) {
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
         if ($this->shouldLimitToAssignedProjects($user)) {
             return false;
         }
@@ -2321,6 +2347,15 @@ class ProjectController extends Controller
 
     private function canAllocateEmployees(ProductionInitiation $productionInitiation, User $user): bool
     {
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($productionInitiation->department_id && in_array((int) $productionInitiation->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $productionInitiation->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject && strtolower(trim((string) $productionInitiation->project_allocation_status)) === 'allocated') {
+                return true;
+            }
+        }
+
         return $this->isAssignedTlForProject($productionInitiation, $user)
             && strtolower(trim((string) $productionInitiation->project_allocation_status)) === 'allocated'
             && in_array(strtolower(trim((string) $this->tlEmployeeAllocationStatusForUser($productionInitiation, $user))), ['allocation_pending', 'allocated'], true);

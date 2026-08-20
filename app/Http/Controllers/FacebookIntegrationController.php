@@ -717,18 +717,51 @@ class FacebookIntegrationController extends Controller
     public function syncCampaign(CampaignMaster $campaignMaster, FacebookLeadImporter $importer)
     {
         try {
-
             $summary = $importer->importCampaign($campaignMaster);
+
+            $message = "Facebook sync completed for {$campaignMaster->campaign_name}. Imported {$summary['created']} leads, updated {$summary['updated']} leads, skipped {$summary['skipped']}, failed {$summary['failed']}.";
+
+            if (!empty($summary['failed']) && !empty($summary['errors'])) {
+                $message .= ' Failed reason(s): ' . Str::limit(implode('; ', $summary['errors']), 500);
+            }
 
             return redirect()
                 ->route('settings.facebook-integration')
-                ->with(
-                    'success',
-                    "Facebook sync completed for {$campaignMaster->campaign_name}. Imported {$summary['created']} leads, updated {$summary['updated']} leads, skipped {$summary['skipped']}, failed {$summary['failed']}."
-                );
+                ->with('success', $message);
         } catch (\Throwable $th) {
             Log::error('Error syncing Facebook campaign.', [
                 'campaign_master_id' => $campaignMaster->id,
+                'message' => $th->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('settings.facebook-integration')
+                ->with('error', $this->facebookSyncFailureMessage($th));
+        }
+    }
+
+    public function syncAllCampaigns(FacebookLeadImporter $importer)
+    {
+        try {
+            $summary = $importer->importIntegratedCampaigns();
+
+            if (($summary['campaigns'] ?? 0) === 0) {
+                return redirect()
+                    ->route('settings.facebook-integration')
+                    ->with('success', 'No migrated campaigns found to sync.');
+            }
+
+            $message = "Facebook sync completed for all {$summary['campaigns']} migrated campaign(s). Imported {$summary['created']} leads, updated {$summary['updated']} leads, skipped {$summary['skipped']}, failed {$summary['failed']}.";
+
+            if (!empty($summary['failed']) && !empty($summary['errors'])) {
+                $message .= ' Failed reason(s): ' . Str::limit(implode('; ', $summary['errors']), 500);
+            }
+
+            return redirect()
+                ->route('settings.facebook-integration')
+                ->with('success', $message);
+        } catch (\Throwable $th) {
+            Log::error('Error syncing all Facebook campaigns.', [
                 'message' => $th->getMessage(),
             ]);
 

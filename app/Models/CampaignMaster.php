@@ -15,6 +15,11 @@ class CampaignMaster extends Model
         return $this->hasMany(AssignedUser::class, 'campaign_id');
     }
 
+    public function fieldMigrations(): HasMany
+    {
+        return $this->hasMany(CampaignFieldMigration::class, 'campaign_id');
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

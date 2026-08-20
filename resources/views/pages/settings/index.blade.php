@@ -288,6 +288,7 @@
         </a>
         @endcan
 
+        @can('expense_pipeline.menuview')
         <a href="{{ route('settings.expense-pipeline.index') }}" class="settings-card payroll">
             <div class="settings-card-icon payroll">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -304,7 +305,10 @@
                 </svg>
             </span>
         </a>
+        @endcan
 
+
+        @can('leave_hierarchy.menuview')
         <a href="{{ route('settings.leave-hierarchy.index') }}" class="settings-card attendance">
             <div class="settings-card-icon attendance">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -321,8 +325,9 @@
                 </svg>
             </span>
         </a>
+        @endcan
 
-        @can('form_customization.menuview')
+        @can('field_customization.menuview')
         <a href="{{ url('/lead/form-customization') }}" class="settings-card facebook">
             <div class="settings-card-icon facebook">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -426,7 +431,7 @@
         </a>
         @endcan
 
-        @can('settings.manage')
+        @can('sales_targets.menuview')
         <a href="{{ route('settings.sales-targets.index') }}" class="settings-card outcome">
             <div class="settings-card-icon outcome">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -447,7 +452,7 @@
         </a>
         @endcan
 
-        @can('settings.manage')
+        @can('lead_reallocation.menuview')
         <a href="{{ route('settings.lead-reallocation.index') }}" class="settings-card branch">
             <div class="settings-card-icon branch">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -462,6 +467,28 @@
             <p class="settings-card-text">Reassign leads and their products from one user to another. Useful for managing team changes and workload distribution.</p>
             <span class="settings-card-link">
                 Open Lead Reallocation
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
+        @endcan
+
+        @can('lead_import.menuview')
+        <a href="{{ route('settings.lead-import.index') }}" class="settings-card source">
+            <div class="settings-card-icon source">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                    <polyline points="9 15 12 12 15 15"></polyline>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Lead Import</h4>
+            <p class="settings-card-text">Import leads in bulk from Excel or CSV files with custom field mapping, product assignment, and sales/presales team allocation.</p>
+            <span class="settings-card-link">
+                Open Lead Import
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>

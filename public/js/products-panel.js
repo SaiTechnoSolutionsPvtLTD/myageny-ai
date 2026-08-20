@@ -15,6 +15,8 @@
     var API_BASE  = cfg.apiBase  || '/api/v1';
     var CSRF      = cfg.csrf     || '';
     var IS_ADMIN  = !!cfg.isAdmin;
+    var ALLOWS_PRICE_REQUESTS = cfg.allowsPriceRequests !== false;
+    var ALLOWS_PRODUCTION_UPDATES = cfg.allowsProductionUpdates !== false;
     var STATUS_OPTIONS = normalizeStatusOptions(cfg.statusOptions || []);
 
     /* ── Local state ─────────────────────────────────────────────── */
@@ -228,7 +230,7 @@
 
         var priceRequestBtn = el('pp-submit-price-request-btn');
         if (priceRequestBtn) {
-            priceRequestBtn.style.display = isEdit ? 'none' : '';
+            priceRequestBtn.style.display = (isEdit || !ALLOWS_PRICE_REQUESTS) ? 'none' : '';
         }
 
         var multiSel = el('pp-product-multi-select');
@@ -522,7 +524,7 @@
             return;
         }
 
-        if (!IS_ADMIN && hasPriceChange(products)) {
+        if (ALLOWS_PRICE_REQUESTS && !IS_ADMIN && hasPriceChange(products)) {
             toast('Price was changed. Please send a price change request for admin approval.', 'error');
             return;
         }
@@ -560,7 +562,7 @@
     function submitProductEdit(dealName, product) {
         if (!product) { toast('Select a product to update.', 'error'); return; }
 
-        if (isSingleProductPriceChanged(product)) {
+        if (ALLOWS_PRICE_REQUESTS && isSingleProductPriceChanged(product)) {
             PP.ppSubmitPriceRequest();
             return;
         }
@@ -642,6 +644,11 @@
     }
 
     PP.ppSubmitPriceRequest = function () {
+        if (!ALLOWS_PRICE_REQUESTS) {
+            toast('Price request feature is disabled for your company.', 'error');
+            return;
+        }
+
         var dealName = (el('pp-deal-name') || {}).value || '';
         if (!dealName.trim()) { toast('Please enter a Deal Name.', 'error'); return; }
 
@@ -916,25 +923,27 @@
                             '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>' +
                             'Edit' +
                         '</button>' +
-                        (p.productionInitiation && !isRejectedInOvp
-                            ? '<a class="pp-act-btn pp-btn-prod" href="' + escAttr(p.productionInitiation.view_url || '#') + '" style="opacity:.9">' +
-                                '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
-                                'Product Initiated' +
-                              '</a>'
-                            : isRejectedInOvp
-                                ? '<button type="button" class="pp-act-btn pp-btn-reinitiate" onclick="PP.ppShowProduction(' + p.id + ')" title="Re-initiate production for rejected OVP item">' +
-                                    '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 11V16h5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 13V8h-5"/></svg>' +
-                                    'Re-Initiate' +
-                                  '</button>'
-                            : !canMoveToProduction(p)
-                                ? '<button type="button" class="pp-act-btn pp-btn-prod" disabled style="opacity:.55;cursor:not-allowed" title="' + escAttr(productionLockedMessage(p)) + '">' +
+                        (ALLOWS_PRODUCTION_UPDATES ? (
+                            p.productionInitiation && !isRejectedInOvp
+                                ? '<a class="pp-act-btn pp-btn-prod" href="' + escAttr(p.productionInitiation.view_url || '#') + '" style="opacity:.9">' +
+                                    '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
+                                    'Product Initiated' +
+                                  '</a>'
+                                : isRejectedInOvp
+                                    ? '<button type="button" class="pp-act-btn pp-btn-reinitiate" onclick="PP.ppShowProduction(' + p.id + ')" title="Re-initiate production for rejected OVP item">' +
+                                        '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 11V16h5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 13V8h-5"/></svg>' +
+                                        'Re-Initiate' +
+                                      '</button>'
+                                : !canMoveToProduction(p)
+                                    ? '<button type="button" class="pp-act-btn pp-btn-prod" disabled style="opacity:.55;cursor:not-allowed" title="' + escAttr(productionLockedMessage(p)) + '">' +
+                                        '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
+                                        'Move to Production' +
+                                      '</button>'
+                                : '<button type="button" class="pp-act-btn pp-btn-prod" onclick="PP.ppShowProduction(' + p.id + ')">' +
                                     '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
                                     'Move to Production' +
                                   '</button>'
-                            : '<button type="button" class="pp-act-btn pp-btn-prod" onclick="PP.ppShowProduction(' + p.id + ')">' +
-                                '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M6 12h12"/><path d="M9 17h6"/></svg>' +
-                                'Move to Production' +
-                              '</button>') +
+                        ) : '') +
 
                     '</div>' +
                 '</div>' +
@@ -1445,6 +1454,11 @@
     };
 
     PP.ppShowProduction = function (prodId) {
+        if (!ALLOWS_PRODUCTION_UPDATES) {
+            toast('Move to Production feature is disabled for your company.', 'error');
+            return;
+        }
+
         var p = findProduct(prodId);
         if (!p) { toast('Product not found. Try refreshing.', 'error'); return; }
 

@@ -33,17 +33,33 @@ class LeadShowController extends Controller
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
         $outcomeCat = \App\Models\OutcomeCategory::find($request->outcome);
-        $isNotInterested = false;
-        if ($outcomeCat && strtolower(trim($outcomeCat->name)) === 'not interested') {
-            $isNotInterested = true;
+        $outcomeName = strtolower(trim($outcomeCat?->name ?? ''));
+
+        $subCatName = '';
+        if ($request->outcome_sub_category_id) {
+            $subCat = \App\Models\OutcomeSubCategory::find($request->outcome_sub_category_id);
+            $subCatName = strtolower(trim($subCat?->name ?? ''));
+        }
+
+        $isNoFollowupNeeded = false;
+        if (
+            in_array($outcomeName, ['not interested', 'closed', 'won', 'lost']) ||
+            str_contains($outcomeName, 'not interested') ||
+            str_contains($outcomeName, 'closed') ||
+            in_array($subCatName, ['not interested', 'closed', 'won', 'lost']) ||
+            str_contains($subCatName, 'not interested') ||
+            str_contains($subCatName, 'closed')
+        ) {
+            $isNoFollowupNeeded = true;
         }
 
         $data = $request->validate([
             'outcome'                 => ['required'],
             'outcome_sub_category_id' => ['required'],
             'notes'                   => ['nullable', 'string', 'max:1000'],
-            'next_follow_up'          => [$isNotInterested ? 'nullable' : 'required', 'nullable', 'date'],
-            'followup_time'           => [$isNotInterested ? 'nullable' : 'required'],
+            'next_follow_up'          => [$isNoFollowupNeeded ? 'nullable' : 'required', 'nullable', 'date'],
+            'followup_time'           => [$isNoFollowupNeeded ? 'nullable' : 'required'],
+            'reminder_remarks'        => ['nullable', 'string', 'max:500'],
         ]);
 
         $data['lead_id'] = $lead->id;
@@ -53,6 +69,25 @@ class LeadShowController extends Controller
         $data['company_id'] = $lead->company_id;
 
         LeadCallUpdate::create($data);
+
+        // Auto-create Reminder in Reminders Tab / Tasks whenever next_follow_up date is set
+        if (! $isNoFollowupNeeded && ! empty($request->next_follow_up)) {
+            $reminderTitle = trim((string) $request->reminder_remarks);
+            if ($reminderTitle === '') {
+                $reminderTitle = 'Follow-up Call: ' . ($subCatName ?: $outcomeName ?: 'Lead Follow-up');
+            }
+
+            LeadReminder::create([
+                'lead_id'        => $lead->id,
+                'user_id'        => auth()->id(),
+                'title'          => \Illuminate\Support\Str::limit($reminderTitle, 150),
+                'description'    => $request->notes ? \Illuminate\Support\Str::limit((string) $request->notes, 500) : null,
+                'remind_at'      => $request->next_follow_up,
+                'remainder_time' => $request->followup_time ?: '10:00:00',
+                'type'           => 'follow_up',
+                'priority'       => 'high',
+            ]);
+        }
 
         return back()->with('success', 'Call update added successfully.');
     }

@@ -18,7 +18,7 @@ return [
             // not nested), so this follows the same existing convention.
             ['key' => 'pre_sales',      'label' => 'Pre Sales',      'section' => 'CRM', 'order' => 45, 'permission' => 'pre_sales.menuview'],
             ['key' => 'call_updates',   'label' => 'Call Updates',   'section' => 'CRM', 'order' => 50, 'permission' => 'call_updates.menuview'],
-            ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview'],
+            ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview', 'require_method' => 'allowsPriceRequests'],
             ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70],
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
             ['key' => 'production_approvals',  'label' => 'Production Approvals',  'section' => 'OVP & PRODUCTION', 'order' => 90, 'permission' => 'production_approval_module.menuview'],

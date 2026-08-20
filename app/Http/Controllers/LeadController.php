@@ -36,12 +36,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        if (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset')) {
-            $request->merge([
-                'date_from' => $defaultFromDate,
-                'date_to' => $defaultToDate,
-            ]);
-        }
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
         $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
             ->latest('lead_date');
@@ -205,19 +200,7 @@ class LeadController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
-
-        if ($quickDate === 'all') {
-            $request->merge([
-                'date_from' => null,
-                'date_to' => null,
-            ]);
-        } elseif (!$request->has('date_from') && !$request->has('date_to') && !$request->has('reset') && !$quickDate) {
-            $request->merge([
-                'date_from' => $defaultFromDate,
-                'date_to' => $defaultToDate,
-            ]);
-        }
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
         $query = LeadProduct::query()
             ->with(['lead.branch', 'lead.assignedTo', 'product', 'leadStatus'])
@@ -256,9 +239,23 @@ class LeadController extends Controller
         if ($request->filled('product_status')) {
             $statusVal = $request->product_status;
             if (is_numeric($statusVal)) {
-                $query->where('lead_status_id', (int) $statusVal);
+                $statusRecord = LeadStatus::find($statusVal);
+                $statusName = $statusRecord ? strtolower($statusRecord->name) : null;
+                $query->where(function ($q) use ($statusVal, $statusName) {
+                    $q->where('lead_status_id', (int) $statusVal);
+                    if ($statusName) {
+                        $q->orWhere('product_status', $statusName);
+                    }
+                });
             } else {
-                $query->where('product_status', $statusVal);
+                $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
+                $statusId = $statusRecord?->id;
+                $query->where(function ($q) use ($statusVal, $statusId) {
+                    $q->where('product_status', $statusVal);
+                    if ($statusId) {
+                        $q->orWhere('lead_status_id', $statusId);
+                    }
+                });
             }
         }
 
@@ -281,11 +278,19 @@ class LeadController extends Controller
         }
 
         if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date_from);
+            $dateFrom = $request->date_from;
+            $query->where(function ($q) use ($dateFrom) {
+                $q->whereDate('created_at', '>=', $dateFrom)
+                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+            });
         }
 
         if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date_to);
+            $dateTo = $request->date_to;
+            $query->where(function ($q) use ($dateTo) {
+                $q->whereDate('created_at', '<=', $dateTo)
+                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+            });
         }
 
         $statsBase = (clone $query)->with('payments');
@@ -596,15 +601,35 @@ class LeadController extends Controller
             ->delete();
 
         foreach ($fields as $field) {
-            $submittedValue = $submittedValues[$field->id] ?? null;
+            $normalizedValue = null;
 
-            if (is_array($submittedValue)) {
-                $submittedValue = array_values(array_filter($submittedValue, fn ($value) => $value !== null && $value !== ''));
+            if ($field->field_type === 'file') {
+                $fileInputKey = "custom_fields.{$field->id}";
+                if (request()->hasFile($fileInputKey)) {
+                    $uploadedFile = request()->file($fileInputKey);
+                    $targetDir = public_path('uploads/custom_fields');
+                    if (!file_exists($targetDir)) {
+                        mkdir($targetDir, 0777, true);
+                    }
+                    $extension = $uploadedFile->getClientOriginalExtension();
+                    $filename = time() . '_' . uniqid('cf_') . ($extension ? '.' . $extension : '');
+                    $uploadedFile->move($targetDir, $filename);
+                    $normalizedValue = 'uploads/custom_fields/' . $filename;
+                } else {
+                    $existingFile = request()->input("existing_custom_files.{$field->id}");
+                    $normalizedValue = $existingFile ?: ($submittedValues[$field->id] ?? null);
+                }
+            } else {
+                $submittedValue = $submittedValues[$field->id] ?? null;
+
+                if (is_array($submittedValue)) {
+                    $submittedValue = array_values(array_filter($submittedValue, fn ($value) => $value !== null && $value !== ''));
+                }
+
+                $normalizedValue = is_array($submittedValue)
+                    ? json_encode($submittedValue)
+                    : ($submittedValue !== null ? trim((string) $submittedValue) : null);
             }
-
-            $normalizedValue = is_array($submittedValue)
-                ? json_encode($submittedValue)
-                : ($submittedValue !== null ? trim((string) $submittedValue) : null);
 
             if ($normalizedValue === null || $normalizedValue === '' || $normalizedValue === '[]') {
                 LeadFieldValue::query()
@@ -623,6 +648,75 @@ class LeadController extends Controller
                     'value' => $normalizedValue,
                 ]
             );
+        }
+    }
+
+    private function resolveQuickDate(Request $request, string $defaultFromDate, string $defaultToDate): void
+    {
+        $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
+
+        if ($quickDate) {
+            if ($quickDate === 'all') {
+                $request->merge([
+                    'date_from'  => null,
+                    'date_to'    => null,
+                    'quick_date' => 'all',
+                ]);
+                return;
+            }
+
+            $dates = match ($quickDate) {
+                'today'               => [now()->toDateString(), now()->toDateString()],
+                'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                'month', 'this_month' => [$defaultFromDate, $defaultToDate],
+                'quarter'             => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
+                'year', 'this_year'   => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                default               => null,
+            };
+
+            if ($dates) {
+                $request->merge([
+                    'date_from'  => $dates[0],
+                    'date_to'    => $dates[1],
+                    'quick_date' => $quickDate,
+                ]);
+                return;
+            }
+        }
+
+        $parsedFrom = $this->parseDateInput($request->input('date_from'));
+        $parsedTo   = $this->parseDateInput($request->input('date_to'));
+
+        if ($parsedFrom || $parsedTo) {
+            $request->merge([
+                'date_from' => $parsedFrom,
+                'date_to'   => $parsedTo,
+            ]);
+        } elseif (!$request->has('reset') && $quickDate !== 'all') {
+            $request->merge([
+                'date_from'  => $defaultFromDate,
+                'date_to'    => $defaultToDate,
+                'quick_date' => 'month',
+            ]);
+        }
+    }
+
+    private function parseDateInput(?string $dateStr): ?string
+    {
+        if (empty($dateStr)) {
+            return null;
+        }
+
+        $dateStr = trim($dateStr);
+
+        try {
+            if (preg_match('/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/', $dateStr, $matches)) {
+                return Carbon::createFromDate((int)$matches[3], (int)$matches[2], (int)$matches[1])->toDateString();
+            }
+
+            return Carbon::parse($dateStr)->toDateString();
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 }

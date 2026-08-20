@@ -131,8 +131,23 @@
 .lh-flow-chain {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #fe5f04 #ffedd5;
+}
+.lh-flow-chain::-webkit-scrollbar {
+    height: 6px;
+}
+.lh-flow-chain::-webkit-scrollbar-track {
+    background: #ffedd5;
+    border-radius: 999px;
+}
+.lh-flow-chain::-webkit-scrollbar-thumb {
+    background: #fe5f04;
+    border-radius: 999px;
 }
 .lh-role-pill {
     display: inline-flex;
@@ -145,6 +160,8 @@
     background: #f3f4f6;
     color: #374151;
     border: 1px solid #e5e7eb;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 .lh-role-pill.applicant {
     background: #fff7ed;
@@ -160,6 +177,7 @@
     color: #fe5f04;
     font-weight: 800;
     font-size: 14px;
+    flex-shrink: 0;
 }
 
 /* Status Badge */
@@ -190,8 +208,8 @@
 .lh-modal {
     background: #ffffff;
     border-radius: 20px;
-    width: 90%;
-    max-width: 640px;
+    width: 92%;
+    max-width: 740px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
@@ -218,10 +236,47 @@
 .lh-modal-body {
     padding: 24px;
     overflow-y: auto;
+    max-height: calc(85vh - 130px);
     display: flex;
     flex-direction: column;
     gap: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
 }
+.lh-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.lh-modal-body::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 999px;
+}
+.lh-modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+.lh-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+#stepsContainer {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #fe5f04 #ffedd5;
+}
+#stepsContainer::-webkit-scrollbar {
+    width: 5px;
+}
+#stepsContainer::-webkit-scrollbar-track {
+    background: #ffedd5;
+    border-radius: 999px;
+}
+#stepsContainer::-webkit-scrollbar-thumb {
+    background: #fe5f04;
+    border-radius: 999px;
+}
+
 .lh-form-group { display: flex; flex-direction: column; gap: 6px; }
 .lh-form-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: #4b5563; }
 .lh-input, .lh-select {
@@ -500,7 +555,7 @@
                 {{-- Live Chain Preview --}}
                 <div class="lh-form-group">
                     <label class="lh-form-label">Live Visual Approval Flow Preview</label>
-                    <div id="chainPreview" style="padding: 14px; background: #fff9f3; border: 1px solid #ffedd5; border-radius: 12px;">
+                    <div id="chainPreview" style="padding: 14px; background: #fff9f3; border: 1px solid #ffedd5; border-radius: 12px; overflow-x: auto;">
                         <span style="font-size: 12px; color: #9ca3af;">Select a role and add steps to preview the approval chain...</span>
                     </div>
                 </div>

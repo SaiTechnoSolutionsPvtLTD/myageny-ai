@@ -699,15 +699,35 @@ class LeadController extends Controller
             ->delete();
 
         foreach ($fields as $field) {
-            $submittedValue = $submittedValues[$field->id] ?? null;
+            $normalizedValue = null;
 
-            if (is_array($submittedValue)) {
-                $submittedValue = array_values(array_filter($submittedValue, fn($value) => $value !== null && $value !== ''));
+            if ($field->field_type === 'file') {
+                $fileInputKey = "custom_fields.{$field->id}";
+                if (request()->hasFile($fileInputKey)) {
+                    $uploadedFile = request()->file($fileInputKey);
+                    $targetDir = public_path('uploads/custom_fields');
+                    if (!file_exists($targetDir)) {
+                        mkdir($targetDir, 0777, true);
+                    }
+                    $extension = $uploadedFile->getClientOriginalExtension();
+                    $filename = time() . '_' . uniqid('cf_') . ($extension ? '.' . $extension : '');
+                    $uploadedFile->move($targetDir, $filename);
+                    $normalizedValue = 'uploads/custom_fields/' . $filename;
+                } else {
+                    $existingFile = request()->input("existing_custom_files.{$field->id}");
+                    $normalizedValue = $existingFile ?: ($submittedValues[$field->id] ?? null);
+                }
+            } else {
+                $submittedValue = $submittedValues[$field->id] ?? null;
+
+                if (is_array($submittedValue)) {
+                    $submittedValue = array_values(array_filter($submittedValue, fn($value) => $value !== null && $value !== ''));
+                }
+
+                $normalizedValue = is_array($submittedValue)
+                    ? json_encode($submittedValue)
+                    : ($submittedValue !== null ? trim((string) $submittedValue) : null);
             }
-
-            $normalizedValue = is_array($submittedValue)
-                ? json_encode($submittedValue)
-                : ($submittedValue !== null ? trim((string) $submittedValue) : null);
 
             if ($normalizedValue === null || $normalizedValue === '' || $normalizedValue === '[]') {
                 LeadFieldValue::query()
@@ -909,6 +929,10 @@ class LeadController extends Controller
 
     public function priceRequestIndex(Request $request)
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['message' => 'Price request feature is disabled for your company.'], 403);
+        }
+
         $query = LeadProductPriceRequest::with([
             'lead',
             'product',
@@ -933,6 +957,10 @@ class LeadController extends Controller
 
     public function priceRequestApprove(Request $request, LeadProductPriceRequest $req)
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['message' => 'Price request feature is disabled for your company.'], 403);
+        }
+
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Already processed.'], 422);
         }
@@ -970,6 +998,9 @@ class LeadController extends Controller
 
     public function priceRequestReject(Request $request, LeadProductPriceRequest $req)
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['message' => 'Price request feature is disabled for your company.'], 403);
+        }
         if ($req->status !== 'pending') {
             return response()->json(['message' => 'Already processed.'], 422);
         }

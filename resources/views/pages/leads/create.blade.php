@@ -27,7 +27,7 @@
     </div>
 
     <div class="lf-body">
-    <form method="POST" action="{{ route('leads.store') }}" id="leadForm">
+    <form method="POST" action="{{ route('leads.store') }}" id="leadForm" enctype="multipart/form-data">
         @csrf
         @include('pages.leads.form', ['lead' => null])
     </form>
@@ -144,5 +144,22 @@ document.querySelectorAll('[data-field-name]').forEach(input => {
 
 toggleCustomFieldsByBranch();
 recalculateCustomFormulaFields();
+
+const leadForm = document.getElementById('leadForm');
+if (leadForm) {
+    leadForm.addEventListener('submit', function () {
+        const buttons = document.querySelectorAll('button[type="submit"][form="leadForm"], #leadForm button[type="submit"]');
+        buttons.forEach(btn => {
+            btn.disabled = true;
+            btn.classList.add('is-processing');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 0.8s linear infinite;">
+                    <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="10" stroke-linecap="round"></circle>
+                </svg>
+                Processing...
+            `;
+        });
+    });
+}
 </script>
 @endpush

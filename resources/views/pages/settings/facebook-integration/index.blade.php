@@ -4,6 +4,15 @@
 @push('styles')
 @include('pages.settings.partials.table-styles')
 <style>
+.crm-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.crm-table {
+    min-width: 800px;
+}
+
 .crm-filter-card {
     background: #fff;
     border: 1px solid #e1dee3;
@@ -105,6 +114,13 @@
             </div>
             <div class="crm-header-actions">
                 <a href="{{ route('settings.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <form action="{{ route('settings.facebook-integration.sync-all') }}" method="POST" style="display:inline">
+                    @csrf
+                    <button type="submit" class="crm-btn crm-btn-ghost" style="display:inline-flex; align-items:center; gap:6px; background:#fff7ed; color:#fe5f04; border-color:#fdba74;" onclick="return confirm('Are you sure you want to sync all migrated campaigns?')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                        Sync All
+                    </button>
+                </form>
                 <a href="/settings/auth/facebook" target="_blank" class="crm-btn crm-btn-primary">+ Login Facebook</a>
             </div>
         </div>

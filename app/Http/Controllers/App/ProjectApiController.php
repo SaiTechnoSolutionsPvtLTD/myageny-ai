@@ -742,12 +742,7 @@ class ProjectApiController extends Controller
 
         // Mirrors web: day closing update required unless the project is
         // Design/DM AND project_type is 'recurring'.
-        $deptName = strtolower((string) $project->department?->name);
-        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
-        $isRecurring = ($validated['project_type'] ?? 'recurring') === 'recurring';
-        $dayClosingRequired = !$isDesignOrDm || !$isRecurring;
-
-        if ($dayClosingRequired && trim((string) ($validated['day_closing_update'] ?? '')) === '') {
+        if (trim((string) ($validated['day_closing_update'] ?? '')) === '') {
             return response()->json([
                 'success' => false,
                 'message' => 'The day closing update is required.',
@@ -757,11 +752,11 @@ class ProjectApiController extends Controller
         if (filled($validated['day_closing_update'] ?? null)) {
             $lines = collect(preg_split('/\R/', (string) $validated['day_closing_update']))
                 ->map(fn($l) => trim($l))->filter();
-            if ($lines->count() < 5) {
+            if ($lines->count() < 1) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Please add at least 5 task lines in the day closing update.',
-                    'errors'  => ['day_closing_update' => ['Please add at least 5 task lines in the day closing update.']],
+                    'message' => 'Please add at least 1 task line in the day closing update.',
+                    'errors'  => ['day_closing_update' => ['Please add at least 1 task line in the day closing update.']],
                 ], 422);
             }
         }
@@ -975,6 +970,15 @@ class ProjectApiController extends Controller
     //  All private helpers copied verbatim from web ProjectController
     // ─────────────────────────────────────────────────────────────────────────
 
+    private function digitalMarketingDepartmentIds(): array
+    {
+        return Department::where(function ($q) {
+            $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+              ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+              ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+        })->pluck('id')->toArray();
+    }
+
     private function visibleProjectsQuery(User $user): Builder
     {
         $query = ProductionInitiation::query()
@@ -986,6 +990,13 @@ class ProjectApiController extends Controller
             $query->where(function ($q) use ($devDeptIds) {
                 $q->whereIn('department_id', $devDeptIds)
                   ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($user->isDigitalMarketingTl()) {
+            $dmDeptIds = $this->digitalMarketingDepartmentIds();
+            $query->where(function ($q) use ($dmDeptIds, $user) {
+                $q->whereIn('department_id', $dmDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
+                  ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
             })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
         } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $query->where('project_allocation_status', 'allocated')
@@ -1229,6 +1240,22 @@ class ProjectApiController extends Controller
     private function ensureProjectIsVisibleToUser(ProductionInitiation $p, User $user): void
     {
         $p->loadMissing($this->projectRelations());
+
+        if ($user->isDevelopmentProjectCoordinator()) {
+            abort_unless($this->isDevelopmentProject($p), 403, 'Development Project Coordinator can only view Development Department projects.');
+        }
+
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm'])
+                || $this->isAssignedTlForProject($p, $user);
+
+            abort_unless($isDmProject, 403, 'Digital Marketing Team Leader can only view Digital Marketing Department projects.');
+            abort_unless($this->resolveBucketForUser($p, $user) !== null, 404);
+
+            return;
+        }
+
         abort_unless($this->resolveBucketForUser($p, $user) !== null, 404);
         if ($this->shouldLimitToAssignedProjects($user)) abort_unless($this->isAssignedTlForProject($p, $user), 403);
         if ($this->shouldLimitToEmployeeProjects($user))  abort_unless($this->isAssignedEmployeeForProject($p, $user), 403);
@@ -1325,6 +1352,18 @@ class ProjectApiController extends Controller
 
     private function resolveBucketForUser(ProductionInitiation $p, User $user): ?string
     {
+        if ($user->isDigitalMarketingTl()) {
+            if (strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending') {
+                return 'allocation_pending';
+            }
+
+            if ($this->isAssignedTlForProject($p, $user)) {
+                return $this->resolveBucket((string) ($p->current_team_status ?? $this->tlEmployeeAllocationStatusForUser($p, $user)));
+            }
+
+            return $this->resolveBucket((string) $p->project_allocation_status);
+        }
+
         if ($this->shouldLimitToAssignedProjects($user)) {
             return $this->resolveBucket((string) ($p->current_team_status ?? $this->tlEmployeeAllocationStatusForUser($p, $user)));
         }
@@ -1345,6 +1384,20 @@ class ProjectApiController extends Controller
 
     private function canAllocateTl(ProductionInitiation $p, User $user): bool
     {
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject) {
+                $isApproved = in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true);
+                if (! $isApproved) {
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
         if ($this->shouldLimitToAssignedProjects($user)) return false;
 
         $isApproved = in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true);
@@ -1362,6 +1415,15 @@ class ProjectApiController extends Controller
 
     private function canAllocateEmployees(ProductionInitiation $p, User $user): bool
     {
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject && strtolower(trim((string) $p->project_allocation_status)) === 'allocated') {
+                return true;
+            }
+        }
+
         return $this->isAssignedTlForProject($p, $user)
             && strtolower(trim((string) $p->project_allocation_status)) === 'allocated'
             && in_array(strtolower(trim($this->tlEmployeeAllocationStatusForUser($p, $user))), ['allocation_pending', 'allocated'], true);
