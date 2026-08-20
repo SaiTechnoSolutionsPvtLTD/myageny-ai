@@ -155,22 +155,36 @@ class Quotation extends Model
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /**
-     * Generate the next sequential quotation number.
+     * Generate the next sequential quotation number per company.
      * Format: QT-YY-0001
      */
-    public static function generateQuotationNo(): string
+    public static function generateQuotationNo(?int $companyId = null): string
     {
+        $companyId = $companyId ?? (auth()->check() ? auth()->user()?->company_id : null);
         $year   = now()->format('y');
         $prefix = "QT-{$year}-";
 
-        $last = static::where('quotation_no', 'like', "{$prefix}%")
-            ->when(auth()->check() && auth()->user()?->company_id, fn ($query) => $query->where('company_id', auth()->user()->company_id))
-            ->orderByDesc('id')
-            ->value('quotation_no');
+        $query = static::where('quotation_no', 'like', "{$prefix}%");
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
 
+        $last = $query->orderByDesc('id')->value('quotation_no');
         $seq = $last ? ((int) substr($last, -4)) + 1 : 1;
 
-        return $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);
+        do {
+            $candidate = $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);
+            $checkQuery = static::where('quotation_no', $candidate);
+            if ($companyId) {
+                $checkQuery->where('company_id', $companyId);
+            } else {
+                $checkQuery->whereNull('company_id');
+            }
+            if (! $checkQuery->exists()) {
+                return $candidate;
+            }
+            $seq++;
+        } while (true);
     }
 
     /**

@@ -19,6 +19,10 @@ class LeadProductPriceRequestController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['message' => 'Price request feature is disabled for your company.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'lead_id' => ['required', 'exists:leads,id'],
             'deal_name' => ['required', 'string', 'max:255'],
@@ -90,7 +94,7 @@ class LeadProductPriceRequestController extends Controller
 
     public function index(Request $request): View
     {
-        // abort_unless($this->isAdmin($request->user()), 403);
+        abort_unless((bool) $request->user()?->allowsPriceRequests(), 403, 'Price request feature is disabled for your company.');
 
         $query = LeadProductPriceRequest::with(['lead', 'product', 'requestedBy', 'approvedBy'])
             ->latest();
@@ -123,8 +127,7 @@ class LeadProductPriceRequestController extends Controller
 
     public function approve(Request $request, LeadProductPriceRequest $priceRequest): RedirectResponse
     {
-
-        // abort_unless($this->isAdmin($request->user()), 403);
+        abort_unless((bool) $request->user()?->allowsPriceRequests(), 403, 'Price request feature is disabled for your company.');
 
         if ($priceRequest->status !== 'pending') {
             return back()->with('error', 'This request has already been processed.');
@@ -177,7 +180,7 @@ class LeadProductPriceRequestController extends Controller
 
     public function reject(Request $request, LeadProductPriceRequest $priceRequest): RedirectResponse
     {
-        // abort_unless($this->isAdmin($request->user()), 403);
+        abort_unless((bool) $request->user()?->allowsPriceRequests(), 403, 'Price request feature is disabled for your company.');
 
         if ($priceRequest->status !== 'pending') {
             return back()->with('error', 'This request has already been processed.');

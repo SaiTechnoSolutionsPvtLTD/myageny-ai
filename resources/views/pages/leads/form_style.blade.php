@@ -149,5 +149,16 @@
     background: #fe5f04;
     color: #fff;
 }
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.lf-btn.is-processing {
+    opacity: 0.75 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
 </style>
 

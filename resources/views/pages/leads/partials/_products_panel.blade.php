@@ -423,7 +423,7 @@
 <div class="pp-toolbar">
     <div class="pp-toolbar-title">🤝 Deals &amp; Products</div>
     <div class="pp-toolbar-right">
-        @if($canApproveLeadPriceRequests)
+        @if(auth()->user()?->allowsPriceRequests() && $canApproveLeadPriceRequests)
         <a href="{{ route('lead-price-requests.index', ['lead_id' => $lead->id, 'status' => 'pending']) }}"
            class="pp-act-btn pp-btn-hist">
             Pending Requests
@@ -892,6 +892,8 @@ window.PP_CONFIG = {
     apiBase : '{{ rtrim(env("APP_URL"), "/") }}/api',
     csrf    : {!! json_encode(csrf_token()) !!},
     isAdmin : {{ $canApproveLeadPriceRequests ? 'true' : 'false' }},
+    allowsPriceRequests: {{ auth()->user()?->allowsPriceRequests() ? 'true' : 'false' }},
+    allowsProductionUpdates: {{ auth()->user()?->allowsProductionUpdates() ? 'true' : 'false' }},
     statusOptions: @json($leadProductStatuses->map(fn ($status) => ['id' => $status->id, 'name' => $status->name])->values()),
 };
 window.PP = window.PP || {};

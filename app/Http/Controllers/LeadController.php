@@ -607,8 +607,14 @@ class LeadController extends Controller
                 $fileInputKey = "custom_fields.{$field->id}";
                 if (request()->hasFile($fileInputKey)) {
                     $uploadedFile = request()->file($fileInputKey);
-                    $path = $uploadedFile->store('lead_custom_files', 'public');
-                    $normalizedValue = $path;
+                    $targetDir = public_path('uploads/custom_fields');
+                    if (!file_exists($targetDir)) {
+                        mkdir($targetDir, 0777, true);
+                    }
+                    $extension = $uploadedFile->getClientOriginalExtension();
+                    $filename = time() . '_' . uniqid('cf_') . ($extension ? '.' . $extension : '');
+                    $uploadedFile->move($targetDir, $filename);
+                    $normalizedValue = 'uploads/custom_fields/' . $filename;
                 } else {
                     $existingFile = request()->input("existing_custom_files.{$field->id}");
                     $normalizedValue = $existingFile ?: ($submittedValues[$field->id] ?? null);

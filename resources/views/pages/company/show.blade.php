@@ -167,7 +167,7 @@
                             </div>
 
                             <div class="cshow-item">
-                                <div class="cshow-label">Production Update</div>
+                                <div class="cshow-label">Move to Production Option</div>
                                 <div class="cshow-value">
                                     <span class="feat-pill {{ $company->allowsProductionUpdates() ? 'feat-enabled' : 'feat-disabled' }}">
                                         {{ $company->allowsProductionUpdates() ? '✓ Enabled' : '✕ Disabled' }}

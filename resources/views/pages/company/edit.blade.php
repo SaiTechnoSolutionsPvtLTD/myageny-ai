@@ -128,7 +128,7 @@
 
                         <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">
                             <input type="checkbox" name="show_production_update" value="1" {{ old('show_production_update', $company->allowsProductionUpdates()) ? 'checked' : '' }} style="width:18px; height:18px; accent-color:#fe5f04;">
-                            Production Update
+                            Move to Production Option
                         </label>
 
                         <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; font-weight:600; color:#333;">

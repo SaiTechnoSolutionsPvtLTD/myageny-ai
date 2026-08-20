@@ -1141,6 +1141,10 @@ class LeadShowController extends Controller
 
     public function priceRequest(Request $request): JsonResponse
     {
+        if (! $request->user()?->allowsPriceRequests()) {
+            return response()->json(['status' => false, 'message' => 'Price request feature is disabled for your company.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'lead_id'                          => ['required', 'exists:leads,id'],
             'deal_name'                        => ['required', 'string', 'max:255'],

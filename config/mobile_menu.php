@@ -13,7 +13,7 @@ return [
             ['key' => 'quotations',     'label' => 'Quotations',     'section' => 'CRM', 'order' => 30, 'permission' => 'quotations.menuview'],
             ['key' => 'lead_products',  'label' => 'Lead Products',  'section' => 'CRM', 'order' => 40, 'permission' => 'leads.view'],
             ['key' => 'call_updates',   'label' => 'Call Updates',   'section' => 'CRM', 'order' => 50, 'permission' => 'call_updates.menuview'],
-            ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview'],
+            ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview', 'require_method' => 'allowsPriceRequests'],
             ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70],
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
             ['key' => 'production_approvals',  'label' => 'Production Approvals',  'section' => 'OVP & PRODUCTION', 'order' => 90, 'permission' => 'production_approval_module.menuview'],

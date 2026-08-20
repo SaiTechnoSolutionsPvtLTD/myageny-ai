@@ -364,9 +364,14 @@
                                         @if($field->is_required && empty($fieldValue)) required @endif>
                                 </div>
                                 @if(!empty($fieldValue) && is_string($fieldValue))
+                                    @php
+                                        $fileUrl = (str_starts_with($fieldValue, 'uploads/') || str_starts_with($fieldValue, 'http'))
+                                            ? asset($fieldValue)
+                                            : asset('storage/' . $fieldValue);
+                                    @endphp
                                     <div style="margin-top:6px; font-size:12px; display:flex; align-items:center; gap:6px;">
                                         <span style="color:#666;">Current file:</span>
-                                        <a href="{{ asset('storage/' . $fieldValue) }}" target="_blank" style="color:#60308c; font-weight:600; text-decoration:underline; display:inline-flex; align-items:center; gap:4px;">
+                                        <a href="{{ $fileUrl }}" target="_blank" style="color:#60308c; font-weight:600; text-decoration:underline; display:inline-flex; align-items:center; gap:4px;">
                                             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                                             {{ basename($fieldValue) }}
                                         </a>

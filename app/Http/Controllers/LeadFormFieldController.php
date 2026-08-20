@@ -309,6 +309,7 @@ class LeadFormFieldController extends Controller
                 ['value' => 'date',     'label' => 'Date Picker',      'icon' => 'calendar'],
                 ['value' => 'email',    'label' => 'Email',            'icon' => 'mail'],
                 ['value' => 'phone',    'label' => 'Phone Number',     'icon' => 'phone'],
+                ['value' => 'file',     'label' => 'File Upload',      'icon' => 'paperclip'],
             ],
         ]);
     }
