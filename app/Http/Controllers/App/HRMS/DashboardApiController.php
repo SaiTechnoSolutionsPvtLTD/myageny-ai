@@ -11,6 +11,7 @@ use App\Models\HolidayCalendar;
 use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\LeaveRequest;
+use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
@@ -69,6 +70,17 @@ class DashboardApiController extends Controller
         $today_late    = $attendanceStats['late_count'];
         $today_early   = $attendanceStats['early_count'];
         $today_absent  = $attendanceStats['absent_count'];
+        $today_outside_office_checkins  = $attendanceStats['outside_office_checkins_count'];
+        $today_outside_office_checkouts = $attendanceStats['outside_office_checkouts_count'];
+
+        // Pending Outside Office Attendance requests awaiting HR/Admin review.
+        // Deliberately NOT scoped to "today" — an unreviewed request from
+        // yesterday is still actionable, so it should keep counting until
+        // someone approves or rejects it (see OutsideOfficeAttendanceRequest,
+        // company/branch already scoped via its own global scopes).
+        $outside_office_pending = OutsideOfficeAttendanceRequest::query()
+            ->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING)
+            ->count();
 
         // ── Department-wise employee count and salary ─────────────────────────
         $department_stats = Department::select(
@@ -124,7 +136,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
@@ -136,7 +148,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
@@ -150,7 +162,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
@@ -231,6 +243,10 @@ class DashboardApiController extends Controller
                     'leave'   => $today_leave,
                     'early'   => $today_early,
                     'total'   => $employees_total,
+                    'outside_office_checkins'  => $today_outside_office_checkins,
+                    'outside_office_checkouts' => $today_outside_office_checkouts,
+                    // Pending approval count — not date-scoped, see above.
+                    'outside_office_pending'   => $outside_office_pending,
                 ],
 
                 'department_stats'         => $department_stats,
@@ -378,7 +394,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
@@ -389,7 +405,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
@@ -400,7 +416,7 @@ class DashboardApiController extends Controller
             ->map(fn ($emp) => [
                 'id'             => $emp->id,
                 'name'           => $emp->name,
-                'role'           => optional($emp->role)->name,
+                'role'           => optional($emp->role)->display_name,
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
@@ -597,7 +613,7 @@ class DashboardApiController extends Controller
                 'id'             => $lr->id,
                 'employee_name'  => optional($lr->employee)->name,
                 'avatar_initial' => strtoupper(substr(optional($lr->employee)->name ?? '?', 0, 1)),
-                'role'           => optional($lr->employee?->role)->name,
+                'role'           => optional($lr->employee?->role)->display_name,
                 'department'     => optional($lr->employee?->department)->name,
                 'start_date'     => optional($lr->start_date)->toDateString(),
                 'end_date'       => optional($lr->end_date)->toDateString(),
@@ -618,7 +634,7 @@ class DashboardApiController extends Controller
                 'id'             => $pr->id,
                 'employee_name'  => optional($pr->employee)->name,
                 'avatar_initial' => strtoupper(substr(optional($pr->employee)->name ?? '?', 0, 1)),
-                'role'           => optional($pr->employee?->role)->name,
+                'role'           => optional($pr->employee?->role)->display_name,
                 'department'     => optional($pr->employee?->department)->name,
                 'from_time'      => $pr->from_time,
                 'to_time'        => $pr->to_time,
@@ -775,6 +791,8 @@ class DashboardApiController extends Controller
                 'absent_count'    => 0,
                 'late_count'      => 0,
                 'early_count'     => 0,
+                'outside_office_checkins_count'  => 0,
+                'outside_office_checkouts_count' => 0,
             ];
         }
 
@@ -828,6 +846,12 @@ class DashboardApiController extends Controller
                 ->where('attendance_status', 'present')
                 ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'early')
                 ->count(),
+            // Outside-office check-in/check-out counts for the same
+            // already-scoped $attendanceRows population used for
+            // present/late/absent above — guarantees the dashboard count and
+            // the Attendance list's "Outside Office" filter always agree.
+            'outside_office_checkins_count'  => $attendanceRows->where('is_outside_office_checkin', true)->count(),
+            'outside_office_checkouts_count' => $attendanceRows->where('is_outside_office_checkout', true)->count(),
         ];
     }
 

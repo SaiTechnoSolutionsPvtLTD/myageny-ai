@@ -12,6 +12,11 @@ return [
             ['key' => 'leads',          'label' => 'Leads',          'section' => 'CRM', 'order' => 20, 'permission' => 'leads.menuview'],
             ['key' => 'quotations',     'label' => 'Quotations',     'section' => 'CRM', 'order' => 30, 'permission' => 'quotations.menuview'],
             ['key' => 'lead_products',  'label' => 'Lead Products',  'section' => 'CRM', 'order' => 40, 'permission' => 'leads.view'],
+            // Sits under "Leads" in the web sidebar (All Leads / Lead Products /
+            // Add Lead / Pre Sales / Call Updates); mobile's CRM section is
+            // already flat (lead_products/call_updates are siblings here too,
+            // not nested), so this follows the same existing convention.
+            ['key' => 'pre_sales',      'label' => 'Pre Sales',      'section' => 'CRM', 'order' => 45, 'permission' => 'pre_sales.menuview'],
             ['key' => 'call_updates',   'label' => 'Call Updates',   'section' => 'CRM', 'order' => 50, 'permission' => 'call_updates.menuview'],
             ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview'],
             ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70],
@@ -127,6 +132,34 @@ return [
                 'order' => 90,
                 'permission' => 'visitor_management.menuview',
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
+            ],
+            // Matches sidebar.blade.php's @can('expense_request.menuview') gate
+            // exactly — same permission key, so the mobile menu and web
+            // sidebar always show/hide this item in lockstep.
+            [
+                'key' => 'hrms.expense_request',
+                'label' => 'Expense Request',
+                'section' => 'HRMS',
+                'order' => 95,
+                'permission' => 'expense_request.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser'
+            ],
+            // No web-sidebar equivalent (this workflow is mobile-only), so
+            // there's no existing Spatie permission to mirror — gated the
+            // same way OutsideOfficeApprovalApiController::canManage() gates
+            // the API itself, via require_any_method instead of 'permission'.
+            [
+                'key' => 'hrms.outside_office_approval',
+                'label' => 'Outside Office Approval',
+                'section' => 'HRMS',
+                'order' => 97,
+                'require_any_method' => [
+                    'isSystemAdmin',
+                    'belongsToHrDepartment',
+                    'hasHrLikeRole',
+                    'isCompanyAdmin',
+                    'isBranchAdmin',
+                ],
             ],
             [
                 'key' => 'hrms.facility',

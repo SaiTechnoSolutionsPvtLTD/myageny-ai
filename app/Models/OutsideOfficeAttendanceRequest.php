@@ -3,17 +3,29 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class DailyAttendance extends Model
+class OutsideOfficeAttendanceRequest extends Model
 {
     use HasFactory, BelongsToCompany;
 
+    public const STATUS_PENDING  = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_REJECTED = 'rejected';
+
+    public const TYPE_CHECKIN  = 'checkin';
+    public const TYPE_CHECKOUT = 'checkout';
+
+    // Same branch-visibility scope as DailyAttendance, so a Branch Admin's
+    // outside-office queue only ever shows their own branch's employees —
+    // matches DailyAttendance::booted() exactly, kept in sync deliberately
+    // rather than shared, since the two models scope different tables.
     protected static function booted(): void
     {
-        static::addGlobalScope('branch', function (\Illuminate\Database\Eloquent\Builder $builder) {
+        static::addGlobalScope('branch', function (Builder $builder) {
             if (! auth()->hasUser()) {
                 return;
             }
@@ -40,38 +52,30 @@ class DailyAttendance extends Model
         'attendee_type',
         'intern_joining_form_id',
         'employee_name',
-        'attendance_photo',
-        'logout_photo',
-        'login_location',
-        'login_latitude',
-        'login_longitude',
-        'login_time',
-        'logout_location',
-        'logout_latitude',
-        'logout_longitude',
-        'logout_time',
-        'overall_working_hours',
+        'request_type',
+        'daily_attendance_id',
+        'requested_at',
         'attendance_date',
-        'attendance_status',
-        'leave_category',
-        'leave_session',
-        'remarks',
-        'is_outside_office_checkin',
-        'outside_office_checkin_reason',
-        'is_outside_office_checkout',
-        'outside_office_checkout_reason',
+        'photo',
+        'latitude',
+        'longitude',
+        'location',
+        'reason',
+        'status',
+        'reviewed_by',
+        'reviewed_at',
+        'admin_remarks',
     ];
 
     protected $casts = [
         'employee_id' => 'integer',
         'intern_joining_form_id' => 'integer',
-        'login_latitude' => 'float',
-        'login_longitude' => 'float',
-        'logout_latitude' => 'float',
-        'logout_longitude' => 'float',
+        'daily_attendance_id' => 'integer',
+        'requested_at' => 'datetime',
         'attendance_date' => 'date',
-        'is_outside_office_checkin' => 'boolean',
-        'is_outside_office_checkout' => 'boolean',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'reviewed_at' => 'datetime',
     ];
 
     public function employee(): BelongsTo
@@ -82,5 +86,20 @@ class DailyAttendance extends Model
     public function intern(): BelongsTo
     {
         return $this->belongsTo(InternJoiningForm::class, 'intern_joining_form_id');
+    }
+
+    public function dailyAttendance(): BelongsTo
+    {
+        return $this->belongsTo(DailyAttendance::class, 'daily_attendance_id');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === self::STATUS_PENDING;
     }
 }

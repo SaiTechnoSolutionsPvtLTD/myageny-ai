@@ -295,6 +295,7 @@ class AttendanceApiController extends Controller
             'date_to'         => ['nullable', 'date', 'after_or_equal:date_from'],
             'status'          => ['nullable', 'in:present,absent,leave'],
             'login_timing'    => ['nullable', 'in:early,late,on-time'],
+            'outside_office'  => ['nullable', 'in:checkin,checkout,any'],
             'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
             'page'            => ['nullable', 'integer', 'min:1'],
         ];
@@ -324,6 +325,7 @@ class AttendanceApiController extends Controller
 
         $statusFilter       = $validated['status']        ?? null;
         $loginTimingFilter  = $validated['login_timing']  ?? null;
+        $outsideOfficeFilter = $validated['outside_office'] ?? null;
         $employeeNameFilter = $this->canViewAllAttendance() ? trim((string) ($validated['employee_name'] ?? '')) : '';
         $employeeIdFilter   = $this->canViewAllAttendance() ? trim((string) ($validated['employee_id']   ?? '')) : '';
         $attendeeTypeFilter = $this->canViewAllAttendance() ? ($validated['attendee_type'] ?? '') : '';
@@ -415,6 +417,7 @@ class AttendanceApiController extends Controller
             'early_count'      => $attendanceRecords->where('login_timing', 'early')->count(),
             'employee_count'   => $accessibleAttendees->where('attendee_type', 'employee')->count(),
             'intern_count'     => $accessibleAttendees->where('attendee_type', 'intern')->count(),
+            ...$this->outsideOfficeTodayCounts($accessibleEmployeeIds, $accessibleInternIds),
         ];
 
         // ── Merge & status filter ────────────────────────────────────────────
@@ -431,6 +434,7 @@ class AttendanceApiController extends Controller
             $employeeIdFilter,
             $loginTimingFilter,
             $attendeeTypeFilter,
+            $outsideOfficeFilter,
         ) {
             if (
                 $employeeNameFilter !== '' &&
@@ -451,6 +455,18 @@ class AttendanceApiController extends Controller
             }
 
             if ($attendeeTypeFilter !== '' && $rec['attendee_type'] !== $attendeeTypeFilter) {
+                return false;
+            }
+
+            if ($outsideOfficeFilter === 'checkin' && empty($rec['is_outside_office_checkin'])) {
+                return false;
+            }
+
+            if ($outsideOfficeFilter === 'checkout' && empty($rec['is_outside_office_checkout'])) {
+                return false;
+            }
+
+            if ($outsideOfficeFilter === 'any' && empty($rec['is_outside_office_checkin']) && empty($rec['is_outside_office_checkout'])) {
                 return false;
             }
 
@@ -976,6 +992,16 @@ class AttendanceApiController extends Controller
             'attendance_photo_url'  => $a->attendance_photo ? asset($a->attendance_photo) : null,
             'logout_photo_url'      => $a->logout_photo ? asset($a->logout_photo) : null,
             'login_timing'          => $this->resolveLoginTiming($a->login_time),
+            'is_outside_office_checkin'      => (bool) $a->is_outside_office_checkin,
+            'outside_office_checkin_reason'  => $a->outside_office_checkin_reason,
+            'is_outside_office_checkout'     => (bool) $a->is_outside_office_checkout,
+            'outside_office_checkout_reason' => $a->outside_office_checkout_reason,
+            'checkin_location_status'  => $a->login_time
+                ? ($a->is_outside_office_checkin ? 'outside_office' : 'inside_office')
+                : null,
+            'checkout_location_status' => $a->logout_time
+                ? ($a->is_outside_office_checkout ? 'outside_office' : 'inside_office')
+                : null,
             'is_derived'            => false,
         ];
     }
@@ -1004,6 +1030,12 @@ class AttendanceApiController extends Controller
             'remarks'               => 'No check-in record found for the selected date.',
             'attendance_photo_url'  => $attendee['photo_url'] ?? null,
             'login_timing'          => null,
+            'is_outside_office_checkin'      => false,
+            'outside_office_checkin_reason'  => null,
+            'is_outside_office_checkout'     => false,
+            'outside_office_checkout_reason' => null,
+            'checkin_location_status'  => null,
+            'checkout_location_status' => null,
             'is_derived'            => true,
         ];
     }
@@ -1019,6 +1051,49 @@ class AttendanceApiController extends Controller
             'early_count'     => 0,
             'employee_count'  => 0,
             'intern_count'    => 0,
+            'outside_office_checkins_today'  => 0,
+            'outside_office_checkouts_today' => 0,
+        ];
+    }
+
+    /**
+     * Today's outside-office check-in/check-out counts, scoped to the same
+     * accessible/branch-visible attendee set as the rest of this endpoint.
+     * Computed independently of the caller's selected date range/filters —
+     * per the "Outside Office Check-Ins Today" / "Outside Office Check-Outs
+     * Today" requirement, these are always "today," not "today within the
+     * currently viewed range."
+     */
+    private function outsideOfficeTodayCounts(
+        \Illuminate\Support\Collection $accessibleEmployeeIds,
+        \Illuminate\Support\Collection $accessibleInternIds
+    ): array {
+        if ($accessibleEmployeeIds->isEmpty() && $accessibleInternIds->isEmpty()) {
+            return ['outside_office_checkins_today' => 0, 'outside_office_checkouts_today' => 0];
+        }
+
+        $today = Carbon::today()->toDateString();
+
+        $scoped = fn() => DailyAttendance::query()
+            ->whereDate('attendance_date', $today)
+            ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
+                if ($accessibleEmployeeIds->isNotEmpty()) {
+                    $query->orWhere(function ($q) use ($accessibleEmployeeIds) {
+                        $q->where('attendee_type', 'employee')
+                            ->whereIn('employee_id', $accessibleEmployeeIds);
+                    });
+                }
+                if ($accessibleInternIds->isNotEmpty()) {
+                    $query->orWhere(function ($q) use ($accessibleInternIds) {
+                        $q->where('attendee_type', 'intern')
+                            ->whereIn('intern_joining_form_id', $accessibleInternIds);
+                    });
+                }
+            });
+
+        return [
+            'outside_office_checkins_today'  => $scoped()->where('is_outside_office_checkin', true)->count(),
+            'outside_office_checkouts_today' => $scoped()->where('is_outside_office_checkout', true)->count(),
         ];
     }
 

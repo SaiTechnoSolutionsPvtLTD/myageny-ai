@@ -28,6 +28,7 @@ use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
 use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
 use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
 use App\Http\Controllers\App\HRMS\AttendanceLocationApiController;
+use App\Http\Controllers\App\HRMS\OutsideOfficeApprovalApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -38,6 +39,8 @@ use App\Http\Controllers\App\AppMenuController;
 use App\Http\Controllers\App\NotificationApiController as MobileNotificationApiController;
 use App\Http\Controllers\App\CstAllocationApiController;
 use App\Http\Controllers\App\CustomerSuccessDashboardApiController;
+use App\Http\Controllers\App\PreSalesApiController;
+use App\Http\Controllers\App\ExpenseRequestApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,8 +56,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/product-dashboard-data/filters', [AdminDashboardProductController::class, 'filterOptions']);
 });
 
-Route::get('/getLeadQuotations/{leadid}', [QuotationController::class, 'getLeadQuotations']);
-Route::get('/getAllQuotations', [QuotationController::class, 'getAllQuotations']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/getLeadQuotations/{leadid}', [QuotationController::class, 'getLeadQuotations']);
+    Route::get('/getAllQuotations', [QuotationController::class, 'getAllQuotations']);
+});
 
 // Route::get('/products', [ProductController::class, 'getProducts']);
 
@@ -128,10 +133,13 @@ Route::get('/get-outcome-category', [OutcomeCategoryController::class, 'getOutco
 Route::get('/get-subcategories/{id}', [OutcomeCategoryController::class, 'getSubCategories']);
 Route::get('/get-lead-status', [LeadController::class, 'leadStatus']);
 Route::get('/get-lead-source', [LeadController::class, 'leadSource']);
-Route::get('/quotation/{quotation}', [QuotationController::class, 'apiShow']);
-Route::post('/create-quotation', [QuotationController::class, 'apiStore']);
-Route::put('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']);
-Route::patch('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/quotation/{quotation}', [QuotationController::class, 'apiShow']);
+    Route::post('/create-quotation', [QuotationController::class, 'apiStore']);
+    Route::put('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']);
+    Route::patch('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -232,6 +240,14 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('visitor-management/{id}',         [VisitorManagementApiController::class, 'show'])->name('visitor-management.show');
         Route::put('visitor-management/{id}',         [VisitorManagementApiController::class, 'update'])->name('visitor-management.update');
         Route::delete('visitor-management/{id}',      [VisitorManagementApiController::class, 'destroy'])->name('visitor-management.destroy');
+
+        // ── Outside Office Attendance Approval (HR/Admin) ─────────────────────
+        // Submission itself happens via the self-service
+        // mobile/attendance/check-in|check-out endpoints (below) — this is
+        // only the review queue.
+        Route::get('outside-office-requests', [OutsideOfficeApprovalApiController::class, 'index'])->name('outside-office-requests.index');
+        Route::post('outside-office-requests/{outsideOfficeRequest}/approve', [OutsideOfficeApprovalApiController::class, 'approve'])->name('outside-office-requests.approve');
+        Route::post('outside-office-requests/{outsideOfficeRequest}/reject',  [OutsideOfficeApprovalApiController::class, 'reject'])->name('outside-office-requests.reject');
     });
 
     Route::prefix('attendance')->name('attendance.')->group(function () {
@@ -239,6 +255,15 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('check-out', [MobileDailyAttendanceController::class, 'attendanceCheckOut'])->name('check-out');
         Route::get('daily-list', [MobileDailyAttendanceController::class, 'dailyAttendanceList'])->name('daily-list');
         Route::get('/branch-location', [AttendanceLocationApiController::class, 'myBranch']);
+        // Self-service poll: "do I have an outside-office request pending/
+        // approved/rejected today?" — lets the app show the right status
+        // without attempting another check-in/out.
+        Route::get('outside-office-status', [MobileDailyAttendanceController::class, 'outsideOfficeStatus'])->name('outside-office-status');
+        // Self-service resubmission of a REJECTED outside-office request —
+        // distinct from the HR-only outside-office-requests/{id}/approve|
+        // reject pair above (that's the review side; this is the employee
+        // acting on a decision). See DailyAttendanceController::resubmitOutsideOffice().
+        Route::post('outside-office-requests/{outsideOfficeRequest}/resubmit', [MobileDailyAttendanceController::class, 'resubmitOutsideOffice'])->name('outside-office-requests.resubmit');
     });
 
     // ── OVP Module ───────────────────────────────────────────────────────────────
@@ -321,8 +346,20 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     Route::post('/cst-allocation/{lead}/allocate-tl', [CstAllocationApiController::class, 'allocateTl']);
     Route::post('/cst-allocation/{lead}/allocate-executive', [CstAllocationApiController::class, 'allocateExecutive']);
 
+    // ── Pre-Sales Workspace — mirrors web's PreSalesController exactly ──────
+    Route::get('/pre-sales', [PreSalesApiController::class, 'index']);
+    Route::get('/pre-sales/filters', [PreSalesApiController::class, 'filters']);
+    Route::post('/pre-sales/allocate', [PreSalesApiController::class, 'allocate']);
+
     Route::get('/customer-success/data', [CustomerSuccessDashboardApiController::class, 'data']);
     Route::get('/customer-success/filters', [CustomerSuccessDashboardApiController::class, 'filters']);
+
+    // ── Expense Reimbursements — mirrors web's ExpenseRequestController exactly ──
+    Route::get('/expense-requests', [ExpenseRequestApiController::class, 'index']);
+    Route::get('/expense-requests/filters', [ExpenseRequestApiController::class, 'filters']);
+    Route::post('/expense-requests', [ExpenseRequestApiController::class, 'store']);
+    Route::post('/expense-requests/{expenseRequest}/approve', [ExpenseRequestApiController::class, 'approve']);
+    Route::post('/expense-requests/{expenseRequest}/reject', [ExpenseRequestApiController::class, 'reject']);
 
     Route::get('notifications', [MobileNotificationApiController::class, 'index']);
     Route::get('notifications/unread-count', [MobileNotificationApiController::class, 'unreadCount']);

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\ProductionInitiation;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -170,11 +171,28 @@ class MenuService
     private function resolveBadgeCount(array $item, User $user): ?int
     {
         return match ($item['key'] ?? null) {
-            'ovp_module'           => $this->ovpBadgeCount($user),
-            'production_approvals' => $this->productionApprovalBadgeCount($user),
-            'notifications'        => $this->notificationBadgeCount($user),
+            'ovp_module'                       => $this->ovpBadgeCount($user),
+            'production_approvals'             => $this->productionApprovalBadgeCount($user),
+            'notifications'                    => $this->notificationBadgeCount($user),
+            'hrms.outside_office_approval'     => $this->outsideOfficePendingBadgeCount(),
             default                => null,
         };
+    }
+
+    /**
+     * Same query DashboardApiController::organizationDashboard() uses for
+     * the "Outside Office Pending" Key Metrics card — deliberately NOT
+     * date-scoped, since an unreviewed request from any day is still
+     * actionable. Relies on OutsideOfficeAttendanceRequest::booted()'s own
+     * company/branch visibility scope (mirrors DailyAttendance) rather than
+     * re-deriving it here, so this always agrees with what the approval
+     * queue itself shows for the same user.
+     */
+    private function outsideOfficePendingBadgeCount(): int
+    {
+        return OutsideOfficeAttendanceRequest::query()
+            ->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING)
+            ->count();
     }
 
     /**
