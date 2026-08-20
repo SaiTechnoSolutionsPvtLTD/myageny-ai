@@ -9,6 +9,7 @@
         || request()->routeIs('projects.my-accounts')
         || request()->routeIs('projects.my-accounts.show');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
+        || request()->routeIs('hrms.calendar.*')
         || request()->routeIs('hrms.petty-cash.*')
         || request()->routeIs('hrms.expense-requests.*')
         || request()->routeIs('hrms.masters.*')
@@ -168,7 +169,7 @@
                 </a>
                 @endif
 
-                @if(!$isDesigningDashboardActive && !auth()->user()?->belongsToDigitalMarketingDepartment())
+                @if(!$isDesigningDashboardActive && (!auth()->user()?->belongsToDigitalMarketingDepartment() || auth()->user()?->hasTlLikeRole()))
                 <a href="{{ route('projects.index') }}" class="nav-item {{ request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate'))
                         <div class="active-indicator"></div>
@@ -225,6 +226,21 @@
                     </div>
                 </a>
                 @endif
+
+                <a href="{{ route('hrms.calendar.index') }}" class="nav-item {{ request()->routeIs('hrms.calendar.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.calendar.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        <span>Calendar</span>
+                    </div>
+                </a>
 
                 @if(! $hrmsSelfService)
                 @can('masters.menuview')
@@ -661,13 +677,38 @@
         Pre Sales
     </a>
     @endcan
-
-    @can('call_updates.menuview')
-    <a href="{{ route('leads.calls.index') }}" class="submenu-item {{ request()->is('leads/call-updates') ? 'active' : '' }}">
-        Call Updates
-    </a>
-    @endcan
 </div>
+
+                @can('leads.menuview')
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->is('crm/tasks*') || request()->is('leads/call-updates*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->is('crm/tasks*') || request()->is('leads/call-updates*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        <span>Tasks</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+                <div class="submenu {{ request()->is('crm/tasks*') || request()->is('leads/call-updates*') ? 'show' : '' }}">
+                    @can('leads.view')
+                    <a href="{{ route('tasks.index') }}" class="submenu-item {{ request()->is('crm/tasks*') ? 'active' : '' }}">
+                        Reminders & Tasks
+                    </a>
+                    @endcan
+
+                    @can('call_updates.menuview')
+                    <a href="{{ route('leads.calls.index') }}" class="submenu-item {{ request()->is('leads/call-updates') ? 'active' : '' }}">
+                        Call Updates
+                    </a>
+                    @endcan
+                </div>
+                @endcan
                 @can('quotations.menuview')
                 <a href="{{ url('/quotations') }}" class="nav-item {{ request()->is('quotations') || request()->is('/') ? 'active' : '' }}">
                     @if(request()->is('quotations') || request()->is('/'))
@@ -702,6 +743,7 @@
                 </a>
                 @endcan
 
+                @if(auth()->user()?->allowsPriceRequests())
                 @can('price_requests.menuview')
 
                 <a href="{{ route('lead-price-requests.index') }}" class="nav-item {{ request()->routeIs('lead-price-requests.*') ? 'active' : '' }}">
@@ -719,6 +761,7 @@
                 </a>
 
                 @endcan
+                @endif
 
                 @can('cst_allocation.menuview')
                 <a href="{{ route('cst-allocation.index') }}" class="nav-item {{ request()->routeIs('cst-allocation.*') ? 'active' : '' }}">
@@ -833,7 +876,8 @@
     </nav>
 
     <div class="sidebar-footer">
-        {{-- Support Option (Visible to everyone) --}}
+        {{-- Support Option --}}
+        @can('support.menuview')
         <a href="{{ route('support.index') }}" class="support-card {{ request()->routeIs('support.*') ? 'active' : '' }}">
             <div class="support-icon-wrapper">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -842,6 +886,7 @@
             </div>
             <span>Support Portal</span>
         </a>
+        @endcan
 
         {{-- User Profile Card --}}
         <div class="user-profile-card">

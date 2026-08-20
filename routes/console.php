@@ -15,3 +15,9 @@ Schedule::command('leads:sync-branch')
 
 Schedule::command('app:expire-companies')
     ->hourly();
+
+Schedule::command('app:send-daily-reminder-emails')
+    ->dailyAt('09:40');
+
+Schedule::command('hrms:send-calendar-notifications')
+    ->dailyAt('09:30');

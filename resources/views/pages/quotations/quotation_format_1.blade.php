@@ -56,22 +56,22 @@
     .terms-header { border-bottom: 3px solid {{ $quoteSetting['theme_color'] }}; padding-bottom: 14px; margin-bottom: 20px; }
     .terms-title { font-size: 24px; font-weight: bold; color: {{ $quoteSetting['theme_color'] }}; }
     .terms-subtitle { margin-top: 6px; font-size: 11px; color: #5a6472; }
-    .terms-section { margin-bottom: 22px; }
-    .terms-section h3 { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: .08em; color: {{ $quoteSetting['secondary_color'] }}; margin-bottom: 10px; }
-    .terms-box { background: #f9fafb; border: 1px solid #e5e8ed; border-radius: 6px; padding: 14px 16px; }
-    .terms-box p, .terms-box li { font-size: 11px; line-height: 1.8; color: #334155; }
-    .terms-box ul { margin: 0; padding-left: 18px; }
-    .terms-box p + p { margin-top: 8px; }
-    .terms-footer-note { margin-top: 30px; padding-top: 12px; border-top: 1px solid #d8dde5; font-size: 10px; color: #64748b; }
   </style>
 </head>
 <body>
+
 @php
   $logoBase64 = null;
+  $logoPath = null;
   if (!empty($quoteSetting['logo']) && file_exists(public_path($quoteSetting['logo']))) {
-      $path = public_path($quoteSetting['logo']);
-      $type = pathinfo($path, PATHINFO_EXTENSION);
-      $data = file_get_contents($path);
+      $logoPath = public_path($quoteSetting['logo']);
+  } elseif (file_exists(public_path('images/LOGO_STS.png'))) {
+      $logoPath = public_path('images/LOGO_STS.png');
+  }
+
+  if ($logoPath && file_exists($logoPath)) {
+      $type = pathinfo($logoPath, PATHINFO_EXTENSION);
+      $data = file_get_contents($logoPath);
       $logoBase64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
   }
 

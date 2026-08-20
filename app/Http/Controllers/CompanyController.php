@@ -68,6 +68,10 @@ class CompanyController extends Controller
                 'company_status' => $data['company_status'],
                 'facebook_client_id' => $data['facebook_client_id'],
                 'facebook_client_secret' => $data['facebook_client_secret'],
+                'show_price_request' => $data['show_price_request'] ?? true,
+                'show_production_update' => $data['show_production_update'] ?? true,
+                'show_approval_history' => $data['show_approval_history'] ?? true,
+                'show_cst_updates' => $data['show_cst_updates'] ?? true,
             ]);
 
             $defaultRoles = $this->createDefaultCompanyRoles($company);
@@ -170,7 +174,11 @@ class CompanyController extends Controller
             'production_approval_module',
             'facebook_integration',
             'payroll_settings',
-            'design_settings'
+            'design_settings',
+            'cst_allocation',
+            'expense_pipeline',
+            'leave_hierarchy',
+            'form_customization',
         ];
 
         $allPermissionNames = $companyPermissions->filter(function ($permission) use ($excludedModules) {

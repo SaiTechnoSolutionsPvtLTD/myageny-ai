@@ -61,6 +61,16 @@ class FacebookLeadImporterTest extends TestCase
         $this->assertSame([], $result['custom']);
     }
 
+    public function test_sanitize_error_message_hides_access_tokens(): void
+    {
+        $importer = new FacebookLeadImporter();
+        $secretMessage = 'Graph API failure access_token=EAAX123456789012345678901234567890 details';
+        $sanitized = $importer->sanitizeErrorMessage($secretMessage);
+
+        $this->assertStringNotContainsString('EAAX123456789012345678901234567890', $sanitized);
+        $this->assertStringContainsString('access_token=[hidden]', $sanitized);
+    }
+
     private function mapSubmissionValues(array $submission, Collection $fieldMappings, Collection $leadFields): array
     {
         $method = new ReflectionMethod(FacebookLeadImporter::class, 'mapSubmissionValues');

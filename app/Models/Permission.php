@@ -52,6 +52,9 @@ class Permission extends SpatiePermission
         'payroll_settings' => ['menuview', 'manage'],
         'design_settings' => ['menuview', 'manage'],
         'facebook_integration' => ['menuview', 'manage'],
+        'support' => ['menuview', 'view', 'create', 'update', 'delete'],
+        'expense_pipeline' => ['menuview', 'manage'],
+        'leave_hierarchy' => ['menuview', 'manage'],
     ];
 
     protected $fillable = [

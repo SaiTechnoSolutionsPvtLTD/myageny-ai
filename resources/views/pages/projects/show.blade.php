@@ -317,22 +317,20 @@
     $isContentCalendarDept = in_array($deptName, ['designing', 'digital marketing'], true);
     $contentCalendarSheetUrl = (string) ($projectItem->content_calendar_sheet_url ?? '');
 
-    // Testing Tab: show only for Development and Testing department users or admins
+    // Testing Tab: show ONLY for Development department / Development team
     $currentUser = auth()->user();
     $isDevUser = $currentUser && (
         $currentUser->belongsToDevelopmentDepartment() ||
         $currentUser->hasDevelopmentLikeRole() ||
-        $currentUser->isDevelopmentTeam()
-    );
-    $isTestingUser = $currentUser && (
-        $currentUser->belongsToTestingDepartment() ||
-        $currentUser->hasTestingLikeRole()
-    );
-    $isAdminUser = $currentUser && (
+        $currentUser->isDevelopmentTeam() ||
         $currentUser->isSuperAdmin() ||
-        $currentUser->hasAdminLikeRole()
+        $currentUser->isCompanyAdmin()
     );
-    $canSeeTestingTab = $isAdminUser || $isDevUser || $isTestingUser || in_array($deptName, ['development', 'testing', 'web development', 'app development', 'software development'], true);
+
+    $isDevDept = str_contains($deptName, 'development') || str_contains($deptName, 'dev') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app');
+    $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
+
+    $canSeeTestingTab = ($isDevDept || $isDevUser) && ! $isNonDevDept;
 
     if ($activeTab === 'testing' && ! $canSeeTestingTab) {
         $activeTab = 'overview';
@@ -361,7 +359,9 @@
             <button type="button" class="ps-tab-btn {{ $activeTab === 'overview' ? 'is-active' : '' }}" data-tab-target="overview">Overview</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'approvals' ? 'is-active' : '' }}" data-tab-target="approvals">Approvals</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'allocation' ? 'is-active' : '' }}" data-tab-target="allocation">{{ $isTlScopedView ? 'Team Allocation' : 'TL Allocation' }}</button>
+            @if(auth()->user()?->allowsProductionUpdates())
             <button type="button" class="ps-tab-btn {{ $activeTab === 'updates' ? 'is-active' : '' }}" data-tab-target="updates">Production Update</button>
+            @endif
             <button type="button" class="ps-tab-btn {{ $activeTab === 'timeline' ? 'is-active' : '' }}" data-tab-target="timeline">Timeline</button>
             @if($canSeeTestingTab)
             <button type="button" class="ps-tab-btn {{ $activeTab === 'testing' ? 'is-active' : '' }}" data-tab-target="testing">
@@ -809,6 +809,7 @@
             </div>
         </section>
 
+        @if(auth()->user()?->allowsProductionUpdates())
         <section class="ps-tab-panel {{ $activeTab === 'updates' ? 'is-active' : '' }}" data-tab-panel="updates">
             <section class="ps-card">
                 <div class="ps-card-head">
@@ -895,6 +896,7 @@
                 </div>
             </section>
         </section>
+        @endif
 
         <section class="ps-tab-panel {{ $activeTab === 'timeline' ? 'is-active' : '' }}" data-tab-panel="timeline">
             <section class="ps-card">

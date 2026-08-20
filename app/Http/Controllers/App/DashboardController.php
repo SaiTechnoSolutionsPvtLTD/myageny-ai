@@ -219,7 +219,7 @@ class DashboardController extends Controller
         $overdueQuery = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()));
-        $overdueCount = (clone $overdueQuery)->where('remind_at', '<', now())->count();
+        $overdueCount = (clone $overdueQuery)->whereDate('remind_at', '<', today())->count();
 
         $todayReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
@@ -246,7 +246,7 @@ class DashboardController extends Controller
         $overdueReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at', '<', now())
+            ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
             ->take(15)
@@ -414,7 +414,9 @@ class DashboardController extends Controller
                     'high_priority'   => $highPriority,
                     'pipeline_value'  => $pipelineValue,
                     'won_value'       => $wonValue,
-                    'conversion_rate' => $convRate,
+                    'conversion_rate'            => $convRate,
+                    'overdue_reminders_count'    => $overdueCount,
+                    'today_completed_calls_count' => LeadCallUpdate::whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))->whereDate('called_at', today())->count(),
                 ],
 
                 'financials' => [

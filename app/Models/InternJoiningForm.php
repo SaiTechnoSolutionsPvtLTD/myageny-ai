@@ -33,7 +33,7 @@ class InternJoiningForm extends Model
         });
     }
 
-    public const INTERN_ID_PREFIX = 'STSINT';
+    public const INTERN_ID_PREFIX = 'STSINT-';
     public const STATUS_ACTIVE = 'active';
     public const STATUS_RESIGNED = 'resigned';
 

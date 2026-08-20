@@ -533,6 +533,24 @@ class User extends Authenticatable
         });
     }
 
+    public function isDigitalMarketingTl(): bool
+    {
+        if ($this->hasAdminLikeRole()) {
+            return false;
+        }
+
+        if ($this->belongsToDigitalMarketingDepartment() && $this->hasTlLikeRole()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->contains(function ($key) {
+            return (\Illuminate\Support\Str::contains($key, 'digital_marketing') || \Illuminate\Support\Str::contains($key, 'dm'))
+                && (\Illuminate\Support\Str::contains($key, 'tl') || \Illuminate\Support\Str::contains($key, 'lead') || \Illuminate\Support\Str::contains($key, 'leader') || \Illuminate\Support\Str::contains($key, 'manager'));
+        });
+    }
+
     public function canViewBudgetApprovalDetails(): bool
     {
         if ($this->isSuperAdmin()) {
@@ -892,5 +910,41 @@ class User extends Authenticatable
     public function canAccessHrmsModule(): bool
     {
         return true;
+    }
+
+    public function allowsPriceRequests(): bool
+    {
+        if ($this->isSystemAdmin()) {
+            return true;
+        }
+
+        return $this->company?->allowsPriceRequests() ?? true;
+    }
+
+    public function allowsProductionUpdates(): bool
+    {
+        if ($this->isSystemAdmin()) {
+            return true;
+        }
+
+        return $this->company?->allowsProductionUpdates() ?? true;
+    }
+
+    public function allowsApprovalHistory(): bool
+    {
+        if ($this->isSystemAdmin()) {
+            return true;
+        }
+
+        return $this->company?->allowsApprovalHistory() ?? true;
+    }
+
+    public function allowsCstUpdates(): bool
+    {
+        if ($this->isSystemAdmin()) {
+            return true;
+        }
+
+        return $this->company?->allowsCstUpdates() ?? true;
     }
 }

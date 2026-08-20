@@ -28,7 +28,10 @@ class FacebookLeadImporter
     public function importIntegratedCampaigns(): array
     {
         $campaigns = CampaignMaster::query()
-            ->where('is_integrated', 1)
+            ->where(function ($query) {
+                $query->where('is_integrated', 1)
+                    ->orWhereHas('fieldMigrations');
+            })
             ->orderBy('id')
             ->get();
 
@@ -39,6 +42,7 @@ class FacebookLeadImporter
             'updated' => 0,
             'skipped' => 0,
             'failed' => 0,
+            'errors' => [],
         ];
 
         foreach ($campaigns as $campaign) {
@@ -49,9 +53,23 @@ class FacebookLeadImporter
                 $summary['updated'] += $result['updated'];
                 $summary['skipped'] += $result['skipped'];
                 $summary['failed'] += $result['failed'];
+
+                if (!empty($result['errors'])) {
+                    foreach ($result['errors'] as $err) {
+                        $formattedErr = "Campaign '{$campaign->campaign_name}': {$err}";
+                        if (!in_array($formattedErr, $summary['errors'], true)) {
+                            $summary['errors'][] = $formattedErr;
+                        }
+                    }
+                }
             } catch (\Throwable $e) {
                 $summary['processed']++;
                 $summary['failed']++;
+
+                $errMessage = "Campaign '{$campaign->campaign_name}': " . $this->sanitizeErrorMessage($e->getMessage());
+                if (!in_array($errMessage, $summary['errors'], true)) {
+                    $summary['errors'][] = $errMessage;
+                }
 
                 Log::error('Facebook campaign import failed.', [
                     'campaign_master_id' => $campaign->id,
@@ -66,6 +84,14 @@ class FacebookLeadImporter
 
     public function importCampaign(CampaignMaster $campaign): array
     {
+        $stats = [
+            'created' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'errors' => [],
+        ];
+
         $campaignIdentifier = $this->campaignIdentifier($campaign);
         $accessToken = $this->resolveAccessToken($campaign);
 
@@ -74,10 +100,27 @@ class FacebookLeadImporter
                 'campaign_master_id' => $campaign->id,
             ]);
 
-            return ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 1];
+            $stats['failed'] = 1;
+            $stats['errors'][] = 'Missing campaign identifier or access token.';
+
+            return $stats;
         }
 
-        $submissions = $this->fetchLeadPages($campaign, $accessToken);
+        try {
+            $submissions = $this->fetchLeadPages($campaign, $accessToken);
+        } catch (\Throwable $e) {
+            $stats['failed'] = 1;
+            $stats['errors'][] = $this->sanitizeErrorMessage($e->getMessage());
+
+            Log::error('Facebook campaign lead fetch failed.', [
+                'campaign_master_id' => $campaign->id,
+                'campaign_name' => $campaign->campaign_name,
+                'message' => $e->getMessage(),
+            ]);
+
+            return $stats;
+        }
+
         $campaignIdentifier = $this->campaignIdentifier($campaign) ?: $campaignIdentifier;
         $fieldMappings = CampaignFieldMigration::query()
             ->where('campaign_id', $campaign->id)
@@ -89,8 +132,6 @@ class FacebookLeadImporter
             ->keyBy('id');
 
         $assignedUsers = $this->activeAssignedUsers($campaign);
-
-        $stats = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
 
         foreach ($submissions as $submission) {
             try {
@@ -106,6 +147,10 @@ class FacebookLeadImporter
                 $stats[$status]++;
             } catch (\Throwable $e) {
                 $stats['failed']++;
+                $errorMsg = $this->sanitizeErrorMessage($e->getMessage());
+                if (!in_array($errorMsg, $stats['errors'], true)) {
+                    $stats['errors'][] = $errorMsg;
+                }
 
                 Log::error('Facebook lead import failed for submission.', [
                     'campaign_master_id' => $campaign->id,
@@ -113,7 +158,6 @@ class FacebookLeadImporter
                     'facebook_campaign_name' => $campaign->campaign_name,
                     'message' => $e->getMessage(),
                     'mapped_field_names' => $fieldMappings->pluck('crm_field_name')->filter()->values()->all(),
-                    'mapped_values' => $mappedValues['core'] ?? [],
                 ]);
             }
         }
@@ -148,7 +192,10 @@ class FacebookLeadImporter
 
         foreach ($candidateIds as $candidateId) {
             try {
-                return $this->fetchLeadsFromNode((string) $candidateId, $accessToken);
+                $leads = $this->fetchLeadsFromNode((string) $candidateId, $accessToken);
+                if ($leads->isNotEmpty()) {
+                    return $leads;
+                }
             } catch (\Throwable $e) {
                 $lastFetchError = $e->getMessage();
 
@@ -175,7 +222,15 @@ class FacebookLeadImporter
         $allLeads = collect();
 
         foreach ($formIds as $formId) {
-            $allLeads = $allLeads->merge($this->fetchLeadsFromNode((string) $formId, $accessToken));
+            try {
+                $allLeads = $allLeads->merge($this->fetchLeadsFromNode((string) $formId, $accessToken));
+            } catch (\Throwable $e) {
+                Log::warning('Facebook lead fetch failed for form node.', [
+                    'campaign_master_id' => $campaign->id,
+                    'form_id' => $formId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         if ($formIds->count() === 1 && $campaign->camp_id !== (string) $formIds->first()) {
@@ -200,7 +255,7 @@ class FacebookLeadImporter
         $leads = collect();
         $after = null;
 
-        for ($page = 0; $page < 20; $page++) {
+        for ($page = 0; $page < 100; $page++) {
             $query = [
                 'access_token' => $accessToken,
                 'fields' => self::LEAD_FIELDS,
@@ -421,10 +476,81 @@ class FacebookLeadImporter
         return 'created';
     }
 
+    protected function syncMappedValuesForExistingLead(Lead $lead, array $mappedValues, Collection $leadFields): bool
+    {
+        $updated = false;
+
+        $core = $mappedValues['core'] ?? [];
+        $fillableUpdates = [];
+
+        foreach ($core as $column => $val) {
+            if ($val === null || $val === '') {
+                continue;
+            }
+
+            if (empty($lead->{$column}) || $lead->{$column} !== $val) {
+                $fillableUpdates[$column] = $val;
+            }
+        }
+
+        if (!empty($fillableUpdates)) {
+            $lead->fill($fillableUpdates);
+            if ($lead->isDirty()) {
+                $lead->save();
+                $updated = true;
+            }
+        }
+
+        if (!empty($mappedValues['custom'])) {
+            $this->syncCustomFieldValues($lead, $mappedValues['custom'], $leadFields);
+            $updated = true;
+        }
+
+        return $updated;
+    }
+
+    protected function syncCustomFieldValues(Lead $lead, array $customValues, Collection $leadFields): void
+    {
+        foreach ($customValues as $leadFieldId => $value) {
+            $field = $leadFields->get($leadFieldId) ?? LeadFormField::find($leadFieldId);
+
+            if (!$field) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = array_values(array_filter($value, fn ($v) => $v !== null && $v !== ''));
+                $normalizedValue = json_encode($value);
+            } else {
+                $normalizedValue = $value !== null ? trim((string) $value) : null;
+            }
+
+            if ($normalizedValue === null || $normalizedValue === '' || $normalizedValue === '[]') {
+                LeadFieldValue::query()
+                    ->where('lead_id', $lead->id)
+                    ->where('lead_form_field_id', $field->id)
+                    ->delete();
+                continue;
+            }
+
+            LeadFieldValue::updateOrCreate(
+                [
+                    'lead_id' => $lead->id,
+                    'lead_form_field_id' => $field->id,
+                ],
+                [
+                    'value' => $normalizedValue,
+                ]
+            );
+        }
+    }
+
     protected function mapSubmissionValues(array $submission, Collection $fieldMappings, Collection $leadFields): array
     {
         $core = [];
         $custom = [];
+        $firstName = null;
+        $lastName = null;
 
         foreach ((array) data_get($submission, 'field_data', []) as $field) {
             $facebookFieldName = (string) data_get($field, 'name');
@@ -435,29 +561,70 @@ class FacebookLeadImporter
                 continue;
             }
 
+            // 1. Exact match on campaign_field_name
             $mapping = $fieldMappings->firstWhere('campaign_field_name', $facebookFieldName);
 
+            // 2. Normalized case-insensitive match on campaign_field_name
             if (!$mapping) {
-                continue;
+                $normFbName = Str::of($facebookFieldName)->trim()->lower()->replace([' ', '-'], '_')->value();
+                $mapping = $fieldMappings->first(function ($m) use ($normFbName) {
+                    $normMappedName = Str::of((string) $m->campaign_field_name)->trim()->lower()->replace([' ', '-'], '_')->value();
+                    return $normMappedName === $normFbName;
+                });
             }
 
-            $leadField = $leadFields->get($mapping->lead_field_id);
+            if ($mapping) {
+                $leadField = $leadFields->get($mapping->lead_field_id);
 
-            if ($leadField) {
-                $custom[$leadField->id] = $value;
-                continue;
+                if ($leadField) {
+                    $custom[$leadField->id] = $value;
+                    continue;
+                }
+
+                $fieldName = $this->normalizeLeadColumnName($mapping->crm_field_name);
+
+                if ($fieldName && $this->isLeadColumn($fieldName)) {
+                    $core[$fieldName] = $value;
+                    continue;
+                }
             }
 
-            $fieldName = $this->normalizeLeadColumnName($mapping->crm_field_name);
+            // 3. Fallback for standard Facebook Lead Ads keys if unmapped or missing in DB mapping
+            $normKey = Str::of($facebookFieldName)->trim()->lower()->replace([' ', '-'], '_')->value();
 
-            if (!$fieldName) {
-                continue;
+            if (!isset($core['contact_name'])) {
+                if (in_array($normKey, ['full_name', 'name', 'contact_name', 'client_name', 'customer_name'], true) && is_string($value)) {
+                    $core['contact_name'] = trim($value);
+                } elseif (in_array($normKey, ['first_name', 'firstname'], true) && is_string($value)) {
+                    $firstName = trim($value);
+                } elseif (in_array($normKey, ['last_name', 'lastname'], true) && is_string($value)) {
+                    $lastName = trim($value);
+                }
             }
 
-            if ($this->isLeadColumn($fieldName)) {
-                $core[$fieldName] = $value;
-                continue;
+            if (!isset($core['email']) && in_array($normKey, ['email', 'email_address'], true) && is_string($value)) {
+                $core['email'] = trim($value);
             }
+
+            if (!isset($core['mobile_number']) && in_array($normKey, ['phone_number', 'phone', 'mobile', 'mobile_number', 'mobile_no'], true) && is_string($value)) {
+                $core['mobile_number'] = $this->cleanPhoneNumber($value);
+            }
+
+            if (!isset($core['company_name']) && in_array($normKey, ['company', 'company_name', 'business_name', 'organization'], true) && is_string($value)) {
+                $core['company_name'] = trim($value);
+            }
+
+            if (!isset($core['remarks']) && in_array($normKey, ['remarks', 'message', 'notes', 'comments'], true) && is_string($value)) {
+                $core['remarks'] = trim($value);
+            }
+        }
+
+        if (!isset($core['contact_name']) && ($firstName || $lastName)) {
+            $core['contact_name'] = trim(($firstName ?? '') . ' ' . ($lastName ?? ''));
+        }
+
+        if (isset($core['mobile_number'])) {
+            $core['mobile_number'] = $this->cleanPhoneNumber($core['mobile_number']);
         }
 
         return [
@@ -466,125 +633,13 @@ class FacebookLeadImporter
         ];
     }
 
-    protected function syncMappedValuesForExistingLead(Lead $lead, array $mappedValues, Collection $leadFields): bool
+    protected function cleanPhoneNumber(mixed $value): string
     {
-        $changed = false;
+        $str = is_array($value) ? implode('', $value) : (string) $value;
+        $str = Str::after($str, 'p:');
+        $cleaned = preg_replace('/[^\d+]/', '', $str);
 
-        // Map legacy field names to their FK equivalents
-        $fieldAliases = [
-            'lead_source'    => 'lead_source_id',
-            'lead_source_id' => 'lead_source_id',
-            'lead_status'    => 'lead_status_id',
-            'lead_status_id' => 'lead_status_id',
-        ];
-
-        DB::transaction(function () use ($lead, $mappedValues, $leadFields, &$changed, $fieldAliases) {
-            foreach ($mappedValues['core'] as $fieldName => $value) {
-                if (!$this->isLeadColumn($fieldName) || is_array($value) || $value === null || $value === '') {
-                    continue;
-                }
-
-                $targetField = $fieldAliases[$fieldName] ?? $fieldName;
-
-                if ($lead->{$targetField} === null || $lead->{$targetField} === '') {
-                    $normalizedValue = $this->normalizeCoreValue($fieldName, $value);
-
-                    if ($normalizedValue !== null && $normalizedValue !== '') {
-                        $lead->{$targetField} = $normalizedValue;
-                        $changed = true;
-                    }
-                }
-            }
-
-            if ($changed) {
-                $lead->save();
-            }
-
-            $changed = $this->syncCustomFieldValues($lead, $mappedValues['custom'], $leadFields) || $changed;
-        });
-
-        return $changed;
-    }
-
-    protected function normalizeCoreValue(string $fieldName, mixed $value): mixed
-    {
-        if (is_array($value)) {
-            return null;
-        }
-
-        return match ($fieldName) {
-            'priority'      => $this->normalizePriority((string) $value),
-            'deal_value'    => $this->normalizeMoney($value),
-            'product_id'    => $this->normalizeProductId($value),
-            'lead_date'     => $this->normalizeDate($value),
-            'lead_status',
-            'lead_status_id' => $this->normalizeLeadStatusId($value),
-            'lead_source',
-            'lead_source_id' => $this->normalizeLeadSourceId($value),
-            default         => trim((string) $value),
-        };
-    }
-
-    protected function normalizeDate(mixed $value): ?string
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::parse($value)->toDateString();
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    protected function syncCustomFieldValues(Lead $lead, array $customValues, Collection $leadFields): bool
-    {
-        $changed = false;
-
-        foreach ($customValues as $fieldId => $value) {
-            if (!$leadFields->has($fieldId)) {
-                continue;
-            }
-
-            $normalizedValue = $this->normalizeCustomFieldValue($value);
-
-            if ($normalizedValue === null) {
-                continue;
-            }
-
-            $fieldValue = LeadFieldValue::firstOrNew([
-                'lead_id' => $lead->id,
-                'lead_form_field_id' => $fieldId,
-            ]);
-
-            if ((string) $fieldValue->value === $normalizedValue) {
-                continue;
-            }
-
-            $fieldValue->value = $normalizedValue;
-            $fieldValue->save();
-            $changed = true;
-        }
-
-        return $changed;
-    }
-
-    protected function normalizeCustomFieldValue(mixed $value): ?string
-    {
-        if (is_array($value)) {
-            $value = array_values(array_filter($value, fn ($item) => $item !== null && $item !== ''));
-
-            if (empty($value)) {
-                return null;
-            }
-
-            return json_encode($value);
-        }
-
-        $value = trim((string) $value);
-
-        return $value !== '' ? $value : null;
+        return $cleaned !== '' ? $cleaned : (trim((string) $value) ?: '0000000000');
     }
 
     protected function buildLeadPayload(
@@ -599,7 +654,7 @@ class FacebookLeadImporter
         $core = $mappedValues['core'];
         $companyName = trim((string) ($core['company_name'] ?? $core['contact_name'] ?? 'Facebook Lead'));
         $contactName = trim((string) ($core['contact_name'] ?? $core['company_name'] ?? 'Facebook Lead'));
-        $mobileNumber = trim((string) ($core['mobile_number'] ?? '0000000000'));
+        $mobileNumber = $this->cleanPhoneNumber($core['mobile_number'] ?? '0000000000');
 
         return [
             'company_name' => $companyName !== '' ? $companyName : 'Facebook Lead',
@@ -615,7 +670,7 @@ class FacebookLeadImporter
             'product_id'   => $this->normalizeProductId($core['product_id'] ?? null),
             'priority'     => $this->normalizePriority($core['priority'] ?? null),
             'deal_value'   => $this->normalizeMoney($core['deal_value'] ?? null),
-            'remarks'      => '',
+            'remarks'      => $core['remarks'] ?? '',
             'assigned_to'  => $assignedUser?->id,
             'created_by'   => $assignedUser?->id,
             'company_id'   => $assignedUser?->company_id,
@@ -943,5 +998,19 @@ class FacebookLeadImporter
             'deal_value',
             'remarks',
         ], true);
+    }
+
+    public function sanitizeErrorMessage(string $message): string
+    {
+        $message = trim($message);
+
+        if ($message === '') {
+            return 'Unknown error occurred.';
+        }
+
+        $message = preg_replace('/access_token=([^&\s]+)/i', 'access_token=[hidden]', $message);
+        $message = preg_replace('/\bEAA[A-Za-z0-9_-]{20,}\b/', '[hidden-token]', $message);
+
+        return $message;
     }
 }

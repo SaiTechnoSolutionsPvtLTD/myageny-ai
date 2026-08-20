@@ -207,7 +207,7 @@ class SuperAdminDashboardController extends ApiController
         $overdueCount = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at', '<', now())
+            ->whereDate('remind_at', '<', today())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
@@ -233,7 +233,7 @@ class SuperAdminDashboardController extends ApiController
         $overdueReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at', '<', now())
+            ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
             ->take(15)
@@ -394,26 +394,37 @@ class SuperAdminDashboardController extends ApiController
             'year'       => $request->year,
         ]);
 
+        $todayCompletedCallsCount = LeadCallUpdate::whereDate('called_at', today())
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                    ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                    ->when($stage,    fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
+            })->count();
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
             'filters_applied' => $filtersApplied,
 
             'kpis' => [
-                'total_leads'       => $totalLeads,
-                'active_leads'      => $activeLeads,
-                'won_leads'         => $wonLeads,
-                'lost_leads'        => $lostLeads,
-                'high_priority'     => $highPriority,
-                'pipeline_value'    => $pipelineValue,
-                'won_value'         => $wonValue,
-                'conversion_rate'   => $convRate,
-                'converted_products_count' => $convertedProductsCount,
-                'upcoming_amount'   => $upcomingAmount,
-                'converted_value'   => $convertedValue,
-                'converted_percentage' => $convertedPercentage,
-                'followups_count'   => $followupsCount,
-                'scheduled_followups_count' => $todayFollowups->count(),
+                'total_leads'                => $totalLeads,
+                'active_leads'               => $activeLeads,
+                'won_leads'                  => $wonLeads,
+                'lost_leads'                 => $lostLeads,
+                'high_priority'              => $highPriority,
+                'pipeline_value'             => $pipelineValue,
+                'won_value'                  => $wonValue,
+                'conversion_rate'            => $convRate,
+                'converted_products_count'  => $convertedProductsCount,
+                'upcoming_amount'            => $upcomingAmount,
+                'converted_value'            => $convertedValue,
+                'converted_percentage'       => $convertedPercentage,
+                'followups_count'            => $followupsCount,
+                'scheduled_followups_count'  => $todayFollowups->count(),
+                'overdue_reminders_count'    => $overdueCount,
+                'today_completed_calls_count' => $todayCompletedCallsCount,
             ],
 
             'financials' => [
@@ -945,7 +956,7 @@ class SuperAdminDashboardController extends ApiController
         $overdueCount = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at', '<', now())
+            ->whereDate('remind_at', '<', today())
             ->count();
         $todayReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
@@ -972,7 +983,7 @@ class SuperAdminDashboardController extends ApiController
         $overdueReminders = LeadReminder::where('is_completed', false)
             ->where($reminderUserConstraint)
             ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
-            ->where('remind_at', '<', now())
+            ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
             ->take(15)
@@ -1155,6 +1166,22 @@ class SuperAdminDashboardController extends ApiController
             'year'       => $request->year,
         ]);
 
+        $overdueCount = LeadReminder::where('is_completed', false)
+            ->whereHas('lead', function ($q) use ($request, $branchId, $userId) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
+            })
+            ->whereDate('remind_at', '<', today())
+            ->count();
+
+        $todayCompletedCallsCount = LeadCallUpdate::whereDate('called_at', today())
+            ->whereHas('lead', function ($q) use ($request, $branchId, $userId) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                    ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
+            })->count();
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
@@ -1173,7 +1200,9 @@ class SuperAdminDashboardController extends ApiController
                 'upcoming_amount'   => $upcomingAmount,
                 'converted_value'   => $convertedValue,
                 'converted_percentage' => $convertedPercentage,
-                'scheduled_followups_count' => $todayFollowups->count(),
+                'scheduled_followups_count'  => $todayFollowups->count(),
+                'overdue_reminders_count'    => $overdueCount,
+                'today_completed_calls_count' => $todayCompletedCallsCount,
             ],
 
             'trends' => [

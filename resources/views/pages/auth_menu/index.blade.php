@@ -347,7 +347,9 @@
                 </svg>
             </span>
         </a>
+        @endcan
 
+        @can('production_mapping.menuview')
         <a href="{{ route('auth.production-mappings.index') }}" class="authdash-card mapping">
             <div class="authdash-icon mapping">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

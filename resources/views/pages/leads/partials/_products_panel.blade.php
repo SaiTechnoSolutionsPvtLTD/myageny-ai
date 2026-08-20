@@ -548,6 +548,7 @@
                 </svg>
                 Create Deal
             </button>
+            @if(auth()->user()?->allowsPriceRequests())
             <button type="button" id="pp-submit-price-request-btn" class="ppf-btn pp-btn-hist"
                     style="justify-content:center"
                     onclick="PP.ppSubmitPriceRequest()">
@@ -558,6 +559,7 @@
                 </svg>
                 Send Price Request
             </button>
+            @endif
             <button type="button" class="ppf-btn ppf-btn-sec"
                     onclick="PP.ppHideModal('pp-modal-add-product')">Cancel</button>
         </div>

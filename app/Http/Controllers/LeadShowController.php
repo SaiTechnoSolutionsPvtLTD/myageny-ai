@@ -59,6 +59,7 @@ class LeadShowController extends Controller
             'notes'                   => ['nullable', 'string', 'max:1000'],
             'next_follow_up'          => [$isNoFollowupNeeded ? 'nullable' : 'required', 'nullable', 'date'],
             'followup_time'           => [$isNoFollowupNeeded ? 'nullable' : 'required'],
+            'reminder_remarks'        => ['nullable', 'string', 'max:500'],
         ]);
 
         $data['lead_id'] = $lead->id;
@@ -68,6 +69,25 @@ class LeadShowController extends Controller
         $data['company_id'] = $lead->company_id;
 
         LeadCallUpdate::create($data);
+
+        // Auto-create Reminder in Reminders Tab / Tasks whenever next_follow_up date is set
+        if (! $isNoFollowupNeeded && ! empty($request->next_follow_up)) {
+            $reminderTitle = trim((string) $request->reminder_remarks);
+            if ($reminderTitle === '') {
+                $reminderTitle = 'Follow-up Call: ' . ($subCatName ?: $outcomeName ?: 'Lead Follow-up');
+            }
+
+            LeadReminder::create([
+                'lead_id'        => $lead->id,
+                'user_id'        => auth()->id(),
+                'title'          => \Illuminate\Support\Str::limit($reminderTitle, 150),
+                'description'    => $request->notes ? \Illuminate\Support\Str::limit((string) $request->notes, 500) : null,
+                'remind_at'      => $request->next_follow_up,
+                'remainder_time' => $request->followup_time ?: '10:00:00',
+                'type'           => 'follow_up',
+                'priority'       => 'high',
+            ]);
+        }
 
         return back()->with('success', 'Call update added successfully.');
     }

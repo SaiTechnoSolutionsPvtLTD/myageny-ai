@@ -183,9 +183,10 @@ class DashboardController extends Controller
             'can_manage_announcements' => $this->canManageAnnouncements(),
             'exit_approval_queue' => $exitApprovalQueue,
             'exit_request' => $exitRequest,
-            'can_raise_exit' => (bool) ($currentEmployee && $currentEmployee->status === EmployeeOnboarding::STATUS_ACTIVE && ! ($exitRequest && $exitRequest->isOpenForEmployee())),
             'assigned_interviews' => $this->assignedInterviewsForUser(),
         ];
+
+        $stats = array_merge($stats, $this->getHrmsCalendarData($request));
 
         return view('pages.hrms.dashboard.index', compact('stats'));
     }
@@ -282,7 +283,78 @@ class DashboardController extends Controller
             'assigned_interviews' => $this->assignedInterviewsForUser(),
         ];
 
+        $stats = array_merge($stats, $this->getHrmsCalendarData($request));
+
         return view('pages.hrms.dashboard.index', compact('stats'));
+    }
+
+    public function storeTask(Request $request)
+    {
+        $validated = $request->validate([
+            'task_date' => 'required|date',
+            'task_time' => 'nullable',
+            'remarks'   => 'required|string',
+            'user_id'   => 'nullable|exists:users,id',
+        ]);
+
+        $targetUserId = $validated['user_id'] ?? auth()->id();
+
+        $task = \App\Models\HrmsTask::create([
+            'company_id' => auth()->user()?->company_id,
+            'user_id'    => $targetUserId,
+            'created_by' => auth()->id(),
+            'task_date'  => $validated['task_date'],
+            'task_time'  => $validated['task_time'] ?? '10:00:00',
+            'remarks'    => $validated['remarks'],
+            'status'     => 'pending',
+            'mail_sent'  => false,
+        ]);
+
+        return back()->with('success', 'HRMS Calendar Task created successfully!');
+    }
+
+    public function completeTask(\App\Models\HrmsTask $task)
+    {
+        $task->update(['status' => 'completed']);
+        return back()->with('success', 'Task marked as completed!');
+    }
+
+    public function destroyTask(\App\Models\HrmsTask $task)
+    {
+        $task->delete();
+        return back()->with('success', 'Task deleted successfully!');
+    }
+
+    private function getHrmsCalendarData(Request $request): array
+    {
+        $currentMonth = $request->filled('calendar_month')
+            ? Carbon::parse($request->calendar_month)
+            : Carbon::today();
+
+        $startOfMonth = $currentMonth->copy()->startOfMonth()->subDays(7);
+        $endOfMonth   = $currentMonth->copy()->endOfMonth()->addDays(7);
+
+        $hrmsTasks = \App\Models\HrmsTask::with(['user:id,name', 'creator:id,name'])
+            ->when(auth()->user()?->company_id, fn($q) => $q->where('company_id', auth()->user()->company_id))
+            ->whereBetween('task_date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+            ->get();
+
+        $holidays = \App\Models\HolidayCalendar::query()
+            ->when(auth()->user()?->company_id, fn($q) => $q->where('company_id', auth()->user()->company_id))
+            ->whereBetween('holiday_date', [$startOfMonth->toDateString(), $endOfMonth->toDateString()])
+            ->get();
+
+        $assignableUsers = \App\Models\User::where('is_active', true)
+            ->when(auth()->user()?->company_id, fn($q) => $q->where('company_id', auth()->user()->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return [
+            'hrms_tasks'        => $hrmsTasks,
+            'calendar_holidays' => $holidays,
+            'assignable_users'  => $assignableUsers,
+            'calendar_month'    => $currentMonth,
+        ];
     }
 
     private function resolveHolidayFilter(Request $request, Carbon $today): array

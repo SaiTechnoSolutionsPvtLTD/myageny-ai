@@ -301,6 +301,10 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('can:companies.manage')->name('companies.update');
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('can:companies.manage')->name('companies.destroy');
     Route::get('/hrms/dashboard', [App\Http\Controllers\HRMS\DashboardController::class, 'index'])->name('hrms.dashboard');
+    Route::get('/hrms/calendar', [\App\Http\Controllers\HRMS\HrmsCalendarController::class, 'index'])->name('hrms.calendar.index');
+    Route::post('/hrms/tasks', [App\Http\Controllers\HRMS\DashboardController::class, 'storeTask'])->name('hrms.tasks.store');
+    Route::patch('/hrms/tasks/{task}/complete', [App\Http\Controllers\HRMS\DashboardController::class, 'completeTask'])->name('hrms.tasks.complete');
+    Route::delete('/hrms/tasks/{task}', [App\Http\Controllers\HRMS\DashboardController::class, 'destroyTask'])->name('hrms.tasks.destroy');
 
     // Expense Requests
     Route::prefix('hrms/expense-requests')->name('hrms.expense-requests.')->group(function () {
@@ -422,6 +426,11 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/lead-price-requests/{priceRequest}/reject', [LeadProductPriceRequestController::class, 'reject'])
         ->middleware('can:price_requests.reject')
         ->name('lead-price-requests.reject');
+
+    // ── CRM Tasks & Reminders ────────────────────────────────────
+    Route::get('/crm/tasks', [\App\Http\Controllers\CrmTaskController::class, 'index'])->middleware('can:leads.view')->name('tasks.index');
+    Route::patch('/crm/tasks/{reminder}/complete', [\App\Http\Controllers\CrmTaskController::class, 'complete'])->middleware('can:leads.edit')->name('tasks.complete');
+    Route::patch('/crm/tasks/{reminder}/incomplete', [\App\Http\Controllers\CrmTaskController::class, 'incomplete'])->middleware('can:leads.edit')->name('tasks.incomplete');
 
     // ── Pre Sales Management ─────────────────────────────────────
     Route::get('/pre-sales', [\App\Http\Controllers\PreSalesController::class, 'index'])->name('pre-sales.index');
@@ -605,6 +614,9 @@ Route::post('/editfieldmaps',[FacebookIntegrationController::class,'editfieldmap
 Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationController::class, 'syncCampaign'])
     ->middleware('can:facebook_integration.manage')
     ->name('facebook-integration.sync');
+Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::class, 'syncAllCampaigns'])
+    ->middleware('can:facebook_integration.manage')
+    ->name('facebook-integration.sync-all');
 
 
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->middleware('can:quotation_settings.menuview')->name('quotation');
@@ -635,7 +647,7 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     });
 
     // Expense Pipeline Settings
-    Route::prefix('expense-pipeline')->name('expense-pipeline.')->group(function () {
+    Route::prefix('expense-pipeline')->name('expense-pipeline.')->middleware('can:expense_pipeline.menuview')->group(function () {
         Route::get('/', [\App\Http\Controllers\ExpensePipelineController::class, 'index'])->name('index');
         Route::post('/', [\App\Http\Controllers\ExpensePipelineController::class, 'store'])->name('store');
         Route::put('/{expensePipeline}', [\App\Http\Controllers\ExpensePipelineController::class, 'update'])->name('update');
@@ -644,7 +656,7 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     });
 
     // Leave Hierarchy Settings
-    Route::prefix('leave-hierarchy')->name('leave-hierarchy.')->group(function () {
+    Route::prefix('leave-hierarchy')->name('leave-hierarchy.')->middleware('can:leave_hierarchy.menuview')->group(function () {
         Route::get('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'index'])->name('index');
         Route::post('/', [\App\Http\Controllers\LeaveHierarchyController::class, 'store'])->name('store');
         Route::put('/{leaveHierarchy}', [\App\Http\Controllers\LeaveHierarchyController::class, 'update'])->name('update');
@@ -688,9 +700,9 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
     Route::post('/ai/summarize', [AiController::class, 'summarize'])->name('ai.summarize');
 
     // Support Ticket Routes
-    Route::get('/support', [\App\Http\Controllers\SupportController::class, 'index'])->name('support.index');
-    Route::post('/support', [\App\Http\Controllers\SupportController::class, 'store'])->name('support.store');
-    Route::post('/support/{ticket}/update-status', [\App\Http\Controllers\SupportController::class, 'updateStatus'])->name('support.update-status');
+    Route::get('/support', [\App\Http\Controllers\SupportController::class, 'index'])->middleware('can:support.menuview')->name('support.index');
+    Route::post('/support', [\App\Http\Controllers\SupportController::class, 'store'])->middleware('can:support.create')->name('support.store');
+    Route::post('/support/{ticket}/update-status', [\App\Http\Controllers\SupportController::class, 'updateStatus'])->middleware('can:support.update')->name('support.update-status');
 
 
 //     Route::prefix('products')->name('products.')->middleware(['auth'])->group(function () {

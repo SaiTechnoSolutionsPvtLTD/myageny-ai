@@ -625,18 +625,30 @@ class InterMigration extends Command
 
     private function generateNextInternId(): string
     {
-        $latestInternId = InternJoiningForm::query()
-            ->where('intern_id', 'like', self::INTERN_PREFIX . '%')
-            ->orderByDesc('intern_id')
-            ->value('intern_id');
+        $prefix = InternJoiningForm::INTERN_ID_PREFIX;
+        $cleanPrefix = rtrim($prefix, '-') . '-';
+
+        $internIds = InternJoiningForm::withoutGlobalScopes()
+            ->pluck('intern_id');
 
         $lastNumber = 0;
 
-        if ($latestInternId && preg_match('/(\d+)$/', $latestInternId, $matches)) {
-            $lastNumber = (int) $matches[1];
+        foreach ($internIds as $internId) {
+            if (!$internId) {
+                continue;
+            }
+
+            if (preg_match('/(\d+)$/', $internId, $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $lastNumber) {
+                    $lastNumber = $num;
+                }
+            }
         }
 
-        return self::INTERN_PREFIX . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
+        $nextNumber = $lastNumber > 0 ? $lastNumber + 1 : 1001;
+
+        return $cleanPrefix . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
     private function cleanString(mixed $value): ?string

@@ -14,7 +14,7 @@
 .crm-btn-ghost:hover { background:#f8f8f8; }
 
 /* Table */
-.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow:hidden; }
+.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .crm-table          { width:100%; border-collapse:collapse; font-size:14px; }
 .crm-table thead tr { background:#f8f8f8; }
 .crm-table th       { padding:12px 16px; text-align:left; font-size:12px; color:#9e9e9e; font-weight:600; border-bottom:1px solid #f1f1f1; }

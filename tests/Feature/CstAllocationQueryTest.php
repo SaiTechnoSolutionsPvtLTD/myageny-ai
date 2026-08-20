@@ -295,4 +295,22 @@ class CstAllocationQueryTest extends TestCase
         $this->assertTrue(auth()->check());
         $this->assertEquals($user->id, auth()->id());
     }
+
+    /** @test */
+    public function test_cst_allocation_permission_not_granted_by_default_for_new_company_user()
+    {
+        $company = Company::create(['company_name' => 'New Company']);
+        $user = User::create([
+            'company_id' => $company->id,
+            'name' => 'Company User',
+            'email' => 'compuser@test.com',
+            'password' => 'secret',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user);
+
+        // User without cst_allocation.menuview permission should not pass Gate check
+        $this->assertFalse($user->can('cst_allocation.menuview'));
+    }
 }

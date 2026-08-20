@@ -654,19 +654,30 @@ class InternJoiningFormController extends Controller
 
     private function generateNextInternId(): string
     {
-        $latestInternId = InternJoiningForm::query()
-            ->where('intern_id', 'like', InternJoiningForm::INTERN_ID_PREFIX . '%')
-            ->orderByDesc('intern_id')
-            ->lockForUpdate()
-            ->value('intern_id');
+        $prefix = InternJoiningForm::INTERN_ID_PREFIX;
+        $cleanPrefix = rtrim($prefix, '-') . '-';
+
+        $internIds = InternJoiningForm::withoutGlobalScopes()
+            ->pluck('intern_id');
 
         $lastNumber = 0;
 
-        if ($latestInternId && preg_match('/^' . preg_quote(InternJoiningForm::INTERN_ID_PREFIX, '/') . '(\d+)$/', $latestInternId, $matches)) {
-            $lastNumber = (int) $matches[1];
+        foreach ($internIds as $internId) {
+            if (!$internId) {
+                continue;
+            }
+
+            if (preg_match('/(\d+)$/', $internId, $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $lastNumber) {
+                    $lastNumber = $num;
+                }
+            }
         }
 
-        return InternJoiningForm::INTERN_ID_PREFIX . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
+        $nextNumber = $lastNumber > 0 ? $lastNumber + 1 : 1001;
+
+        return $cleanPrefix . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
     private function generateNextEmployeeId(?int $branchId = null): string

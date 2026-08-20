@@ -37,6 +37,9 @@
 .cshow-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:#9e9e9e; margin-bottom:6px; }
 .cshow-value { font-size:14px; font-weight:700; color:#121212; word-break:break-word; }
 .cshow-value.muted { font-weight:500; color:#666; }
+.feat-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; font-size:12px; font-weight:700; }
+.feat-enabled { background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; }
+.feat-disabled { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
 @media (max-width: 900px) {
     .cshow-topbar { height:auto; padding:16px 20px; flex-direction:column; align-items:flex-start; gap:10px; }
     .cshow-body { padding:16px 20px 24px; }
@@ -99,48 +102,96 @@
                 </div>
             </div>
 
-            <div class="cshow-card">
-                <div class="cshow-card-head">
-                    <div class="cshow-card-title">Company Details</div>
-                    <div class="cshow-card-sub">Stored business and Facebook app configuration</div>
+            <div style="display:flex; flex-direction:column; gap:18px;">
+                <div class="cshow-card">
+                    <div class="cshow-card-head">
+                        <div class="cshow-card-title">Company Details</div>
+                        <div class="cshow-card-sub">Stored business and Facebook app configuration</div>
+                    </div>
+                    <div class="cshow-card-body">
+                        <div class="cshow-grid">
+                            <div class="cshow-item">
+                                <div class="cshow-label">Company Name</div>
+                                <div class="cshow-value">{{ $company->company_name }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Email</div>
+                                <div class="cshow-value">{{ $company->email }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Mobile Number</div>
+                                <div class="cshow-value">{{ $company->mobile_number }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Company Status</div>
+                                <div class="cshow-value">{{ $company->status_label }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Expiry Date</div>
+                                <div class="cshow-value">{{ $company->expiry_date ? $company->expiry_date->format('d M Y') : 'N/A' }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Expiry Status</div>
+                                <div class="cshow-value" style="color:{{ $company->isExpired() ? '#dc2626' : '#16a34a' }}">{{ $company->expiry_status }}</div>
+                            </div>
+                            <div class="cshow-item full">
+                                <div class="cshow-label">Address</div>
+                                <div class="cshow-value muted">{{ $company->address }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Facebook Client ID</div>
+                                <div class="cshow-value">{{ $company->facebook_client_id }}</div>
+                            </div>
+                            <div class="cshow-item">
+                                <div class="cshow-label">Facebook Client Secret</div>
+                                <div class="cshow-value">{{ $company->facebook_client_secret }}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="cshow-card-body">
-                    <div class="cshow-grid">
-                        <div class="cshow-item">
-                            <div class="cshow-label">Company Name</div>
-                            <div class="cshow-value">{{ $company->company_name }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Email</div>
-                            <div class="cshow-value">{{ $company->email }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Mobile Number</div>
-                            <div class="cshow-value">{{ $company->mobile_number }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Company Status</div>
-                            <div class="cshow-value">{{ $company->status_label }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Expiry Date</div>
-                            <div class="cshow-value">{{ $company->expiry_date ? $company->expiry_date->format('d M Y') : 'N/A' }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Expiry Status</div>
-                            <div class="cshow-value" style="color:{{ $company->isExpired() ? '#dc2626' : '#16a34a' }}">{{ $company->expiry_status }}</div>
-                        </div>
-                        <div class="cshow-item full">
-                            <div class="cshow-label">Address</div>
-                            <div class="cshow-value muted">{{ $company->address }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Facebook Client ID</div>
-                            <div class="cshow-value">{{ $company->facebook_client_id }}</div>
-                        </div>
-                        <div class="cshow-item">
-                            <div class="cshow-label">Facebook Client Secret</div>
-                            <div class="cshow-value">{{ $company->facebook_client_secret }}</div>
+
+                <div class="cshow-card">
+                    <div class="cshow-card-head">
+                        <div class="cshow-card-title">Feature Settings</div>
+                        <div class="cshow-card-sub">Enabled feature options for this company</div>
+                    </div>
+                    <div class="cshow-card-body">
+                        <div class="cshow-grid">
+                            <div class="cshow-item">
+                                <div class="cshow-label">Price Request Option</div>
+                                <div class="cshow-value">
+                                    <span class="feat-pill {{ $company->allowsPriceRequests() ? 'feat-enabled' : 'feat-disabled' }}">
+                                        {{ $company->allowsPriceRequests() ? '✓ Enabled' : '✕ Disabled' }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="cshow-item">
+                                <div class="cshow-label">Production Update</div>
+                                <div class="cshow-value">
+                                    <span class="feat-pill {{ $company->allowsProductionUpdates() ? 'feat-enabled' : 'feat-disabled' }}">
+                                        {{ $company->allowsProductionUpdates() ? '✓ Enabled' : '✕ Disabled' }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="cshow-item">
+                                <div class="cshow-label">Approval History</div>
+                                <div class="cshow-value">
+                                    <span class="feat-pill {{ $company->allowsApprovalHistory() ? 'feat-enabled' : 'feat-disabled' }}">
+                                        {{ $company->allowsApprovalHistory() ? '✓ Enabled' : '✕ Disabled' }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="cshow-item">
+                                <div class="cshow-label">CST Updates</div>
+                                <div class="cshow-value">
+                                    <span class="feat-pill {{ $company->allowsCstUpdates() ? 'feat-enabled' : 'feat-disabled' }}">
+                                        {{ $company->allowsCstUpdates() ? '✓ Enabled' : '✕ Disabled' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
