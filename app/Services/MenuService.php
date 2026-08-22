@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\LeadReminder;
 use App\Models\OutsideOfficeAttendanceRequest;
+use App\Services\DataVisibilityService;
 use App\Models\ProductionInitiation;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -10,6 +12,8 @@ use Illuminate\Support\Str;
 
 class MenuService
 {
+    public function __construct(private readonly DataVisibilityService $visibility = new DataVisibilityService()) {}
+
     /** Module key => switcher metadata. Add a line here when a new module ships. */
     private const MODULE_META = [
         'crm'      => ['label' => 'CRM',      'order' => 10],
@@ -175,8 +179,27 @@ class MenuService
             'production_approvals'             => $this->productionApprovalBadgeCount($user),
             'notifications'                    => $this->notificationBadgeCount($user),
             'hrms.outside_office_approval'     => $this->outsideOfficePendingBadgeCount(),
+            'reminders_tasks'                  => $this->remindersTasksOverdueBadgeCount($user),
             default                => null,
         };
+    }
+
+    /**
+     * Same "Overdue" count CrmTaskApiController::index() computes for its
+     * overdue tab badge — not-completed reminders whose remind_at date has
+     * already passed, scoped through the exact same
+     * DataVisibilityService::applyLeadRelationVisibility() used there, so
+     * this always agrees with what the Reminders & Tasks screen itself
+     * shows for the same user.
+     */
+    private function remindersTasksOverdueBadgeCount(User $user): int
+    {
+        $query = LeadReminder::query();
+        $this->visibility->applyLeadRelationVisibility($query, 'lead', $user);
+
+        return $query->where('is_completed', false)
+            ->whereDate('remind_at', '<', now()->toDateString())
+            ->count();
     }
 
     /**

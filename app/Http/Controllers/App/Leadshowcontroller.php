@@ -215,15 +215,34 @@ class LeadShowController extends Controller
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
 
         $data = $request->validate([
-            'title'       => ['required', 'string', 'max:150'],
-            'description' => ['nullable', 'string', 'max:500'],
-            'remind_at'   => ['required', 'date', 'after:now'],
-            'type'        => ['required', 'in:' . implode(',', array_keys(LeadReminder::TYPES))],
-            'priority'    => ['required', 'in:low,medium,high'],
+            'title'          => ['required', 'string', 'max:150'],
+            'description'    => ['nullable', 'string', 'max:500'],
+            'remind_at'      => ['required', 'date', 'after:now'],
+            'type'           => ['required', 'in:' . implode(',', array_keys(LeadReminder::TYPES))],
+            'priority'       => ['required', 'in:low,medium,high'],
+            // Optional here (unlike the web form's separate date+time inputs,
+            // the app's picker sends one combined remind_at) — derived below
+            // when omitted so the row is still fully populated the same way
+            // web's is. Kept nullable/optional rather than required so this
+            // doesn't become a breaking change for the existing app build.
+            'remainder_time' => ['nullable'],
         ]);
 
         $data['lead_id'] = $lead->id;
         $data['user_id'] = auth()->id();
+
+        // The app's Set Reminder form only has a single combined date+time
+        // picker (remind_at carries both), unlike the web form's separate
+        // date/time inputs — so remainder_time is never sent from the app.
+        // Derive it from remind_at's own time-of-day here so the stored row
+        // ends up exactly as populated as a web-created one: both
+        // LeadReminder::type_label-style displays (web's Tasks page, this
+        // app's own new Reminders & Tasks screen) read remainder_time
+        // separately from remind_at, and would otherwise show a blank/
+        // fallback time for every reminder created from the app.
+        if (empty($data['remainder_time'])) {
+            $data['remainder_time'] = \Carbon\Carbon::parse($data['remind_at'])->format('H:i:s');
+        }
 
         $reminder = LeadReminder::create($data);
         $reminder->load('user:id,name');
@@ -1061,14 +1080,15 @@ class LeadShowController extends Controller
             'id'           => $reminder->id,
             'title'        => $reminder->title,
             'description'  => $reminder->description,
-            'remind_at'    => $reminder->remind_at?->toIso8601String(),
+            'remind_at'    => optional($reminder->remind_at)->format('Y-m-d H:i:s'),
+            'remainder_time' => $reminder->remainder_time,
             'type'         => $reminder->type,
             'type_label'   => $reminder->type_label,
             'type_icon'    => $reminder->type_icon,
             'priority'     => $reminder->priority,
             'is_completed' => (bool) $reminder->is_completed,
             'is_overdue'   => $reminder->is_overdue,
-            'completed_at' => $reminder->completed_at?->toIso8601String(),
+            'completed_at' => optional($reminder->completed_at)->format('Y-m-d H:i:s'),
             'user'         => $reminder->user ? ['id' => $reminder->user->id, 'name' => $reminder->user->name] : null,
         ];
     }

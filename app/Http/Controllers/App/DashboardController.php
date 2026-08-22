@@ -233,7 +233,11 @@ class DashboardController extends Controller
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                // Naive "Y-m-d H:i:s" (no timezone offset) — toISOString()
+                // appended a UTC offset that Dart's DateTime.parse() would
+                // convert, shifting the displayed date back a day.
+                'remind_at'      => optional($r->remind_at)->format('Y-m-d H:i:s'),
+                'remainder_time' => $r->remainder_time,
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,
@@ -255,7 +259,8 @@ class DashboardController extends Controller
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                'remind_at'      => optional($r->remind_at)->format('Y-m-d H:i:s'),
+                'remainder_time' => $r->remainder_time,
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,

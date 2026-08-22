@@ -38,6 +38,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\App\AppMenuController;
 use App\Http\Controllers\App\NotificationApiController as MobileNotificationApiController;
 use App\Http\Controllers\App\CstAllocationApiController;
+use App\Http\Controllers\App\CrmTaskApiController;
 use App\Http\Controllers\App\CustomerSuccessDashboardApiController;
 use App\Http\Controllers\App\PreSalesApiController;
 use App\Http\Controllers\App\ExpenseRequestApiController;
@@ -266,6 +267,18 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('outside-office-requests/{outsideOfficeRequest}/resubmit', [MobileDailyAttendanceController::class, 'resubmitOutsideOffice'])->name('outside-office-requests.resubmit');
     });
 
+    // ── CRM Tasks & Reminders ──────────────────────────────────────────────
+    // Mobile JSON mirror of the web "Tasks & Reminders" page
+    // (App\Http\Controllers\CrmTaskController) — see CrmTaskApiController's
+    // class doc comment. Not nested under mobile/leads/{lead}/... like the
+    // per-lead reminder CRUD above, since this is a cross-lead management
+    // view, not scoped to a single lead.
+    Route::prefix('crm-tasks')->name('crm-tasks.')->group(function () {
+        Route::get('/',                     [CrmTaskApiController::class, 'index'])->name('index');
+        Route::patch('/{reminder}/complete',   [CrmTaskApiController::class, 'complete'])->name('complete');
+        Route::patch('/{reminder}/incomplete', [CrmTaskApiController::class, 'incomplete'])->name('incomplete');
+    });
+
     // ── OVP Module ───────────────────────────────────────────────────────────────
     Route::prefix('ovp')->name('ovp.')->group(function () {
         Route::get('/',                                      [OvpModuleApiController::class, 'index'])->name('index');
@@ -321,6 +334,21 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('designing-dashboard/allocate', [ProjectApiController::class, 'allocateDailyTask'])
             ->name('mobile.projects.designing-dashboard.allocate');
 
+        // ── Testing Department Dashboard ─────────────────────────────────────
+        // Mobile mirror of ProjectController::dashboard()'s 'testing' branch +
+        // testingDetails()/updateTestingStatus() — see ProjectApiController's
+        // doc comments. Static 'testing-dashboard'/'bugs' segments must stay
+        // ahead of the '/{productionInitiation}' wildcard below, same reason
+        // 'designing-dashboard' does.
+        Route::get('testing-dashboard', [ProjectApiController::class, 'testingDashboard'])
+            ->name('mobile.projects.testing-dashboard');
+        Route::get('testing-dashboard/{productionInitiation}', [ProjectApiController::class, 'testingProjectDetails'])
+            ->name('mobile.projects.testing-dashboard.show');
+        Route::post('testing-dashboard/{productionInitiation}/status', [ProjectApiController::class, 'updateTestingStatus'])
+            ->name('mobile.projects.testing-dashboard.update-status');
+        Route::patch('bugs/{bug}/status', [ProjectApiController::class, 'updateBugStatus'])
+            ->name('mobile.projects.bugs.update-status');
+
         // ── {productionInitiation} wildcard LAST ────────────────────────────
         Route::get('/{productionInitiation}', [ProjectApiController::class, 'show'])
             ->name('show');
@@ -332,6 +360,10 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('schedule.update');
         Route::post('/{productionInitiation}/updates', [ProjectApiController::class, 'storeUpdate'])
             ->name('updates.store');
+        Route::post('/{productionInitiation}/move-to-testing', [ProjectApiController::class, 'moveToTesting'])
+            ->name('mobile.projects.move-to-testing');
+        Route::post('/{productionInitiation}/bugs', [ProjectApiController::class, 'storeBug'])
+            ->name('mobile.projects.bugs.store');
 
         Route::patch('{productionInitiation}/content-calendar-sheet', [ProjectApiController::class, 'updateContentCalendarSheet'])
             ->name('mobile.projects.content-calendar-sheet.update');

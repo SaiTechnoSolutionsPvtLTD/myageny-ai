@@ -352,6 +352,11 @@ class AuthController extends Controller
             'role_display'    => $user->role_display_name,
             'dashboard_route' => $mobileRoute,
             'is_designing_department' => $user->belongsToDesigningDepartment(),
+            // Mirrors ProjectController::dashboard()'s own auto-detection
+            // condition ($user->belongsToTestingDepartment() ||
+            // $user->hasTestingLikeRole()) — drives both the mobile menu's
+            // Testing Dashboard visibility and ModuleFab's auto-routing.
+            'is_testing_department' => $user->belongsToTestingDepartment() || $user->hasTestingLikeRole(),
             'is_active'       => $user->is_active,
             'branch_id'       => $activeBranchId ?? $user->branch_id,
             'branch' => $user->branch ? [

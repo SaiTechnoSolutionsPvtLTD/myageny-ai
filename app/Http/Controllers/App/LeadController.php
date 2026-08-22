@@ -530,14 +530,21 @@ class LeadController extends Controller
                     'id'           => $r->id,
                     'title'        => $r->title,
                     'description'  => $r->description,
-                    'remind_at'    => $r->remind_at?->toIso8601String(),
+                    // Naive "Y-m-d H:i:s" (no timezone offset) — matches the
+                    // web reference and the Reminders & Tasks module. Using
+                    // toIso8601String() here appended a "+05:30" offset that
+                    // Dart's DateTime.parse() converted to UTC, shifting the
+                    // displayed date back a day. remainder_time (previously
+                    // missing from this response) carries the actual time.
+                    'remind_at'      => optional($r->remind_at)->format('Y-m-d H:i:s'),
+                    'remainder_time' => $r->remainder_time,
                     'type'         => $r->type,
                     'type_label'   => $r->type_label,
                     'type_icon'    => $r->type_icon,
                     'priority'     => $r->priority,
                     'is_completed' => (bool) $r->is_completed,
                     'is_overdue'   => $r->is_overdue,
-                    'completed_at' => $r->completed_at?->toIso8601String(),
+                    'completed_at' => optional($r->completed_at)->format('Y-m-d H:i:s'),
                     'user'         => $r->user
                         ? ['id' => $r->user->id, 'name' => $r->user->name]
                         : null,

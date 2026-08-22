@@ -18,6 +18,10 @@ return [
             // not nested), so this follows the same existing convention.
             ['key' => 'pre_sales',      'label' => 'Pre Sales',      'section' => 'CRM', 'order' => 45, 'permission' => 'pre_sales.menuview'],
             ['key' => 'call_updates',   'label' => 'Call Updates',   'section' => 'CRM', 'order' => 50, 'permission' => 'call_updates.menuview'],
+            // Mobile mirror of the web sidebar's "Reminders & Tasks" item
+            // (App\Http\Controllers\CrmTaskController::index, gated
+            // `can:leads.view` there) — same permission here for parity.
+            ['key' => 'reminders_tasks', 'label' => 'Reminders & Tasks', 'section' => 'CRM', 'order' => 55, 'permission' => 'leads.view'],
             ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview', 'require_method' => 'allowsPriceRequests'],
             ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70],
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
@@ -60,6 +64,16 @@ return [
                 'section' => 'PROJECTS',
                 'order' => 50,
                 'require_any_method' => ['belongsToDesigningDepartment', 'belongsToDigitalMarketingDepartment']
+            ],
+            // Mobile mirror of the web sidebar's Testing Department dashboard
+            // (auto-selected by ProjectController::dashboard() for these same
+            // users) — see ProjectApiController::testingDashboard().
+            [
+                'key' => 'projects.testing_dashboard',
+                'label' => 'Testing Dashboard',
+                'section' => 'PROJECTS',
+                'order' => 55,
+                'require_any_method' => ['belongsToTestingDepartment', 'hasTestingLikeRole']
             ],
             ['key' => 'projects.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 60],
         ],

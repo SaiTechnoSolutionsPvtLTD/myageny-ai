@@ -21,6 +21,8 @@ use App\Models\Department;
 use App\Models\Lead;
 use App\Models\LeadProduct;
 use App\Models\DesignSettingTarget;
+use App\Models\ProjectTestingDetail;
+use App\Models\ProjectBug;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use App\Services\NotificationService;
@@ -310,6 +312,57 @@ class ProjectApiController extends Controller
         $projectDeliveryDate   = $this->projectDeliveryDate($productionInitiation);
         $updates               = $updatesQuery->latest('created_at')->get();
 
+        // Testing tab data — only computed when the viewer is actually allowed
+        // to see the tab, same short-circuit web's Blade does by wrapping the
+        // whole panel in @if($canSeeTestingTab) rather than always querying it.
+        $canSeeTestingTab = $this->canSeeTestingTab($productionInitiation, $user);
+        $testingDetails = [];
+        $testingBugs = [];
+        $testingTlUsers = [];
+        if ($canSeeTestingTab) {
+            $testingDetails = $productionInitiation->testingDetails()
+                ->with(['movedBy', 'testingTl'])
+                ->latest()
+                ->get()
+                ->map(fn ($h) => $this->serializeHandoverDetail($h))
+                ->values()
+                ->all();
+
+            $testingBugs = $productionInitiation->bugs()
+                ->with('createdBy')
+                ->latest()
+                ->get()
+                ->map(fn ($b) => $this->serializeBug($b))
+                ->values()
+                ->all();
+
+            // Mirrors ProjectController::show()'s $testingTlUsers derivation
+            // exactly: prefer users in a Testing-flavored department/role,
+            // fall back to any TL-like/admin user if none exist.
+            $testingTlUsers = User::with(['roles.department', 'branch'])
+                ->where('is_active', true)
+                ->get()
+                ->filter(function ($u) {
+                    $deptNames = strtolower($u->roles->map(fn ($r) => $r->department?->name)->filter()->implode(' '));
+                    $roleNames = strtolower($u->roles->implode('display_name', ' ') . ' ' . $u->roles->implode('name', ' '));
+                    return str_contains($deptNames, 'testing') || str_contains($roleNames, 'testing');
+                })
+                ->values();
+
+            if ($testingTlUsers->isEmpty()) {
+                $testingTlUsers = User::with(['roles.department', 'branch'])
+                    ->where('is_active', true)
+                    ->get()
+                    ->filter(fn ($u) => $u->hasTlLikeRole() || $u->isSuperAdmin() || $u->isCompanyAdmin())
+                    ->values();
+            }
+
+            $testingTlUsers = $testingTlUsers
+                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'role_display' => $u->role_display_name])
+                ->values()
+                ->all();
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -335,6 +388,9 @@ class ProjectApiController extends Controller
                 'can_approve_content_calendar' => $this->isContentCalendarDept($productionInitiation)
                     && $user->belongsToDesigningDepartment()
                     && ! $productionInitiation->content_calendar_approved,
+                'testing_details' => $testingDetails,
+                'bugs'            => $testingBugs,
+                'testing_tl_users' => $testingTlUsers,
             ],
         ]);
     }
@@ -900,6 +956,7 @@ class ProjectApiController extends Controller
             // approves instead) — see the @if(belongsToDesigningDepartment())
             // branch in show.blade.php around the cc-sheet-form.
             'can_edit_content_calendar_sheet' => ! ($user?->belongsToDesigningDepartment() ?? false),
+            'can_see_testing_tab' => $this->canSeeTestingTab($p, $user),
         ]);
     }
 
@@ -910,6 +967,32 @@ class ProjectApiController extends Controller
             ['designing', 'digital marketing'],
             true
         );
+    }
+
+    /**
+     * Mirrors show.blade.php's $canSeeTestingTab exactly: visible when either
+     * the project's own department or the viewing user is development-flavored,
+     * UNLESS the project sits in a Digital Marketing/Design department (those
+     * never get a Testing tab regardless of who's viewing). This gates the
+     * Development-side "Testing" tab on Project Detail — a separate concern
+     * from the Testing Dashboard's own belongsToTestingDepartment() gate.
+     */
+    private function canSeeTestingTab(ProductionInitiation $p, ?User $user): bool
+    {
+        $deptName = strtolower(trim((string) ($p->department?->name ?? '')));
+
+        $isDevUser = $user && (
+            $user->belongsToDevelopmentDepartment()
+            || $user->hasDevelopmentLikeRole()
+            || (method_exists($user, 'isDevelopmentTeam') && $user->isDevelopmentTeam())
+            || $user->isSuperAdmin()
+            || $user->isCompanyAdmin()
+        );
+
+        $isDevDept = str_contains($deptName, 'development') || str_contains($deptName, 'dev') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app');
+        $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
+
+        return ($isDevDept || $isDevUser) && ! $isNonDevDept;
     }
 
     private function serializeUpdate(ProjectUpdate $u): array
@@ -1993,6 +2076,334 @@ class ProjectApiController extends Controller
                 ],
             ],
         ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Testing Department Dashboard — mobile mirror of
+    //  App\Http\Controllers\ProjectController::dashboard()'s 'testing' branch
+    //  + resources/views/pages/projects/testing-dashboard.blade.php /
+    //  testing-details.blade.php. Same statuses (open/moved_to_testing treated
+    //  as one 'open' bucket, ongoing, retesting, completed), same counts, same
+    //  unscoped (company-only, via ProjectTestingDetail's BelongsToCompany
+    //  global scope) visibility — web applies no extra branch/user scoping
+    //  here either, so mobile matches that exactly rather than introducing a
+    //  narrower view the web page doesn't have.
+    //
+    //  GET /mobile/projects/testing-dashboard
+    // ─────────────────────────────────────────────────────────────────────────
+    public function testingDashboard(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($user->belongsToTestingDepartment() || $user->hasTestingLikeRole(), 403);
+
+        $testingHandovers = ProjectTestingDetail::with([
+            'productionInitiation.leadProduct',
+            'productionInitiation.product',
+            'productionInitiation.lead',
+            'productionInitiation.bugs',
+            'movedBy',
+            'testingTl',
+        ])->latest()->get();
+
+        $activeStatus = (string) $request->query('status', 'open');
+
+        $openCount = $testingHandovers->whereIn('status', ['moved_to_testing', 'open'])->count();
+        $ongoingCount = $testingHandovers->where('status', 'ongoing')->count();
+        $retestingCount = $testingHandovers->where('status', 'retesting')->count();
+        $completedCount = $testingHandovers->where('status', 'completed')->count();
+
+        $filteredHandovers = match ($activeStatus) {
+            'ongoing' => $testingHandovers->where('status', 'ongoing'),
+            'retesting' => $testingHandovers->where('status', 'retesting'),
+            'completed' => $testingHandovers->where('status', 'completed'),
+            default => $testingHandovers->filter(fn ($h) => in_array($h->status, ['moved_to_testing', 'open'], true)),
+        };
+
+        if (! in_array($activeStatus, ['open', 'ongoing', 'retesting', 'completed'], true)) {
+            $activeStatus = 'open';
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'active_status' => $activeStatus,
+                'stats' => [
+                    'open' => $openCount,
+                    'ongoing' => $ongoingCount,
+                    'retesting' => $retestingCount,
+                    'completed' => $completedCount,
+                ],
+                'handovers' => $filteredHandovers->values()->map(fn ($h) => $this->serializeTestingHandover($h))->all(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /mobile/projects/testing-dashboard/{productionInitiation}
+     * Mirrors ProjectController::testingDetails() — the "View Details" screen
+     * reached from a Testing Dashboard card.
+     */
+    public function testingProjectDetails(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $productionInitiation->load([
+            'leadProduct',
+            'product',
+            'lead',
+            'testingDetails.movedBy',
+            'testingDetails.testingTl',
+            'bugs.createdBy',
+        ]);
+
+        $latestHandover = $productionInitiation->testingDetails()->latest()->first();
+        $bugs = $productionInitiation->bugs()->with('createdBy')->latest()->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'project' => $this->serializeProjectSummary($productionInitiation),
+                'handover' => $latestHandover ? $this->serializeHandoverDetail($latestHandover) : null,
+                'bugs' => $bugs->map(fn ($b) => $this->serializeBug($b))->values()->all(),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /mobile/projects/testing-dashboard/{productionInitiation}/status
+     * Mirrors ProjectController::updateTestingStatus() exactly (same allowed
+     * values, updates the latest handover row only).
+     */
+    public function updateTestingStatus(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed'])],
+        ]);
+
+        $latestHandover = $productionInitiation->testingDetails()->latest()->first();
+        if (! $latestHandover) {
+            return response()->json(['success' => false, 'message' => 'No testing handover found for this project.'], 404);
+        }
+
+        $latestHandover->update(['status' => $validated['status']]);
+        $latestHandover->load(['movedBy', 'testingTl']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Testing status updated successfully.',
+            'data' => $this->serializeHandoverDetail($latestHandover),
+        ]);
+    }
+
+    /**
+     * POST /mobile/projects/{productionInitiation}/bugs
+     * Mirrors ProjectController::storeBug() exactly — including the 15s
+     * duplicate-submission guard and public-disk file storage. Called both
+     * from the Testing Department's testing-details screen and the
+     * Development side's Project Detail "Testing" tab, same as web.
+     */
+    public function storeBug(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $validated = $request->validate([
+            'description' => ['required', 'string', 'max:5000'],
+            'priority' => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
+            'attachment' => ['nullable', 'file', 'max:10240'],
+        ]);
+
+        $existingBug = ProjectBug::where('production_initiation_id', $productionInitiation->id)
+            ->where('created_by_user_id', auth()->id())
+            ->where('description', $validated['description'])
+            ->where('created_at', '>=', now()->subSeconds(15))
+            ->first();
+
+        if ($existingBug) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Bug report already submitted.',
+                'data' => $this->serializeBug($existingBug->load('createdBy')),
+            ]);
+        }
+
+        $attachmentPath = null;
+        $attachmentName = null;
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $attachmentName = $file->getClientOriginalName();
+
+            $folder = public_path('uploads/project-bugs');
+            if (! file_exists($folder)) {
+                mkdir($folder, 0777, true);
+            }
+
+            $fileName = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+            $file->move($folder, $fileName);
+            $attachmentPath = 'uploads/project-bugs/' . $fileName;
+        }
+
+        $bug = $productionInitiation->bugs()->create([
+            'company_id' => auth()->user()?->company_id,
+            'lead_id' => $productionInitiation->lead_id,
+            'lead_product_id' => $productionInitiation->lead_product_id,
+            'description' => $validated['description'],
+            'priority' => $validated['priority'],
+            'attachment_path' => $attachmentPath,
+            'attachment_original_name' => $attachmentName,
+            'status' => 'open',
+            'created_by_user_id' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bug reported successfully to project testing.',
+            'data' => $this->serializeBug($bug->load('createdBy')),
+        ], 201);
+    }
+
+    /**
+     * PATCH /mobile/projects/bugs/{bug}/status
+     * Mirrors ProjectController::updateBugStatus() exactly.
+     */
+    public function updateBugStatus(Request $request, ProjectBug $bug): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'fixed', 'closed'])],
+        ]);
+
+        $bug->update(['status' => $validated['status']]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bug status updated successfully.',
+            'data' => $this->serializeBug($bug->load('createdBy')),
+        ]);
+    }
+
+    /**
+     * POST /mobile/projects/{productionInitiation}/move-to-testing
+     * Mirrors ProjectController::moveToTesting() exactly, including the
+     * notification email (TO the selected Testing TL, CC'd to
+     * projects@saitechnosolutions.net + the project's Development TLs).
+     * Development-side action — reached from the mobile Project Detail
+     * screen's "Testing" tab, not the Testing Department dashboard.
+     */
+    public function moveToTesting(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $validated = $request->validate([
+            'credentials' => ['nullable', 'string', 'max:5000'],
+            'notes' => ['nullable', 'string', 'max:5000'],
+            'testing_tl_id' => ['nullable', 'exists:users,id'],
+        ]);
+
+        $testingDetail = $productionInitiation->testingDetails()->create([
+            'company_id' => auth()->user()?->company_id,
+            'lead_id' => $productionInitiation->lead_id,
+            'lead_product_id' => $productionInitiation->lead_product_id,
+            'credentials' => $validated['credentials'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'status' => 'moved_to_testing',
+            'moved_by_user_id' => auth()->id(),
+            'testing_tl_id' => $validated['testing_tl_id'] ?? null,
+        ]);
+
+        $testingTl = ! empty($validated['testing_tl_id']) ? User::find($validated['testing_tl_id']) : null;
+        $toEmail = $testingTl?->email ?: 'projects@saitechnosolutions.net';
+
+        $filterDevUsers = function ($collection) {
+            return $collection->filter(function ($u) {
+                if (! is_object($u)) return false;
+                $roles = method_exists($u, 'resolvedRoles') ? $u->resolvedRoles(true) : ($u->roles ?? collect());
+                $deptNames = strtolower($roles->map(fn ($r) => $r->department?->name)->filter()->implode(' '));
+                $roleNames = strtolower($roles->implode('display_name', ' ') . ' ' . $roles->implode('name', ' '));
+                return str_contains($deptNames, 'development')
+                    || str_contains($roleNames, 'development')
+                    || str_contains($roleNames, 'software')
+                    || str_contains($roleNames, 'web')
+                    || str_contains($roleNames, 'app');
+            })->pluck('email')->filter()->all();
+        };
+
+        $userDevTlUsers = auth()->user()?->mappedManagers()->get() ?? collect();
+        $allocatedDevTlUsers = $this->allocatedTlUsers($productionInitiation);
+
+        $ccEmails = array_values(array_unique(array_filter(array_merge(
+            ['projects@saitechnosolutions.net'],
+            $filterDevUsers($userDevTlUsers),
+            $filterDevUsers($allocatedDevTlUsers)
+        ))));
+        $ccEmails = array_values(array_diff($ccEmails, [$toEmail]));
+
+        try {
+            Mail::to($toEmail)
+                ->cc($ccEmails)
+                ->send(new \App\Mail\ProjectTestingNotificationMail($productionInitiation, $testingDetail));
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Project Testing notification mail (mobile): ' . $e->getMessage());
+        }
+
+        $testingDetail->load(['movedBy', 'testingTl']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Project details updated and moved to Testing. Notification email sent to Testing TL.',
+            'data' => $this->serializeHandoverDetail($testingDetail),
+        ], 201);
+    }
+
+    /** Compact row for the Testing Dashboard's handover list. */
+    private function serializeTestingHandover(ProjectTestingDetail $handover): array
+    {
+        $proj = $handover->productionInitiation;
+        $allBugs = $proj?->bugs ?? collect();
+
+        return [
+            'id' => $handover->id,
+            'production_initiation_id' => $handover->production_initiation_id,
+            'status' => $handover->status,
+            'project_name' => $proj?->leadProduct?->name
+                ?? $proj?->product?->name
+                ?? ($proj?->lead?->company_name ? $proj->lead->company_name . ' Project' : 'Project #' . $handover->production_initiation_id),
+            'company_name' => $proj?->lead?->company_name,
+            'moved_at' => optional($handover->created_at)->toIso8601String(),
+            'developer_name' => $handover->movedBy?->name ?? 'Developer Team',
+            'delivery_date' => $proj ? optional($this->projectDeliveryDate($proj))->format('Y-m-d') : null,
+            'total_bugs' => $allBugs->count(),
+            'resolved_bugs' => $allBugs->whereIn('status', ['fixed', 'closed', 'resolved'])->count(),
+        ];
+    }
+
+    /** Full handover payload for the testing-details / Testing-tab screens. */
+    private function serializeHandoverDetail(ProjectTestingDetail $handover): array
+    {
+        return [
+            'id' => $handover->id,
+            'production_initiation_id' => $handover->production_initiation_id,
+            'status' => $handover->status,
+            'credentials' => $handover->credentials,
+            'notes' => $handover->notes,
+            'moved_at' => optional($handover->created_at)->toIso8601String(),
+            'developer_name' => $handover->movedBy?->name ?? 'Dev Team',
+            'testing_tl' => $handover->testingTl ? [
+                'id' => $handover->testingTl->id,
+                'name' => $handover->testingTl->name,
+            ] : null,
+        ];
+    }
+
+    private function serializeBug(ProjectBug $bug): array
+    {
+        return [
+            'id' => $bug->id,
+            'production_initiation_id' => $bug->production_initiation_id,
+            'description' => $bug->description,
+            'priority' => $bug->priority,
+            'status' => $bug->status,
+            'attachment_url' => $bug->attachment_path ? asset($bug->attachment_path) : null,
+            'attachment_name' => $bug->attachment_original_name,
+            'created_at' => optional($bug->created_at)->toIso8601String(),
+            'created_by' => $bug->createdBy ? [
+                'id' => $bug->createdBy->id,
+                'name' => $bug->createdBy->name,
+            ] : null,
+        ];
     }
 
     public function updatePlannedTask(Request $request): JsonResponse
