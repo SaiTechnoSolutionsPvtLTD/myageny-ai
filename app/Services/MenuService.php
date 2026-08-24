@@ -59,16 +59,37 @@ class MenuService
 
     /**
      * Which modules can this user switch into at all — feeds the mobile
-     * module-switcher FAB. A module is offered iff the user passes its gate;
-     * reuses the exact same gate check build() uses, so this is never a
-     * second, independently-drifting authorization path.
+     * module-switcher FAB (the "Quick module access" panel).
+     *
+     * Deliberately does NOT reuse build()'s broader `gate` (department/role
+     * heuristics like hasSalesLikeRole(), belongsToSalesDepartment(),
+     * hasTlLikeRole(), or fallbacks onto unrelated permissions like
+     * dashboard.view/leads.menuview). Those heuristics decide what's inside
+     * a module's menu once you're in it — they were never meant to decide
+     * whether the module tile itself is offered.
+     *
+     * The web app's own switcher (resources/views/layouts/module_sidebar.blade.php)
+     * shows each tile based on exactly one check: can("modules_menu.$key").
+     * Mirrored here 1:1 so an employee who lacks e.g. modules_menu.crm never
+     * sees the CRM tile on mobile even if their role/department would have
+     * granted them CRM *menu* access via the broader build() gate.
+     *
+     * Exception: HRMS stays unconditionally offered, same as its `gate =>
+     * null` in config/mobile_menu.php — plain self-service employees are
+     * frequently never assigned an explicit modules_menu.hrms permission,
+     * and still need the HRMS tile to check in/out. Web's own left sidebar
+     * treats HRMS the same way (dashboard.view || dashboard.menuview ||
+     * modules_menu.hrms || isCompanyAdmin || isSystemAdmin) rather than
+     * requiring modules_menu.hrms alone.
      */
     public function accessibleModules(User $user): array
     {
         $modules = [];
 
         foreach (config('mobile_menu', []) as $key => $config) {
-            if ($this->passesGate($user, $config['gate'] ?? null)) {
+            $canAccess = $key === 'hrms' || $user->can("modules_menu.$key");
+
+            if ($canAccess) {
                 $modules[] = [
                     'key'   => $key,
                     'label' => $config['label'] ?? ucfirst($key),

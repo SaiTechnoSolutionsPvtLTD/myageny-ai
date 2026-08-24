@@ -171,7 +171,10 @@ class CrmTaskApiController extends Controller
             'title'          => $r->title,
             'description'    => $r->description,
             'remind_at'      => optional($r->remind_at)->format('Y-m-d H:i:s'),
-            'remainder_time' => $r->remainder_time,
+            // Explicit ->format() — the raw Carbon instance serializes to
+            // UTC by default (Carbon::jsonSerialize()), which silently
+            // shifted the displayed time back by the app's UTC+5:30 offset.
+            'remainder_time' => optional($r->remainder_time)->format('H:i:s'),
             'type'           => $r->type,
             'type_label'     => $r->type_label,
             'type_icon'      => $r->type_icon,

@@ -19,6 +19,7 @@ use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 use App\Services\NotificationService;
@@ -143,7 +144,7 @@ class LeadController extends Controller
             'company_name'  => ['required', 'string', 'max:255'],
             'contact_name'  => ['required', 'string', 'max:255'],
             'lead_date'     => ['nullable', 'date'],
-            'mobile_number' => ['required', 'string', 'max:20'],
+            'mobile_number' => ['required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
             'email'         => ['nullable', 'email', 'max:255'],
             'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
@@ -233,6 +234,7 @@ class LeadController extends Controller
         $lead->load([
             'branch:id,name',
             'assignedTo:id,name',
+            'preSaleExecutive:id,name',
             'createdBy:id,name',
             'product:id,product_name',
             'callUpdates.user:id,name',
@@ -241,13 +243,17 @@ class LeadController extends Controller
             'reminders.user:id,name',
             'products.payments.recordedBy:id,name',
             'products.leadStatus',
+            'products.latestProductionInitiation.department',
             'products.latestProductionInitiation.initiatedBy',
             'products.latestProductionInitiation.reviewedBy',
             'products.latestProductionInitiation.productionApprovalReviewedBy',
             'products.latestProductionInitiation.projectAllocatedBy',
             'products.latestProductionInitiation.employeeAllocatedBy',
+            'products.latestProductionInitiation.projectUpdates.createdBy',
             'quotations.items',
             'quotations.createdBy:id,name',
+            'cstUpdates.user:id,name',
+            'cstUpdates.product.product:id,product_name',
             'customFieldValues.field' => function ($query) {
                 $query->where('is_active', true)
                     ->orderBy('sort_order')
@@ -289,7 +295,7 @@ class LeadController extends Controller
             'company_name'  => ['sometimes', 'required', 'string', 'max:255'],
             'contact_name'  => ['sometimes', 'required', 'string', 'max:255'],
             'lead_date'     => ['nullable', 'date'],
-            'mobile_number' => ['sometimes', 'required', 'string', 'max:20'],
+            'mobile_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
             'email'         => ['nullable', 'email', 'max:255'],
             'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
@@ -490,6 +496,9 @@ class LeadController extends Controller
             'assigned_to'          => $lead->assignedTo
                 ? ['id' => $lead->assignedTo->id, 'name' => $lead->assignedTo->name]
                 : null,
+            'pre_sale_executive'   => $lead->preSaleExecutive
+                ? ['id' => $lead->preSaleExecutive->id, 'name' => $lead->preSaleExecutive->name]
+                : null,
             'created_at'           => $lead->created_at?->toIso8601String(),
         ];
     }
@@ -537,7 +546,11 @@ class LeadController extends Controller
                     // displayed date back a day. remainder_time (previously
                     // missing from this response) carries the actual time.
                     'remind_at'      => optional($r->remind_at)->format('Y-m-d H:i:s'),
-                    'remainder_time' => $r->remainder_time,
+                    // Explicit ->format() — the raw Carbon instance serializes
+                    // to UTC by default (Carbon::jsonSerialize()), which
+                    // silently shifted the displayed time back by the app's
+                    // UTC+5:30 offset.
+                    'remainder_time' => optional($r->remainder_time)->format('H:i:s'),
                     'type'         => $r->type,
                     'type_label'   => $r->type_label,
                     'type_icon'    => $r->type_icon,
@@ -618,11 +631,50 @@ class LeadController extends Controller
                 'lead_id'            => $v->lead_id,
                 'lead_form_field_id' => $v->lead_form_field_id,
                 'value'              => $v->value,
+                // Resolved absolute URL for file-type fields — mirrors
+                // leads/form.blade.php's existing-file link (asset() on the
+                // stored 'uploads/custom_fields/...' path) and the same
+                // *_url convention used everywhere else in this API
+                // (attendance_photo_url, attachment_url, photograph_url).
+                // Null for non-file fields / empty values.
+                'file_url'           => ($v->field?->field_type === 'file' && !empty($v->value))
+                    ? (Str::startsWith($v->value, ['uploads/', 'http'])
+                        ? asset($v->value)
+                        : asset('storage/' . $v->value))
+                    : null,
                 'field'              => $v->field ? [
                     'label'      => $v->field->label,
                     'field_type' => $v->field->field_type,
                 ] : null,
             ])->values(),
+
+            // ── CST & Weekly Updates ─────────────────────────────────────────
+            // Visibility mirrors pages/leads/show.blade.php: viewing the tab is
+            // gated on the company-level allowsCstUpdates() flag, while adding
+            // a new update is restricted to Customer Success Team members
+            // (isCustomerSuccessUser()).
+            'can_view_cst_updates' => (bool) (auth()->user()?->allowsCstUpdates()),
+            'can_add_cst_update'   => (bool) (auth()->user()?->isCustomerSuccessUser()),
+            'cst_updates_count'         => $lead->relationLoaded('cstUpdates') ? $lead->cstUpdates->count() : 0,
+            'cst_only_count'            => $lead->relationLoaded('cstUpdates') ? $lead->cstUpdates->where('update_type', 'cst_update')->count() : 0,
+            'weekly_only_count'         => $lead->relationLoaded('cstUpdates') ? $lead->cstUpdates->where('update_type', 'weekly_update')->count() : 0,
+            'review_only_count'         => $lead->relationLoaded('cstUpdates') ? $lead->cstUpdates->where('update_type', 'review')->count() : 0,
+            'escalation_only_count'     => $lead->relationLoaded('cstUpdates') ? $lead->cstUpdates->where('update_type', 'escalation')->count() : 0,
+            'cst_updates' => $lead->relationLoaded('cstUpdates')
+                ? $lead->cstUpdates->map(fn($u) => [
+                    'id'                => $u->id,
+                    'update_type'       => $u->update_type,
+                    'update_type_label' => $u->update_type_label,
+                    'notes'             => $u->notes,
+                    'product'           => $u->product?->product
+                        ? ['id' => $u->product->product->id, 'name' => $u->product->product->product_name]
+                        : null,
+                    'user'              => $u->user
+                        ? ['id' => $u->user->id, 'name' => $u->user->name]
+                        : null,
+                    'created_at'        => $u->created_at?->toIso8601String(),
+                ])->values()
+                : [],
         ]);
     }
 
@@ -671,6 +723,19 @@ class LeadController extends Controller
                     : null,
                 'allocated_at' => $history->employee_allocated_at?->toIso8601String(),
             ],
+            'department' => $history->department
+                ? ['id' => $history->department->id, 'name' => $history->department->name]
+                : null,
+            'team_member_count' => count($history->project_allocated_employee_user_ids ?? []),
+            'project_updates' => $history->projectUpdates->map(fn ($u) => [
+                'id'         => $u->id,
+                'type'       => $u->type,
+                'content'    => $u->content,
+                'created_by' => $u->createdBy
+                    ? ['id' => $u->createdBy->id, 'name' => $u->createdBy->name]
+                    : null,
+                'created_at' => $u->created_at?->toDateTimeString(),
+            ])->values(),
         ];
     }
 

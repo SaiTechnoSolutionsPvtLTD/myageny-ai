@@ -289,6 +289,8 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
     // ── Production Approvals ─────────────────────────────────────────────────────
     Route::prefix('production-approvals')->name('production-approvals.')->group(function () {
+        // Static routes MUST come before the {productionInitiation} wildcard.
+        Route::get('/filters',                                   [ProductionApprovalApiController::class, 'filters'])->name('filters');
         Route::get('/',                                          [ProductionApprovalApiController::class, 'index'])->name('index');
         Route::post('/{productionInitiation}/review',            [ProductionApprovalApiController::class, 'review'])->name('review');
     });
@@ -436,6 +438,11 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::patch('/{lead}/reminders/{reminder}/complete', [MobileLeadShowController::class, 'completeReminder'])->name('reminders.complete');
     Route::delete('/{lead}/reminders/{reminder}',         [MobileLeadShowController::class, 'destroyReminder'])->name('reminders.destroy');
     Route::post('/reminder-list',                         [AppApiController::class, 'reminderList']);
+
+    // ── CST & Weekly Updates ────────────────────────────────────────────────
+    Route::post('/{lead}/cst-updates', [MobileLeadShowController::class, 'storeCstUpdate'])
+        ->middleware('can:add-cst-update,lead')
+        ->name('cst-updates.store');
 
     // ── Lead Products ────────────────────────────────────────────────────────
     Route::post('/leadproducts-store',                   [LeadProductController::class, 'store'])->name('products.store');

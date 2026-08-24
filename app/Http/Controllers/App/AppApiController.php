@@ -23,7 +23,12 @@ class AppApiController extends Controller
                     'title'          => $reminder->title,
                     'description'    => $reminder->description,
                     'remind_at'      => $reminder->remind_at?->format('Y-m-d H:i:s'),
-                    'remainder_time' => $reminder->remainder_time,
+                    // Explicit ->format() is required here — Carbon's default
+                    // JSON serialization (what happens if you assign the raw
+                    // Carbon instance directly) always converts to UTC first,
+                    // which silently shifted every displayed time back by the
+                    // app's UTC+5:30 offset on mobile.
+                    'remainder_time' => optional($reminder->remainder_time)->format('H:i:s'),
                     'type'           => $reminder->type,
                     'type_label'     => $reminder->type_label,
                     'type_icon'      => $reminder->type_icon,

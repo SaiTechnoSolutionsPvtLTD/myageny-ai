@@ -59,6 +59,19 @@ class Lead extends Model
         'high'   => 'High',
     ];
 
+    // Shared mobile_number validation rule — an optional leading '+' (for a
+    // country code) followed by 7-15 digits, per the ITU-T E.164 numbering
+    // plan international phone numbers are built on (15 digits is E.164's
+    // hard max; 7 is a practical floor below which a value is essentially
+    // never a genuine subscriber number). Used by StoreLeadRequest,
+    // UpdateLeadRequest, and the mobile App\Http\Controllers\App\LeadController
+    // store()/update() actions so web, mobile API, and this model all agree
+    // on the same rule instead of drifting independently. Mirrored on the
+    // Flutter side in lib/utils/phone_validation.dart. A plain 10-digit
+    // Indian mobile number (with or without a leading +91) already matches
+    // this, so existing numbers are unaffected.
+    const MOBILE_NUMBER_REGEX = '/^\+?[0-9]{7,15}$/';
+
     const STATUS_COLORS = [
         'new'         => ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'],
         'qualified'   => ['bg' => '#f0fdfa', 'text' => '#0f766e', 'border' => '#99f6e4'],

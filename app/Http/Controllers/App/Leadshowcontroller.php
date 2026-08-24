@@ -328,6 +328,75 @@ class LeadShowController extends Controller
     }
 
     // ════════════════════════════════════════════════════════════════
+    // CST & WEEKLY UPDATES
+    // Mirrors LeadController::storeCstUpdate() (web) — Update Type +
+    // Notes only, no product picker (the web form doesn't offer one
+    // either; lead_product_id is left null here to match). Route-level
+    // 'can:add-cst-update,lead' middleware (see routes/api.php + the
+    // Gate defined in AppServiceProvider) enforces the same
+    // isCustomerSuccessUser() restriction web applies inline via
+    // abort_unless — kept here too as a defense-in-depth check.
+    // ════════════════════════════════════════════════════════════════
+
+    #[OA\Post(
+        path: "/api/mobile/leads/{lead}/cst-updates",
+        summary: "Add a CST / Weekly / Review / Escalation update to a lead",
+        security: [["sanctum" => []]],
+        tags: ["Lead Sub-Resources"],
+        parameters: [
+            new OA\Parameter(name: "lead", in: "path", required: true, description: "Lead ID", schema: new OA\Schema(type: "integer")),
+        ],
+        responses: [
+            new OA\Response(
+                response: 201,
+                description: "CST update recorded",
+                content: new OA\JsonContent(properties: [
+                    new OA\Property(property: "status",  type: "boolean", example: true),
+                    new OA\Property(property: "message", type: "string",  example: "CST Update added successfully."),
+                    new OA\Property(property: "data",    type: "object"),
+                ])
+            ),
+            new OA\Response(response: 403, description: "Forbidden", content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
+            new OA\Response(response: 404, description: "Not found", content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
+        ]
+    )]
+    public function storeCstUpdate(Request $request, Lead $lead): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_unless($request->user()?->allowsCstUpdates() && $request->user()?->isCustomerSuccessUser(), 403, 'Only Customer Success Team members can add CST updates.');
+
+        $data = $request->validate([
+            'update_type' => ['required', 'in:cst_update,weekly_update,review,escalation'],
+            'notes'       => ['required', 'string', 'max:5000'],
+        ]);
+
+        $update = $lead->cstUpdates()->create([
+            'company_id'      => $lead->company_id,
+            'lead_product_id' => null,
+            'update_type'     => $data['update_type'],
+            'notes'           => $data['notes'],
+            'user_id'         => $request->user()->id,
+        ]);
+
+        $update->load('user:id,name');
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'CST Update added successfully.',
+            'data'    => [
+                'id'                => $update->id,
+                'update_type'       => $update->update_type,
+                'update_type_label' => $update->update_type_label,
+                'notes'             => $update->notes,
+                'user'              => $update->user
+                    ? ['id' => $update->user->id, 'name' => $update->user->name]
+                    : null,
+                'created_at'        => $update->created_at?->toIso8601String(),
+            ],
+        ], 201);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     // LEAD PRODUCTS
     // ════════════════════════════════════════════════════════════════
 
@@ -1081,7 +1150,11 @@ class LeadShowController extends Controller
             'title'        => $reminder->title,
             'description'  => $reminder->description,
             'remind_at'    => optional($reminder->remind_at)->format('Y-m-d H:i:s'),
-            'remainder_time' => $reminder->remainder_time,
+            // Must be an explicit ->format() string, not the raw Carbon
+            // instance — Carbon's default JSON serialization converts to UTC
+            // first, which shifted every displayed time back by the app's
+            // UTC+5:30 offset (e.g. 15:26 stored -> 09:56 shown on mobile).
+            'remainder_time' => optional($reminder->remainder_time)->format('H:i:s'),
             'type'         => $reminder->type,
             'type_label'   => $reminder->type_label,
             'type_icon'    => $reminder->type_icon,

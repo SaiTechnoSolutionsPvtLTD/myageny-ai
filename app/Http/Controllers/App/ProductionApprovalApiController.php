@@ -15,9 +15,82 @@ class ProductionApprovalApiController extends Controller
 {
     public function __construct(private readonly NotificationService $notifications) {}
 
+    // Bucket key -> underlying production_approval_status values. 'approval'
+    // covers both 'approval' and 'approved' since different points in the
+    // app have historically written either spelling; same for 'rejected'/
+    // 'reject'. Keeping this map as the single source of truth avoids the
+    // count query and the list query ever disagreeing about what belongs in
+    // a bucket.
+    private const BUCKET_STATUSES = [
+        'pending'  => ['pending'],
+        'approval' => ['approval', 'approved'],
+        'rejected' => ['rejected', 'reject'],
+    ];
+
+    /**
+     * GET /mobile/production-approvals?bucket=pending|approval|rejected&page=&per_page=
+     *
+     * Previously this endpoint ran `->get()` with no LIMIT at all — every
+     * production initiation in the approval workflow (across the entire
+     * company's history) was pulled from the DB, fully hydrated with 5
+     * eager-loaded relations, formatted (including looping each row's
+     * custom_form_data JSON blob), and shipped to the app in one response,
+     * every single time the screen opened. That's what made the screen slow
+     * as the table grew — this mirrors LeadController::index()'s approach
+     * instead: paginate at the database level, and only fetch the bucket
+     * the user is actually looking at.
+     */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page'     => ['nullable', 'integer', 'min:1'],
+        ]);
+
         $user = auth()->user();
+
+        $bucket = $request->query('bucket');
+        if (! array_key_exists($bucket, self::BUCKET_STATUSES)) {
+            $bucket = 'pending';
+        }
+
+        $applyFilters = function ($query) use ($request) {
+            $query->whereIn('status', ['approval', 'approved']);
+
+            // Filters — mirrors web ProductionApprovalController::index() exactly.
+            if ($request->filled('start_date')) {
+                $query->whereDate('created_at', '>=', $request->query('start_date'));
+            }
+            if ($request->filled('end_date')) {
+                $query->whereDate('created_at', '<=', $request->query('end_date'));
+            }
+            if ($request->filled('product_id')) {
+                $query->where('product_id', $request->query('product_id'));
+            }
+            if ($request->filled('user_id')) {
+                $query->where('production_approval_reviewed_by', $request->query('user_id'));
+            }
+            if ($request->filled('company_id')) {
+                $query->where('company_id', $request->query('company_id'));
+            }
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->query('department_id'));
+            }
+
+            return $query;
+        };
+
+        // Counts for all 3 tab badges — cheap aggregate COUNT(*) queries
+        // (no rows/relations hydrated), not a side effect of fetching
+        // everything like the old implementation. Same filters apply to
+        // every count so the badges stay consistent with whatever's active.
+        $counts = [];
+        foreach (self::BUCKET_STATUSES as $key => $statuses) {
+            $countQuery = ProductionInitiation::query();
+            $applyFilters($countQuery);
+            $countQuery->whereIn('production_approval_status', $statuses);
+            $counts[$key] = $countQuery->count();
+        }
 
         $query = ProductionInitiation::query()
             ->with([
@@ -27,88 +100,63 @@ class ProductionApprovalApiController extends Controller
                 'productionApprovalReviewedBy:id,name',
                 'product:id,product_name,is_budget_approval_needed',
             ])
-            ->whereIn('status', ['approval', 'approved'])
-            ->whereIn('production_approval_status', ['pending', 'approval', 'approved', 'rejected', 'reject']);
+            ->whereIn('production_approval_status', self::BUCKET_STATUSES[$bucket]);
+        $applyFilters($query);
 
-        // Filters — mirrors web ProductionApprovalController::index() exactly.
-        if ($request->filled('start_date')) {
-            $query->whereDate('created_at', '>=', $request->query('start_date'));
-        }
-        if ($request->filled('end_date')) {
-            $query->whereDate('created_at', '<=', $request->query('end_date'));
-        }
-        if ($request->filled('product_id')) {
-            $query->where('product_id', $request->query('product_id'));
-        }
-        if ($request->filled('status')) {
-            $query->where('production_approval_status', $request->query('status'));
-        }
-        if ($request->filled('user_id')) {
-            $query->where('production_approval_reviewed_by', $request->query('user_id'));
-        }
-        if ($request->filled('company_id')) {
-            $query->where('company_id', $request->query('company_id'));
-        }
-        if ($request->filled('department_id')) {
-            $query->where('department_id', $request->query('department_id'));
-        }
-
-        $initiations = $query->latest()->get();
-
-        $buckets = [
-            'pending'  => ['items' => [], 'count' => 0],
-            'approval' => ['items' => [], 'count' => 0],
-            'rejected' => ['items' => [], 'count' => 0],
-        ];
-
-        foreach ($initiations as $initiation) {
-            $bucket = $this->resolveBucket((string) $initiation->production_approval_status);
-            if (! $bucket) continue;
-
-            $buckets[$bucket]['items'][] = $this->formatItem($initiation, $user);
-
-            $buckets[$bucket]['count']++;
-        }
+        $perPage     = (int) $request->input('per_page', 15);
+        $initiations = $query->latest()->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'data' => [
-                'buckets' => $buckets,
-                'counts'  => [
-                    'pending'  => $buckets['pending']['count'],
-                    'approval' => $buckets['approval']['count'],
-                    'rejected' => $buckets['rejected']['count'],
+                'bucket' => $bucket,
+                'items'  => $initiations->getCollection()
+                    ->map(fn ($i) => $this->formatItem($i, $user))
+                    ->values(),
+                'pagination' => [
+                    'current_page' => $initiations->currentPage(),
+                    'last_page'    => $initiations->lastPage(),
+                    'per_page'     => $initiations->perPage(),
+                    'total'        => $initiations->total(),
                 ],
-                'filters' => $this->filterOptions(),
+                'counts' => $counts,
             ],
         ]);
     }
 
     /**
+     * GET /mobile/production-approvals/filters
+     *
      * Dropdown data for the mobile filter sheet — same four lists web's
      * ProductionApprovalController::index() passes into the Blade view.
+     * Split out of index() so the app fetches (and caches) this once
+     * instead of re-querying all products/departments/active users/
+     * companies on every single list request.
      */
-    private function filterOptions(): array
+    public function filters(Request $request): JsonResponse
     {
-        return [
-            'products' => \App\Models\Product::orderBy('product_name')
-                ->get(['id', 'product_name'])
-                ->map(fn($p) => ['id' => $p->id, 'name' => $p->product_name])
-                ->all(),
-            'departments' => \App\Models\Department::orderBy('name')
-                ->get(['id', 'name'])
-                ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
-                ->all(),
-            'users' => \App\Models\User::where('user_status', 'active')
-                ->orderBy('name')
-                ->get(['id', 'name'])
-                ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
-                ->all(),
-            'companies' => \App\Models\Company::orderBy('company_name')
-                ->get(['id', 'company_name'])
-                ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
-                ->all(),
-        ];
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'products' => \App\Models\Product::orderBy('product_name')
+                    ->get(['id', 'product_name'])
+                    ->map(fn($p) => ['id' => $p->id, 'name' => $p->product_name])
+                    ->all(),
+                'departments' => \App\Models\Department::orderBy('name')
+                    ->get(['id', 'name'])
+                    ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
+                    ->all(),
+                'users' => \App\Models\User::where('user_status', 'active')
+                    ->orderBy('name')
+                    ->get(['id', 'name'])
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->all(),
+                'companies' => \App\Models\Company::orderBy('company_name')
+                    ->get(['id', 'company_name'])
+                    ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
+                    ->all(),
+            ],
+        ]);
     }
 
     public function review(Request $request, ProductionInitiation $productionInitiation): JsonResponse

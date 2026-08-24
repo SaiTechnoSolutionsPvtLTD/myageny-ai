@@ -19,7 +19,7 @@ class UpdateLeadRequest extends FormRequest
             'company_name'   => ['required', 'string', 'max:150'],
             'contact_name'   => ['required', 'string', 'max:100'],
             'lead_date'      => ['required', 'date'],
-            'mobile_number'  => ['required', 'string', 'max:20'],
+            'mobile_number'  => ['required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
             'email'          => ['nullable', 'email', 'max:150'],
             'lead_source_id' => ['required', 'integer', 'exists:lead_sources,id'],
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
@@ -35,7 +35,10 @@ class UpdateLeadRequest extends FormRequest
 
     public function messages(): array
     {
-        $messages = [];
+        $messages = [
+            'mobile_number.required' => 'Mobile number is required.',
+            'mobile_number.regex'    => 'Enter a valid mobile number (digits only, optionally starting with +country code).',
+        ];
 
         foreach ($this->activeCustomFields() as $field) {
             $key = 'custom_fields.' . $field->id;
