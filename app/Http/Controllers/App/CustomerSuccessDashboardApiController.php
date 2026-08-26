@@ -432,8 +432,18 @@ class CustomerSuccessDashboardApiController extends Controller
         $formData = is_array($pi->custom_form_data) ? $pi->custom_form_data : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
 
         foreach ($formData as $field) {
-            $key = strtolower(trim($field['field_name'] ?? ''));
-            $value = trim((string) ($field['value'] ?? ''));
+            if (!is_array($field)) {
+                continue;
+            }
+            $fieldKey = $field['field_name'] ?? '';
+            $fieldVal = $field['value'] ?? '';
+
+            $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
+            if (is_array($fieldVal)) {
+                $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal)));
+            } else {
+                $value = trim((string) $fieldVal);
+            }
             if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date']) && !empty($value)) {
                 try {
                     return Carbon::parse($value)->toDateString();

@@ -1709,26 +1709,9 @@ class ReportApiController extends Controller
             $committedVideosFromForm  = 0;
 
             foreach ($formData as $field) {
-                // Guard against a malformed entry (e.g. a bare scalar instead
-                // of a {field_name, label, value} object) — skip it rather
-                // than risk an "Illegal string offset" warning escalating
-                // into an ErrorException the same way the array 'value' bug
-                // did.
-                if (!is_array($field)) {
-                    continue;
-                }
                 $key = strtolower(trim($field['field_name'] ?? ''));
                 $label = strtolower(trim($field['label'] ?? ($field['key'] ?? '')));
-                // Multi-select / checklist custom fields (e.g. Production
-                // Initiation forms — see ProductionInitiationApiController::store())
-                // store 'value' as a raw array, not a pre-flattened string.
-                // Casting that straight to (string) throws PHP's "Array to
-                // string conversion" — which Laravel's default error
-                // handler escalates into a thrown ErrorException, crashing
-                // this endpoint with a 500 for any row whose custom form
-                // has such a field. stringifyFieldValue() flattens it into
-                // a readable comma-separated string instead.
-                $value = trim($this->stringifyFieldValue($field['value'] ?? ''));
+                $value = trim((string) ($field['value'] ?? ''));
 
                 if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
                     $startDate = $value ?: null;
@@ -1844,9 +1827,21 @@ class ReportApiController extends Controller
             $designAllocatedNames = [];
             $dmAllocatedNames     = [];
 
-            $allocatedEmployeeIds = json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? [];
-            $allocatedTlIds       = json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? [];
-            $allocatedUserIds     = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds)));
+            $allocatedEmployeeIds = is_array($pi->project_allocated_employee_user_ids)
+                ? $pi->project_allocated_employee_user_ids
+                : (json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? []);
+            $allocatedTlIds       = is_array($pi->project_allocated_tl_user_ids)
+                ? $pi->project_allocated_tl_user_ids
+                : (json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? []);
+
+            if (!is_array($allocatedEmployeeIds)) {
+                $allocatedEmployeeIds = [];
+            }
+            if (!is_array($allocatedTlIds)) {
+                $allocatedTlIds = [];
+            }
+
+            $allocatedUserIds = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds), fn($u) => is_numeric($u)));
 
             foreach ($allocatedUserIds as $uId) {
                 $userDept = $usersWithDept->get($uId);
@@ -1880,11 +1875,26 @@ class ReportApiController extends Controller
             }
 
             // Fallback to tl_employee_allocations if still '-'
-            if ($designPersons === '-' && $pi->tl_employee_allocations) {
+            if ($designPersons === '-' && !empty($pi->tl_employee_allocations)) {
                 try {
-                    $allocs = json_decode($pi->tl_employee_allocations, true) ?? [];
-                    $names  = collect($allocs)->pluck('name')->filter()->values()->implode(', ');
-                    if ($names) $designPersons = $names;
+                    $allocs = is_array($pi->tl_employee_allocations)
+                        ? $pi->tl_employee_allocations
+                        : (json_decode($pi->tl_employee_allocations, true) ?? []);
+                    if (is_array($allocs)) {
+                        $names = collect($allocs)->map(function ($item) {
+                            if (is_array($item)) {
+                                $n = $item['name'] ?? null;
+                                if (is_array($n)) {
+                                    return implode(', ', array_filter(array_map('strval', $n)));
+                                }
+                                return is_scalar($n) ? (string) $n : null;
+                            }
+                            return is_scalar($item) ? (string) $item : null;
+                        })->filter()->values()->implode(', ');
+                        if ($names) {
+                            $designPersons = $names;
+                        }
+                    }
                 } catch (\Exception $e) {
                 }
             }
