@@ -1667,7 +1667,14 @@ class ReportApiController extends Controller
             $piId = $pi->pi_id;
 
             // Parse custom_form_data for start/end date and committed counts
-            $formData = json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+            // Parse custom_form_data for start/end date and committed counts
+            $formData = is_array($pi->custom_form_data)
+                ? $pi->custom_form_data
+                : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+            if (!is_array($formData)) {
+                $formData = [];
+            }
 
             $startDate = null;
             $endDate   = null;
@@ -1675,9 +1682,22 @@ class ReportApiController extends Controller
             $committedVideosFromForm  = 0;
 
             foreach ($formData as $field) {
-                $key = strtolower(trim($field['field_name'] ?? ''));
-                $label = strtolower(trim($field['label'] ?? ($field['key'] ?? '')));
-                $value = trim((string) ($field['value'] ?? ''));
+                if (!is_array($field)) {
+                    continue;
+                }
+
+                $fieldKey   = $field['field_name'] ?? '';
+                $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
+                $fieldVal   = $field['value'] ?? '';
+
+                $key   = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
+                $label = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
+
+                if (is_array($fieldVal)) {
+                    $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal)));
+                } else {
+                    $value = trim((string) $fieldVal);
+                }
 
                 if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
                     $startDate = $value ?: null;
@@ -1793,9 +1813,21 @@ class ReportApiController extends Controller
             $designAllocatedNames = [];
             $dmAllocatedNames     = [];
 
-            $allocatedEmployeeIds = json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? [];
-            $allocatedTlIds       = json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? [];
-            $allocatedUserIds     = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds)));
+            $allocatedEmployeeIds = is_array($pi->project_allocated_employee_user_ids)
+                ? $pi->project_allocated_employee_user_ids
+                : (json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? []);
+            $allocatedTlIds       = is_array($pi->project_allocated_tl_user_ids)
+                ? $pi->project_allocated_tl_user_ids
+                : (json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? []);
+
+            if (!is_array($allocatedEmployeeIds)) {
+                $allocatedEmployeeIds = [];
+            }
+            if (!is_array($allocatedTlIds)) {
+                $allocatedTlIds = [];
+            }
+
+            $allocatedUserIds = array_unique(array_filter(array_merge($allocatedEmployeeIds, $allocatedTlIds), fn($u) => is_numeric($u)));
 
             foreach ($allocatedUserIds as $uId) {
                 $userDept = $usersWithDept->get($uId);
@@ -1829,11 +1861,26 @@ class ReportApiController extends Controller
             }
 
             // Fallback to tl_employee_allocations if still '-'
-            if ($designPersons === '-' && $pi->tl_employee_allocations) {
+            if ($designPersons === '-' && !empty($pi->tl_employee_allocations)) {
                 try {
-                    $allocs = json_decode($pi->tl_employee_allocations, true) ?? [];
-                    $names  = collect($allocs)->pluck('name')->filter()->values()->implode(', ');
-                    if ($names) $designPersons = $names;
+                    $allocs = is_array($pi->tl_employee_allocations)
+                        ? $pi->tl_employee_allocations
+                        : (json_decode($pi->tl_employee_allocations, true) ?? []);
+                    if (is_array($allocs)) {
+                        $names = collect($allocs)->map(function ($item) {
+                            if (is_array($item)) {
+                                $n = $item['name'] ?? null;
+                                if (is_array($n)) {
+                                    return implode(', ', array_filter(array_map('strval', $n)));
+                                }
+                                return is_scalar($n) ? (string) $n : null;
+                            }
+                            return is_scalar($item) ? (string) $item : null;
+                        })->filter()->values()->implode(', ');
+                        if ($names) {
+                            $designPersons = $names;
+                        }
+                    }
                 } catch (\Exception $e) {
                 }
             }

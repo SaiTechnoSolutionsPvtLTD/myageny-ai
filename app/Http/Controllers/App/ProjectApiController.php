@@ -1769,8 +1769,10 @@ class ProjectApiController extends Controller
                 $endDateCustom = null;
                 if (is_array($project->custom_form_data)) {
                     foreach ($project->custom_form_data as $field) {
-                        $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
-                        $value = trim((string) ($field['value'] ?? ''));
+                        $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
+                        $fieldVal   = $field['value'] ?? '';
+                        $label      = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
+                        $value      = is_array($fieldVal) ? implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal))) : trim((string) $fieldVal);
                         if ($label === 'start date') $startDateCustom = $value;
                         elseif ($label === 'end date') $endDateCustom = $value;
                     }
@@ -1905,8 +1907,10 @@ class ProjectApiController extends Controller
             $endDateCustom = null;
             if (is_array($project->custom_form_data)) {
                 foreach ($project->custom_form_data as $field) {
-                    $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
-                    $value = trim((string) ($field['value'] ?? ''));
+                    $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
+                    $fieldVal   = $field['value'] ?? '';
+                    $label      = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
+                    $value      = is_array($fieldVal) ? implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal))) : trim((string) $fieldVal);
                     if ($label === 'number of posters' || $label === 'number of poster') {
                         $posterCountCustom = (int) $value;
                     } elseif ($label === 'number of videos' || $label === 'number of video') {
@@ -2004,8 +2008,10 @@ class ProjectApiController extends Controller
             $videoCountCustom = 0;
             if (is_array($project->custom_form_data)) {
                 foreach ($project->custom_form_data as $field) {
-                    $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
-                    $value = trim((string) ($field['value'] ?? ''));
+                    $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
+                    $fieldVal   = $field['value'] ?? '';
+                    $label      = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
+                    $value      = is_array($fieldVal) ? implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal))) : trim((string) $fieldVal);
                     if ($label === 'start date') $startDateCustom = $value;
                     elseif ($label === 'end date') $endDateCustom = $value;
                     elseif ($label === 'tenure') $tenureCustom = strtolower($value);
