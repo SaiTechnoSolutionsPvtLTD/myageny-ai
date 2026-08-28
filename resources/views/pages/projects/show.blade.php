@@ -457,7 +457,12 @@
                                     <div class="ps-label">Attachment</div>
                                     <div class="ps-value">
                                         @if($projectItem->attachment_path)
-                                            <a class="ps-link" href="{{ asset('storage/' . $projectItem->attachment_path) }}" target="_blank">{{ $projectItem->attachment_name ?: 'View attachment' }}</a>
+                                            @php
+                                                $attUrl = (str_starts_with($projectItem->attachment_path, 'uploads/') || str_starts_with($projectItem->attachment_path, 'http'))
+                                                    ? asset($projectItem->attachment_path)
+                                                    : asset('storage/' . $projectItem->attachment_path);
+                                            @endphp
+                                            <a class="ps-link" href="{{ $attUrl }}" target="_blank" download="{{ $projectItem->attachment_name ?: basename($projectItem->attachment_path) }}">{{ $projectItem->attachment_name ?: 'View / Download attachment' }}</a>
                                         @else
                                             <span class="ps-value-soft">No attachment available</span>
                                         @endif

@@ -563,7 +563,17 @@ class LeadProductController extends Controller
             ->latest()
             ->first();
         $attachment = $request->file('attachment');
-        $attachmentPath = $attachment ? $attachment->store('production-initiations', 'public') : (string) ($latestInitiation?->attachment_path ?? '');
+        $attachmentPath = (string) ($latestInitiation?->attachment_path ?? '');
+        if ($attachment) {
+            $targetDir = public_path('uploads/production-initiations');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0777, true);
+            }
+            $extension = $attachment->getClientOriginalExtension();
+            $filename = time() . '_' . uniqid('pi_') . ($extension ? '.' . $extension : '');
+            $attachment->move($targetDir, $filename);
+            $attachmentPath = 'uploads/production-initiations/' . $filename;
+        }
         $customFormData = $this->prepareProductCustomizationData($request, $leadProduct->product);
         $requirements = trim((string) $request->input('requirements', (string) ($latestInitiation?->requirements ?? '')));
 
@@ -780,7 +790,15 @@ class LeadProductController extends Controller
                     continue;
                 }
 
-                $path = $uploadedFile->store('production-initiations/custom-fields', 'public');
+                $targetDir = public_path('uploads/production-initiations/custom-fields');
+                if (!file_exists($targetDir)) {
+                    mkdir($targetDir, 0777, true);
+                }
+                $extension = $uploadedFile->getClientOriginalExtension();
+                $filename = time() . '_' . uniqid('cf_') . ($extension ? '.' . $extension : '');
+                $uploadedFile->move($targetDir, $filename);
+                $path = 'uploads/production-initiations/custom-fields/' . $filename;
+
                 $stored[] = [
                     'field_id' => $field->id,
                     'field_name' => $fieldName,
@@ -789,7 +807,7 @@ class LeadProductController extends Controller
                     'value' => [
                         'path' => $path,
                         'name' => $uploadedFile->getClientOriginalName(),
-                        'url' => Storage::disk('public')->url($path),
+                        'url' => asset($path),
                     ],
                 ];
 

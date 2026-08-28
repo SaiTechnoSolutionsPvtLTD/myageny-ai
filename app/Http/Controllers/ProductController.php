@@ -58,7 +58,7 @@ class ProductController extends Controller
     public function create(): View
     {
         $categories = ProductCategory::active()->orderBy('name')->get();
-        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+        $departments = Department::query()->withoutGlobalScope('company')->orderBy('name')->get(['id', 'name']);
 
         $users = $this->visibility->visibleAssignableUsers();
 
@@ -114,7 +114,7 @@ class ProductController extends Controller
 
         $product->load('category', 'attributeValues.attribute', 'departments');
         $categories = ProductCategory::active()->orderBy('name')->get();
-        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+        $departments = Department::query()->withoutGlobalScope('company')->orderBy('name')->get(['id', 'name']);
         $users = $this->visibility->visibleAssignableUsers();
 
         // Build a keyed map for pre-filling attribute values

@@ -191,11 +191,18 @@ class ProductionInitiationApiController extends Controller
                 continue;
             }
 
-            $path = $uploadedFile->store('production-initiations', 'public');
+            $targetDir = public_path('uploads/production-initiations');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0777, true);
+            }
+            $extension = $uploadedFile->getClientOriginalExtension();
+            $filename = time() . '_' . uniqid('pi_') . ($extension ? '.' . $extension : '');
+            $uploadedFile->move($targetDir, $filename);
+            $path = 'uploads/production-initiations/' . $filename;
             $uploadedFilesByField[$field->field_name] = [
                 'path' => $path,
                 'name' => $uploadedFile->getClientOriginalName(),
-                'url'  => Storage::disk('public')->url($path),
+                'url'  => asset($path),
             ];
         }
 

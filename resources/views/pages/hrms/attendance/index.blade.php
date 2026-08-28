@@ -571,7 +571,7 @@ details[open] summary.att-accordion-header {
 @section('content')
 <div class="att-page">
     @php($selfServiceMode = auth()->user()?->isHrmsAttendanceOnlyUser())
-    @php($managerAttendanceView = $canViewAllAttendance ?? false)
+    @php($managerAttendanceView = ($canViewAllAttendance ?? false) || ($hasTeamMembers ?? false))
     @php($sortIcon = fn (string $column) => $sortBy === $column ? ($sortDir === 'asc' ? '↑' : '↓') : '↕')
     <div class="att-topbar">
         <div>

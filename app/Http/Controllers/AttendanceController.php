@@ -39,6 +39,7 @@ class AttendanceController extends Controller
             'stats' => $attendanceData['stats'],
             'departments' => $this->attendanceDepartments(),
             'canViewAllAttendance' => $this->canViewAllAttendance(),
+            'hasTeamMembers' => $this->hasMappedTeamMembers(),
             'thresholds' => [
                 'early_before' => self::EARLY_LOGIN_BEFORE,
                 'late_after' => $this->graceLoginTime(),
@@ -352,10 +353,6 @@ class AttendanceController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
-
-        if (! $this->canViewAllAttendance()) {
-            unset($rules['employee_name'], $rules['attendee_type']);
-        }
 
         return $request->validate($rules);
     }
@@ -710,20 +707,50 @@ class AttendanceController extends Controller
             ->first();
     }
 
+    private function hasMappedTeamMembers(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        return $user->managedUsers()->exists();
+    }
+
     private function accessibleAttendees(): Collection
     {
         $employeeQuery = $this->activeEmployeesQuery()
             ->whereNotNull('name')
             ->with('department');
 
-        if (! $this->canViewAllAttendance()) {
-            $currentEmployee = $this->currentEmployee();
+        $internQuery = $this->activeInternsQuery()
+            ->whereNotNull('name')
+            ->with('department');
 
-            if (! $currentEmployee) {
+        if (! $this->canViewAllAttendance()) {
+            $user = auth()->user();
+
+            if (! $user) {
                 return collect();
             }
 
-            $employeeQuery->whereKey($currentEmployee->id);
+            /** @var \App\Services\DataVisibilityService $visibility */
+            $visibility = app(\App\Services\DataVisibilityService::class);
+            $mappedUserIds = $visibility->descendantUserIds($user)->push($user->id)->unique()->values();
+
+            $mappedUsers = \App\Models\User::whereIn('id', $mappedUserIds)->get(['id', 'email']);
+            $mappedPortalUserIds = $mappedUsers->pluck('id')->filter()->values()->all();
+            $mappedEmails = $mappedUsers->pluck('email')->filter()->values()->all();
+
+            $employeeQuery->where(function (Builder $query) use ($mappedPortalUserIds, $mappedEmails) {
+                $query->whereIn('portal_user_id', $mappedPortalUserIds)
+                    ->orWhereIn('email', $mappedEmails);
+            });
+
+            $internQuery->where(function (Builder $query) use ($mappedPortalUserIds, $mappedEmails) {
+                $query->whereIn('portal_user_id', $mappedPortalUserIds)
+                    ->orWhereIn('email', $mappedEmails);
+            });
         }
 
         $employees = $employeeQuery
@@ -741,13 +768,7 @@ class AttendanceController extends Controller
                 'select_key' => 'employee:' . $employee->id,
             ]);
 
-        if (! $this->canViewAllAttendance()) {
-            return $employees->values();
-        }
-
-        $interns = $this->activeInternsQuery()
-            ->whereNotNull('name')
-            ->with('department')
+        $interns = $internQuery
             ->orderBy('name')
             ->get(['id', 'intern_id', 'name', 'photograph', 'department_id'])
             ->map(fn (InternJoiningForm $intern) => [
@@ -824,11 +845,8 @@ class AttendanceController extends Controller
 
     private function attendanceDepartments(): Collection
     {
-        if (! $this->canViewAllAttendance()) {
-            return collect();
-        }
-
         return Department::query()
+            ->withoutGlobalScope('company')
             ->orderBy('name')
             ->get(['id', 'name']);
     }

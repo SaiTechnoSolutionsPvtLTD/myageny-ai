@@ -1545,7 +1545,7 @@ class ProjectController extends Controller
 
         $validated = $request->validate([
             'project_delivery_date' => ['nullable', 'date'],
-            'project_execution_status' => ['required', 'in:ontrack,hold,delivered'],
+            'project_execution_status' => ['required', 'in:ontrack,hold,delivered,lost'],
         ]);
 
         $oldDeliveryDate = $productionInitiation->project_delivery_date;
@@ -2367,7 +2367,10 @@ class ProjectController extends Controller
 
     private function canManageProjectSchedule(ProductionInitiation $productionInitiation, User $user): bool
     {
-        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
+        return $user->hasAdminLikeRole()
+            || $this->hasProjectCoordinatorRole($user)
+            || $this->isUserTl($user)
+            || $user->hasTlLikeRole();
     }
 
     private function shouldLimitToAssignedProjects(User $user): bool

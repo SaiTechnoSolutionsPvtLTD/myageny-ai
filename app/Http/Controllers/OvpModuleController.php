@@ -527,7 +527,14 @@ class OvpModuleController extends Controller
                 $uploadedFile = $request->file('custom_files.' . $fieldName);
 
                 if ($uploadedFile) {
-                    $path = $uploadedFile->store('production-initiations/custom-fields', 'public');
+                    $targetDir = public_path('uploads/production-initiations/custom-fields');
+                    if (!file_exists($targetDir)) {
+                        mkdir($targetDir, 0777, true);
+                    }
+                    $extension = $uploadedFile->getClientOriginalExtension();
+                    $filename = time() . '_' . uniqid('cf_') . ($extension ? '.' . $extension : '');
+                    $uploadedFile->move($targetDir, $filename);
+                    $path = 'uploads/production-initiations/custom-fields/' . $filename;
                     $stored[] = [
                         'field_id' => $field->id,
                         'field_name' => $fieldName,
@@ -536,7 +543,7 @@ class OvpModuleController extends Controller
                         'value' => [
                             'path' => $path,
                             'name' => $uploadedFile->getClientOriginalName(),
-                            'url' => Storage::disk('public')->url($path),
+                            'url' => asset($path),
                         ],
                     ];
                     continue;

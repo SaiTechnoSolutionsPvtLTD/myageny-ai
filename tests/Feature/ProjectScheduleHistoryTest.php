@@ -130,6 +130,7 @@ class ProjectScheduleHistoryTest extends TestCase
             $table->string('status')->default('ovp_pending');
             $table->string('production_approval_status')->default('pending');
             $table->string('project_allocation_status')->nullable();
+            $table->json('project_allocated_tl_user_ids')->nullable();
             $table->date('project_delivery_date')->nullable();
             $table->string('project_execution_status')->nullable();
             $table->foreignId('initiated_by')->nullable();
@@ -150,6 +151,7 @@ class ProjectScheduleHistoryTest extends TestCase
             $table->id();
             $table->foreignId('company_id')->nullable();
             $table->string('name');
+            $table->string('display_name')->nullable();
             $table->string('guard_name')->default('web');
             $table->timestamps();
         });
@@ -337,5 +339,73 @@ class ProjectScheduleHistoryTest extends TestCase
         $this->assertStringContainsString('Delivery Date updated from', $historyUpdate->content);
         $this->assertStringContainsString('Project Status updated from', $historyUpdate->content);
         $this->assertEquals($user->id, $historyUpdate->created_by);
+    }
+
+    public function test_tl_user_can_update_project_schedule(): void
+    {
+        $company = Company::create([
+            'company_name' => 'TL Test Co',
+            'email' => 'tl@example.com',
+            'mobile_number' => '1234567890',
+            'address' => 'Test Address',
+        ]);
+
+        $tlUser = User::create([
+            'company_id' => $company->id,
+            'name' => 'TL User',
+            'email' => 'tluser@example.com',
+            'password' => Hash::make('password'),
+            'is_active' => true,
+        ]);
+
+        // Attach TL role
+        $roleId = DB::table('roles')->insertGetId([
+            'company_id' => $company->id,
+            'name' => 'team_lead',
+            'display_name' => 'Team Lead',
+            'guard_name' => 'web',
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
+
+        DB::table('model_has_roles')->insert([
+            'role_id' => $roleId,
+            'model_type' => User::class,
+            'model_id' => $tlUser->id,
+        ]);
+
+        $project = ProductionInitiation::create([
+            'company_id' => $company->id,
+            'lead_id' => 1,
+            'lead_product_id' => 1,
+            'product_id' => 1,
+            'department_id' => 1,
+            'product_name' => 'TL Test Product',
+            'total_working_days' => 5,
+            'ui_available' => true,
+            'requirements' => 'TL test reqs',
+            'attachment_path' => '',
+            'attachment_name' => '',
+            'status' => 'approved',
+            'production_approval_status' => 'approved',
+            'project_allocation_status' => 'allocated',
+            'project_allocated_tl_user_ids' => [$tlUser->id],
+            'project_delivery_date' => '2026-08-01',
+            'project_execution_status' => 'ontrack',
+        ]);
+
+        $this->actingAs($tlUser);
+
+        $response = $this->post(route('projects.schedule.update', $project), [
+            'project_delivery_date' => '2026-08-15',
+            'project_execution_status' => 'delivered',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
+        $project->refresh();
+        $this->assertEquals('2026-08-15', Carbon::parse($project->project_delivery_date)->toDateString());
+        $this->assertEquals('delivered', $project->project_execution_status);
     }
 }

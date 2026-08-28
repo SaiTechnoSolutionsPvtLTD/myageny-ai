@@ -78,6 +78,23 @@ class ProductionInitiation extends Model
         'lead_budget_amount' => 'float',
     ];
 
+    protected $appends = [
+        'attachment_url',
+    ];
+
+    public function getAttachmentUrlAttribute(): ?string
+    {
+        if (! $this->attachment_path) {
+            return null;
+        }
+
+        if (str_starts_with($this->attachment_path, 'uploads/') || str_starts_with($this->attachment_path, 'http://') || str_starts_with($this->attachment_path, 'https://')) {
+            return asset($this->attachment_path);
+        }
+
+        return asset('storage/' . $this->attachment_path);
+    }
+
     public function lead(): BelongsTo
     {
         return $this->belongsTo(Lead::class);

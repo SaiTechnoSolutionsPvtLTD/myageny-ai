@@ -416,7 +416,7 @@ tbody tr:last-child td { border-bottom: none; }
                                                         ? asset($fieldValue->value)
                                                         : asset('storage/' . $fieldValue->value);
                                                 @endphp
-                                                <a href="{{ $fileUrl }}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#f0e8f8;color:#60308c;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;transition:background 0.15s;">
+                                                <a href="{{ $fileUrl }}" target="_blank" download="{{ basename($fieldValue->value) }}" style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:#f0e8f8;color:#60308c;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;transition:background 0.15s;">
                                                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                                                     View / Download File ({{ basename($fieldValue->value) }})
                                                 </a>

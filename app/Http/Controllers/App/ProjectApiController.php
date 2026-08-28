@@ -592,7 +592,7 @@ class ProjectApiController extends Controller
 
         $validated = $request->validate([
             'project_delivery_date'    => ['nullable', 'date'],
-            'project_execution_status' => ['required', 'in:ontrack,hold,delivered'],
+            'project_execution_status' => ['required', 'in:ontrack,hold,delivered,lost'],
         ]);
 
         $oldDeliveryDate = $productionInitiation->project_delivery_date;
@@ -933,6 +933,7 @@ class ProjectApiController extends Controller
             'ui_available'        => (bool) ($p->ui_available ?? false),
             'requirements'        => $p->project_requirements ?? $p->remarks ?? null,
             'attachment'          => $p->attachment_name ?? null,
+            'attachment_url'      => $p->attachment_url,
             'ovp_approved_by'     => $p->reviewedBy?->name,
             'ovp_approved_on'     => $p->ovp_reviewed_at ?? null,
             // Dynamic OVP form fields collected at lead/product stage — raw
@@ -1514,7 +1515,10 @@ class ProjectApiController extends Controller
 
     private function canManageProjectSchedule(ProductionInitiation $p, User $user): bool
     {
-        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
+        return $user->hasAdminLikeRole()
+            || $this->hasProjectCoordinatorRole($user)
+            || $this->isUserTl($user)
+            || $user->hasTlLikeRole();
     }
 
     private function shouldLimitToAssignedProjects(User $user): bool
