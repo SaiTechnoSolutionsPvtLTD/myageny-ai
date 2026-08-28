@@ -1653,6 +1653,33 @@ class ReportApiController extends Controller
     }
 
     /**
+     * Flattens a custom_form_data field's `value` into a display-safe
+     * string. Most fields store `value` as a plain string, but multi-select
+     * / checklist custom fields (see
+     * ProductionInitiationApiController::store()) store it as a raw PHP
+     * array instead — casting that straight to (string) triggers PHP's
+     * "Array to string conversion" warning, which Laravel's default error
+     * handler escalates into a thrown ErrorException (a 500 for this
+     * endpoint). Mobile-only fix; not used by the web report.
+     */
+    private function stringifyFieldValue($value): string
+    {
+        if (is_array($value)) {
+            return implode(', ', array_map(
+                fn($v) => is_scalar($v) ? (string) $v : (is_null($v) ? '' : (json_encode($v) ?: '')),
+                $value
+            ));
+        }
+
+        if (is_null($value) || !is_scalar($value)) {
+            // null, objects, resources, etc. — anything not safely castable.
+            return '';
+        }
+
+        return (string) $value;
+    }
+
+    /**
      * Mirrors CrmReportController::buildSmmReportData()'s per-row logic
      * exactly — same custom-form committed-count fallback, same role-based
      * department fallback for timesheet persons, same multi-group
@@ -1666,12 +1693,12 @@ class ReportApiController extends Controller
     {
             $piId = $pi->pi_id;
 
-            // Parse custom_form_data for start/end date and committed counts
-            // Parse custom_form_data for start/end date and committed counts
-            $formData = is_array($pi->custom_form_data)
-                ? $pi->custom_form_data
-                : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
-
+            // Parse custom_form_data for start/end date and committed counts.
+            // json_decode() can return a non-array (null on malformed JSON,
+            // or a scalar if custom_form_data was ever stored as something
+            // other than a list of field entries) — normalize to [] so the
+            // foreach below never sees anything but an array.
+            $formData = json_decode($pi->custom_form_data ?? '[]', true);
             if (!is_array($formData)) {
                 $formData = [];
             }
@@ -1682,22 +1709,9 @@ class ReportApiController extends Controller
             $committedVideosFromForm  = 0;
 
             foreach ($formData as $field) {
-                if (!is_array($field)) {
-                    continue;
-                }
-
-                $fieldKey   = $field['field_name'] ?? '';
-                $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
-                $fieldVal   = $field['value'] ?? '';
-
-                $key   = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
-                $label = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
-
-                if (is_array($fieldVal)) {
-                    $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal)));
-                } else {
-                    $value = trim((string) $fieldVal);
-                }
+                $key = strtolower(trim($field['field_name'] ?? ''));
+                $label = strtolower(trim($field['label'] ?? ($field['key'] ?? '')));
+                $value = trim((string) ($field['value'] ?? ''));
 
                 if (in_array($key, ['start_date', 'startdate', 'start date', 'smm_start_date', 'Start Date', 'ovp_start_date'])) {
                     $startDate = $value ?: null;
