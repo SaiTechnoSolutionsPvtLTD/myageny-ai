@@ -219,7 +219,7 @@ class ProductionInitiationApiController extends Controller
                 'field_id'   => $field->id,
                 'field_name' => $field->field_name,
                 'label'      => $field->label,
-                'field_type' => $field->field_type,
+                'type'       => $field->field_type,
                 'value'      => $value,
             ];
         }
