@@ -183,7 +183,7 @@
                     </select>
                 </div>
 
-                @if($isAdminLike ?? false)
+                @if(($isAdminLike ?? false) && $departments->isNotEmpty())
                     <div class="pts-filter-group">
                         <label class="pts-label">Department</label>
                         <select name="filter_department_id" class="pts-select">
@@ -195,7 +195,9 @@
                             @endforeach
                         </select>
                     </div>
+                @endif
 
+                @if($allUsers->isNotEmpty())
                     <div class="pts-filter-group">
                         <label class="pts-label">Employee</label>
                         <select name="filter_user_id" class="pts-select select2" data-placeholder="All Employees">
@@ -231,7 +233,7 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    @if($isAdminLike ?? false)
+                                    @if(($isAdminLike ?? false) || ($canViewTeamTimesheets ?? false))
                                         <th>Employee</th>
                                     @endif
                                     <th>Project</th>
@@ -256,7 +258,7 @@
                                     @endphp
                                     <tr>
                                         <td>{{ optional($timesheet->timesheet_date)->format('d M Y') ?: 'No date' }}</td>
-                                        @if($isAdminLike ?? false)
+                                        @if(($isAdminLike ?? false) || ($canViewTeamTimesheets ?? false))
                                             <td>
                                                 <div style="font-weight:700;">{{ $timesheet->user?->name ?? 'Unknown' }}</div>
                                                 <div class="pts-meta">{{ $timesheet->user?->designation ?? '' }}</div>
@@ -367,7 +369,7 @@
                 <!-- Date -->
                 <div class="pts-grid-col-4">
                     <label class="pts-label">Date</label>
-                    <input type="date" name="timesheet_date" id="timesheetDateInput" value="{{ old('timesheet_date', $today) }}" class="pts-input" required>
+                    <input type="date" name="timesheet_date" id="timesheetDateInput" min="{{ $today }}" value="{{ old('timesheet_date', $today) }}" class="pts-input" required>
                     @error('timesheet_date')
                         <div class="pts-error">{{ $message }}</div>
                     @enderror

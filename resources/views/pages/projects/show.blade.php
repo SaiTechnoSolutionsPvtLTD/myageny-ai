@@ -722,7 +722,7 @@
                     </div>
                 </section>
 
-                @if($isAssignedTl || $allocatedEmployees->isNotEmpty())
+                @if($canAllocateEmployees || $isAssignedTl || $allocatedEmployees->isNotEmpty() || auth()->user()?->isDesigningTl() || auth()->user()?->hasAdminLikeRole())
                     <section class="ps-card">
                         <div class="ps-card-head">
                             <div class="ps-card-title">Employee Allocation</div>

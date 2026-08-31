@@ -29,13 +29,17 @@
         @endif
 
         <div class="rec-stats">
-            <a href="{{ route('recruitment.index') }}" class="rec-stat {{ request('bucket') === null && request('status') === null ? 'is-active' : '' }}">
+            <a href="{{ route('recruitment.index') }}" class="rec-stat {{ request('bucket') === null && request('status') === null && request('assigned') === null ? 'is-active' : '' }}">
                 <div class="rec-stat-label">All Candidates</div>
                 <div class="rec-stat-value">{{ $counts['all'] }}</div>
             </a>
             <a href="{{ route('recruitment.index', ['bucket' => 'active']) }}" class="rec-stat {{ request('bucket') === 'active' ? 'is-active' : '' }}">
                 <div class="rec-stat-label">Active Pipeline</div>
                 <div class="rec-stat-value">{{ $counts['active'] }}</div>
+            </a>
+            <a href="{{ route('recruitment.index', ['assigned' => 'me']) }}" class="rec-stat {{ request('assigned') === 'me' ? 'is-active' : '' }}">
+                <div class="rec-stat-label">🎯 My Interviews</div>
+                <div class="rec-stat-value">{{ $counts['assigned'] }}</div>
             </a>
             <a href="{{ route('recruitment.index', ['bucket' => 'selected']) }}" class="rec-stat {{ request('bucket') === 'selected' ? 'is-active' : '' }}">
                 <div class="rec-stat-label">Selected Bucket</div>
@@ -49,6 +53,12 @@
 
         <div class="eob-filter-card">
             <form method="GET" action="{{ route('recruitment.index') }}" class="eob-filter-form">
+                @if(request('assigned'))
+                    <input type="hidden" name="assigned" value="{{ request('assigned') }}">
+                @endif
+                @if(request('bucket'))
+                    <input type="hidden" name="bucket" value="{{ request('bucket') }}">
+                @endif
                 <div class="eob-field">
                     <label class="eob-label">Search</label>
                     <input type="text" name="search" class="eob-input" value="{{ request('search') }}" placeholder="Name, mobile, email, job, location">
@@ -64,7 +74,7 @@
                 </div>
                 <div class="eob-actions">
                     <button type="submit" class="eob-btn eob-btn-primary">Filter</button>
-                    @if(request()->hasAny(['search', 'status', 'bucket']))
+                    @if(request()->hasAny(['search', 'status', 'bucket', 'assigned']))
                         <a href="{{ route('recruitment.index') }}" class="eob-btn eob-btn-ghost">Reset</a>
                     @endif
                 </div>
@@ -74,8 +84,19 @@
         <div class="eob-table-card">
             <div class="eob-card-head">
                 <div>
-                    <div class="eob-card-title">Candidate Pipeline</div>
-                    <div class="eob-card-sub">Track applicants from first contact through interview, selection, or rejection.</div>
+                    <div class="eob-card-title">
+                        Candidate Pipeline
+                        @if(request('assigned') === 'me')
+                            <span style="font-size: 12px; font-weight: 700; color: #fe5f04; background: #fff3eb; padding: 2px 8px; border-radius: 999px; margin-left: 6px; border: 1px solid #ffd9bf;">🎯 Assigned to Me</span>
+                        @endif
+                    </div>
+                    <div class="eob-card-sub">
+                        @if(request('assigned') === 'me')
+                            Showing only candidates with interviews scheduled/allocated to you.
+                        @else
+                            Track applicants from first contact through interview, selection, or rejection.
+                        @endif
+                    </div>
                 </div>
                 <div class="eob-results">{{ $candidates->total() }} candidate(s)</div>
             </div>

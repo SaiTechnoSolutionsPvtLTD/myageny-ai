@@ -13,15 +13,20 @@ class RecruitmentCandidate extends Model
 {
     use HasFactory, BelongsToCompany;
 
-    public const STATUS_APPLIED = 'applied';
-    public const STATUS_SCREENING = 'screening';
+    public const STATUS_SHORTLIST = 'shortlist';
+    public const STATUS_FOLLOW_UP = 'follow_up';
+    public const STATUS_RNR = 'rnr';
     public const STATUS_INTERVIEW_SCHEDULED = 'interview_scheduled';
     public const STATUS_SELECTED = 'selected';
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUS_APPLIED = 'applied';
+    public const STATUS_SCREENING = 'screening';
+
     public const STATUSES = [
-        self::STATUS_APPLIED => 'Applied',
-        self::STATUS_SCREENING => 'Screening',
+        self::STATUS_SHORTLIST => 'Shortlist',
+        self::STATUS_FOLLOW_UP => 'Follow-up',
+        self::STATUS_RNR => 'RNR',
         self::STATUS_INTERVIEW_SCHEDULED => 'Interview Scheduled',
         self::STATUS_SELECTED => 'Selected',
         self::STATUS_REJECTED => 'Rejected',
@@ -97,7 +102,11 @@ class RecruitmentCandidate extends Model
 
     public function getStatusLabelAttribute(): string
     {
-        return self::STATUSES[$this->status] ?? ucfirst(str_replace('_', ' ', (string) $this->status));
+        return self::STATUSES[$this->status] ?? match ($this->status) {
+            self::STATUS_APPLIED => 'Applied',
+            self::STATUS_SCREENING => 'Screening',
+            default => ucfirst(str_replace('_', ' ', (string) $this->status)),
+        };
     }
 
     public function getInitialsAttribute(): string

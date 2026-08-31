@@ -60,8 +60,14 @@ class SuperAdminDashboardController extends ApiController
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
                 ->when($source, fn($q) => $q->where('lead_source_id', $source))
-                ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
-                ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
+                ->when($dateFrom, fn($q) => $q->where(function($dq) use ($dateFrom) {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                      ->orWhereDate('created_at', '>=', $dateFrom);
+                }))
+                ->when($dateTo, fn($q) => $q->where(function($dq) use ($dateTo) {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                      ->orWhereDate('created_at', '<=', $dateTo);
+                }));
         };
 
         // ── 1. KPIs ───────────────────────────────────────────────
@@ -77,11 +83,12 @@ class SuperAdminDashboardController extends ApiController
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
         $lpBase  = $this->getLeadProductBaseQuery($request);
+        $lpProducts = (clone $lpBase)->with('payments')->get();
 
-        $convertedProductsCount = (clone $lpBase)->where('product_status', 'converted')->count();
-        $upcomingAmount = (float) (clone $lpBase)->where('product_status', '!=', 'converted')->sum('total_price');
-        $convertedValue = (float) (clone $lpBase)->where('product_status', 'converted')->sum('total_price');
-        $totalProductsCount = (clone $lpBase)->count();
+        $convertedProductsCount = $lpProducts->where('product_status', 'converted')->count();
+        $upcomingAmount = (float) $lpProducts->where('product_status', '!=', 'converted')->sum('total_price');
+        $convertedValue = (float) $lpProducts->where('product_status', 'converted')->sum('total_price');
+        $totalProductsCount = $lpProducts->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
 
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
@@ -111,16 +118,14 @@ class SuperAdminDashboardController extends ApiController
         unset($src);
 
         // ── 4. Financials (from lead_products + payments) ─────────
-        $leadIds = (clone $base())->pluck('id');
-
-        $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
-        $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
-        $totalPending      = $totalProductValue - $totalPaid;
-        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+        $totalProductValue = (float) $lpProducts->sum('total_price');
+        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalPending      = max(0, $totalProductValue - $totalPaid);
+        $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
+        $leadProductIds = $lpProducts->pluck('id');
+        $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
             ->orderByDesc('total')
@@ -135,7 +140,7 @@ class SuperAdminDashboardController extends ApiController
         // Product status distribution
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', $pkey)->count();
+            $cnt = $lpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status'  => $pkey,
                 'label'   => $plabel,
@@ -200,18 +205,26 @@ class SuperAdminDashboardController extends ApiController
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
-        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
-        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
-            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+        $reminderQuery = fn() => LeadReminder::where('is_completed', false)
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                  ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                  ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                  ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
+            })
+            ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
+                $q->where(function ($sub) use ($effectiveUserId) {
+                    $sub->where('user_id', $effectiveUserId)
+                        ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+                });
+            });
 
-        $overdueCount = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueCount = (clone $reminderQuery())
             ->whereDate('remind_at', '<', today())
             ->count();
-        $todayReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+
+        $todayReminders = (clone $reminderQuery())
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at')
@@ -221,18 +234,17 @@ class SuperAdminDashboardController extends ApiController
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                'remind_at'   => optional($r->remind_at)->toISOString() ?: optional($r->remind_at)->format('Y-m-d H:i:s'),
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,
                 'priority'    => $r->priority,
+                'is_overdue'  => $r->is_overdue,
                 'user'        => ['id' => $r->user?->id, 'name' => $r->user?->name],
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
 
-        $overdueReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueReminders = (clone $reminderQuery())
             ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
@@ -242,7 +254,7 @@ class SuperAdminDashboardController extends ApiController
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                'remind_at'   => optional($r->remind_at)->toISOString() ?: optional($r->remind_at)->format('Y-m-d H:i:s'),
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,
@@ -604,9 +616,11 @@ class SuperAdminDashboardController extends ApiController
         }
     }
 
-    private function getLeadProductBaseQuery(Request $request)
+    private function getLeadProductBaseQuery(Request $request, $customFrom = null, $customTo = null)
     {
-        [$dateFrom, $dateTo] = $this->resolveDates($request);
+        [$resolvedFrom, $resolvedTo] = $this->resolveDates($request);
+        $dateFrom = $customFrom !== null ? $customFrom : $resolvedFrom;
+        $dateTo   = $customTo !== null ? $customTo : $resolvedTo;
         $branchId = $request->branch_id;
         $userId   = $request->user_id;
 
@@ -816,21 +830,23 @@ class SuperAdminDashboardController extends ApiController
         $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $prevConvRate      = $prevTotalLeads > 0 ? round($prevWonLeads / $prevTotalLeads * 100, 1) : 0.0;
 
-        $prevLeadIds = (clone $prevBase())->pluck('id');
+        $prevLpBase = $this->getLeadProductBaseQuery($request, $prevFrom, $prevTo);
+        $prevLpProducts = (clone $prevLpBase)->with('payments')->get();
 
-        $prevTotalProductValue = (float) LeadProduct::whereIn('lead_id', $prevLeadIds)->sum('total_price');
-        $prevTotalPaid         = (float) LeadProductPayment::whereIn('lead_id', $prevLeadIds)->sum('amount');
-        $prevTotalPending      = $prevTotalProductValue - $prevTotalPaid;
-        $prevConvertedValue    = (float) LeadProduct::whereIn('lead_id', $prevLeadIds)->where('product_status', 'converted')->sum('total_price');
+        $prevTotalProductValue = (float) $prevLpProducts->sum('total_price');
+        $prevTotalPaid         = (float) $prevLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $prevTotalPending      = max(0, $prevTotalProductValue - $prevTotalPaid);
+        $prevConvertedValue    = (float) $prevLpProducts->where('product_status', 'converted')->sum('total_price');
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
         $lpBase  = $this->getLeadProductBaseQuery($request);
+        $lpProducts = (clone $lpBase)->with('payments')->get();
 
-        $convertedProductsCount = (clone $lpBase)->where('product_status', 'converted')->count();
-        $upcomingAmount = (float) (clone $lpBase)->where('product_status', '!=', 'converted')->sum('total_price');
-        $convertedValue = (float) (clone $lpBase)->where('product_status', 'converted')->sum('total_price');
-        $totalProductsCount = (clone $lpBase)->count();
+        $convertedProductsCount = $lpProducts->where('product_status', 'converted')->count();
+        $upcomingAmount = (float) $lpProducts->where('product_status', '!=', 'converted')->sum('total_price');
+        $convertedValue = (float) $lpProducts->where('product_status', 'converted')->sum('total_price');
+        $totalProductsCount = $lpProducts->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
 
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
@@ -860,16 +876,14 @@ class SuperAdminDashboardController extends ApiController
         unset($src);
 
         // ── 4. Financials (from lead_products + payments) ─────────
-        $leadIds = (clone $base())->pluck('id');
-
-        $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
-        $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
-        $totalPending      = $totalProductValue - $totalPaid;
-        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+        $totalProductValue = (float) $lpProducts->sum('total_price');
+        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalPending      = max(0, $totalProductValue - $totalPaid);
+        $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
+        $leadProductIds = $lpProducts->pluck('id');
+        $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
             ->orderByDesc('total')
@@ -884,7 +898,7 @@ class SuperAdminDashboardController extends ApiController
         // Product status distribution
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', $pkey)->count();
+            $cnt = $lpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status'  => $pkey,
                 'label'   => $plabel,
@@ -949,18 +963,26 @@ class SuperAdminDashboardController extends ApiController
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
-        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
-        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
-            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+        $reminderQuery = fn() => LeadReminder::where('is_completed', false)
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                  ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                  ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                  ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
+            })
+            ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
+                $q->where(function ($sub) use ($effectiveUserId) {
+                    $sub->where('user_id', $effectiveUserId)
+                        ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+                });
+            });
 
-        $overdueCount = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueCount = (clone $reminderQuery())
             ->whereDate('remind_at', '<', today())
             ->count();
-        $todayReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+
+        $todayReminders = (clone $reminderQuery())
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at')
@@ -970,7 +992,7 @@ class SuperAdminDashboardController extends ApiController
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                'remind_at'   => optional($r->remind_at)->toISOString() ?: optional($r->remind_at)->format('Y-m-d H:i:s'),
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,
@@ -980,9 +1002,7 @@ class SuperAdminDashboardController extends ApiController
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
 
-        $overdueReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueReminders = (clone $reminderQuery())
             ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
@@ -992,7 +1012,7 @@ class SuperAdminDashboardController extends ApiController
                 'id'          => $r->id,
                 'title'       => $r->title,
                 'description' => $r->description,
-                'remind_at'   => $r->remind_at->toISOString(),
+                'remind_at'   => optional($r->remind_at)->toISOString() ?: optional($r->remind_at)->format('Y-m-d H:i:s'),
                 'type'        => $r->type,
                 'type_label'  => $r->type_label,
                 'type_icon'   => $r->type_icon,

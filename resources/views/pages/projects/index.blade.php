@@ -302,12 +302,25 @@
                                     <td>
                                         <div class="prj-action-group">
                                             <a href="{{ route('projects.show', $item) }}" class="prj-view-btn">View</a>
-                                            @if($isTlScopedView)
-                                                <a href="{{ route('projects.show', $item) }}" class="prj-action-btn">{{ $currentStatus === 'allocated' ? 'Reallocate Team' : 'Allocate Team' }}</a>
-                                            @elseif($item->project_allocation_status === 'allocation_pending')
-                                                <a href="{{ route('projects.show', $item) }}" class="prj-action-btn">Allocate</a>
+                                            @php
+                                                $canUserAllocate = auth()->user()?->hasAdminLikeRole()
+                                                    || (auth()->user()?->isDesigningTl() || (auth()->user()?->belongsToDesigningDepartment() && auth()->user()?->hasTlLikeRole()))
+                                                    || auth()->user()?->isDigitalMarketingTl()
+                                                    || auth()->user()?->isDevelopmentProjectCoordinator()
+                                                    || $isTlScopedView;
+                                            @endphp
+                                            @if($canUserAllocate)
+                                                @if($isTlScopedView)
+                                                    <a href="{{ route('projects.show', $item) }}" class="prj-action-btn">{{ $currentStatus === 'allocated' ? 'Reallocate Team' : 'Allocate Team' }}</a>
+                                                @elseif($item->project_allocation_status === 'allocation_pending')
+                                                    <a href="{{ route('projects.show', $item) }}" class="prj-action-btn">Allocate</a>
+                                                @else
+                                                    <span class="prj-action-muted">{{ optional($isTlScopedView ? ($item->current_team_allocated_at ?? null) : $item->project_allocated_at)->format('d M Y h:i A') ?: 'Completed' }}</span>
+                                                @endif
                                             @else
-                                                <span class="prj-action-muted">{{ optional($isTlScopedView ? ($item->current_team_allocated_at ?? null) : $item->project_allocated_at)->format('d M Y h:i A') ?: 'Completed' }}</span>
+                                                @if($item->project_allocated_at || ($item->current_team_allocated_at ?? null))
+                                                    <span class="prj-action-muted">{{ optional($isTlScopedView ? ($item->current_team_allocated_at ?? null) : $item->project_allocated_at)->format('d M Y h:i A') ?: 'Completed' }}</span>
+                                                @endif
                                             @endif
                                         </div>
                                     </td>

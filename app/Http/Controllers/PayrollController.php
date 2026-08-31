@@ -367,7 +367,11 @@ class PayrollController extends Controller
         $cursor = $start->copy();
 
         while ($cursor->lte($end)) {
-            if (! $cursor->isSunday() && ! in_array($cursor->toDateString(), $holidays, true)) {
+            $isSunday = $cursor->isSunday();
+            $saturdayOccurrence = (int) ceil($cursor->day / 7);
+            $isFirstOrThirdSaturday = $cursor->isSaturday() && ($saturdayOccurrence === 1 || $saturdayOccurrence === 3);
+
+            if (! $isSunday && ! $isFirstOrThirdSaturday && ! in_array($cursor->toDateString(), $holidays, true)) {
                 $dates[] = $cursor->toDateString();
             }
 

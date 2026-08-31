@@ -18,6 +18,7 @@
         || request()->routeIs('assets.*')
         || request()->routeIs('interns.*')
         || request()->routeIs('attendance.*')
+        || request()->routeIs('hrms.timesheet-lop.*')
         || request()->routeIs('house-keeping.*')
         || request()->routeIs('payroll.*')
         || request()->routeIs('hrms-announcements.*')
@@ -169,7 +170,13 @@
                 </a>
                 @endif
 
-                @if(!$isDesigningDashboardActive && (!auth()->user()?->belongsToDigitalMarketingDepartment() || auth()->user()?->hasTlLikeRole()))
+                @php
+                    $canViewAllProjectsMenu = auth()->user()?->hasAdminLikeRole()
+                        || auth()->user()?->belongsToDesigningDepartment()
+                        || auth()->user()?->isDevelopmentProjectCoordinator()
+                        || (auth()->user()?->belongsToDigitalMarketingDepartment() ? auth()->user()?->hasTlLikeRole() : (! $isDesigningDashboardActive || auth()->user()?->hasTlLikeRole()));
+                @endphp
+                @if($canViewAllProjectsMenu)
                 <a href="{{ route('projects.index') }}" class="nav-item {{ request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.index') || request()->routeIs('projects.show') || request()->routeIs('projects.allocate') || request()->routeIs('projects.employee-allocate'))
                         <div class="active-indicator"></div>
@@ -338,6 +345,23 @@
                     </div>
                 </a>
                 @endcan
+
+                @if(! $hrmsSelfService)
+                @can('timesheet_lop.menuview')
+                <a href="{{ route('hrms.timesheet-lop.index') }}" class="nav-item {{ request()->routeIs('hrms.timesheet-lop.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.timesheet-lop.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>Timesheet LOP</span>
+                    </div>
+                </a>
+                @endcan
+                @endif
 
                 @if(! $hrmsSelfService)
                 @can('house_keeping.menuview')

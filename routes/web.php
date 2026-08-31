@@ -337,6 +337,18 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/checkout', [AttendanceController::class, 'storeCheckout'])->name('attendance.checkout.store');
     Route::get('/attendance/lookup', [AttendanceController::class, 'lookupAttendance'])->name('attendance.lookup');
     Route::get('/attendance/export', [AttendanceController::class, 'export'])->name('attendance.export');
+
+    // Timesheet LOP Management
+    Route::get('/hrms/timesheet-lop', [\App\Http\Controllers\HRMS\TimesheetLopController::class, 'index'])
+        ->middleware('can:timesheet_lop.menuview')
+        ->name('hrms.timesheet-lop.index');
+    Route::get('/hrms/timesheet-lop/details/{employee}', [\App\Http\Controllers\HRMS\TimesheetLopController::class, 'details'])
+        ->middleware('can:timesheet_lop.menuview')
+        ->name('hrms.timesheet-lop.details');
+    Route::get('/hrms/timesheet-lop/export', [\App\Http\Controllers\HRMS\TimesheetLopController::class, 'export'])
+        ->middleware('can:timesheet_lop.menuview')
+        ->name('hrms.timesheet-lop.export');
+
     Route::get('/house-keeping-management', [HouseKeepingManagementController::class, 'index'])
         ->middleware('can:house_keeping.menuview')
         ->name('house-keeping.index');

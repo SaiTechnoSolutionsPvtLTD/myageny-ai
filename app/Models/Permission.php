@@ -31,6 +31,7 @@ class Permission extends SpatiePermission
         'recruitment' => ['menuview'],
         'interns' => ['menuview'],
         'attendance' => ['menuview'],
+        'timesheet_lop' => ['menuview', 'view'],
         'payroll' => ['menuview'],
         'announcements' => ['menuview'],
         'leave_requests' => ['menuview'],

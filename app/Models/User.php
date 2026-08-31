@@ -533,6 +533,24 @@ class User extends Authenticatable
         });
     }
 
+    public function isDesigningTl(): bool
+    {
+        if ($this->hasAdminLikeRole()) {
+            return false;
+        }
+
+        if ($this->belongsToDesigningDepartment() && $this->hasTlLikeRole()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->contains(function ($key) {
+            return (\Illuminate\Support\Str::contains($key, 'design') || \Illuminate\Support\Str::contains($key, 'graphic'))
+                && (\Illuminate\Support\Str::contains($key, 'tl') || \Illuminate\Support\Str::contains($key, 'lead') || \Illuminate\Support\Str::contains($key, 'leader') || \Illuminate\Support\Str::contains($key, 'manager'));
+        });
+    }
+
     public function isDigitalMarketingTl(): bool
     {
         if ($this->hasAdminLikeRole()) {

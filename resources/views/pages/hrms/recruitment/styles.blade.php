@@ -1,10 +1,13 @@
 <style>
-.rec-stats { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
+.rec-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
 .rec-stat { background:#fff; border:1px solid #e1dee3; border-radius:16px; padding:16px; text-decoration:none; color:#121212; }
 .rec-stat.is-active { border-color:#fe5f04; box-shadow:0 10px 24px rgba(254,95,4,.10); }
 .rec-stat-label { font-size:11px; font-weight:800; color:#8a8a8a; text-transform:uppercase; letter-spacing:.06em; }
 .rec-stat-value { margin-top:8px; font-size:28px; font-weight:800; }
 .rec-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+.rec-chip-shortlist { background:#eef2ff; color:#4338ca; }
+.rec-chip-follow_up { background:#fffbeb; color:#b45309; }
+.rec-chip-rnr { background:#fff1f2; color:#e11d48; }
 .rec-chip-applied { background:#eff6ff; color:#2563eb; }
 .rec-chip-screening { background:#fff7ed; color:#c2410c; }
 .rec-chip-interview_scheduled { background:#faf5ff; color:#7c3aed; }

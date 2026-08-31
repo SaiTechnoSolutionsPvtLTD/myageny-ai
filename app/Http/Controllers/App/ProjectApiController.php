@@ -709,6 +709,9 @@ class ProjectApiController extends Controller
     public function timesheets(Request $request): JsonResponse
     {
         $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+        $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->orderBy('name')->get(['users.id', 'users.name']);
+        $hasMappedUsers = $managedUsers->isNotEmpty();
 
         $assignedProjects = $this->timesheetProjectsQuery($user)
             ->get()
@@ -722,11 +725,20 @@ class ProjectApiController extends Controller
             'filter_lead_id'     => trim((string) $request->query('filter_lead_id', '')),
             'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
             'filter_status'     => trim((string) $request->query('filter_status', '')),
+            'filter_user_id'    => trim((string) $request->query('filter_user_id', '')),
         ];
 
+        $accessibleUserIds = $isAdminLike
+            ? null
+            : ($hasMappedUsers
+                ? array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all()))
+                : [$user->id]);
+
         $timesheets = ProjectTimesheet::query()
-            ->with(['project' => fn($q) => $q->with($this->projectRelations())])
-            ->where('user_id', $user->id)
+            ->with(['project' => fn($q) => $q->with($this->projectRelations()), 'user'])
+            ->when(!$isAdminLike, function ($q) use ($accessibleUserIds) {
+                $q->whereIn('user_id', $accessibleUserIds);
+            })
             ->when($filters['filter_date'] !== '', function ($q) use ($filters) {
                 try {
                     $q->whereDate('timesheet_date', Carbon::parse($filters['filter_date'])->toDateString());
@@ -741,10 +753,14 @@ class ProjectApiController extends Controller
             ->when($filters['filter_project_id'] !== '', function ($q) use ($filters) {
                 $q->where('production_initiation_id', (int) $filters['filter_project_id']);
             })
-            // Fixed: filter by the model's own `status` column (matches web),
-            // not a delivery-date comparison.
             ->when($filters['filter_status'] !== '', function ($q) use ($filters) {
                 $q->where('status', $filters['filter_status']);
+            })
+            ->when($filters['filter_user_id'] !== '', function ($q) use ($filters, $isAdminLike, $accessibleUserIds) {
+                $targetUserId = (int) $filters['filter_user_id'];
+                if ($isAdminLike || in_array($targetUserId, $accessibleUserIds ?? [], true)) {
+                    $q->where('user_id', $targetUserId);
+                }
             })
             ->latest('created_at')
             ->latest('timesheet_date')
@@ -1054,6 +1070,13 @@ class ProjectApiController extends Controller
     //  All private helpers copied verbatim from web ProjectController
     // ─────────────────────────────────────────────────────────────────────────
 
+    private function designDepartmentIds(): array
+    {
+        return Department::where(function ($q) {
+            $q->whereRaw('LOWER(name) LIKE ?', ['%design%']);
+        })->pluck('id')->toArray();
+    }
+
     private function digitalMarketingDepartmentIds(): array
     {
         return Department::where(function ($q) {
@@ -1074,6 +1097,13 @@ class ProjectApiController extends Controller
             $query->where(function ($q) use ($devDeptIds) {
                 $q->whereIn('department_id', $devDeptIds)
                   ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+            })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
+        } elseif ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            $designDeptIds = $this->designDepartmentIds();
+            $query->where(function ($q) use ($designDeptIds, $user) {
+                $q->whereIn('department_id', $designDeptIds)
+                  ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']))
+                  ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
             })->whereIn('project_allocation_status', ['allocation_pending', 'allocated']);
         } elseif ($user->isDigitalMarketingTl()) {
             $dmDeptIds = $this->digitalMarketingDepartmentIds();
@@ -1097,11 +1127,27 @@ class ProjectApiController extends Controller
 
     private function timesheetProjectsQuery(User $user): Builder
     {
+        $isTestingUser = $user->belongsToTestingDepartment() || $user->hasTestingLikeRole();
+
         return ProductionInitiation::query()
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved'])
-            ->where('project_allocation_status', 'allocated')
-            ->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+            ->where(function ($q) use ($user, $isTestingUser) {
+                if ($isTestingUser) {
+                    $q->whereHas('testingDetails')
+                      ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
+                      ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
+                } else {
+                    $q->where(function ($sub) use ($user) {
+                        $sub->where('project_allocation_status', 'allocated')
+                            ->whereJsonContains('project_allocated_employee_user_ids', $user->id);
+                    })
+                    ->orWhereHas('testingDetails', function ($tq) use ($user) {
+                        $tq->where('testing_tl_id', $user->id)
+                           ->orWhere('moved_by_user_id', $user->id);
+                    });
+                }
+            })
             ->latest('production_approval_reviewed_at');
     }
 
@@ -1329,6 +1375,17 @@ class ProjectApiController extends Controller
             abort_unless($this->isDevelopmentProject($p), 403, 'Development Project Coordinator can only view Development Department projects.');
         }
 
+        if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            $isDesignProject = ($p->department_id && in_array((int) $p->department_id, $this->designDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), 'design')
+                || $this->isAssignedTlForProject($p, $user);
+
+            abort_unless($isDesignProject, 403, 'Design Team Leader can only view Design Department projects.');
+            abort_unless($this->resolveBucketForUser($p, $user) !== null, 404);
+
+            return;
+        }
+
         if ($user->isDigitalMarketingTl()) {
             $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
                 || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm'])
@@ -1436,6 +1493,18 @@ class ProjectApiController extends Controller
 
     private function resolveBucketForUser(ProductionInitiation $p, User $user): ?string
     {
+        if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            if (strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending') {
+                return 'allocation_pending';
+            }
+
+            if ($this->isAssignedTlForProject($p, $user)) {
+                return $this->resolveBucket((string) ($p->current_team_status ?? $this->tlEmployeeAllocationStatusForUser($p, $user)));
+            }
+
+            return $this->resolveBucket((string) $p->project_allocation_status);
+        }
+
         if ($user->isDigitalMarketingTl()) {
             if (strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending') {
                 return 'allocation_pending';
@@ -1468,49 +1537,73 @@ class ProjectApiController extends Controller
 
     private function canAllocateTl(ProductionInitiation $p, User $user): bool
     {
-        if ($user->isDigitalMarketingTl()) {
-            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
-                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
-
-            if ($isDmProject) {
-                $isApproved = in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true);
-                if (! $isApproved) {
-                    return false;
-                }
-
-                return true;
-            }
-        }
-
-        if ($this->shouldLimitToAssignedProjects($user)) return false;
-
         $isApproved = in_array(strtolower(trim((string) $p->production_approval_status)), ['approval', 'approved'], true);
         if (! $isApproved) {
             return false;
         }
 
-        $isPending = strtolower(trim((string) $p->project_allocation_status)) === 'allocation_pending';
-        if ($isPending) {
+        if ($user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user) || $user->isDevelopmentProjectCoordinator()) {
             return true;
         }
 
-        return $user->hasAdminLikeRole() || $this->hasProjectCoordinatorRole($user);
-    }
+        if ($this->isAssignedTlForProject($p, $user)) {
+            return true;
+        }
 
-    private function canAllocateEmployees(ProductionInitiation $p, User $user): bool
-    {
-        if ($user->isDigitalMarketingTl()) {
-            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
-                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
+        if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            $isDesignProject = ($p->department_id && in_array((int) $p->department_id, $this->designDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), 'design');
 
-            if ($isDmProject && strtolower(trim((string) $p->project_allocation_status)) === 'allocated') {
+            if ($isDesignProject) {
                 return true;
             }
         }
 
-        return $this->isAssignedTlForProject($p, $user)
-            && strtolower(trim((string) $p->project_allocation_status)) === 'allocated'
-            && in_array(strtolower(trim($this->tlEmployeeAllocationStatusForUser($p, $user))), ['allocation_pending', 'allocated'], true);
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canAllocateEmployees(ProductionInitiation $p, User $user): bool
+    {
+        if (strtolower(trim((string) $p->project_allocation_status)) !== 'allocated') {
+            return false;
+        }
+
+        if ($user->hasAdminLikeRole()) {
+            return true;
+        }
+
+        if ($this->isAssignedTlForProject($p, $user)) {
+            return true;
+        }
+
+        if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            $isDesignProject = ($p->department_id && in_array((int) $p->department_id, $this->designDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), 'design');
+
+            if ($isDesignProject) {
+                return true;
+            }
+        }
+
+        if ($user->isDigitalMarketingTl()) {
+            $isDmProject = ($p->department_id && in_array((int) $p->department_id, $this->digitalMarketingDepartmentIds(), true))
+                || Str::contains(strtolower((string) $p->department?->name), ['digital', 'marketing', 'dm']);
+
+            if ($isDmProject) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function canManageProjectSchedule(ProductionInitiation $p, User $user): bool
@@ -1575,8 +1668,42 @@ class ProjectApiController extends Controller
 
     private function availableTeamMembers(User $user): Collection
     {
-        return $user->managedUsers()->where('users.is_active', true)->with(['roles.department'])->get()
-            ->map(fn($m) => $this->mapUserSummary($m))
+        $managedMembers = $user->managedUsers()->where('users.is_active', true)->with(['roles.department'])->get()
+            ->map(fn($m) => $this->mapUserSummary($m));
+
+        if ($user->belongsToDesigningDepartment()) {
+            $designDeptIds = $this->designDepartmentIds();
+            $deptMembers = User::where('users.is_active', true)
+                ->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $designDeptIds)->orWhereRaw('LOWER(name) LIKE ?', ['%design%']))
+                ->with(['roles.department'])
+                ->get()
+                ->map(fn ($m) => $this->mapUserSummary($m));
+
+            return $managedMembers
+                ->concat($deptMembers)
+                ->push($this->mapUserSummary($user))
+                ->unique('id')
+                ->sortBy('name')
+                ->values();
+        }
+
+        if ($user->belongsToDigitalMarketingDepartment()) {
+            $dmDeptIds = $this->digitalMarketingDepartmentIds();
+            $deptMembers = User::where('users.is_active', true)
+                ->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds)->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
+                ->with(['roles.department'])
+                ->get()
+                ->map(fn ($m) => $this->mapUserSummary($m));
+
+            return $managedMembers
+                ->concat($deptMembers)
+                ->push($this->mapUserSummary($user))
+                ->unique('id')
+                ->sortBy('name')
+                ->values();
+        }
+
+        return $managedMembers
             ->push($this->mapUserSummary($user))
             ->unique('id')->sortBy('name')->values();
     }
@@ -1674,7 +1801,14 @@ class ProjectApiController extends Controller
             ->whereIn('production_approval_status', ['approval', 'approved'])
             ->where('project_allocation_status', 'allocated');
 
-        if ($this->shouldLimitToAssignedProjects($user)) {
+        if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
+            $designDeptIds = $this->designDepartmentIds();
+            $projectQuery->where(function ($q) use ($designDeptIds, $user) {
+                $q->whereIn('department_id', $designDeptIds)
+                    ->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']))
+                    ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
+            });
+        } elseif ($this->shouldLimitToAssignedProjects($user)) {
             $projectQuery->whereJsonContains('project_allocated_tl_user_ids', $user->id);
         } elseif ($this->shouldLimitToEmployeeProjects($user)) {
             $projectQuery->whereJsonContains('project_allocated_employee_user_ids', $user->id);

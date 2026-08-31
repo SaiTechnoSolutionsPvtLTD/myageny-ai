@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EmployeeOnboarding;
 use App\Models\RecruitmentCallUpdate;
 use App\Models\RecruitmentCandidate;
 use App\Models\RecruitmentInterview;
@@ -20,6 +21,9 @@ class RecruitmentController extends Controller
 
     public function index(Request $request): View
     {
+        $user = auth()->user();
+        $employee = $this->currentEmployee();
+
         $query = RecruitmentCandidate::query()
             ->with(['creator', 'latestInterview'])
             ->withCount(['callUpdates', 'interviews'])
@@ -54,7 +58,28 @@ class RecruitmentController extends Controller
             };
         }
 
+        $applyAssignedFilter = function ($q) use ($user, $employee) {
+            $q->whereHas('interviews', function ($iq) use ($user, $employee) {
+                $iq->where(function ($sub) use ($user, $employee) {
+                    if ($user) {
+                        $sub->where('interviewer_id', $user->id)
+                            ->orWhere('interviewer_name', $user->name);
+                    }
+                    if ($employee && $employee->name && (! $user || $employee->name !== $user->name)) {
+                        $sub->orWhere('interviewer_name', $employee->name);
+                    }
+                });
+            });
+        };
+
+        if ($request->get('assigned') === 'me' || $request->filled('my_interviews')) {
+            $applyAssignedFilter($query);
+        }
+
         $candidates = $query->paginate(12)->withQueryString();
+
+        $assignedCountQuery = RecruitmentCandidate::query();
+        $applyAssignedFilter($assignedCountQuery);
 
         $counts = [
             'all' => RecruitmentCandidate::count(),
@@ -62,6 +87,7 @@ class RecruitmentController extends Controller
                 RecruitmentCandidate::STATUS_SELECTED,
                 RecruitmentCandidate::STATUS_REJECTED,
             ])->count(),
+            'assigned' => $assignedCountQuery->count(),
             'selected' => RecruitmentCandidate::where('status', RecruitmentCandidate::STATUS_SELECTED)->count(),
             'rejected' => RecruitmentCandidate::where('status', RecruitmentCandidate::STATUS_REJECTED)->count(),
         ];
@@ -168,7 +194,7 @@ class RecruitmentController extends Controller
 
         $candidate = RecruitmentCandidate::create(array_merge($validated, [
             'candidate_no' => RecruitmentCandidate::generateCandidateNo(),
-            'status' => RecruitmentCandidate::STATUS_APPLIED,
+            'status' => RecruitmentCandidate::STATUS_SHORTLIST,
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
             'status_updated_at' => now(),
@@ -481,7 +507,9 @@ class RecruitmentController extends Controller
     private function syncCandidateStatusFromCallOutcome(RecruitmentCandidate $candidate, string $outcome): void
     {
         $status = match ($outcome) {
-            'screening', 'interested', 'follow_up' => RecruitmentCandidate::STATUS_SCREENING,
+            'screening', 'interested' => RecruitmentCandidate::STATUS_SHORTLIST,
+            'follow_up' => RecruitmentCandidate::STATUS_FOLLOW_UP,
+            'no_answer' => RecruitmentCandidate::STATUS_RNR,
             'interview_planned' => RecruitmentCandidate::STATUS_INTERVIEW_SCHEDULED,
             'selected' => RecruitmentCandidate::STATUS_SELECTED,
             'rejected', 'not_interested' => RecruitmentCandidate::STATUS_REJECTED,
@@ -500,5 +528,25 @@ class RecruitmentController extends Controller
             'updated_by' => auth()->id(),
             'status_updated_at' => now(),
         ]);
+    }
+
+    private function currentEmployee(): ?EmployeeOnboarding
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return null;
+        }
+
+        $query = EmployeeOnboarding::withoutGlobalScopes()->active();
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        return $query->where(function ($q) use ($user) {
+            $q->where('portal_user_id', $user->id)
+                ->orWhere('email', $user->email);
+        })
+        ->latest('id')
+        ->first();
     }
 }

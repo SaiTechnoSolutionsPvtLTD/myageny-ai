@@ -60,6 +60,98 @@
 .task-badge-high { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
 .task-badge-medium { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
 .task-badge-low { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+
+/* Pagination Styling */
+.task-pagination-wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    border-top: 1px solid #f1eef2;
+    background: #fff;
+}
+.task-pagination-info {
+    font-size: 13px;
+    color: #7c7c7c;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.task-pagination-info strong {
+    color: #121212;
+    font-weight: 800;
+}
+.task-pagination-info-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
+    border-radius: 10px;
+    background: #faf7f4;
+    border: 1px solid #ece7eb;
+    font-size: 12px;
+    color: #64748b;
+}
+.task-pagination-links {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.task-page-link,
+.task-page-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid #e1dee3;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    color: #4b5563;
+    text-decoration: none;
+    transition: all .15s ease;
+    user-select: none;
+}
+.task-page-link:hover {
+    border-color: #fe5f04;
+    color: #fe5f04;
+    background: #fffaf7;
+    transform: translateY(-1px);
+}
+.task-page-link.is-active {
+    background: linear-gradient(135deg, #fe5f04, #ff7c30);
+    border-color: #fe5f04;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(254, 95, 4, .25);
+}
+.task-page-link.is-disabled {
+    opacity: .45;
+    background: #faf7f4;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.task-page-ellipsis {
+    border-color: transparent;
+    background: transparent;
+    color: #9ca3af;
+    min-width: auto;
+    padding: 0 4px;
+}
+@media (max-width: 640px) {
+    .task-pagination-wrap {
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+}
 </style>
 @endpush
 
@@ -279,9 +371,79 @@
                 </table>
             </div>
 
-            @if($tasks->hasPages())
-                <div style="padding:14px 18px; border-top:1px solid #ece7eb;">
-                    {{ $tasks->links() }}
+            @if($tasks->total() > 0)
+                @php
+                    $startPage = max(1, $tasks->currentPage() - 2);
+                    $endPage   = min($tasks->lastPage(), $tasks->currentPage() + 2);
+                    $pageName  = $tasks->getPageName();
+                    
+                    $allParams = collect(request()->all())
+                        ->except(['_token', '_method'])
+                        ->map(fn($val) => $val ?? '')
+                        ->toArray();
+
+                    $getPageUrl = function($page) use ($allParams, $pageName) {
+                        $params = array_merge($allParams, [$pageName => $page]);
+                        return url()->current() . '?' . http_build_query($params);
+                    };
+                @endphp
+
+                <div class="task-pagination-wrap">
+                    <div class="task-pagination-info">
+                        <div class="task-pagination-info-badge">
+                            Showing &nbsp;<strong>{{ $tasks->firstItem() ?? 0 }} - {{ $tasks->lastItem() ?? 0 }}</strong>&nbsp; of &nbsp;<strong>{{ $tasks->total() }}</strong>&nbsp; tasks
+                        </div>
+                    </div>
+
+                    @if($tasks->hasPages())
+                        <div class="task-pagination-links">
+                            {{-- Prev Button --}}
+                            @if($tasks->onFirstPage())
+                                <span class="task-page-link is-disabled">
+                                    <i class="fas fa-chevron-left" style="font-size:11px;"></i> Prev
+                                </span>
+                            @else
+                                <a href="{{ $getPageUrl($tasks->currentPage() - 1) }}" class="task-page-link">
+                                    <i class="fas fa-chevron-left" style="font-size:11px;"></i> Prev
+                                </a>
+                            @endif
+
+                            {{-- First page + ellipsis --}}
+                            @if($startPage > 1)
+                                <a href="{{ $getPageUrl(1) }}" class="task-page-link">1</a>
+                                @if($startPage > 2)
+                                    <span class="task-page-ellipsis">...</span>
+                                @endif
+                            @endif
+
+                            {{-- Page numbers --}}
+                            @foreach(range($startPage, $endPage) as $pg)
+                                <a href="{{ $getPageUrl($pg) }}"
+                                   class="task-page-link {{ $pg === $tasks->currentPage() ? 'is-active' : '' }}">
+                                    {{ $pg }}
+                                </a>
+                            @endforeach
+
+                            {{-- Last page + ellipsis --}}
+                            @if($endPage < $tasks->lastPage())
+                                @if($endPage < $tasks->lastPage() - 1)
+                                    <span class="task-page-ellipsis">...</span>
+                                @endif
+                                <a href="{{ $getPageUrl($tasks->lastPage()) }}" class="task-page-link">{{ $tasks->lastPage() }}</a>
+                            @endif
+
+                            {{-- Next Button --}}
+                            @if($tasks->hasMorePages())
+                                <a href="{{ $getPageUrl($tasks->currentPage() + 1) }}" class="task-page-link">
+                                    Next <i class="fas fa-chevron-right" style="font-size:11px;"></i>
+                                </a>
+                            @else
+                                <span class="task-page-link is-disabled">
+                                    Next <i class="fas fa-chevron-right" style="font-size:11px;"></i>
+                                </span>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>

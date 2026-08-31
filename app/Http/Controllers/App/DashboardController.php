@@ -137,16 +137,18 @@ class DashboardController extends Controller
         unset($src);
 
         // ── 4. Financials ─────────────────────────────────────────
-        $leadIds = (clone $base())->pluck('id');
+        $lpBase = $this->getLeadProductBaseQuery($request);
+        $lpProducts = (clone $lpBase)->with('payments')->get();
 
-        $totalProductValue = (float) LeadProduct::whereIn('lead_id', $leadIds)->sum('total_price');
-        $totalPaid         = (float) LeadProductPayment::whereIn('lead_id', $leadIds)->sum('amount');
-        $totalPending      = $totalProductValue - $totalPaid;
-        $convertedValue    = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-        $convertedCount    = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+        $totalProductValue = (float) $lpProducts->sum('total_price');
+        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalPending      = max(0, $totalProductValue - $totalPaid);
+        $convertedValue    = (float) $lpProducts->where('product_status', 'converted')->sum('total_price');
+        $convertedCount    = $lpProducts->where('product_status', 'converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $paymentByMode = LeadProductPayment::whereIn('lead_id', $leadIds)
+        $leadProductIds = $lpProducts->pluck('id');
+        $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
             ->orderByDesc('total')
@@ -160,7 +162,7 @@ class DashboardController extends Controller
 
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', $pkey)->count();
+            $cnt = $lpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status' => $pkey,
                 'label'  => $plabel,
@@ -212,18 +214,30 @@ class DashboardController extends Controller
             ]);
 
         // ── 6. Pending reminders today ────────────────────────────
-        $targetUserId = $request->filled('user_id') ? (int) $request->user_id : (int) $request->user()->id;
-        $reminderUserConstraint = fn($q) => $q->where('user_id', $targetUserId)
-            ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $targetUserId));
+        $currentUser = $request->user();
+        $isUserAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $effectiveUserId = $request->filled('user_id') ? (int) $request->user_id : ($isUserAdmin ? null : (int) $currentUser->id);
 
-        $overdueQuery = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()));
-        $overdueCount = (clone $overdueQuery)->whereDate('remind_at', '<', today())->count();
+        $reminderQuery = fn() => LeadReminder::where('is_completed', false)
+            ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($q, $request->user());
+                $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                  ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                  ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                  ->when($source, fn($q2) => $q2->where('lead_source', $source));
+            })
+            ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
+                $q->where(function ($sub) use ($effectiveUserId) {
+                    $sub->where('user_id', $effectiveUserId)
+                        ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+                });
+            });
 
-        $todayReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueCount = (clone $reminderQuery())
+            ->whereDate('remind_at', '<', today())
+            ->count();
+
+        $todayReminders = (clone $reminderQuery())
             ->whereDate('remind_at', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at')
@@ -250,9 +264,7 @@ class DashboardController extends Controller
                 'lead'        => ['id' => $r->lead?->id, 'company_name' => $r->lead?->company_name],
             ]);
 
-        $overdueReminders = LeadReminder::where('is_completed', false)
-            ->where($reminderUserConstraint)
-            ->whereHas('lead', fn ($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))
+        $overdueReminders = (clone $reminderQuery())
             ->whereDate('remind_at', '<', today())
             ->with(['lead:id,company_name', 'user:id,name'])
             ->orderBy('remind_at', 'desc')
@@ -488,6 +500,40 @@ class DashboardController extends Controller
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
+
+    private function getLeadProductBaseQuery(Request $request): \Illuminate\Database\Eloquent\Builder
+    {
+        [$dateFrom, $dateTo] = $this->resolveDates($request);
+        $branchId = $request->branch_id;
+        $userId   = $request->user_id;
+
+        $query = LeadProduct::query()
+            ->whereHas('lead', function ($leadQuery) use ($request, $branchId, $userId) {
+                $this->visibility->applyLeadVisibility($leadQuery, $request->user());
+                if ($branchId) {
+                    $leadQuery->where('branch_id', $branchId);
+                }
+                if ($userId) {
+                    $leadQuery->where('assigned_to', $userId);
+                }
+            });
+
+        if ($dateFrom) {
+            $query->where(function ($q) use ($dateFrom) {
+                $q->whereDate('created_at', '>=', $dateFrom)
+                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+            });
+        }
+
+        if ($dateTo) {
+            $query->where(function ($q) use ($dateTo) {
+                $q->whereDate('created_at', '<=', $dateTo)
+                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+            });
+        }
+
+        return $query;
+    }
 
     private function resolveDates(Request $request): array
     {

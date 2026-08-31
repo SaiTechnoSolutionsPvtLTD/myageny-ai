@@ -820,7 +820,7 @@
                         <div class="hrms-panel-title">🎯 Interview Assigned</div>
                         <div class="hrms-panel-sub">Interviews scheduled and allocated for today's evaluation</div>
                     </div>
-                    <a href="{{ route('recruitment.index') }}" class="hrms-link">View Candidates</a>
+                    <a href="{{ route('recruitment.index', ['assigned' => 'me']) }}" class="hrms-link">View Candidates</a>
                 </div>
                 <div class="hrms-feature-list">
                     @forelse($stats['assigned_interviews'] ?? [] as $interview)

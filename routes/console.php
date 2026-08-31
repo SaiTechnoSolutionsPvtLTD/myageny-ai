@@ -21,3 +21,6 @@ Schedule::command('app:send-daily-reminder-emails')
 
 Schedule::command('hrms:send-calendar-notifications')
     ->dailyAt('09:30');
+
+Schedule::command('recruitment:send-interview-reminders')
+    ->dailyAt('09:00');

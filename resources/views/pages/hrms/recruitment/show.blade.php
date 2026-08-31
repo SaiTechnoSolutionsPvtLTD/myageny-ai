@@ -28,6 +28,9 @@
     $colors = ['#fe5f04', '#7c3aed', '#2563eb', '#16a34a', '#be123c', '#0284c7', '#b45309', '#0f766e'];
     $heroColor = $colors[$candidate->id % count($colors)];
     $statusColors = [
+        'shortlist' => ['bg' => '#eef2ff', 'text' => '#4338ca', 'border' => '#c7d2fe'],
+        'follow_up' => ['bg' => '#fffbeb', 'text' => '#b45309', 'border' => '#fde68a'],
+        'rnr' => ['bg' => '#fff1f2', 'text' => '#e11d48', 'border' => '#fecdd3'],
         'applied' => ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'],
         'screening' => ['bg' => '#fff7ed', 'text' => '#c2410c', 'border' => '#fed7aa'],
         'interview_scheduled' => ['bg' => '#faf5ff', 'text' => '#7c3aed', 'border' => '#e9d5ff'],
