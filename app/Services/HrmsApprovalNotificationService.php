@@ -16,6 +16,7 @@ class HrmsApprovalNotificationService
     public function sendLeaveSubmitted(LeaveRequest $leaveRequest): void
     {
         $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $branchId = $leaveRequest->user?->branch_id;
 
         $currentApproval = $this->currentLeaveApproval($leaveRequest);
 
@@ -28,6 +29,7 @@ class HrmsApprovalNotificationService
                 'approve_url' => route('leave-requests.email-approve', [$leaveRequest, $currentApproval]),
                 'reject_url' => route('leave-requests.email-reject', [$leaveRequest, $currentApproval]),
                 'request_type' => 'leave',
+                'branch_id' => $branchId,
                 'event_type' => 'submitted',
                 'request_id' => $leaveRequest->id,
                 'actor_name' => $leaveRequest->user?->name,
@@ -43,6 +45,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->leaveDetail($leaveRequest),
                 'action_url' => route('leave-requests.show', $leaveRequest),
                 'request_type' => 'leave',
+                'branch_id' => $branchId,
                 'event_type' => 'submitted_confirmation',
                 'request_id' => $leaveRequest->id,
                 'requester_name' => $leaveRequest->user?->name,
@@ -53,7 +56,9 @@ class HrmsApprovalNotificationService
 
     public function sendLeaveApproved(LeaveRequest $leaveRequest, LeaveApproval $actedApproval, ?LeaveApproval $nextApproval): void
     {
+        $branchId = $leaveRequest->user?->branch_id;
         $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $branchId = $leaveRequest->user?->branch_id;
         $actedApproval->loadMissing(['approver', 'actionedBy']);
         $previousApprovals = $this->leaveApprovalHistoryText($leaveRequest);
 
@@ -68,6 +73,7 @@ class HrmsApprovalNotificationService
                 'approve_url' => route('leave-requests.email-approve', [$leaveRequest, $nextApproval]),
                 'reject_url' => route('leave-requests.email-reject', [$leaveRequest, $nextApproval]),
                 'request_type' => 'leave',
+                'branch_id' => $branchId,
                 'event_type' => 'next_approval',
                 'request_id' => $leaveRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -88,6 +94,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->leaveDetail($leaveRequest),
                 'action_url' => route('leave-requests.show', $leaveRequest),
                 'request_type' => 'leave',
+                'branch_id' => $branchId,
                 'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
                 'request_id' => $leaveRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -100,7 +107,9 @@ class HrmsApprovalNotificationService
 
     public function sendLeaveRejected(LeaveRequest $leaveRequest, LeaveApproval $actedApproval): void
     {
+        $branchId = $leaveRequest->user?->branch_id;
         $leaveRequest->loadMissing(['user', 'leaveType', 'approvals.approver', 'approvals.actionedBy']);
+        $branchId = $leaveRequest->user?->branch_id;
         $actedApproval->loadMissing(['approver', 'actionedBy']);
         $previousApprovals = $this->leaveApprovalHistoryText($leaveRequest);
 
@@ -111,6 +120,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->leaveDetail($leaveRequest),
                 'action_url' => route('leave-requests.show', $leaveRequest),
                 'request_type' => 'leave',
+                'branch_id' => $branchId,
                 'event_type' => 'rejected',
                 'request_id' => $leaveRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -124,6 +134,7 @@ class HrmsApprovalNotificationService
     public function sendPermissionSubmitted(PermissionRequest $permissionRequest): void
     {
         $permissionRequest->loadMissing(['user', 'approvals.approver']);
+        $branchId = $permissionRequest->user?->branch_id;
 
         $currentApproval = $this->currentPermissionApproval($permissionRequest);
 
@@ -136,6 +147,7 @@ class HrmsApprovalNotificationService
                 'approve_url' => route('permission-requests.email-approve', [$permissionRequest, $currentApproval]),
                 'reject_url' => route('permission-requests.email-reject', [$permissionRequest, $currentApproval]),
                 'request_type' => 'permission',
+                'branch_id' => $branchId,
                 'event_type' => 'submitted',
                 'request_id' => $permissionRequest->id,
                 'actor_name' => $permissionRequest->user?->name,
@@ -151,6 +163,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->permissionDetail($permissionRequest),
                 'action_url' => route('permission-requests.show', $permissionRequest),
                 'request_type' => 'permission',
+                'branch_id' => $branchId,
                 'event_type' => 'submitted_confirmation',
                 'request_id' => $permissionRequest->id,
                 'requester_name' => $permissionRequest->user?->name,
@@ -161,6 +174,7 @@ class HrmsApprovalNotificationService
 
     public function sendPermissionApproved(PermissionRequest $permissionRequest, PermissionApproval $actedApproval, ?PermissionApproval $nextApproval): void
     {
+        $branchId = $permissionRequest->user?->branch_id;
         $permissionRequest->loadMissing('user');
         $actedApproval->loadMissing(['approver', 'actionedBy']);
 
@@ -175,6 +189,7 @@ class HrmsApprovalNotificationService
                 'approve_url' => route('permission-requests.email-approve', [$permissionRequest, $nextApproval]),
                 'reject_url' => route('permission-requests.email-reject', [$permissionRequest, $nextApproval]),
                 'request_type' => 'permission',
+                'branch_id' => $branchId,
                 'event_type' => 'next_approval',
                 'request_id' => $permissionRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -194,6 +209,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->permissionDetail($permissionRequest),
                 'action_url' => route('permission-requests.show', $permissionRequest),
                 'request_type' => 'permission',
+                'branch_id' => $branchId,
                 'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
                 'request_id' => $permissionRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -205,6 +221,7 @@ class HrmsApprovalNotificationService
 
     public function sendPermissionRejected(PermissionRequest $permissionRequest, PermissionApproval $actedApproval): void
     {
+        $branchId = $permissionRequest->user?->branch_id;
         $permissionRequest->loadMissing('user');
         $actedApproval->loadMissing(['approver', 'actionedBy']);
 
@@ -215,6 +232,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->permissionDetail($permissionRequest),
                 'action_url' => route('permission-requests.show', $permissionRequest),
                 'request_type' => 'permission',
+                'branch_id' => $branchId,
                 'event_type' => 'rejected',
                 'request_id' => $permissionRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -227,6 +245,7 @@ class HrmsApprovalNotificationService
     public function sendOdSubmitted(OdRequest $odRequest): void
     {
         $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
+        $branchId = $odRequest->user?->branch_id;
 
         $currentApproval = $this->currentOdApproval($odRequest);
 
@@ -237,6 +256,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->odDetail($odRequest),
                 'action_url' => route('od-requests.show', $odRequest),
                 'request_type' => 'od',
+                'branch_id' => $branchId,
                 'event_type' => 'submitted',
                 'request_id' => $odRequest->id,
                 'actor_name' => $odRequest->user?->name,
@@ -248,6 +268,7 @@ class HrmsApprovalNotificationService
 
     public function sendOdApproved(OdRequest $odRequest, OdApproval $actedApproval, ?OdApproval $nextApproval): void
     {
+        $branchId = $odRequest->user?->branch_id;
         $odRequest->loadMissing('user');
         $actedApproval->loadMissing(['approver', 'actionedBy']);
 
@@ -258,6 +279,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->odDetail($odRequest),
                 'action_url' => route('od-requests.show', $odRequest),
                 'request_type' => 'od',
+                'branch_id' => $branchId,
                 'event_type' => 'next_stage',
                 'request_id' => $odRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -281,6 +303,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->odDetail($odRequest),
                 'action_url' => route('od-requests.show', $odRequest),
                 'request_type' => 'od',
+                'branch_id' => $branchId,
                 'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
                 'request_id' => $odRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
@@ -292,6 +315,7 @@ class HrmsApprovalNotificationService
 
     public function sendOdRejected(OdRequest $odRequest, OdApproval $actedApproval): void
     {
+        $branchId = $odRequest->user?->branch_id;
         $odRequest->loadMissing('user');
         $actedApproval->loadMissing(['approver', 'actionedBy']);
 
@@ -302,6 +326,7 @@ class HrmsApprovalNotificationService
                 'detail' => $this->odDetail($odRequest),
                 'action_url' => route('od-requests.show', $odRequest),
                 'request_type' => 'od',
+                'branch_id' => $branchId,
                 'event_type' => 'rejected',
                 'request_id' => $odRequest->id,
                 'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,

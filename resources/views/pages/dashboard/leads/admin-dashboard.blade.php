@@ -1126,6 +1126,7 @@ function renderKpis(k, filters) {
         { accent:'orange', val:k.total_leads,    label:'Overall Leads Count', sub:'All in scope',
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
         { accent:'blue',   val:k.won_leads,      label:'Active Customers', sub:'Converted leads count',
+          clickAction: "viewConvertedLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' },
         { accent:'green',  val:k.converted_products_count, label:'Converted Products', sub:'Total Converted Products',
           svg:'<polyline points="20 6 9 17 4 12"/>' },
@@ -1218,6 +1219,29 @@ function getFilterDates() {
 
     return { from: from, to: to };
 }
+
+window.viewConvertedLeads = function() {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    params.set('lead_status', 'converted');
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+
+    window.location.href = '{{ url("/leads") }}?' + params.toString();
+};
 
 window.navigateToFunnelStage = function(stageVal) {
     var dates = getFilterDates();

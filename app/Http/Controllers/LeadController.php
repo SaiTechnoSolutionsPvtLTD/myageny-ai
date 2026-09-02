@@ -20,6 +20,7 @@ use App\Models\OutcomeCategory;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\DataVisibilityService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -653,18 +654,53 @@ class LeadController extends Controller
 
     private function resolveQuickDate(Request $request, string $defaultFromDate, string $defaultToDate): void
     {
+        // If user clicked Reset, clear date filters
+        if ($request->has('reset')) {
+            $request->merge([
+                'date_from'  => null,
+                'date_to'    => null,
+                'quick_date' => null,
+            ]);
+            return;
+        }
+
         $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
 
-        if ($quickDate) {
-            if ($quickDate === 'all') {
-                $request->merge([
-                    'date_from'  => null,
-                    'date_to'    => null,
-                    'quick_date' => 'all',
-                ]);
-                return;
+        // If user explicitly clicked 'Show All'
+        if ($quickDate === 'all') {
+            $request->merge([
+                'date_from'  => null,
+                'date_to'    => null,
+                'quick_date' => 'all',
+            ]);
+            return;
+        }
+
+        $hasFrom = $request->filled('date_from');
+        $hasTo   = $request->filled('date_to');
+
+        // 1. If user provided custom date_from or date_to, ALWAYS prioritize user's dates!
+        if ($hasFrom || $hasTo) {
+            $parsedFrom = $this->parseDateInput($request->input('date_from'));
+            $parsedTo   = $this->parseDateInput($request->input('date_to'));
+
+            $matchedQuick = null;
+            if ($parsedFrom === $defaultFromDate && $parsedTo === $defaultToDate) {
+                $matchedQuick = 'month';
+            } elseif ($parsedFrom === now()->toDateString() && $parsedTo === now()->toDateString()) {
+                $matchedQuick = 'today';
             }
 
+            $request->merge([
+                'date_from'  => $parsedFrom,
+                'date_to'    => $parsedTo,
+                'quick_date' => $matchedQuick,
+            ]);
+            return;
+        }
+
+        // 2. If quick_date was explicitly requested (and not 'custom')
+        if ($quickDate && $quickDate !== 'custom') {
             $dates = match ($quickDate) {
                 'today'               => [now()->toDateString(), now()->toDateString()],
                 'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
@@ -684,21 +720,12 @@ class LeadController extends Controller
             }
         }
 
-        $parsedFrom = $this->parseDateInput($request->input('date_from'));
-        $parsedTo   = $this->parseDateInput($request->input('date_to'));
-
-        if ($parsedFrom || $parsedTo) {
-            $request->merge([
-                'date_from' => $parsedFrom,
-                'date_to'   => $parsedTo,
-            ]);
-        } elseif (!$request->has('reset') && $quickDate !== 'all') {
-            $request->merge([
-                'date_from'  => $defaultFromDate,
-                'date_to'    => $defaultToDate,
-                'quick_date' => 'month',
-            ]);
-        }
+        // 3. DEFAULT (Initial page load): apply default current month
+        $request->merge([
+            'date_from'  => $defaultFromDate,
+            'date_to'    => $defaultToDate,
+            'quick_date' => 'month',
+        ]);
     }
 
     private function parseDateInput(?string $dateStr): ?string
@@ -708,6 +735,10 @@ class LeadController extends Controller
         }
 
         $dateStr = trim($dateStr);
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr)) {
+            return $dateStr;
+        }
 
         try {
             if (preg_match('/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/', $dateStr, $matches)) {

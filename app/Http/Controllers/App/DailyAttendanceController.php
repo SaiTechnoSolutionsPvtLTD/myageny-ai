@@ -527,13 +527,20 @@ class DailyAttendanceController extends Controller
     private function notifyHrOfPendingRequest(OutsideOfficeAttendanceRequest $pending): void
     {
         $companyId = $pending->company_id;
+        $employeeBranchId = $pending->employee?->portalUser?->branch_id
+            ?? $pending->internJoiningForm?->portalUser?->branch_id
+            ?? User::where('name', $pending->employee_name)->value('branch_id');
 
         $recipients = User::query()
             ->when($companyId, fn($q) => $q->where('company_id', $companyId))
             ->get()
             ->filter(fn(User $u) => $u->isHrOrAdmin());
 
-        if ($recipients->isEmpty()) {
+        if ($employeeBranchId) {
+            $recipients = $this->notifications->filterByBranchVisibility($recipients, (int) $employeeBranchId);
+        }
+
+        if (empty($recipients)) {
             return;
         }
 
@@ -549,6 +556,7 @@ class DailyAttendanceController extends Controller
             'actor_name'     => $pending->employee_name,
             'requester_name' => $pending->employee_name,
             'status'         => 'pending',
+            'branch_id'      => $employeeBranchId ? (int) $employeeBranchId : null,
         ]);
     }
 

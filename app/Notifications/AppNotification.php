@@ -65,6 +65,7 @@ class AppNotification extends Notification
             'actor_name' => $this->payload['actor_name'] ?? null,
             'requester_name' => $this->payload['requester_name'] ?? null,
             'status' => $this->payload['status'] ?? null,
+            'branch_id' => $this->payload['branch_id'] ?? null,
             'created_at_human' => now()->diffForHumans(),
         ];
     }

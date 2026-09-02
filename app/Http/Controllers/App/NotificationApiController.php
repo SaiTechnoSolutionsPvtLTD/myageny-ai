@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,10 @@ class NotificationApiController extends Controller
         $user = $request->user();
         $perPage = min(50, max(1, (int) $request->query('per_page', 20)));
 
+        $targetBranchId = $this->resolveTargetBranchId($request, $user);
+
         $query = $user->notifications();
+        $this->applyBranchFilter($query, $user, $targetBranchId);
 
         $module = trim((string) $request->query('module', ''));
         if ($module !== '') {
@@ -29,6 +33,10 @@ class NotificationApiController extends Controller
 
         $notifications = $query->latest()->paginate($perPage);
 
+        // Branch-filtered unread count
+        $unreadQuery = $user->unreadNotifications();
+        $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -38,16 +46,26 @@ class NotificationApiController extends Controller
                     'last_page' => $notifications->lastPage(),
                     'total' => $notifications->total(),
                 ],
-                'unread_count' => $user->unreadNotifications()->count(),
+                'unread_count' => $unreadQuery->count(),
+                'branch_id' => $targetBranchId,
             ],
         ]);
     }
 
     public function unreadCount(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $targetBranchId = $this->resolveTargetBranchId($request, $user);
+
+        $unreadQuery = $user->unreadNotifications();
+        $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+
         return response()->json([
             'success' => true,
-            'data' => ['unread_count' => $request->user()->unreadNotifications()->count()],
+            'data' => [
+                'unread_count' => $unreadQuery->count(),
+                'branch_id' => $targetBranchId,
+            ],
         ]);
     }
 
@@ -68,14 +86,57 @@ class NotificationApiController extends Controller
 
     public function markAllAsRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $user = $request->user();
+        $targetBranchId = $this->resolveTargetBranchId($request, $user);
+
+        $unreadQuery = $user->unreadNotifications();
+        $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+
+        $unreadQuery->update(['read_at' => now()]);
 
         return response()->json(['success' => true, 'message' => 'All notifications marked as read.']);
     }
 
+    private function resolveTargetBranchId(Request $request, $user): ?int
+    {
+        if ($request->filled('branch_id')) {
+            return (int) $request->query('branch_id');
+        }
+
+        if ($request->header('X-Branch-Id')) {
+            return (int) $request->header('X-Branch-Id');
+        }
+
+        if ($user->branch_id) {
+            return (int) $user->branch_id;
+        }
+
+        return null;
+    }
+
+    private function applyBranchFilter($query, $user, ?int $targetBranchId): void
+    {
+        if ($targetBranchId !== null) {
+            $query->where(function ($q) use ($targetBranchId) {
+                $q->where('data->branch_id', $targetBranchId)
+                  ->orWhere('data->branch_id', (string) $targetBranchId);
+            });
+        } elseif (! $user->isSystemAdmin()) {
+            $allowedBranchIds = array_filter($user->getMyBranchIds());
+            if (!empty($allowedBranchIds)) {
+                $query->where(function ($q) use ($allowedBranchIds) {
+                    foreach ($allowedBranchIds as $bId) {
+                        $q->orWhere('data->branch_id', $bId)
+                          ->orWhere('data->branch_id', (string) $bId);
+                    }
+                });
+            }
+        }
+    }
+
     private function format($notification): array
     {
-        $data = $notification->data ?? [];
+        $data = is_array($notification->data) ? $notification->data : (json_decode($notification->data, true) ?: []);
 
         return [
             'id' => $notification->id,
@@ -92,6 +153,7 @@ class NotificationApiController extends Controller
             'actor_name' => $data['actor_name'] ?? null,
             'requester_name' => $data['requester_name'] ?? null,
             'status' => $data['status'] ?? null,
+            'branch_id' => isset($data['branch_id']) ? (int) $data['branch_id'] : NotificationService::resolveNotificationBranchId($notification),
             'is_read' => (bool) $notification->read_at,
             'read_at' => $notification->read_at?->toIso8601String(),
             'created_at' => $notification->created_at?->toIso8601String(),
@@ -106,7 +168,7 @@ class NotificationApiController extends Controller
     private function legacyModuleFallback(array $data): ?string
     {
         return match ($data['request_type'] ?? null) {
-            'leave', 'permission' => 'hrms',
+            'leave', 'permission', 'od', 'outside_office' => 'hrms',
             default => null,
         };
     }

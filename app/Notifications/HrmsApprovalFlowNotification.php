@@ -52,6 +52,7 @@ class HrmsApprovalFlowNotification extends Notification
             'requester_name' => $this->payload['requester_name'] ?? null,
             'previous_approvals' => $this->payload['previous_approvals'] ?? null,
             'status' => $this->payload['status'] ?? null,
+            'branch_id' => $this->payload['branch_id'] ?? null,
             'created_at_human' => now()->diffForHumans(),
         ];
     }

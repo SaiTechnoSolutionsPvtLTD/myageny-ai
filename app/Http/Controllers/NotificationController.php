@@ -23,7 +23,15 @@ class NotificationController extends Controller
 
     public function markAllAsRead(Request $request): RedirectResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $user = $request->user();
+        $branchData = \App\Services\NotificationService::getBranchFilteredNotifications($user, 100);
+        $notifications = $branchData['filtered_notifications'] ?? collect();
+
+        foreach ($notifications as $notification) {
+            if (! $notification->read_at) {
+                $notification->markAsRead();
+            }
+        }
 
         return back()->with('success', 'Notifications marked as read.');
     }

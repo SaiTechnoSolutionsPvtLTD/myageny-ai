@@ -351,7 +351,7 @@
                     <span class="ld-filter-icon"><i class="bi bi-funnel"></i></span>
                     <div>
                         <div class="ld-filter-title">Filters</div>
-                        <div class="ld-filter-sub">Default view shows today's leads. Open this panel to search or change date range.</div>
+                        <div class="ld-filter-sub">Open this panel to search or filter by date range, branch, etc.</div>
                     </div>
                 </div>
                 <div class="ld-filter-toggle-right">
@@ -362,14 +362,14 @@
 
             <div class="ld-filter-body">
                 <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
-                    <input type="hidden" name="quick_date" id="f_quick_date" value="{{ request('quick_date', 'month') }}">
+                    <input type="hidden" name="quick_date" id="f_quick_date" value="{{ request('quick_date') }}">
                     <div class="ld-filter-bar">
                         <div class="ld-fw">
                             <label class="ld-field-label" for="f_search">Search</label>
                             <div class="ld-search-box">
                                 <i class="bi bi-search ld-search-ico"></i>
                                 <input type="text" name="search" class="ld-search-input" id="f_search" placeholder="Company, contact, email..."
-                                       value="{{ request('search') }}" oninput="delaySubmit()">
+                                       value="{{ request('search') }}" oninput="updateFilters()">
                             </div>
                         </div>
 
@@ -377,7 +377,7 @@
                             <label class="ld-field-label" for="f_branch">Branch</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-building ld-fi"></i>
-                                <select name="branch_id" class="ld-fs" id="f_branch" onchange="autoSubmit()">
+                                <select name="branch_id" class="ld-fs" id="f_branch" onchange="updateFilters()">
                                     <option value="">All Branches</option>
                                     @foreach($branches as $b)
                                         <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
@@ -392,7 +392,7 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-telephone ld-fi"></i>
                                 <input type="text" name="mobile_number" class="ld-fi-input" id="f_mobile"
-                                       placeholder="Mobile no." value="{{ request('mobile_number') }}" oninput="delaySubmit()">
+                                       placeholder="Mobile no." value="{{ request('mobile_number') }}" oninput="updateFilters()">
                             </div>
                         </div>
 
@@ -400,7 +400,7 @@
                             <label class="ld-field-label" for="f_source">Lead Source</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-broadcast ld-fi"></i>
-                                <select name="lead_source" class="ld-fs" id="f_source" onchange="autoSubmit()">
+                                <select name="lead_source" class="ld-fs" id="f_source" onchange="updateFilters()">
                                     <option value="">All Sources</option>
                                     @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
                                         <option value="{{ $key }}" {{ request('lead_source') == $key ? 'selected':'' }}>{{ $label }}</option>
@@ -414,7 +414,7 @@
                             <label class="ld-field-label" for="f_status">Lead Status</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-kanban ld-fi"></i>
-                                <select name="lead_status" class="ld-fs" id="f_status" onchange="autoSubmit()">
+                                <select name="lead_status" class="ld-fs" id="f_status" onchange="updateFilters()">
                                     <option value="">All Status</option>
                                     @foreach(\App\Models\Lead::statusOptions() as $key => $label)
                                         <option value="{{ $key }}" {{ request('lead_status') == $key ? 'selected':'' }}>{{ $label }}</option>
@@ -428,7 +428,7 @@
                             <label class="ld-field-label" for="f_priority">Priority</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-flag ld-fi"></i>
-                                <select name="priority" class="ld-fs" id="f_priority" onchange="autoSubmit()">
+                                <select name="priority" class="ld-fs" id="f_priority" onchange="updateFilters()">
                                     <option value="">All Priorities</option>
                                     @foreach(\App\Models\Lead::PRIORITIES as $key => $label)
                                         <option value="{{ $key }}" {{ request('priority') == $key ? 'selected':'' }}>{{ $label }}</option>
@@ -442,7 +442,7 @@
                             <label class="ld-field-label" for="f_user">Assigned To</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-person ld-fi"></i>
-                                <select name="assigned_to" class="ld-fs" id="f_user" onchange="autoSubmit()">
+                                <select name="assigned_to" class="ld-fs" id="f_user" onchange="updateFilters()">
                                     <option value="">All Users</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ request('assigned_to') == $u->id ? 'selected':'' }}>{{ $u->name }}</option>
@@ -456,7 +456,7 @@
                             <label class="ld-field-label" for="f_pre_sales">Pre Sales Exec</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-person-badge ld-fi"></i>
-                                <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales" onchange="autoSubmit()">
+                                <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales" onchange="updateFilters()">
                                     <option value="">All Pre Sales</option>
                                     @foreach($preSaleExecutives as $pse)
                                         <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
@@ -471,7 +471,7 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-box-seam ld-fi"></i>
                                 <input type="text" name="product_name" class="ld-fi-input" id="f_product"
-                                       placeholder="Product name" value="{{ request('product_name') }}" oninput="delaySubmit()">
+                                       placeholder="Product name" value="{{ request('product_name') }}" oninput="updateFilters()">
                             </div>
                         </div>
 
@@ -481,7 +481,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-event ld-fi"></i>
                                     <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                                           value="{{ request('date_from') }}" onchange="autoSubmit()">
+                                           value="{{ request('date_from') }}" onchange="onDateChange()">
                                 </div>
                             </div>
                             <span class="ld-date-sep">to</span>
@@ -490,7 +490,7 @@
                                 <div class="ld-input-wrap">
                                     <i class="bi bi-calendar-check ld-fi"></i>
                                     <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                                           value="{{ request('date_to') }}" onchange="autoSubmit()">
+                                           value="{{ request('date_to') }}" onchange="onDateChange()">
                                 </div>
                             </div>
                         </div>
@@ -888,10 +888,20 @@ const ff = {
 };
 
 function isActiveFilter(id, value) {
-    if (!value) return false;
-    if (id === 'f_date_from' && value === defaultFromDate) return false;
-    if (id === 'f_date_to' && value === defaultToDate) return false;
+    if (!value || !value.trim()) return false;
+    const qVal = document.getElementById('f_quick_date')?.value;
+    const from = document.getElementById('f_date_from')?.value;
+    const to = document.getElementById('f_date_to')?.value;
+    if (from === defaultFromDate && to === defaultToDate && (!qVal || qVal === 'month')) {
+        if (id === 'f_date_from' || id === 'f_date_to') return false;
+    }
     return true;
+}
+
+function onDateChange() {
+    const qEl = document.getElementById('f_quick_date');
+    if (qEl) qEl.value = '';
+    updateFilters();
 }
 
 function updateFilters() {
@@ -924,9 +934,9 @@ function updateFilters() {
     const to = document.getElementById('f_date_to')?.value;
 
     // Toggle active state for quick buttons
-    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (from === todayDate && to === todayDate));
-    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (from === defaultFromDate && to === defaultToDate));
-    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && qVal !== 'month'));
+    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (Boolean(from) && Boolean(to) && from === todayDate && to === todayDate));
+    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (Boolean(from) && Boolean(to) && from === defaultFromDate && to === defaultToDate));
+    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && !qVal));
 
     // Calculate dynamic values for Week and Year active states
     const parts = defaultToDate.split('-').map(Number);
@@ -944,18 +954,18 @@ function updateFilters() {
     sun.setDate(mon.getDate() + 6);
     const weekStart = fmt(mon);
     const weekEnd = fmt(sun);
-    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (from === weekStart && to === weekEnd));
+    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (Boolean(from) && Boolean(to) && from === weekStart && to === weekEnd));
 
     const yearStart = `${parts[0]}-01-01`;
     const yearEnd = `${parts[0]}-12-31`;
-    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (from === yearStart && to === yearEnd));
+    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (Boolean(from) && Boolean(to) && from === yearStart && to === yearEnd));
 
     const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
     const firstQ = new Date(parts[0], qStartMonth, 1);
     const lastQ = new Date(parts[0], qStartMonth + 3, 0);
     const qStart = fmt(firstQ);
     const qEnd = fmt(lastQ);
-    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (from === qStart && to === qEnd));
+    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (Boolean(from) && Boolean(to) && from === qStart && to === qEnd));
 }
 
 function clearF(id) {
@@ -963,19 +973,21 @@ function clearF(id) {
     if (el) {
         el.value = '';
     }
+    if (id === 'f_date_from' || id === 'f_date_to') {
+        const qEl = document.getElementById('f_quick_date');
+        if (qEl) qEl.value = '';
+    }
     updateFilters();
     document.getElementById('filterForm').submit();
 }
 
 function autoSubmit() {
     updateFilters();
-    document.getElementById('filterForm').submit();
 }
 
 function delaySubmit() {
     clearTimeout(st);
     updateFilters();
-    st = setTimeout(() => document.getElementById('filterForm').submit(), 600);
 }
 
 function setQ(p) {
@@ -997,7 +1009,7 @@ function setQ(p) {
     if (p === 'all') {
         f.value = '';
         t.value = '';
-        autoSubmit();
+        updateFilters();
         return;
     }
 
@@ -1032,7 +1044,6 @@ function setQ(p) {
     t.value = targetTo;
 
     updateFilters();
-    document.getElementById('filterForm').submit();
 }
 
 function closeActionMenus() {

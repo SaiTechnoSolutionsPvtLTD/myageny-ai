@@ -72,12 +72,20 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
-        $wonLeads      = (clone $base())->where('lead_status', 'won')->count();
-        $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
-        $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
-        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-        $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
+        $wonQuery      = (clone $base())->converted();
+        $wonLeads      = (clone $wonQuery)->count();
+        $lostQuery     = (clone $base())->lost();
+        $lostLeads     = (clone $lostQuery)->count();
+        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
+
+        $wonLeadIds    = (clone $wonQuery)->pluck('id');
+        $productWonVal = (float) LeadProduct::whereIn('lead_id', $wonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+        $dealWonVal    = (float) (clone $wonQuery)->sum('deal_value');
+        $wonValue      = $productWonVal > 0 ? $productWonVal : $dealWonVal;
+
+        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
+        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
@@ -305,15 +313,21 @@ class SuperAdminDashboardController extends ApiController
 
                 $total          = (clone $q)->count();
                 $leadIds        = (clone $q)->pluck('id');
-                $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
-                $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                $branchWonQuery = (clone $q)->converted();
+                $wonLeads       = (clone $branchWonQuery)->count();
+                $branchWonIds   = (clone $branchWonQuery)->pluck('id');
+                $productConvCnt = LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->count();
+                $productConvVal = (float) LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+                $dealWonVal     = (float) (clone $branchWonQuery)->sum('deal_value');
+                $wonVal         = $productConvVal > 0 ? $productConvVal : $dealWonVal;
 
-                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
-                $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
+                $convertedCount = $wonLeads;
+                $convertedVal   = $wonVal;
                 $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
-                $pipeline       = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
+                $branchLostQuery = (clone $q)->lost();
+                $lostLeads      = (clone $branchLostQuery)->count();
+                $branchExcludedIds = $branchWonIds->merge((clone $branchLostQuery)->pluck('id'))->unique();
+                $pipeline       = (float)(clone $q)->whereNotIn('id', $branchExcludedIds)->sum('deal_value');
 
                 return [
                     'branch_id'            => $branch->id,
@@ -813,21 +827,37 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
-        $wonLeads      = (clone $base())->where('lead_status', 'won')->count();
-        $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
-        $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
-        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-        $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
+        $wonQuery      = (clone $base())->converted();
+        $wonLeads      = (clone $wonQuery)->count();
+        $lostQuery     = (clone $base())->lost();
+        $lostLeads     = (clone $lostQuery)->count();
+        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
+
+        $wonLeadIds    = (clone $wonQuery)->pluck('id');
+        $productWonVal = (float) LeadProduct::whereIn('lead_id', $wonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+        $dealWonVal    = (float) (clone $wonQuery)->sum('deal_value');
+        $wonValue      = $productWonVal > 0 ? $productWonVal : $dealWonVal;
+
+        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
+        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         $prevTotalLeads    = (clone $prevBase())->count();
-        $prevWonLeads      = (clone $prevBase())->where('lead_status', 'won')->count();
-        $prevLostLeads     = (clone $prevBase())->where('lead_status', 'lost')->count();
-        $prevActiveLeads   = $prevTotalLeads - $prevWonLeads - $prevLostLeads;
-        $prevPipelineValue = (float)(clone $prevBase())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-        $prevWonValue      = (float)(clone $prevBase())->where('lead_status', 'won')->sum('deal_value');
-        $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
+        $prevWonQuery      = (clone $prevBase())->converted();
+        $prevWonLeads      = (clone $prevWonQuery)->count();
+        $prevLostQuery     = (clone $prevBase())->lost();
+        $prevLostLeads     = (clone $prevLostQuery)->count();
+        $prevActiveLeads   = max(0, $prevTotalLeads - $prevWonLeads - $prevLostLeads);
+
+        $prevWonLeadIds    = (clone $prevWonQuery)->pluck('id');
+        $prevProductWonVal = (float) LeadProduct::whereIn('lead_id', $prevWonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+        $prevDealWonVal    = (float) (clone $prevWonQuery)->sum('deal_value');
+        $prevWonValue      = $prevProductWonVal > 0 ? $prevProductWonVal : $prevDealWonVal;
+
+        $prevExcludedIds   = $prevWonLeadIds->merge((clone $prevLostQuery)->pluck('id'))->unique();
+        $prevPipelineValue = (float)(clone $prevBase())->whereNotIn('id', $prevExcludedIds)->sum('deal_value');
+        $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('id', $prevExcludedIds)->count();
         $prevConvRate      = $prevTotalLeads > 0 ? round($prevWonLeads / $prevTotalLeads * 100, 1) : 0.0;
 
         $prevLpBase = $this->getLeadProductBaseQuery($request, $prevFrom, $prevTo);
@@ -1078,15 +1108,21 @@ class SuperAdminDashboardController extends ApiController
 
                 $total          = (clone $q)->count();
                 $leadIds        = (clone $q)->pluck('id');
-                $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
-                $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                $branchWonQuery = (clone $q)->converted();
+                $wonLeads       = (clone $branchWonQuery)->count();
+                $branchWonIds   = (clone $branchWonQuery)->pluck('id');
+                $productConvCnt = LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->count();
+                $productConvVal = (float) LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+                $dealWonVal     = (float) (clone $branchWonQuery)->sum('deal_value');
+                $wonVal         = $productConvVal > 0 ? $productConvVal : $dealWonVal;
 
-                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
-                $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
+                $convertedCount = $wonLeads;
+                $convertedVal   = $wonVal;
                 $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
-                $pipeline       = (float)(clone $q)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
+                $branchLostQuery = (clone $q)->lost();
+                $lostLeads      = (clone $branchLostQuery)->count();
+                $branchExcludedIds = $branchWonIds->merge((clone $branchLostQuery)->pluck('id'))->unique();
+                $pipeline       = (float)(clone $q)->whereNotIn('id', $branchExcludedIds)->sum('deal_value');
 
                 return [
                     'branch_id'            => $branch->id,

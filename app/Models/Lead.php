@@ -200,6 +200,42 @@ class Lead extends Model
         return $query->where('branch_id', $branchId);
     }
 
+    public function scopeConverted($query)
+    {
+        $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])->pluck('id')->toArray();
+        if (empty($convertedStatusIds)) {
+            $convertedStatusIds = [5, 15];
+        }
+
+        return $query->where(function ($q) use ($convertedStatusIds) {
+            $q->whereIn('lead_status', ['won', 'converted'])
+              ->orWhereIn('lead_status', $convertedStatusIds)
+              ->orWhereIn('lead_status_id', $convertedStatusIds)
+              ->orWhereHas('products', function ($pq) use ($convertedStatusIds) {
+                  $pq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                     ->orWhereIn('lead_status_id', $convertedStatusIds);
+              });
+        });
+    }
+
+    public function scopeLost($query)
+    {
+        $lostStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?, ?)', ['lost', 'not interested', 'cancelled'])->pluck('id')->toArray();
+        if (empty($lostStatusIds)) {
+            $lostStatusIds = [6, 13];
+        }
+
+        return $query->where(function ($q) use ($lostStatusIds) {
+            $q->whereIn('lead_status', ['lost', 'not interested', 'cancelled'])
+              ->orWhereIn('lead_status', $lostStatusIds)
+              ->orWhereIn('lead_status_id', $lostStatusIds)
+              ->orWhereHas('products', function ($pq) use ($lostStatusIds) {
+                  $pq->whereRaw('LOWER(product_status) in (?, ?, ?)', ['lost', 'not interested', 'cancelled'])
+                     ->orWhereIn('lead_status_id', $lostStatusIds);
+              });
+        });
+    }
+
     // ── Accessors ─────────────────────────────────────────────────
 
     public function getStatusColorAttribute(): array

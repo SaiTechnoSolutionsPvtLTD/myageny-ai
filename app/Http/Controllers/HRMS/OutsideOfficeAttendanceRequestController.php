@@ -295,6 +295,7 @@ class OutsideOfficeAttendanceRequestController extends Controller
             'actor_name'     => $reviewerName,
             'requester_name' => $r->employee_name,
             'status'         => $status,
+            'branch_id'      => $applicantUser->branch_id,
         ]);
     }
 }

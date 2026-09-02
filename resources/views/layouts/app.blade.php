@@ -843,8 +843,9 @@
         $notificationUnreadCount = 0;
 
         if ($notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications')) {
-            $notificationUnreadCount = $notificationUser->unreadNotifications()->count();
-            $notificationItems = $notificationUser->notifications()->latest()->limit(8)->get();
+            $branchNotifData = \App\Services\NotificationService::getBranchFilteredNotifications($notificationUser, 8);
+            $notificationItems = $branchNotifData['items'];
+            $notificationUnreadCount = $branchNotifData['unread_count'];
         }
     @endphp
 
