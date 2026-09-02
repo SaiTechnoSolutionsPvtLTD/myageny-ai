@@ -103,8 +103,29 @@
     background: #fafafa;
 }
 .lh-card-title { font-size: 16px; font-weight: 800; color: #111827; }
+.lh-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f8fafc;
+}
+.lh-table-wrap::-webkit-scrollbar {
+    height: 6px;
+}
+.lh-table-wrap::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+.lh-table-wrap::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+.lh-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
 .lh-table {
     width: 100%;
+    min-width: 860px;
     border-collapse: collapse;
     font-size: 13px;
 }
@@ -428,85 +449,87 @@
             </div>
         </div>
 
-        <table class="lh-table">
-            <thead>
-                <tr>
-                    <th style="width: 50px;">#</th>
-                    <th style="width: 200px;">Applicant Role</th>
-                    <th>Leave Approval Hierarchy Chain</th>
-                    <th style="width: 120px;">Status</th>
-                    <th style="width: 140px; text-align: right;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($hierarchies as $index => $hierarchy)
-                @php
-                    $roleMap = $roles->keyBy('id');
-                    $chainRoleIds = $hierarchy->approval_chain ?? [];
-                @endphp
-                <tr>
-                    <td style="color: #9ca3af; font-weight: 600;">{{ $index + 1 }}</td>
-                    <td>
-                        <strong style="color: #111827; font-size: 14px;">
-                            {{ $hierarchy->role?->display_name ?? ucfirst(str_replace('_',' ', $hierarchy->role?->name ?? 'Role')) }}
-                        </strong>
-                    </td>
-                    <td>
-                        <div class="lh-flow-chain">
-                            <span class="lh-role-pill applicant">
-                                👤 {{ $hierarchy->role?->display_name ?? $hierarchy->role?->name }}
-                            </span>
-
-                            @foreach($chainRoleIds as $stepIdx => $roleId)
-                                <span class="lh-arrow">➔</span>
-                                @php
-                                    $stepRole = $roleMap->get($roleId);
-                                    $stepName = $stepRole?->display_name ?? ucfirst(str_replace('_',' ', $stepRole?->name ?? "Role #{$roleId}"));
-                                @endphp
-                                <span class="lh-role-pill approver">
-                                    <span style="font-size: 10px; opacity: .7;">Step {{ $stepIdx + 1 }}:</span> {{ $stepName }}
+        <div class="lh-table-wrap">
+            <table class="lh-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px; white-space: nowrap;">#</th>
+                        <th style="width: 200px; min-width: 180px; white-space: nowrap;">Applicant Role</th>
+                        <th style="min-width: 340px;">Leave Approval Hierarchy Chain</th>
+                        <th style="width: 120px; min-width: 110px; white-space: nowrap;">Status</th>
+                        <th style="width: 140px; min-width: 130px; text-align: right; white-space: nowrap;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($hierarchies as $index => $hierarchy)
+                    @php
+                        $roleMap = $roles->keyBy('id');
+                        $chainRoleIds = $hierarchy->approval_chain ?? [];
+                    @endphp
+                    <tr>
+                        <td style="color: #9ca3af; font-weight: 600;">{{ $index + 1 }}</td>
+                        <td style="white-space: nowrap;">
+                            <strong style="color: #111827; font-size: 14px;">
+                                {{ $hierarchy->role?->display_name ?? ucfirst(str_replace('_',' ', $hierarchy->role?->name ?? 'Role')) }}
+                            </strong>
+                        </td>
+                        <td>
+                            <div class="lh-flow-chain">
+                                <span class="lh-role-pill applicant">
+                                    👤 {{ $hierarchy->role?->display_name ?? $hierarchy->role?->name }}
                                 </span>
-                            @endforeach
-                        </div>
-                    </td>
-                    <td>
-                        <form method="POST" action="{{ route('settings.leave-hierarchy.toggle-status', $hierarchy) }}">
-                            @csrf @method('PATCH')
-                            <button type="submit" style="background: none; border: none; padding: 0; cursor: pointer;">
-                                @if($hierarchy->is_active)
-                                    <span class="lh-badge badge-active">✓ Active</span>
-                                @else
-                                    <span class="lh-badge badge-inactive">✕ Inactive</span>
-                                @endif
-                            </button>
-                        </form>
-                    </td>
-                    <td style="text-align: right;">
-                        <div style="display: inline-flex; gap: 8px;">
-                            <button type="button" class="lh-btn lh-btn-ghost" style="padding: 5px 12px; font-size: 12px;"
-                                data-hierarchy="{{ json_encode($hierarchy) }}" onclick="openEditModalFromData(this)">
-                                Edit
-                            </button>
-                            <form method="POST" action="{{ route('settings.leave-hierarchy.destroy', $hierarchy) }}" onsubmit="return confirm('Delete this leave approval hierarchy?')">
-                                @csrf @method('DELETE')
-                                <button type="submit" class="lh-btn lh-btn-ghost" style="padding: 5px 12px; font-size: 12px; color: #dc2626; border-color: #fecaca;">
-                                    Delete
+
+                                @foreach($chainRoleIds as $stepIdx => $roleId)
+                                    <span class="lh-arrow">➔</span>
+                                    @php
+                                        $stepRole = $roleMap->get($roleId);
+                                        $stepName = $stepRole?->display_name ?? ucfirst(str_replace('_',' ', $stepRole?->name ?? "Role #{$roleId}"));
+                                    @endphp
+                                    <span class="lh-role-pill approver">
+                                        <span style="font-size: 10px; opacity: .7;">Step {{ $stepIdx + 1 }}:</span> {{ $stepName }}
+                                    </span>
+                                @endforeach
+                            </div>
+                        </td>
+                        <td style="white-space: nowrap;">
+                            <form method="POST" action="{{ route('settings.leave-hierarchy.toggle-status', $hierarchy) }}">
+                                @csrf @method('PATCH')
+                                <button type="submit" style="background: none; border: none; padding: 0; cursor: pointer;">
+                                    @if($hierarchy->is_active)
+                                        <span class="lh-badge badge-active">✓ Active</span>
+                                    @else
+                                        <span class="lh-badge badge-inactive">✕ Inactive</span>
+                                    @endif
                                 </button>
                             </form>
-                        </div>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="5" style="text-align: center; padding: 48px 20px; color: #6b7280;">
-                        <div style="font-size: 32px; margin-bottom: 8px;">🌴</div>
-                        <div style="font-weight: 700; color: #374151; font-size: 15px;">No Leave Hierarchies Configured</div>
-                        <div style="font-size: 13px; margin-top: 4px;">Click "Create Leave Hierarchy" to map role approval steps for leave requests.</div>
-                    </td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+                        </td>
+                        <td style="text-align: right; white-space: nowrap;">
+                            <div style="display: inline-flex; gap: 8px;">
+                                <button type="button" class="lh-btn lh-btn-ghost" style="padding: 5px 12px; font-size: 12px;"
+                                    data-hierarchy="{{ json_encode($hierarchy) }}" onclick="openEditModalFromData(this)">
+                                    Edit
+                                </button>
+                                <form method="POST" action="{{ route('settings.leave-hierarchy.destroy', $hierarchy) }}" onsubmit="return confirm('Delete this leave approval hierarchy?')">
+                                    @csrf @method('DELETE')
+                                    <button type="submit" class="lh-btn lh-btn-ghost" style="padding: 5px 12px; font-size: 12px; color: #dc2626; border-color: #fecaca;">
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 48px 20px; color: #6b7280;">
+                            <div style="font-size: 32px; margin-bottom: 8px;">🌴</div>
+                            <div style="font-weight: 700; color: #374151; font-size: 15px;">No Leave Hierarchies Configured</div>
+                            <div style="font-size: 13px; margin-top: 4px;">Click "Create Leave Hierarchy" to map role approval steps for leave requests.</div>
+                        </td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </div>

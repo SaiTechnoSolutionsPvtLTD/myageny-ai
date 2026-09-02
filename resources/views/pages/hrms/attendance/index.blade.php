@@ -315,6 +315,12 @@
     background: #faf5ff;
     color: #701a75;
 }
+.att-chip-od {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    font-weight: 800;
+}
 .att-chip-employee {
     background: #eff6ff;
     color: #1e40af;
@@ -696,6 +702,7 @@ details[open] summary.att-accordion-header {
                 <select name="status" class="att-select">
                     <option value="">All Status</option>
                     <option value="present" @selected(request('status') === 'present')>Present</option>
+                    <option value="od" @selected(request('status') === 'od')>OD (On Duty)</option>
                     <option value="absent" @selected(request('status') === 'absent')>Absent</option>
                     <option value="leave" @selected(request('status') === 'leave')>Leave</option>
                 </select>
@@ -781,7 +788,7 @@ details[open] summary.att-accordion-header {
                                         <div class="att-cell-title">{{ \Carbon\Carbon::parse($attendance['attendance_date'])->format('d M Y') }}</div>
                                 </td>
                                 <td>
-                                    <span class="att-chip att-chip-{{ $attendance['attendance_status'] }}">{{ $attendance['attendance_status'] }}</span>
+                                    <span class="att-chip att-chip-{{ $attendance['attendance_status'] }}">{{ $attendance['attendance_status'] === 'od' ? 'OD' : ucfirst($attendance['attendance_status']) }}</span>
                                     @if($attendance['attendance_status'] === 'leave' && $attendance['leave_label'])
                                         <div class="att-cell-sub">{{ $attendance['leave_label'] }}</div>
                                     @endif

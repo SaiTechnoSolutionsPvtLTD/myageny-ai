@@ -702,6 +702,23 @@
 
 
         @if(! $selfServiceMode)
+        @if(($stats['outside_office_pending'] ?? 0) > 0)
+        <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fed7aa; border-radius: 18px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 14px; box-shadow: 0 4px 14px rgba(254, 95, 4, 0.08);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 42px; height: 42px; border-radius: 12px; background: #fe5f04; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="bi bi-geo-alt-fill"></i>
+                </div>
+                <div>
+                    <div style="font-size: 14px; font-weight: 800; color: #9a3412;">Outside Office Attendance Requests Awaiting Review</div>
+                    <div style="font-size: 12px; color: #c2410c;">You have <strong>{{ $stats['outside_office_pending'] }}</strong> pending request(s) waiting for your approval.</div>
+                </div>
+            </div>
+            <a href="{{ route('hrms.outside-office-requests.index') }}" class="hrms-btn hrms-btn-primary" style="padding: 8px 16px; font-size: 12px; white-space: nowrap;">
+                Review Requests <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+        @endif
+
         <!-- Key Metrics -->
         <section class="hrms-stats">
             <div class="hrms-stat-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">

@@ -874,6 +874,12 @@
                                         'soft_border' => '#bfdbfe',
                                         'soft_text' => '#1d4ed8',
                                     ];
+                                    $isLifecycleUpdate = str_contains((string)$update->content, 'Production Initiation')
+                                        || str_contains((string)$update->content, 'OVP Review')
+                                        || str_contains((string)$update->content, 'Production Approval')
+                                        || str_contains((string)$update->content, 'Team Lead Allocation')
+                                        || str_contains((string)$update->content, 'Team Member Allocation')
+                                        || str_contains((string)$update->content, 'OVP Executive Allocation');
                                 @endphp
                                 <article class="ps-update-item" style="--update-accent:{{ $typeMeta['accent'] }};">
                                     <div class="ps-update-head">
@@ -884,12 +890,16 @@
                                             >
                                                 {{ $typeMeta['label'] }}
                                             </span>
-                                            <div class="ps-update-title">{{ $typeMeta['title'] }}</div>
+                                            @if(!empty($typeMeta['title']))
+                                                <div class="ps-update-title">{{ $typeMeta['title'] }}</div>
+                                            @endif
                                         </div>
-                                        <div class="ps-update-meta">
-                                            Added By: {{ $update->createdBy?->name ?: 'Unknown user' }}<br>
-                                            Added On: {{ optional($update->created_at)->format('d M Y h:i A') }}
-                                        </div>
+                                        @if(!$isLifecycleUpdate)
+                                            <div class="ps-update-meta">
+                                                Added By: {{ $update->createdBy?->name ?: 'Unknown user' }}<br>
+                                                Added On: {{ optional($update->created_at)->format('d M Y h:i A') }}
+                                            </div>
+                                        @endif
                                     </div>
                                     <div class="ps-update-content">{!! $update->content !!}</div>
                                 </article>

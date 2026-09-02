@@ -15,6 +15,8 @@ class ProjectUpdate extends Model
         'type',
         'content',
         'created_by',
+        'created_at',
+        'updated_at',
     ];
 
     public function productionInitiation(): BelongsTo
@@ -24,6 +26,6 @@ class ProjectUpdate extends Model
 
     public function createdBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by')->withTrashed();
     }
 }

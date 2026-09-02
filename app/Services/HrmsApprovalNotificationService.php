@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
+use App\Models\OdApproval;
+use App\Models\OdRequest;
 use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
 use App\Models\User;
@@ -220,6 +222,108 @@ class HrmsApprovalNotificationService
                 'status' => PermissionRequest::STATUS_REJECTED,
             ]);
         }
+    }
+
+    public function sendOdSubmitted(OdRequest $odRequest): void
+    {
+        $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
+
+        $currentApproval = $this->currentOdApproval($odRequest);
+
+        if ($currentApproval?->approver) {
+            $this->notifyUser($currentApproval->approver, [
+                'title' => 'New OD Request Awaiting Approval',
+                'message' => "{$odRequest->user?->name} submitted an OD (On Duty) request that needs your approval.",
+                'detail' => $this->odDetail($odRequest),
+                'action_url' => route('od-requests.show', $odRequest),
+                'request_type' => 'od',
+                'event_type' => 'submitted',
+                'request_id' => $odRequest->id,
+                'actor_name' => $odRequest->user?->name,
+                'requester_name' => $odRequest->user?->name,
+                'status' => OdRequest::STATUS_PENDING,
+            ]);
+        }
+    }
+
+    public function sendOdApproved(OdRequest $odRequest, OdApproval $actedApproval, ?OdApproval $nextApproval): void
+    {
+        $odRequest->loadMissing('user');
+        $actedApproval->loadMissing(['approver', 'actionedBy']);
+
+        if ($nextApproval?->approver) {
+            $this->notifyUser($nextApproval->approver, [
+                'title' => 'OD Request Moved to Your Approval Stage',
+                'message' => "{$odRequest->user?->name}'s OD request is now waiting for your approval.",
+                'detail' => $this->odDetail($odRequest),
+                'action_url' => route('od-requests.show', $odRequest),
+                'request_type' => 'od',
+                'event_type' => 'next_stage',
+                'request_id' => $odRequest->id,
+                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                'requester_name' => $odRequest->user?->name,
+                'status' => OdRequest::STATUS_PENDING,
+            ]);
+        }
+
+        if ($odRequest->user) {
+            $isFinalApproval = ! $nextApproval;
+            $title = $isFinalApproval
+                ? 'OD Request Approved'
+                : "OD Request Approved by {$actedApproval->step_name}";
+            $message = $isFinalApproval
+                ? 'Your OD request has received final approval and attendance is marked as OD.'
+                : (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' approved your OD request.');
+
+            $this->notifyUser($odRequest->user, [
+                'title' => $title,
+                'message' => $message,
+                'detail' => $this->odDetail($odRequest),
+                'action_url' => route('od-requests.show', $odRequest),
+                'request_type' => 'od',
+                'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
+                'request_id' => $odRequest->id,
+                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                'requester_name' => $odRequest->user?->name,
+                'status' => $isFinalApproval ? OdRequest::STATUS_APPROVED : OdRequest::STATUS_PENDING,
+            ]);
+        }
+    }
+
+    public function sendOdRejected(OdRequest $odRequest, OdApproval $actedApproval): void
+    {
+        $odRequest->loadMissing('user');
+        $actedApproval->loadMissing(['approver', 'actionedBy']);
+
+        if ($odRequest->user) {
+            $this->notifyUser($odRequest->user, [
+                'title' => 'OD Request Rejected',
+                'message' => (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' rejected your OD request.'),
+                'detail' => $this->odDetail($odRequest),
+                'action_url' => route('od-requests.show', $odRequest),
+                'request_type' => 'od',
+                'event_type' => 'rejected',
+                'request_id' => $odRequest->id,
+                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                'requester_name' => $odRequest->user?->name,
+                'status' => OdRequest::STATUS_REJECTED,
+            ]);
+        }
+    }
+
+    private function currentOdApproval(OdRequest $odRequest): ?OdApproval
+    {
+        return $odRequest->approvals
+            ->firstWhere('step_key', $odRequest->current_step);
+    }
+
+    private function odDetail(OdRequest $odRequest): string
+    {
+        $fromDate = $odRequest->from_date?->format('d M Y') ?? '-';
+        $toDate = $odRequest->to_date?->format('d M Y') ?? '-';
+        $days = $odRequest->total_days ?? 1;
+
+        return "OD from {$fromDate} to {$toDate} ({$days} day(s)).";
     }
 
     private function currentLeaveApproval(LeaveRequest $leaveRequest): ?LeaveApproval

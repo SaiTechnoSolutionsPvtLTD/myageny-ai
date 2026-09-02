@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use App\Services\ProductionUpdateRecorder;
 
 class ProductionApprovalController extends Controller
 {
@@ -149,6 +150,25 @@ class ProductionApprovalController extends Controller
         }
 
         $productionInitiation->update($updateData);
+
+        try {
+            $budgetData = null;
+            if ($product && $product->is_budget_approval_needed && $validated['decision'] === 'approval') {
+                $budgetData = [
+                    'lead_budget_amount' => $updateData['lead_budget_amount'] ?? null,
+                    'budget_amount_type' => $updateData['budget_amount_type'] ?? null,
+                ];
+            }
+            app(ProductionUpdateRecorder::class)->recordProductionApproval(
+                $productionInitiation->fresh(),
+                $validated['decision'],
+                $updateData['production_approval_remarks'] ?? null,
+                auth()->user(),
+                $budgetData
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to record production approval update: ' . $e->getMessage());
+        }
 
         if ($validated['decision'] === 'approval') {
             try {

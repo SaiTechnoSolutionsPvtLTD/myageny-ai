@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Services\NotificationService;
+use App\Services\ProductionUpdateRecorder;
 
 class OvpModuleApiController extends Controller
 {
@@ -176,6 +177,12 @@ class OvpModuleApiController extends Controller
             'ovp_allocated_at'      => Carbon::now(),
         ]);
 
+        try {
+            app(ProductionUpdateRecorder::class)->recordOvpAllocation($productionInitiation, (int) $selectedExecutiveId, $user);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to record OVP allocation update: ' . $e->getMessage());
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'OVP item allocated to executive successfully.',
@@ -231,6 +238,13 @@ class OvpModuleApiController extends Controller
             'production_approval_reviewed_at' => null,
             'production_approval_reviewed_by' => null,
         ]);
+
+        try {
+            $remarksForUpdate = $request->input('remarks') ?: $request->input('rejection_reason');
+            app(ProductionUpdateRecorder::class)->recordOvpReview($productionInitiation->fresh(), $validated['decision'], $remarksForUpdate, $user);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to record OVP review update: ' . $e->getMessage());
+        }
 
         if (($validated['decision'] ?? null) === 'approval') {
             $companyId = $productionInitiation->company_id;

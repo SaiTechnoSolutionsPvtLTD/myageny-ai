@@ -934,6 +934,12 @@ tbody tr:last-child td { border-bottom: none; }
                                 @foreach($productionUpdates as $update)
                                     @php
                                         $typeMeta = $productionUpdateTypeMeta[$update->type] ?? ['label' => ucwords(str_replace('_', ' ', (string) $update->type)), 'title' => 'Project Update', 'bg' => '#f3f4f6', 'border' => '#d1d5db', 'text' => '#374151'];
+                                        $isLifecycleUpdate = str_contains((string)$update->content, 'Production Initiation')
+                                            || str_contains((string)$update->content, 'OVP Review')
+                                            || str_contains((string)$update->content, 'Production Approval')
+                                            || str_contains((string)$update->content, 'Team Lead Allocation')
+                                            || str_contains((string)$update->content, 'Team Member Allocation')
+                                            || str_contains((string)$update->content, 'OVP Executive Allocation');
                                     @endphp
                                     <article
                                         class="lsp-prod-update-item"
@@ -950,10 +956,12 @@ tbody tr:last-child td { border-bottom: none; }
                                                 <div class="lsp-prod-update-title">{{ $typeMeta['title'] }}</div>
                                                 <div class="lsp-prod-update-product">{{ $update->lead_product_name ?: 'Product' }}</div>
                                             </div>
-                                            <div class="lsp-prod-update-meta">
-                                                Added By: {{ $update->createdBy?->name ?: 'Unknown user' }}<br>
-                                                Added On: {{ optional($update->created_at)->format('d M Y h:i A') }}
-                                            </div>
+                                            @if(!$isLifecycleUpdate)
+                                                <div class="lsp-prod-update-meta">
+                                                    Added By: {{ $update->createdBy?->name ?: 'Unknown user' }}<br>
+                                                    Added On: {{ optional($update->created_at)->format('d M Y h:i A') }}
+                                                </div>
+                                            @endif
                                         </div>
                                         <div class="lsp-prod-update-content">{!! $update->content !!}</div>
                                     </article>

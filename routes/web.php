@@ -38,6 +38,7 @@ use App\Http\Controllers\MastersController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OutcomeCategoryController;
 use App\Http\Controllers\OutcomeSubCategoryController;
+use App\Http\Controllers\OdRequestController;
 use App\Http\Controllers\OvpModuleController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollSettingController;
@@ -338,6 +339,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/attendance/lookup', [AttendanceController::class, 'lookupAttendance'])->name('attendance.lookup');
     Route::get('/attendance/export', [AttendanceController::class, 'export'])->name('attendance.export');
 
+    // Outside Office Attendance Requests
+    Route::prefix('hrms/outside-office-requests')->name('hrms.outside-office-requests.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\HRMS\OutsideOfficeAttendanceRequestController::class, 'index'])->name('index');
+        Route::post('/{outsideOfficeRequest}/approve', [\App\Http\Controllers\HRMS\OutsideOfficeAttendanceRequestController::class, 'approve'])->name('approve');
+        Route::post('/{outsideOfficeRequest}/reject', [\App\Http\Controllers\HRMS\OutsideOfficeAttendanceRequestController::class, 'reject'])->name('reject');
+    });
+
     // Timesheet LOP Management
     Route::get('/hrms/timesheet-lop', [\App\Http\Controllers\HRMS\TimesheetLopController::class, 'index'])
         ->middleware('can:timesheet_lop.menuview')
@@ -385,6 +393,15 @@ Route::middleware(['auth'])->group(function () {
         ->name('permission-requests.approve');
     Route::patch('/permission-requests/{permissionRequest}/approvals/{approval}/reject', [PermissionRequestController::class, 'reject'])
         ->name('permission-requests.reject');
+    Route::resource('od-requests', OdRequestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/od-requests/{odRequest}/approvals/{approval}/email-approve', [OdRequestController::class, 'emailApprove'])
+        ->name('od-requests.email-approve');
+    Route::get('/od-requests/{odRequest}/approvals/{approval}/email-reject', [OdRequestController::class, 'emailRejectPage'])
+        ->name('od-requests.email-reject');
+    Route::patch('/od-requests/{odRequest}/approvals/{approval}/approve', [OdRequestController::class, 'approve'])
+        ->name('od-requests.approve');
+    Route::patch('/od-requests/{odRequest}/approvals/{approval}/reject', [OdRequestController::class, 'reject'])
+        ->name('od-requests.reject');
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead'])
         ->name('notifications.mark-all-read');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])

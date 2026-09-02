@@ -18,12 +18,14 @@
         || request()->routeIs('assets.*')
         || request()->routeIs('interns.*')
         || request()->routeIs('attendance.*')
+        || request()->routeIs('hrms.outside-office-requests.*')
         || request()->routeIs('hrms.timesheet-lop.*')
         || request()->routeIs('house-keeping.*')
         || request()->routeIs('payroll.*')
         || request()->routeIs('hrms-announcements.*')
         || request()->routeIs('leave-requests.*')
         || request()->routeIs('permission-requests.*')
+        || request()->routeIs('od-requests.*')
         || request()->routeIs('visitor-management.*')
         || request()->routeIs('dynamic-forms.*')
         || request()->routeIs('facility-management.*')
@@ -347,6 +349,29 @@
                 @endcan
 
                 @if(! $hrmsSelfService)
+                @can('outside_permission_request.menuview')
+                <a href="{{ route('hrms.outside-office-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.outside-office-requests.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.outside-office-requests.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                        <span>Outside Office Requests</span>
+                        @php
+                            $ooPendingCount = \App\Models\OutsideOfficeAttendanceRequest::where('status', 'pending')->count();
+                        @endphp
+                        @if($ooPendingCount > 0)
+                            <span class="badge" style="margin-left: auto; background: #fe5f04; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px;">{{ $ooPendingCount }}</span>
+                        @endif
+                    </div>
+                </a>
+                @endcan
+                @endif
+
+                @if(! $hrmsSelfService)
                 @can('timesheet_lop.menuview')
                 <a href="{{ route('hrms.timesheet-lop.index') }}" class="nav-item {{ request()->routeIs('hrms.timesheet-lop.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.timesheet-lop.*'))
@@ -502,6 +527,21 @@
                     </div>
                 </a>
                 @endcan
+                @endif
+
+                @if(! $hrmsSelfService)
+                <a href="{{ route('od-requests.index') }}" class="nav-item {{ request()->routeIs('od-requests.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('od-requests.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                        </svg>
+                        <span>OD Requests</span>
+                    </div>
+                </a>
                 @endif
 
                 @if(! $hrmsSelfService)

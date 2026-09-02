@@ -35,6 +35,11 @@ class HrmsApprovalHierarchyService
         return $this->leaveApprovalChainFor($requester);
     }
 
+    public function odApprovalChainFor(User $requester): Collection
+    {
+        return $this->leaveApprovalChainFor($requester);
+    }
+
     public function leaveApprovalChainFor(User $requester): Collection
     {
         $companyId = $requester->company_id;

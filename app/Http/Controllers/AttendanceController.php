@@ -345,7 +345,7 @@ class AttendanceController extends Controller
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'from_date' => ['nullable', 'date'],
             'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
-            'status' => ['nullable', 'in:present,absent,leave'],
+            'status' => ['nullable', 'in:present,absent,leave,od'],
             'login_timing' => ['nullable', 'in:early,late'],
             'attendee_type' => ['nullable', 'in:employee,intern'],
             'sort_by' => ['nullable', 'in:employee_name,employee_id,attendance_date,attendance_status,login_time,logout_time,overall_working_hours,login_location,attendance_photo'],
@@ -510,7 +510,8 @@ class AttendanceController extends Controller
 
         $stats = [
             'total_employees' => $accessibleAttendees->count(),
-            'present_count' => $attendanceRecords->where('attendance_status', 'present')->count(),
+            'present_count' => $attendanceRecords->whereIn('attendance_status', ['present', 'od'])->count(),
+            'od_count' => $attendanceRecords->where('attendance_status', 'od')->count(),
             'absent_count' => $absentRecords->count(),
             'late_count' => $attendanceRecords->where('attendance_status', 'present')->where('login_timing', 'late')->count(),
             'early_count' => $attendanceRecords->where('attendance_status', 'present')->where('login_timing', 'early')->count(),
@@ -519,7 +520,8 @@ class AttendanceController extends Controller
         ];
 
         $records = match ($statusFilter) {
-            'present' => $attendanceRecords->where('attendance_status', 'present')->values(),
+            'present' => $attendanceRecords->whereIn('attendance_status', ['present', 'od'])->values(),
+            'od' => $attendanceRecords->where('attendance_status', 'od')->values(),
             'absent' => $absentRecords,
             'leave' => $attendanceRecords->where('attendance_status', 'leave')->values(),
             default => $attendanceRecords->concat($absentRecords),

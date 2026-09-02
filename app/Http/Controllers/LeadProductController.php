@@ -13,6 +13,7 @@ use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Services\DataVisibilityService;
+use App\Services\ProductionUpdateRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -622,6 +623,12 @@ class LeadProductController extends Controller
 
             return $initiation;
         });
+
+        try {
+            app(ProductionUpdateRecorder::class)->recordProductionInitiation($initiation, auth()->user());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to record production initiation update: ' . $e->getMessage());
+        }
 
         // Send Email notification to Customer Success Team & CC
         try {

@@ -23,6 +23,7 @@ use App\Models\LeadProduct;
 use App\Models\DesignSettingTarget;
 use App\Models\ProjectTestingDetail;
 use App\Models\ProjectBug;
+use App\Services\ProductionUpdateRecorder;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use App\Services\NotificationService;
@@ -446,6 +447,16 @@ class ProjectApiController extends Controller
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
+        try {
+            app(ProductionUpdateRecorder::class)->recordTlAllocation(
+                $productionInitiation->fresh(),
+                $selectedTlIds,
+                $user
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to record TL allocation update: ' . $e->getMessage());
+        }
+
         $this->notifications->notifyMany(
             User::query()->whereIn('id', $selectedTlIds)->where('is_active', true)->get(),
             'projects',
@@ -531,6 +542,16 @@ class ProjectApiController extends Controller
             ...$this->summarizeTlEmployeeAllocations($tlAllocations->all()),
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
+
+        try {
+            app(ProductionUpdateRecorder::class)->recordTeamAllocation(
+                $productionInitiation->fresh(),
+                $selectedEmployeeIds,
+                $user
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to record team allocation update: ' . $e->getMessage());
+        }
 
         $this->notifications->notifyMany(
             User::query()->whereIn('id', $selectedEmployeeIds)->where('is_active', true)->get(),

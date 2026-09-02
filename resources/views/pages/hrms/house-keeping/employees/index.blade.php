@@ -43,6 +43,9 @@
 .badge-active { background: #dcfce7; color: #15803d; }
 .badge-inactive { background: #fee2e2; color: #b91c1c; }
 
+.hk-pagination-wrap { margin-top: 16px; border: 1px solid #e5e7eb; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 2px 6px rgba(18, 18, 18, 0.02); }
+.hk-pagination-wrap .app-pagination { border-top: none; }
+
 .hk-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 9999; padding: 20px; }
 .hk-modal-overlay.active { display: flex; }
 .hk-modal { background: #fff; width: 100%; max-width: 580px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; animation: modalIn 0.2s ease-out; }
@@ -174,8 +177,8 @@
             </div>
 
             @if($employees->hasPages())
-                <div style="margin-top: 20px;">
-                    {{ $employees->links() }}
+                <div class="hk-pagination-wrap">
+                    @include('partials.table-pagination', ['paginator' => $employees])
                 </div>
             @endif
         </section>

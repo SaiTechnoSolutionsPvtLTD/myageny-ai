@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LeadProduct;
 use App\Models\ProductOvpFormField;
 use App\Models\Department;
+use App\Services\ProductionUpdateRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -286,6 +287,12 @@ class ProductionInitiationApiController extends Controller
             'attachment_path' => $attachmentPath,
             'attachment_name' => $attachmentName,
         ]);
+
+        try {
+            app(ProductionUpdateRecorder::class)->recordProductionInitiation($initiation, auth()->user());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to record production initiation update: ' . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,

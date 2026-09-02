@@ -49,6 +49,8 @@
 .alert-success { padding: 14px 18px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; border-radius: 12px; margin-bottom: 16px; font-weight: 600; font-size: 13px; }
 .alert-danger { padding: 14px 18px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 12px; margin-bottom: 16px; font-weight: 600; font-size: 13px; }
 .empty-state { padding: 36px 18px; text-align: center; color: #9ca3af; font-size: 14px; }
+.hk-pagination-wrap { margin-top: 16px; border: 1px solid #e5e7eb; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 2px 6px rgba(18, 18, 18, 0.02); }
+.hk-pagination-wrap .app-pagination { border-top: none; }
 </style>
 @endpush
 
@@ -257,8 +259,8 @@
             </div>
 
             @if($attendanceLogs->hasPages())
-                <div style="margin-top: 20px;">
-                    {{ $attendanceLogs->links() }}
+                <div class="hk-pagination-wrap">
+                    @include('partials.table-pagination', ['paginator' => $attendanceLogs])
                 </div>
             @endif
         </section>

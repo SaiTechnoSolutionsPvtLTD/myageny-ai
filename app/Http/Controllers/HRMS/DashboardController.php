@@ -11,6 +11,7 @@ use App\Models\HolidayCalendar;
 use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\LeaveRequest;
+use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
@@ -184,6 +185,7 @@ class DashboardController extends Controller
             'exit_approval_queue' => $exitApprovalQueue,
             'exit_request' => $exitRequest,
             'assigned_interviews' => $this->assignedInterviewsForUser(),
+            'outside_office_pending' => OutsideOfficeAttendanceRequest::query()->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING)->count(),
         ];
 
         $stats = array_merge($stats, $this->getHrmsCalendarData($request));

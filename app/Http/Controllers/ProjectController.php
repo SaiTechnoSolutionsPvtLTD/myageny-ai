@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use App\Services\ProductionUpdateRecorder;
 
 class ProjectController extends Controller
 {
@@ -1459,6 +1460,16 @@ class ProjectController extends Controller
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
 
         try {
+            app(ProductionUpdateRecorder::class)->recordTlAllocation(
+                $productionInitiation->fresh(),
+                $selectedTlIds,
+                $user
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to record TL allocation update: ' . $e->getMessage());
+        }
+
+        try {
             $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
             $allocatedTls = User::whereIn('id', $selectedTlIds)
                 ->where('is_active', true)
@@ -1523,6 +1534,16 @@ class ProjectController extends Controller
             ...$allocationSummary,
         ]);
         $this->syncProductionCountReportAllocation($productionInitiation->fresh(), $user->id);
+
+        try {
+            app(ProductionUpdateRecorder::class)->recordTeamAllocation(
+                $productionInitiation->fresh(),
+                $selectedEmployeeIds,
+                $user
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to record team allocation update: ' . $e->getMessage());
+        }
 
         try {
             $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
