@@ -209,11 +209,8 @@ class ExpenseRequestApiController extends Controller
                 return response()->json(['success' => false, 'message' => 'Expense request not found.'], 404);
             }
 
-            $userRoleIds = $user->roles->pluck('id')->toArray();
-            $canApprove = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
-
-            if (! $canApprove) {
-                return response()->json(['success' => false, 'message' => 'You are not authorized to approve this expense request.'], 403);
+            if (! $expenseRequest->canUserAction($user)) {
+                return response()->json(['success' => false, 'message' => 'You are not authorized to approve this expense request at its current stage.'], 403);
             }
 
             if ($expenseRequest->status !== 'pending') {
@@ -226,21 +223,39 @@ class ExpenseRequestApiController extends Controller
 
             $approvalChain = $pipeline->approval_chain ?? [];
             $currentStep = $expenseRequest->current_step;
+            $currentRole = Role::withoutGlobalScopes()->find($expenseRequest->current_approver_role_id);
+            $currentRoleName = $currentRole?->display_name ?: ($currentRole ? ucfirst(str_replace('_', ' ', preg_replace('/^company_\d+__/', '', $currentRole->name))) : "Stage {$currentStep}");
+
+            $history = $expenseRequest->stage_history ?? [];
+            $history[] = [
+                'step'        => $currentStep,
+                'role_id'     => (int) $expenseRequest->current_approver_role_id,
+                'role_name'   => $currentRoleName,
+                'action'      => 'approved',
+                'user_id'     => $user->id,
+                'user_name'   => $user->name,
+                'actioned_at' => now()->toDateTimeString(),
+                'remarks'     => $request->input('remarks'),
+            ];
+
             $nextStepIndex = $currentStep;
 
             if (isset($approvalChain[$nextStepIndex])) {
+                $nextRoleId = (int) $approvalChain[$nextStepIndex];
                 $expenseRequest->update([
                     'current_step'             => $currentStep + 1,
-                    'current_approver_role_id' => (int) $approvalChain[$nextStepIndex],
+                    'current_approver_role_id' => $nextRoleId,
+                    'stage_history'            => $history,
                 ]);
 
                 $this->sendApproverNotification($expenseRequest);
                 $msg = "Approved for Stage {$currentStep}. Notified Stage " . ($currentStep + 1) . " approver(s).";
             } else {
                 $expenseRequest->update([
-                    'status'      => 'approved',
-                    'approver_id' => $user->id,
-                    'actioned_at' => now(),
+                    'status'        => 'approved',
+                    'approver_id'   => $user->id,
+                    'stage_history' => $history,
+                    'actioned_at'   => now(),
                 ]);
 
                 $this->sendApplicantStatusNotification($expenseRequest, 'approved');
@@ -273,11 +288,8 @@ class ExpenseRequestApiController extends Controller
                 return response()->json(['success' => false, 'message' => 'Expense request not found.'], 404);
             }
 
-            $userRoleIds = $user->roles->pluck('id')->toArray();
-            $canReject = $user->isHrOrAdmin() || in_array($expenseRequest->current_approver_role_id, $userRoleIds);
-
-            if (! $canReject) {
-                return response()->json(['success' => false, 'message' => 'You are not authorized to reject this expense request.'], 403);
+            if (! $expenseRequest->canUserAction($user)) {
+                return response()->json(['success' => false, 'message' => 'You are not authorized to reject this expense request at its current stage.'], 403);
             }
 
             if ($expenseRequest->status !== 'pending') {
@@ -288,14 +300,32 @@ class ExpenseRequestApiController extends Controller
                 'rejection_reason' => 'required|string|max:1000',
             ]);
 
+            $reason = $validated['rejection_reason'];
+            $history = $expenseRequest->stage_history ?? [];
+            $currentStep = $expenseRequest->current_step;
+            $currentRole = Role::withoutGlobalScopes()->find($expenseRequest->current_approver_role_id);
+            $currentRoleName = $currentRole?->display_name ?: ($currentRole ? ucfirst(str_replace('_', ' ', preg_replace('/^company_\d+__/', '', $currentRole->name))) : "Stage {$currentStep}");
+
+            $history[] = [
+                'step'        => $currentStep,
+                'role_id'     => (int) $expenseRequest->current_approver_role_id,
+                'role_name'   => $currentRoleName,
+                'action'      => 'rejected',
+                'user_id'     => $user->id,
+                'user_name'   => $user->name,
+                'actioned_at' => now()->toDateTimeString(),
+                'remarks'     => $reason,
+            ];
+
             $expenseRequest->update([
                 'status'           => 'rejected',
                 'approver_id'      => $user->id,
-                'rejection_reason' => $validated['rejection_reason'],
+                'rejection_reason' => $reason,
+                'stage_history'    => $history,
                 'actioned_at'      => now(),
             ]);
 
-            $this->sendApplicantStatusNotification($expenseRequest, 'rejected', $validated['rejection_reason']);
+            $this->sendApplicantStatusNotification($expenseRequest, 'rejected', $reason);
 
             $expenseRequest->load(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole']);
 

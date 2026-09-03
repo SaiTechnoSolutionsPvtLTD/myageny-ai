@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccessMappingController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\AssetCategoryController;
 use App\Http\Controllers\AssetEntryController;
@@ -555,6 +556,11 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
 
     // Main settings dashboard
     Route::get('/', fn() => view('pages.settings.index'))->name('index');
+
+    // Activity Logs (User-wise & Lead-wise Audit)
+    Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+    Route::get('/activity-logs/export', [ActivityLogController::class, 'export'])->name('activity-logs.export');
+    Route::get('/activity-logs/{activityLog}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
 
     // Lead Status  (no create/show pages – handled via modal on index)
     Route::resource('lead-statuses', LeadStatusController::class)

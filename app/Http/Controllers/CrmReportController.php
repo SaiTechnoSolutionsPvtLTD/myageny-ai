@@ -362,8 +362,11 @@ class CrmReportController extends Controller
         $analyticsRows = $analyticsQuery->get();
         
         $totalCount = $analyticsRows->count();
-        // Dynamically paginate to total count to show all rows, avoiding hardcoding page limit
-        $reportRows = $query->paginate(max(1, $totalCount))->withQueryString();
+        $perPage = (int) $request->input('per_page', 20);
+        if ($perPage < 1 || $perPage > 200) {
+            $perPage = 20;
+        }
+        $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
         $summary = [
             'rows' => $totalCount,

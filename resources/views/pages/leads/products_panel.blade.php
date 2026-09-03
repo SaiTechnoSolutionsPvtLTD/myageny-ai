@@ -850,13 +850,6 @@
                 html += '<div class="pp-hist-right">';
                 html += '<div class="pp-hist-amt">₹' + p.amount.toFixed(2) + '</div>';
                 html += '<div class="pp-hist-run">Cumulative: ₹' + running.toFixed(2) + '</div></div>';
-                /* Delete mini-form */
-                html += '<form method="POST" action="' + p.delUrl + '" style="display:inline" onsubmit="return confirm(\'Remove this payment?\')">';
-                html += '<input type="hidden" name="_token" value="' + csrf + '">';
-                html += '<input type="hidden" name="_method" value="DELETE">';
-                html += '<button type="submit" class="pp-hist-del" title="Remove">';
-                html += '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>';
-                html += '</button></form>';
                 html += '</div>';
             });
             html += '</div>';

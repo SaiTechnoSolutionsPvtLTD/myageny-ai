@@ -35,8 +35,11 @@
 .pa-table { width:100%; border-collapse:collapse; }
 .pa-table th { padding:12px 14px; text-align:left; border-bottom:1px solid #eef2f7; background:#fafbfc; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#6b7280; white-space:nowrap; }
 .pa-table td { padding:14px; border-bottom:1px solid #f3f4f6; font-size:13px; color:#111827; vertical-align:middle; }
-.pa-table tbody tr:hover td { background:#fafafa; }
+.pa-row { cursor: pointer; }
+.pa-table tbody tr.pa-row:hover td { background:#f8fafc; }
 .pa-product { font-weight:800; color:#111827; }
+.pa-product-link { font-weight:800; color:#111827; text-decoration:none; transition:color .16s ease; }
+.pa-product-link:hover { color:#166534; text-decoration:underline; }
 .pa-meta { font-size:11px; color:#6b7280; margin-top:3px; }
 .pa-status-pill { display:inline-flex; align-items:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:capitalize; border:1px solid transparent; }
 .pa-status-pill.pending { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
@@ -409,9 +412,17 @@
                                     $displayCompany = $item->company_name ?: ($item->lead?->company_name ?: 'No company');
                                     $displayClient = $item->client_name ?: ($item->lead?->contact_name ?: 'No client');
                                 @endphp
-                                <tr>
+                                <tr class="pa-row" data-href="{{ $item->lead_id ? route('leads.show', $item->lead_id) : '#' }}">
                                     <td>
-                                        <div class="pa-product">{{ $item->product_name }}</div>
+                                        <div class="pa-product">
+                                            @if($item->lead_id)
+                                                <a href="{{ route('leads.show', $item->lead_id) }}" class="pa-product-link" title="View Lead Details">
+                                                    {{ $item->product_name }}
+                                                </a>
+                                            @else
+                                                {{ $item->product_name }}
+                                            @endif
+                                        </div>
                                         @if(auth()->user()->canViewBudgetApprovalDetails() && $item->lead_budget_amount)
                                             <div style="font-size: 11px; font-weight: 700; color: #166534; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: #e9f9ee; border-radius: 4px; border: 1px solid #bce6c7;">
                                                 💰 Budget: ₹{{ number_format($item->lead_budget_amount, 2) }} ({{ $item->budget_amount_type }})
@@ -999,6 +1010,18 @@ document.addEventListener('DOMContentLoaded', function () {
             percentText.innerText = currentProgress + '%';
         }, 250);
     }
+
+    document.querySelectorAll('.pa-row').forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('button') || event.target.closest('a') || event.target.closest('select') || event.target.closest('form') || event.target.closest('input')) {
+                return;
+            }
+            const href = row.dataset.href;
+            if (href && href !== '#') {
+                window.location.href = href;
+            }
+        });
+    });
 });
 </script>
 @endpush

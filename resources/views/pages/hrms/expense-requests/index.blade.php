@@ -617,15 +617,9 @@
             <tbody>
                 @forelse($requests as $index => $req)
                 @php
-                    $applicantRole = $req->user?->roles->first()?->display_name ?? ucfirst(str_replace('_',' ', $req->user?->roles->first()?->name ?? 'User'));
-                    $canAction = false;
-                    if ($req->status === 'pending') {
-                        if (auth()->user()?->isCompanyAdmin() || auth()->user()?->isSystemAdmin()) {
-                            $canAction = true;
-                        } elseif ($req->current_approver_role_id && in_array($req->current_approver_role_id, $userRoleIds)) {
-                            $canAction = true;
-                        }
-                    }
+                    $applicantRole = $req->user?->roles->first()?->display_name ?? ucfirst(str_replace('_',' ', preg_replace('/^company_\d+__/', '', $req->user?->roles->first()?->name ?? 'User')));
+                    $canAction = $req->canUserAction();
+                    $stages = $req->approval_stages;
                 @endphp
                 <tr>
                     <td style="color:#9ca3af; font-weight:600;">
@@ -643,7 +637,7 @@
                     <td>
                         <strong style="color:#111827; font-size:15px;">₹{{ number_format($req->amount, 2) }}</strong>
                     </td>
-                    <td style="color:#4b5563; max-width:240px;">
+                    <td style="color:#4b5563; max-width:220px;">
                         {{ Str::limit($req->description, 75) }}
                         @if($req->attachment)
                             <div style="margin-top:4px;">
@@ -654,23 +648,60 @@
                         @endif
                     </td>
                     <td>
-                        @if($req->status === 'pending')
-                            <span style="font-size:12px; font-weight:700; color:#374151;">
-                                Stage {{ $req->current_step }}: {{ $req->currentApproverRole?->display_name ?? ucfirst(str_replace('_',' ', $req->currentApproverRole?->name ?? 'Pending Role')) }}
-                            </span>
-                        @elseif($req->status === 'approved')
-                            <span style="font-size:11px; color:#166534; font-weight:700;">
-                                Approved by {{ $req->approver?->name ?? 'Approver' }}
-                            </span>
+                        @if(!empty($stages))
+                            <div style="display:flex; flex-direction:column; gap:5px; min-width:180px;">
+                                @foreach($stages as $stg)
+                                    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+                                        @if($stg['status'] === 'completed')
+                                            <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#dcfce7; color:#15803d; font-weight:800; font-size:10px; flex-shrink:0;">✓</span>
+                                            <div style="line-height:1.2;">
+                                                <span style="color:#15803d; font-weight:700;">Stage {{ $stg['step'] }}: {{ $stg['role_name'] }}</span>
+                                                @if($stg['actioned_by'])
+                                                    <span style="color:#64748b; font-size:10px; display:block;">By {{ $stg['actioned_by'] }}</span>
+                                                @endif
+                                            </div>
+                                        @elseif($stg['status'] === 'current')
+                                            <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#fef3c7; color:#b45309; font-weight:800; font-size:10px; flex-shrink:0;">⏳</span>
+                                            <div style="line-height:1.2;">
+                                                <span style="color:#b45309; font-weight:800; background:#fef3c7; padding:2px 6px; border-radius:4px; display:inline-block;">
+                                                    Stage {{ $stg['step'] }}: {{ $stg['role_name'] }}
+                                                </span>
+                                            </div>
+                                        @elseif($stg['status'] === 'rejected')
+                                            <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#fee2e2; color:#b91c1c; font-weight:800; font-size:10px; flex-shrink:0;">✕</span>
+                                            <div style="line-height:1.2;">
+                                                <span style="color:#b91c1c; font-weight:700;">Stage {{ $stg['step'] }}: {{ $stg['role_name'] }}</span>
+                                                @if($stg['actioned_by'])
+                                                    <span style="color:#b91c1c; font-size:10px; display:block;">Rejected by {{ $stg['actioned_by'] }}</span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#f3f4f6; color:#9ca3af; font-weight:700; font-size:10px; flex-shrink:0;">{{ $stg['step'] }}</span>
+                                            <span style="color:#9ca3af; font-weight:600;">Stage {{ $stg['step'] }}: {{ $stg['role_name'] }}</span>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
                         @else
-                            <span style="font-size:11px; color:#991b1b; font-weight:700;">
-                                Rejected by {{ $req->approver?->name ?? 'Approver' }}
-                            </span>
-                            @if($req->rejection_reason)
-                                <div style="margin-top:6px; padding:6px 10px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#991b1b; font-size:11px; font-weight:600; line-height:1.4; max-width:220px;">
-                                    💬 <strong>Remarks:</strong> {{ $req->rejection_reason }}
-                                </div>
+                            @if($req->status === 'pending')
+                                <span style="font-size:12px; font-weight:700; color:#374151;">
+                                    Stage {{ $req->current_step }}: {{ $req->currentApproverRole?->display_name ?? ucfirst(str_replace('_',' ', preg_replace('/^company_\d+__/', '', $req->currentApproverRole?->name ?? 'Approver'))) }}
+                                </span>
+                            @elseif($req->status === 'approved')
+                                <span style="font-size:11px; color:#166534; font-weight:700;">
+                                    Approved by {{ $req->approver?->name ?? 'Approver' }}
+                                </span>
+                            @else
+                                <span style="font-size:11px; color:#991b1b; font-weight:700;">
+                                    Rejected by {{ $req->approver?->name ?? 'Approver' }}
+                                </span>
                             @endif
+                        @endif
+
+                        @if($req->status === 'rejected' && $req->rejection_reason)
+                            <div style="margin-top:6px; padding:6px 10px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#991b1b; font-size:11px; font-weight:600; line-height:1.4; max-width:220px;">
+                                💬 <strong>Remarks:</strong> {{ $req->rejection_reason }}
+                            </div>
                         @endif
                     </td>
                     <td>
@@ -690,18 +721,22 @@
                             <div style="display:inline-flex; gap:6px;">
                                 <form id="approveForm_{{ $req->id }}" method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}">
                                     @csrf
-                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:5px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}')">
-                                        Approve
+                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:6px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}')">
+                                        Approve (Stage {{ $req->current_step }})
                                     </button>
                                 </form>
 
-                                <button type="button" class="exp-req-btn exp-req-btn-outline" style="padding:5px 10px; font-size:11px; color:#dc2626; border-color:#fecaca;"
+                                <button type="button" class="exp-req-btn exp-req-btn-outline" style="padding:6px 10px; font-size:11px; color:#dc2626; border-color:#fecaca;"
                                     onclick="openRejectModal({{ $req->id }})">
                                     Reject
                                 </button>
                             </div>
+                        @elseif($req->status === 'pending')
+                            <span style="display:inline-block; font-size:11px; color:#6b7280; background:#f3f4f6; padding:4px 8px; border-radius:6px; font-weight:600;">
+                                Waiting for Stage {{ $req->current_step }}
+                            </span>
                         @else
-                            <span style="font-size:12px; color:#9ca3af;">-</span>
+                            <span style="font-size:12px; color:#9ca3af;">—</span>
                         @endif
                     </td>
                 </tr>
