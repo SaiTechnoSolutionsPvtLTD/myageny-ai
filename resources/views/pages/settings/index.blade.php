@@ -496,6 +496,23 @@
             </span>
         </a>
         @endcan
+
+        <a href="{{ route('settings.activity-logs.index') }}" class="settings-card quotation">
+            <div class="settings-card-icon quotation">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <h4 class="settings-card-title">Activity Logs</h4>
+            <p class="settings-card-text">Track full user actions from login to logout, lead-wise timeline, system interactions, and audit trail.</p>
+            <span class="settings-card-link">
+                Open Activity Logs
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </span>
+        </a>
     </div>
 </div>
 @endsection

@@ -2029,10 +2029,6 @@
                 '<div class="pp-hist-amt">' + fmt(pmt.amount) + '</div>' +
                 '<div class="pp-hist-run">Cumulative: ' + fmt(running) + '</div>' +
             '</div>' +
-            (!isOverall ?
-                '<button type="button" class="pp-hist-del" onclick="PP.ppDeletePayment(' + pmt.id + ')" title="Remove">' +
-                    '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>' +
-                '</button>' : '') +
         '</div>';
     }
 

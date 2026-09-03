@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->web(append: [
             CheckActiveUser::class,
+            \App\Http\Middleware\TrackUserActivity::class,
         ]);
 
         $middleware->alias([

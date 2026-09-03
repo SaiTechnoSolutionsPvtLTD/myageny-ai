@@ -127,6 +127,7 @@
 @php
     $hasCustomFilters =
         request()->filled('customer_id')
+        || request()->filled('sales_executive_id')
         || request()->filled('payment_mode')
         || request()->filled('branch_id')
         || request()->filled('date_from')
@@ -268,6 +269,10 @@
                         </select>
                     </div>
 
+                    @if(request()->filled('per_page'))
+                        <input type="hidden" name="per_page" value="{{ request('per_page') }}">
+                    @endif
+
                     <div class="crm-pay-form-actions">
                         <button type="submit" class="crm-pay-btn crm-pay-btn-primary">Apply</button>
                         @if($hasCustomFilters)
@@ -285,6 +290,18 @@
                         <div class="crm-pay-card-title">Payment Collection Sheet</div>
                         <div class="crm-pay-card-subtitle">Showing {{ $reportRows->firstItem() ?? 0 }}-{{ $reportRows->lastItem() ?? 0 }} of {{ $reportRows->total() }} rows</div>
                     </div>
+                    @if($reportRows->total() > 0)
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <label for="per_page_select" style="font-size:12px; font-weight:700; color:#64748b;">Per page:</label>
+                            <select id="per_page_select" class="crm-pay-select" style="width:auto; padding:6px 12px; font-size:12px; border-radius:10px;" onchange="window.location.href=this.value">
+                                @foreach([10, 20, 50, 100] as $size)
+                                    <option value="{{ request()->fullUrlWithQuery(['per_page' => $size, 'page' => 1]) }}" @selected((int) request('per_page', 20) === $size)>
+                                        {{ $size }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
                 </div>
 
                 @if($reportRows->isEmpty())

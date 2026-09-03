@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Services\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -98,6 +99,9 @@ class AuthController extends Controller
             'last_login_ip' => $request->ip(),
         ]);
 
+        // Log user login activity
+        ActivityLogger::logLogin($user, $request);
+
         $defaultRoute = $user->dashboardRoute();
 
         return redirect()->intended(route($defaultRoute))
@@ -109,6 +113,11 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
+        $user = Auth::user();
+        if ($user) {
+            ActivityLogger::logLogout($user, $request);
+        }
+
         Auth::logout();
 
         $request->session()->invalidate();
