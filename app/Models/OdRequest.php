@@ -21,6 +21,12 @@ class OdRequest extends Model
         'company_id',
         'user_id',
         'employee_id',
+        // Mobile-only column — see the
+        // 2026_09_02_150100_add_branch_id_to_od_requests_table migration.
+        // Web's OdRequestController::store() never sets this (nullable),
+        // so existing web behaviour is unaffected; only
+        // OdRequestApiController (mobile) populates/filters on it.
+        'branch_id',
         'from_date',
         'to_date',
         'total_days',
@@ -52,6 +58,11 @@ class OdRequest extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(EmployeeOnboarding::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function approvals(): HasMany

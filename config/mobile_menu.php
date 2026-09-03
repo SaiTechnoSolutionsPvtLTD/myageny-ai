@@ -23,7 +23,7 @@ return [
             // `can:leads.view` there) — same permission here for parity.
             ['key' => 'reminders_tasks', 'label' => 'Reminders & Tasks', 'section' => 'CRM', 'order' => 55, 'permission' => 'leads.view'],
             ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview', 'require_method' => 'allowsPriceRequests'],
-            ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70],
+            ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70, 'permission' => 'reports.menuview'],
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
             ['key' => 'production_approvals',  'label' => 'Production Approvals',  'section' => 'OVP & PRODUCTION', 'order' => 90, 'permission' => 'production_approval_module.menuview'],
             ['key' => 'notifications',   'label' => 'Notifications',  'section' => 'CRM', 'order' => 15],
@@ -156,6 +156,28 @@ return [
                 'section' => 'HRMS',
                 'order' => 95,
                 'permission' => 'expense_request.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser'
+            ],
+            // Web's sidebar.blade.php shows the OD Requests nav link to
+            // anyone who isn't hrms-self-service-only (`@if(! $hrmsSelfService)`)
+            // — no granular @can() gate exists for it there. Mobile now has
+            // its own od_request.menuview permission (mobile-only, see
+            // laravel-mobile-od-request.md / the
+            // add_od_request_menuview_permission migration), mirroring the
+            // 'permission' pattern used by every sibling HRMS item below.
+            // $user->can() is safe against an unrecognized/unassigned
+            // permission name here — AppServiceProvider's Gate::before calls
+            // User::hasCrmPermission(), a plain collection lookup that
+            // returns false rather than throwing — so this can never break
+            // the wider /mobile/menu response. forbid_method is kept
+            // alongside it to match the same web condition the sibling items
+            // already enforce.
+            [
+                'key' => 'hrms.od_request',
+                'label' => 'OD Requests',
+                'section' => 'HRMS',
+                'order' => 96,
+                'permission' => 'od_request.menuview',
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
             // No web-sidebar equivalent (this workflow is mobile-only), so

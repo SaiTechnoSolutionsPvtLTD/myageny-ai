@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Department;
 use App\Models\Lead;
 use App\Models\LeadProduct;
+use App\Models\Product;
 use App\Models\DesignSettingTarget;
 use App\Models\ProjectTestingDetail;
 use App\Models\ProjectBug;
@@ -137,6 +139,16 @@ class ProjectApiController extends Controller
                 'is_tl_scoped_view'            => $this->shouldLimitToAssignedProjects($user),
                 'is_contributor_scoped_view'   => $this->shouldLimitToEmployeeProjects($user),
                 'can_quick_add_production_update' => $this->canQuickAddProductionUpdate($user),
+                // These three were already being computed above (lines
+                // 112-125) but never included in the response — the
+                // Flutter dashboard model/UI expects them (development_
+                // product_wise_stats / payment_stats / six_months_revenue)
+                // and hides its chart sections entirely when they're
+                // missing, which is why the graphs never rendered on
+                // mobile even though the web dashboard shows them.
+                'development_product_wise_stats' => $developmentProductWiseStats,
+                'payment_stats'                 => $paymentStats,
+                'six_months_revenue'            => $sixMonthsRevenue,
             ],
         ]);
     }
@@ -198,78 +210,354 @@ class ProjectApiController extends Controller
         return array_values($months);
     }
 
+    // Valid project_execution_status values — matches the `in:` validation
+    // rule on updateStatus() below (and web's ProjectController@updateStatus).
+    private const EXECUTION_STATUSES = [
+        'ontrack'   => 'On Track',
+        'hold'      => 'On Hold',
+        'delivered' => 'Delivered',
+        'lost'      => 'Lost',
+    ];
+
     // ─────────────────────────────────────────────────────────────────────────
     //  GET /mobile/projects
+    //
+    //  Previously this loaded EVERY project visible to the user (`->get()`
+    //  with no LIMIT — for an Admin that's every allocation-pending +
+    //  allocated project in the company) and did all filtering as in-memory
+    //  Collection checks (and for the Admin/TL bucket view, there was no
+    //  filtering at all — not even search). Mirrors the same fix already
+    //  applied to ProductionApprovalApiController::index(): push every
+    //  filter that maps cleanly onto a real column/relation down to a SQL
+    //  WHERE clause via buildFilteredProjectsQuery(), and paginate at the
+    //  database... with one deliberate exception — see the comment above
+    //  filterByDeliveryAndDue() for why delivery-date/due-date filtering
+    //  stays in-memory.
     // ─────────────────────────────────────────────────────────────────────────
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page'     => ['nullable', 'integer', 'min:1'],
+        ]);
+
         $user    = auth()->user();
-        $search  = trim((string) $request->query('search', ''));
-        $category = trim((string) $request->query('project_category', ''));
         $bucket  = trim((string) $request->query('bucket', 'allocation_pending'));
+        $deliveryFrom = trim((string) $request->query('delivery_from', ''));
+        $deliveryTo   = trim((string) $request->query('delivery_to', ''));
+        $due          = trim((string) $request->query('due', ''));
+        $page         = (int) $request->input('page', 1);
+        $perPage      = (int) $request->input('per_page', 15);
 
         $isContributorScopedView = $this->shouldLimitToEmployeeProjects($user);
         $isTlScopedView          = $this->shouldLimitToAssignedProjects($user);
 
+        $query = $this->buildFilteredProjectsQuery($user, [
+            'search'            => (string) $request->query('search', ''),
+            'product_id'        => (string) $request->query('product_id', ''),
+            'department_id'     => (string) $request->query('department_id', ''),
+            'project_category'  => (string) $request->query('project_category', ''),
+            'status'            => (string) $request->query('status', ''),
+            'employee_id'       => (string) $request->query('employee_id', ''),
+            'customer'          => (string) $request->query('customer', ''),
+            'created_from'      => (string) $request->query('created_from', ''),
+            'created_to'        => (string) $request->query('created_to', ''),
+            'my_projects'       => $request->boolean('my_projects'),
+        ]);
+
+        $candidates = $query->get()->map(fn (ProductionInitiation $p) => $this->decorateProjectForUser($p, $user));
+
+        // Computed once per row here (not written onto the model yet) so
+        // filterByDeliveryAndDue() judges every project — contributor or
+        // bucket view alike — by the same effective delivery date. Whether
+        // that computed value actually overwrites the raw column for
+        // display purposes is decided per-branch below, to avoid changing
+        // what the Admin/TL card currently shows (see note there).
+        $deliveryDates = $candidates->mapWithKeys(fn (ProductionInitiation $p) => [$p->id => $this->projectDeliveryDate($p)]);
+        $candidates = $this->filterByDeliveryAndDue($candidates, $deliveryDates, $deliveryFrom, $deliveryTo, $due);
+
+        $optionLists = [
+            'categories'  => $this->categoryOptions($candidates),
+            'departments' => $this->departmentOptions(),
+            'products'    => $this->productOptions(),
+            'statuses'    => self::EXECUTION_STATUSES,
+            'employees'   => $this->employeeOptions($user),
+        ];
+
         if ($isContributorScopedView) {
-            $projects = $this->visibleProjectsQuery($user)->get()
-                ->map(function (ProductionInitiation $p) {
-                    $p->project_delivery_date = $this->projectDeliveryDate($p);
-                    return $p;
-                });
+            // Unchanged from before this rewrite: the contributor card
+            // always shows the computed fallback delivery date, not just
+            // the raw column.
+            $candidates = $candidates->map(function (ProductionInitiation $p) use ($deliveryDates) {
+                $p->project_delivery_date = $deliveryDates->get($p->id);
+                return $p;
+            });
 
-            $filters = [
-                'search'           => $search,
-                'project_category' => $category,
-                'delivery_from'    => trim((string) $request->query('delivery_from', '')),
-                'delivery_to'      => trim((string) $request->query('delivery_to', '')),
-            ];
-
-            $filtered = $this->filterEmployeeProjects($projects, $filters);
+            $paged = $this->paginateCollection($candidates, $page, $perPage);
 
             return response()->json([
                 'success' => true,
-                'data' => [
+                'data' => array_merge([
                     'view_type'   => 'contributor',
-                    'projects'    => $filtered->map(fn($p) => $this->serializeProjectSummary($p))->values(),
-                    'total'       => $filtered->count(),
-                    'categories'  => $projects->map(fn($p) => $p->product?->category?->name)
-                        ->filter()->unique()->sort()->values(),
-                    'filters'     => $filters,
-                ],
+                    'projects'    => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
+                    'total'       => $paged->total(),
+                    'pagination'  => $this->paginationMeta($paged),
+                    'filters'     => $this->echoFilters($request),
+                ], $optionLists),
             ]);
         }
 
-        // TL / Admin view — bucket-based
-        $initiations = $this->visibleProjectsQuery($user)->get()
-            ->map(fn($i) => $this->decorateProjectForUser($i, $user));
-
-        $buckets = ['allocation_pending' => [], 'allocated' => []];
-        foreach ($initiations as $initiation) {
+        // TL / Admin view — bucket-based. Bucket membership depends on
+        // per-viewer role/department/allocation logic (resolveBucketForUser)
+        // that isn't a simple column value, so — same reasoning as the
+        // delivery-date filter — it stays an in-memory classification pass,
+        // but now runs over the already-SQL-filtered candidate set instead
+        // of every visible project in the company.
+        $buckets = ['allocation_pending' => collect(), 'allocated' => collect()];
+        foreach ($candidates as $initiation) {
             $b = $this->resolveBucketForUser($initiation, $user);
             if ($b) {
-                $buckets[$b][] = $initiation;
+                $buckets[$b]->push($initiation);
             }
         }
 
         $validBucket  = array_key_exists($bucket, $buckets) ? $bucket : 'allocation_pending';
         $bucketCounts = [
-            'allocation_pending' => count($buckets['allocation_pending']),
-            'allocated'          => count($buckets['allocated']),
+            'allocation_pending' => $buckets['allocation_pending']->count(),
+            'allocated'          => $buckets['allocated']->count(),
         ];
+
+        $paged = $this->paginateCollection($buckets[$validBucket]->values(), $page, $perPage);
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'view_type'      => $isTlScopedView ? 'tl' : 'admin',
+            'data' => array_merge([
+                'view_type'       => $isTlScopedView ? 'tl' : 'admin',
                 'selected_bucket' => $validBucket,
-                'bucket_counts'  => $bucketCounts,
-                'projects'       => collect($buckets[$validBucket])
-                    ->map(fn($p) => $this->serializeProjectSummary($p))
-                    ->values(),
-                'total'          => count($buckets[$validBucket]),
-            ],
+                'bucket_counts'   => $bucketCounts,
+                'projects'        => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
+                'total'           => $paged->total(),
+                'pagination'      => $this->paginationMeta($paged),
+                'filters'         => $this->echoFilters($request),
+            ], $optionLists),
         ]);
+    }
+
+    /**
+     * Applies every NEW filter that maps cleanly onto a real column or
+     * relation as a genuine SQL WHERE clause on top of visibleProjectsQuery()
+     * (which already scopes rows to what this user is allowed to see —
+     * untouched, still the single source of truth for that). Existing
+     * 'search'/'project_category' filters moved here from their old
+     * in-memory Collection checks too, since both are equally
+     * SQL-expressible.
+     */
+    private function buildFilteredProjectsQuery(User $user, array $filters): Builder
+    {
+        $query = $this->visibleProjectsQuery($user);
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('product_name', 'like', "%{$search}%")
+                    ->orWhere('client_name', 'like', "%{$search}%")
+                    ->orWhere('company_name', 'like', "%{$search}%")
+                    ->orWhereHas('lead', function ($lq) use ($search) {
+                        $lq->where('contact_name', 'like', "%{$search}%")
+                            ->orWhere('company_name', 'like', "%{$search}%")
+                            ->orWhere('mobile_number', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $productId = trim((string) ($filters['product_id'] ?? ''));
+        if ($productId !== '' && is_numeric($productId)) {
+            $query->where('product_id', (int) $productId);
+        }
+
+        $departmentId = trim((string) ($filters['department_id'] ?? ''));
+        if ($departmentId !== '' && is_numeric($departmentId)) {
+            $query->where('department_id', (int) $departmentId);
+        }
+
+        $category = trim((string) ($filters['project_category'] ?? ''));
+        if ($category !== '') {
+            $query->whereHas('product.category', fn ($q) => $q->where('name', $category));
+        }
+
+        $status = trim((string) ($filters['status'] ?? ''));
+        if ($status !== '' && array_key_exists($status, self::EXECUTION_STATUSES)) {
+            $query->where('project_execution_status', $status);
+        }
+
+        $employeeId = trim((string) ($filters['employee_id'] ?? ''));
+        if ($employeeId !== '' && is_numeric($employeeId)) {
+            $query->whereJsonContains('project_allocated_employee_user_ids', (int) $employeeId);
+        }
+
+        // Distinct from 'search' — a dedicated Customer-wise filter matching
+        // only the company/client identity fields, not the product name too.
+        $customer = trim((string) ($filters['customer'] ?? ''));
+        if ($customer !== '') {
+            $query->where(function ($q) use ($customer) {
+                $q->where('company_name', 'like', "%{$customer}%")
+                    ->orWhere('client_name', 'like', "%{$customer}%")
+                    ->orWhereHas('lead', function ($lq) use ($customer) {
+                        $lq->where('company_name', 'like', "%{$customer}%")
+                            ->orWhere('contact_name', 'like', "%{$customer}%");
+                    });
+            });
+        }
+
+        $createdFrom = $this->parseFilterDate((string) ($filters['created_from'] ?? ''));
+        if ($createdFrom) {
+            $query->whereDate('created_at', '>=', $createdFrom->toDateString());
+        }
+
+        $createdTo = $this->parseFilterDate((string) ($filters['created_to'] ?? ''));
+        if ($createdTo) {
+            $query->whereDate('created_at', '<=', $createdTo->toDateString());
+        }
+
+        if (! empty($filters['my_projects'])) {
+            $userId = $user->id;
+            $query->where(function ($q) use ($userId) {
+                $q->where('initiated_by', $userId)
+                    ->orWhereJsonContains('project_allocated_tl_user_ids', $userId)
+                    ->orWhereJsonContains('project_allocated_employee_user_ids', $userId);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * Delivery-date range and Due Date/Deadline-wise (upcoming / overdue /
+     * completed) filtering deliberately stay in-memory rather than becoming
+     * a whereDate() on the raw project_delivery_date column: projectDeliveryDate()
+     * falls back to a *computed* date (approval/allocation date + working
+     * days) whenever that column is null, and the existing contributor-view
+     * delivery filter (and the dashboard's own date filter) already judge
+     * projects by that computed fallback — filtering the raw column only
+     * here would silently exclude/include different projects than every
+     * other delivery-date-aware view in this same controller.
+     */
+    private function filterByDeliveryAndDue(Collection $projects, Collection $deliveryDates, string $deliveryFrom, string $deliveryTo, string $due): Collection
+    {
+        $from = $this->parseFilterDate($deliveryFrom);
+        $to   = $this->parseFilterDate($deliveryTo);
+        $due  = in_array($due, ['upcoming', 'overdue', 'completed'], true) ? $due : '';
+
+        if (! $from && ! $to && $due === '') {
+            return $projects;
+        }
+
+        return $projects->filter(function (ProductionInitiation $p) use ($deliveryDates, $from, $to, $due) {
+            $d = $deliveryDates->get($p->id);
+
+            if ($from || $to) {
+                if (! $d) return false;
+                if ($from && $d->lt($from)) return false;
+                if ($to && $d->gt($to)) return false;
+            }
+
+            if ($due !== '') {
+                $isDelivered = $p->project_execution_status === 'delivered';
+                $isOverdue   = $d && $d->isPast() && ! $isDelivered;
+
+                return match ($due) {
+                    'completed' => $isDelivered,
+                    'overdue'   => $isOverdue,
+                    'upcoming'  => ! $isDelivered && ! $isOverdue && $d && $d->isFuture(),
+                    default     => true,
+                };
+            }
+
+            return true;
+        })->values();
+    }
+
+    private function paginateCollection(Collection $items, int $page, int $perPage): LengthAwarePaginator
+    {
+        $page    = max(1, $page);
+        $perPage = max(1, min(100, $perPage ?: 15));
+        $slice   = $items->slice(($page - 1) * $perPage, $perPage)->values();
+
+        return new LengthAwarePaginator($slice, $items->count(), $perPage, $page);
+    }
+
+    private function paginationMeta(LengthAwarePaginator $paginator): array
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'last_page'    => $paginator->lastPage(),
+            'per_page'     => $paginator->perPage(),
+            'total'        => $paginator->total(),
+        ];
+    }
+
+    private function categoryOptions(Collection $projects): Collection
+    {
+        return $projects->map(fn ($p) => $p->product?->category?->name)
+            ->filter()->unique()->sort()->values();
+    }
+
+    private function departmentOptions(): Collection
+    {
+        return Department::query()->orderBy('name')->get(['id', 'name']);
+    }
+
+    private function productOptions(): Collection
+    {
+        return Product::query()->orderBy('product_name')->get(['id', 'product_name as name']);
+    }
+
+    /**
+     * Deliberately queried independently of buildFilteredProjectsQuery()'s
+     * other filters (same as how the Product/Department option lists are
+     * always the full set) so picking one filter doesn't shrink what's
+     * offered in another — and only plucks the one JSON column needed
+     * instead of hydrating full rows + relations.
+     */
+    private function employeeOptions(User $user): Collection
+    {
+        // ->get([...]) rather than ->pluck() — pluck() runs on the base
+        // query builder and would return the raw unserialized column value
+        // instead of respecting ProductionInitiation's `array` cast on this
+        // column. setEagerLoads([]) strips visibleProjectsQuery()'s ->with()
+        // relations back off again so this only ever selects the two
+        // columns below, not the half-dozen relations that call normally
+        // eager-loads for the full list response.
+        $ids = $this->visibleProjectsQuery($user)
+            ->setEagerLoads([])
+            ->get(['id', 'project_allocated_employee_user_ids'])
+            ->flatMap(fn ($p) => Arr::wrap($p->project_allocated_employee_user_ids))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        return $this->usersFromIds($ids);
+    }
+
+    private function echoFilters(Request $request): array
+    {
+        return [
+            'search'           => (string) $request->query('search', ''),
+            'product_id'       => (string) $request->query('product_id', ''),
+            'department_id'    => (string) $request->query('department_id', ''),
+            'project_category' => (string) $request->query('project_category', ''),
+            'status'           => (string) $request->query('status', ''),
+            'employee_id'      => (string) $request->query('employee_id', ''),
+            'customer'         => (string) $request->query('customer', ''),
+            'delivery_from'    => (string) $request->query('delivery_from', ''),
+            'delivery_to'      => (string) $request->query('delivery_to', ''),
+            'created_from'     => (string) $request->query('created_from', ''),
+            'created_to'       => (string) $request->query('created_to', ''),
+            'due'              => (string) $request->query('due', ''),
+            'my_projects'      => $request->boolean('my_projects'),
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1256,34 +1544,6 @@ class ProjectApiController extends Controller
         })->values();
     }
 
-    private function filterEmployeeProjects(Collection $projects, array $filters): Collection
-    {
-        $deliveryFrom = $this->parseFilterDate($filters['delivery_from'] ?? '');
-        $deliveryTo   = $this->parseFilterDate($filters['delivery_to'] ?? '');
-
-        return $projects->filter(function (ProductionInitiation $project) use ($filters, $deliveryFrom, $deliveryTo) {
-            $search = Str::lower($filters['search'] ?? '');
-            if ($search !== '') {
-                $haystack = Str::lower(implode(' ', [
-                    $project->product_name,
-                    $project->client_name,
-                    $project->company_name,
-                    $project->lead?->contact_name,
-                    $project->lead?->company_name,
-                    $project->lead?->mobile_number,
-                ]));
-                if (! Str::contains($haystack, $search)) return false;
-            }
-
-            if (($filters['project_category'] ?? '') !== '' && $project->product?->category?->name !== $filters['project_category']) return false;
-
-            $d = $project->project_delivery_date;
-            if ($deliveryFrom && (! $d || $d->lt($deliveryFrom))) return false;
-            if ($deliveryTo   && (! $d || $d->gt($deliveryTo)))   return false;
-
-            return true;
-        })->values();
-    }
 
     private function parseFilterDate(string $value): ?Carbon
     {

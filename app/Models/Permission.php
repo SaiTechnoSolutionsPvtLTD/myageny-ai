@@ -36,6 +36,7 @@ class Permission extends SpatiePermission
         'announcements' => ['menuview'],
         'leave_requests' => ['menuview'],
         'permission_requests' => ['menuview'],
+        'od_request' => ['menuview'],
         'visitor_management' => ['menuview'],
         'dynamic_forms' => ['menuview'],
         'facility_management' => ['menuview'],

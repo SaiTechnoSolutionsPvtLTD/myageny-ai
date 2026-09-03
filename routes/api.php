@@ -25,6 +25,7 @@ use App\Http\Controllers\App\HRMS\HolidayApiController;
 use App\Http\Controllers\App\HRMS\LeaveTypeApiController;
 use App\Http\Controllers\App\HRMS\LeaveRequestApiController;
 use App\Http\Controllers\App\HRMS\PermissionRequestApiController;
+use App\Http\Controllers\App\HRMS\OdRequestApiController;
 use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
 use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
 use App\Http\Controllers\App\HRMS\AttendanceLocationApiController;
@@ -216,6 +217,19 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         // Approve / Reject
         Route::post('permission-requests/{permissionRequest}/approvals/{approval}/approve', [PermissionRequestApiController::class, 'approve'])->name('permission-requests.approve');
         Route::post('permission-requests/{permissionRequest}/approvals/{approval}/reject',  [PermissionRequestApiController::class, 'reject'])->name('permission-requests.reject');
+
+        // OD (On Duty) Requests — static routes BEFORE wildcard
+        Route::get('od-requests/meta',               [OdRequestApiController::class, 'meta'])->name('od-requests.meta');
+        Route::get('od-requests/pending-approvals',  [OdRequestApiController::class, 'pendingApprovals'])->name('od-requests.pending-approvals');
+        Route::get('od-requests/handled-approvals',  [OdRequestApiController::class, 'handledApprovals'])->name('od-requests.handled-approvals');
+
+        Route::get('od-requests',                    [OdRequestApiController::class, 'index'])->name('od-requests.index');
+        Route::post('od-requests',                   [OdRequestApiController::class, 'store'])->name('od-requests.store');
+        Route::get('od-requests/{odRequest}',         [OdRequestApiController::class, 'show'])->name('od-requests.show');
+
+        // Approve / Reject
+        Route::post('od-requests/{odRequest}/approvals/{approval}/approve', [OdRequestApiController::class, 'approve'])->name('od-requests.approve');
+        Route::post('od-requests/{odRequest}/approvals/{approval}/reject',  [OdRequestApiController::class, 'reject'])->name('od-requests.reject');
 
         Route::get('facility-titles', [FacilityManagementApiController::class, 'titles'])
             ->name('facility-titles.index');

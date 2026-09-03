@@ -84,8 +84,29 @@ class LeadController extends Controller
 
         if ($request->filled('branch_id'))     $query->where('branch_id',    $request->branch_id);
         if ($request->filled('mobile_number')) $query->where('mobile_number', 'like', '%' . $request->mobile_number . '%');
-        if ($request->filled('lead_source'))   $query->where('lead_source',  $request->lead_source);
-        if ($request->filled('lead_status'))   $query->where('lead_status',  $request->lead_status);
+        // Mobile's Filter Leads modal sources its Lead Source / Lead Status
+        // dropdown options from meta() below, whose keys are
+        // Lead::sourceOptions()/statusOptions() — i.e. lead_sources.id /
+        // lead_statuses.id (see Lead::sourceOptions() -> pluck('name','id')).
+        // So the value this endpoint receives here is always the numeric FK
+        // id, never the display name. Filtering against the plain
+        // 'lead_source'/'lead_status' string columns (as this used to) could
+        // never match that id, so selecting either filter silently returned
+        // zero/incorrect results — the actual leads.lead_source_id /
+        // lead_status_id FK columns are what line up with it (same columns
+        // web's own LeadController@index filters by for the same reason).
+        if ($request->filled('lead_source'))   $query->where('lead_source_id', $request->lead_source);
+        // Matches web's LeadController@index lead_status handling: a lead
+        // counts as this status either at its own top level OR via any of
+        // its products (leads with multiple products can have a product
+        // sitting at a different stage than the lead's own lead_status_id).
+        if ($request->filled('lead_status')) {
+            $statusId = $request->lead_status;
+            $query->where(function ($q) use ($statusId) {
+                $q->where('lead_status_id', $statusId)
+                    ->orWhereHas('products', fn($pq) => $pq->where('lead_status_id', $statusId));
+            });
+        }
         if ($request->filled('priority'))      $query->where('priority',     $request->priority);
         if ($request->filled('assigned_to'))   $query->where('assigned_to',  $request->assigned_to);
         if ($request->filled('product_name'))  $query->whereHas('product', fn($pq) => $pq->where('product_name', 'like', '%' . $request->product_name . '%'));
