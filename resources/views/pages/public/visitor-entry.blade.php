@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visitor Entry</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/de5a089ae19a67b2b6f7f59203abf1b0ba0f9474.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('images/de5a089ae19a67b2b6f7f59203abf1b0ba0f9474.png') }}">
     <style>
         * { box-sizing:border-box; }
         body { margin:0; min-height:100vh; font-family:Inter, Arial, sans-serif; background:#f4f5f7; color:#121212; display:flex; align-items:center; justify-content:center; padding:22px; }

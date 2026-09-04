@@ -35,6 +35,76 @@ class ExpenseRequest extends Model
         'actioned_at'   => 'datetime',
     ];
 
+    protected $appends = [
+        'attachment_url',
+        'attachment_urls',
+    ];
+
+    /**
+     * Get all attachment relative paths as an array.
+     * Supports legacy single string and JSON array format.
+     *
+     * @return array<int, string>
+     */
+    public function getAttachmentsListAttribute(): array
+    {
+        if (empty($this->attachment)) {
+            return [];
+        }
+
+        if (is_array($this->attachment)) {
+            return array_values(array_filter($this->attachment));
+        }
+
+        // Check if JSON array
+        if (is_string($this->attachment) && str_starts_with(trim($this->attachment), '[')) {
+            $decoded = json_decode($this->attachment, true);
+            if (is_array($decoded)) {
+                return array_values(array_filter($decoded));
+            }
+        }
+
+        return [$this->attachment];
+    }
+
+    /**
+     * Get all attachment full URLs as an array.
+     *
+     * @return array<int, string>
+     */
+    public function getAttachmentUrlsAttribute(): array
+    {
+        $list = $this->attachments_list;
+        $urls = [];
+
+        foreach ($list as $path) {
+            if (! $path) {
+                continue;
+            }
+
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                $urls[] = $path;
+            } elseif (str_starts_with($path, 'uploads/') || file_exists(public_path($path))) {
+                $urls[] = asset($path);
+            } elseif (str_starts_with($path, 'expense_attachments/')) {
+                $urls[] = asset('storage/' . $path);
+            } else {
+                $urls[] = asset($path);
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Get the first attachment full URL for backward compatibility.
+     */
+    public function getAttachmentUrlAttribute(): ?string
+    {
+        $urls = $this->attachment_urls;
+        return ! empty($urls) ? $urls[0] : null;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');

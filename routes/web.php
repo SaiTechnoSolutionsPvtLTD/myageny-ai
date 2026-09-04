@@ -552,6 +552,13 @@ Route::middleware(['auth'])->group(function () {
 Route::resource('facility-management', FacilityManagementController::class)
          ->except(['show']);
 
+Route::prefix('settings')->name('settings.')->group(function () {
+    Route::post('holiday-calendars/import', [HolidayCalendarController::class, 'import'])
+         ->name('holiday-calendars.import');
+    Route::resource('holiday-calendars', HolidayCalendarController::class)
+         ->except(['show']);
+});
+
 Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->group(function () {
 
     // Main settings dashboard
@@ -598,14 +605,6 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->except(['show']);
 
     Route::resource('facility-titles', FacilityTitleController::class)
-         ->middleware('can:settings.manage')
-         ->except(['show']);
-
-    Route::post('holiday-calendars/import', [HolidayCalendarController::class, 'import'])
-         ->middleware('can:settings.manage')
-         ->name('holiday-calendars.import');
-
-    Route::resource('holiday-calendars', HolidayCalendarController::class)
          ->middleware('can:settings.manage')
          ->except(['show']);
 

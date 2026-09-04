@@ -89,14 +89,6 @@
                     </div>
                 @endif
 
-                @if($actionUrl)
-                    <div style="margin-top:28px; text-align:center;">
-                        <a href="{{ $actionUrl }}" style="display:inline-block; padding:14px 32px; background:linear-gradient(135deg,#fe5f04 0%,#ff7c30 100%); color:#ffffff; text-decoration:none; border-radius:12px; font-weight:800; font-size:15px; box-shadow:0 10px 24px rgba(254,95,4,.28);">
-                            Review & Action Request in HRMS Portal
-                        </a>
-                    </div>
-                @endif
-
                 <div style="margin-top:28px;padding-top:18px;border-top:1px solid #ece5de;font-size:13px;line-height:1.8;color:#6b7280;text-align:center;">
                     Regards,<br>
                     <span style="font-weight:800;color:#111827;">myAgenci.ai HRMS Workflow System</span>

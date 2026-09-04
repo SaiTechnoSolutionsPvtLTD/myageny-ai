@@ -125,6 +125,18 @@
                     <span class="exp-summary-label">Requested Amount:</span>
                     <span class="exp-summary-val" style="color:#dc2626; font-size:16px;">₹{{ number_format($expenseRequest->amount, 2) }}</span>
                 </div>
+                @if(!empty($expenseRequest->attachment_urls))
+                <div class="exp-summary-row" style="align-items:flex-start;">
+                    <span class="exp-summary-label">Receipt(s) / Bill(s):</span>
+                    <span class="exp-summary-val" style="display:flex; flex-direction:column; gap:4px; text-align:right;">
+                        @foreach($expenseRequest->attachment_urls as $idx => $url)
+                            <a href="{{ $url }}" target="_blank" style="color:#ea580c; text-decoration:underline; font-size:12px; font-weight:700;">
+                                📎 {{ count($expenseRequest->attachment_urls) > 1 ? ('Receipt #' . ($idx + 1)) : 'View Receipt / Bill' }}
+                            </a>
+                        @endforeach
+                    </span>
+                </div>
+                @endif
                 <div style="margin-top:10px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:13px; color:#4b5563;">
                     <strong>Description:</strong> {{ $expenseRequest->description }}
                 </div>

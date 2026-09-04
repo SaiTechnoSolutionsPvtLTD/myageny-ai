@@ -150,13 +150,37 @@ class ExpenseRequestApiController extends Controller
                 'expense_category_id' => 'required|exists:expense_categories,id',
                 'amount'              => 'required|numeric|min:0.01',
                 'description'         => 'required|string|max:2000',
-                'attachment'          => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp,doc,docx|max:5120',
+                'attachment'          => 'nullable',
+                'attachments'         => 'nullable|array',
+                'attachments.*'       => 'file|mimes:pdf,jpg,jpeg,png,webp,doc,docx|max:5120',
             ]);
 
-            $attachmentPath = null;
-            if ($request->hasFile('attachment')) {
-                $attachmentPath = $request->file('attachment')->store('expense_attachments', 'public');
+            $uploadedPaths = [];
+            $targetDir = public_path('uploads/expense-requests');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0755, true);
             }
+
+            $allFiles = [];
+            if ($request->hasFile('attachments')) {
+                $f = $request->file('attachments');
+                $allFiles = is_array($f) ? $f : [$f];
+            } elseif ($request->hasFile('attachment')) {
+                $f = $request->file('attachment');
+                $allFiles = is_array($f) ? $f : [$f];
+            }
+
+            foreach ($allFiles as $file) {
+                if ($file && $file->isValid()) {
+                    $fileName = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $file->getClientOriginalExtension();
+                    $file->move($targetDir, $fileName);
+                    $uploadedPaths[] = 'uploads/expense-requests/' . $fileName;
+                }
+            }
+
+            $attachmentPath = !empty($uploadedPaths)
+                ? (count($uploadedPaths) === 1 ? $uploadedPaths[0] : json_encode($uploadedPaths))
+                : null;
 
             $pipeline = $this->resolvePipelineForUser($user, $companyId);
             $approvalChain = $pipeline->approval_chain ?? [];
@@ -418,7 +442,8 @@ class ExpenseRequestApiController extends Controller
             'category' => $r->category ? ['id' => $r->category->id, 'name' => $r->category->name] : null,
             'amount' => (float) $r->amount,
             'description' => $r->description,
-            'attachment_url' => $r->attachment ? Storage::disk('public')->url($r->attachment) : null,
+            'attachment_url' => $r->attachment_url,
+            'attachment_urls' => $r->attachment_urls,
             'status' => $r->status,
             'status_label' => ucfirst($r->status),
             'current_step' => $r->current_step,
@@ -530,6 +555,8 @@ class ExpenseRequestApiController extends Controller
                 'approveUrl'      => $approveUrl,
                 'rejectUrl'       => $rejectUrl,
                 'stepNumber'      => $stepNumber,
+                'attachmentUrl'   => $expenseRequest->attachment_url,
+                'attachmentUrls'  => $expenseRequest->attachment_urls,
             ], function ($message) use ($emails, $applicantName, $stepNumber) {
                 $message->to($emails)
                         ->subject("Expense Approval Request (Stage {$stepNumber}) from {$applicantName} - myAgenci.ai HRMS");
