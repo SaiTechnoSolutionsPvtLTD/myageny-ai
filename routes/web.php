@@ -332,6 +332,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/hrms-announcements', [HrmsAnnouncementController::class, 'index'])->name('hrms-announcements.index');
     Route::get('/hrms-announcements/create', [HrmsAnnouncementController::class, 'create'])->name('hrms-announcements.create');
     Route::post('/hrms-announcements', [HrmsAnnouncementController::class, 'store'])->name('hrms-announcements.store');
+    Route::get('/hrms-announcements/{announcement}/edit', [HrmsAnnouncementController::class, 'edit'])->name('hrms-announcements.edit');
+    Route::put('/hrms-announcements/{announcement}', [HrmsAnnouncementController::class, 'update'])->name('hrms-announcements.update');
+    Route::delete('/hrms-announcements/{announcement}', [HrmsAnnouncementController::class, 'destroy'])->name('hrms-announcements.destroy');
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/create', [AttendanceController::class, 'create'])->name('attendance.create');
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
@@ -484,6 +487,7 @@ Route::middleware(['auth'])->group(function () {
 
         // ── Call Updates ──────────────────────────────────────
         Route::post('/{lead}/calls',             [LeadShowController::class, 'storeCall'])->middleware('can:call_updates.create')->name('calls.store');
+        Route::put('/{lead}/calls/{call}',      [LeadShowController::class, 'updateCall'])->middleware('can:call_updates.create')->name('calls.update');
         Route::delete('/{lead}/calls/{call}',    [LeadShowController::class, 'destroyCall'])->middleware('can:call_updates.delete')->name('calls.destroy');
 
         // ── CST Updates ───────────────────────────────────────

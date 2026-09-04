@@ -128,13 +128,6 @@
             </div>
             @endif
 
-            {{-- Action Button --}}
-            <div style="margin-top: 28px; text-align: center;">
-                <a href="{{ route('projects.show', $initiation) }}"
-                   style="display: inline-block; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 13px 32px; border-radius: 10px; box-shadow: 0 4px 14px rgba(30, 64, 175, 0.35); transition: all 0.2s ease;">
-                    View Project Details &amp; Assign Team
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}

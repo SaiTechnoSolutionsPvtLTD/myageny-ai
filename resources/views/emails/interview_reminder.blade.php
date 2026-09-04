@@ -131,13 +131,8 @@
                                         @endif
                                     </td>
 
-                                    {{-- Actions --}}
+                                    {{-- Links --}}
                                     <td style="padding:14px;vertical-align:top;text-align:center;white-space:nowrap;">
-                                        @if($interview->recruitment_candidate_id)
-                                            <a href="{{ route('recruitment.show', $interview->recruitment_candidate_id) }}" style="display:inline-block;padding:5px 12px;border-radius:8px;background:#fe5f04;color:#ffffff;text-decoration:none;font-size:11px;font-weight:700;margin-bottom:4px;">
-                                                View
-                                            </a><br>
-                                        @endif
                                         @if($interview->interview_link)
                                             <a href="{{ $interview->interview_link }}" target="_blank" style="display:inline-block;padding:4px 10px;border-radius:6px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;text-decoration:none;font-size:10px;font-weight:700;margin-bottom:4px;">
                                                 Join Link
@@ -160,13 +155,6 @@
                             @endforeach
                         </tbody>
                     </table>
-                </div>
-
-                {{-- Direct Portal Link --}}
-                <div style="text-align:center;margin:20px 0 10px;">
-                    <a href="{{ route('recruitment.index') }}" style="display:inline-block;background:linear-gradient(135deg,#fe5f04,#ff7c30);color:#ffffff !important;text-decoration:none;font-weight:800;font-size:14px;padding:12px 28px;border-radius:10px;box-shadow:0 4px 14px rgba(254,95,4,0.25);">
-                        Open Recruitment Portal &rarr;
-                    </a>
                 </div>
 
                 {{-- Footer --}}

@@ -41,17 +41,8 @@
             </table>
 
             <p style="margin:0 0 18px;font-size:15px;line-height:1.6;">
-                Kindly check the attached PDF and select your response below.
+                Kindly check the attached PDF for complete quotation details.
             </p>
-
-            <div style="margin:0 0 22px;">
-                <a href="{{ $agreeUrl }}" style="display:inline-block;background:#1a7a52;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;margin:0 8px 10px 0;">
-                    Agree
-                </a>
-                <a href="{{ $disagreeUrl }}" style="display:inline-block;background:#ffffff;color:#b42318;text-decoration:none;border:1px solid #f0b8b3;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;margin:0 0 10px 0;">
-                    Disagree
-                </a>
-            </div>
 
             <p style="margin:0;font-size:15px;line-height:1.6;">
                 Regards,<br>

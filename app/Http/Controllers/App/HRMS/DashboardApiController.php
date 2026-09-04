@@ -594,7 +594,7 @@ class DashboardApiController extends Controller
     private function announcementsForDashboard(): array
     {
         return HrmsAnnouncement::query()
-            ->visibleForCompany(auth()->user()?->company_id)
+            ->visibleForUser(auth()->user())
             ->active()
             ->orderByDesc('announcement_date')
             ->latest('id')
@@ -606,6 +606,7 @@ class DashboardApiController extends Controller
                 'priority'       => $a->priority,
                 'date'           => optional($a->announcement_date)->toDateString() ?: now()->toDateString(),
                 'date_formatted' => optional($a->announcement_date)?->format('M j, Y') ?: now()->format('M j, Y'),
+                'branches'       => $a->getTargetBranchesLabel(),
             ])
             ->toArray();
     }

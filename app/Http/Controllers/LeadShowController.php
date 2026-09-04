@@ -92,6 +92,67 @@ class LeadShowController extends Controller
         return back()->with('success', 'Call update added successfully.');
     }
 
+    public function updateCall(Request $request, Lead $lead, LeadCallUpdate $call)
+    {
+        abort_unless($this->visibility->canAccessLead($lead), 403);
+        abort_if($call->lead_id !== $lead->id, 403);
+
+        $outcomeCat = \App\Models\OutcomeCategory::find($request->outcome);
+        $outcomeName = strtolower(trim($outcomeCat?->name ?? ''));
+
+        $subCatName = '';
+        if ($request->outcome_sub_category_id) {
+            $subCat = \App\Models\OutcomeSubCategory::find($request->outcome_sub_category_id);
+            $subCatName = strtolower(trim($subCat?->name ?? ''));
+        }
+
+        $isNoFollowupNeeded = false;
+        if (
+            in_array($outcomeName, ['not interested', 'closed', 'won', 'lost']) ||
+            str_contains($outcomeName, 'not interested') ||
+            str_contains($outcomeName, 'closed') ||
+            in_array($subCatName, ['not interested', 'closed', 'won', 'lost']) ||
+            str_contains($subCatName, 'not interested') ||
+            str_contains($subCatName, 'closed')
+        ) {
+            $isNoFollowupNeeded = true;
+        }
+
+        $data = $request->validate([
+            'outcome'                 => ['required'],
+            'outcome_sub_category_id' => ['required'],
+            'notes'                   => ['nullable', 'string', 'max:1000'],
+            'next_follow_up'          => [$isNoFollowupNeeded ? 'nullable' : 'required', 'nullable', 'date'],
+            'followup_time'           => [$isNoFollowupNeeded ? 'nullable' : 'required'],
+        ]);
+
+        $call->update([
+            'outcome' => $request->outcome,
+            'outcome_subcategory' => $request->outcome_sub_category_id,
+            'notes' => $request->notes,
+            'next_follow_up' => $request->next_follow_up ?: null,
+            'followup_time' => $request->followup_time ?: null,
+        ]);
+
+        // Auto-create/update Reminder in Reminders Tab / Tasks whenever next_follow_up date is set and requested
+        if (! $isNoFollowupNeeded && ! empty($request->next_follow_up) && ! empty($request->reminder_remarks)) {
+            $reminderTitle = trim((string) $request->reminder_remarks);
+
+            LeadReminder::create([
+                'lead_id'        => $lead->id,
+                'user_id'        => auth()->id(),
+                'title'          => \Illuminate\Support\Str::limit($reminderTitle, 150),
+                'description'    => $request->notes ? \Illuminate\Support\Str::limit((string) $request->notes, 500) : null,
+                'remind_at'      => $request->next_follow_up,
+                'remainder_time' => $request->followup_time ?: '10:00:00',
+                'type'           => 'follow_up',
+                'priority'       => 'high',
+            ]);
+        }
+
+        return back()->with('success', 'Call update updated successfully.');
+    }
+
     public function destroyCall(Lead $lead, LeadCallUpdate $call)
     {
         abort_unless($this->visibility->canAccessLead($lead), 403);

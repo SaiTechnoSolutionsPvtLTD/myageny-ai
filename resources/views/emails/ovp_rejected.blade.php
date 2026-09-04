@@ -79,13 +79,6 @@
                 </table>
             </div>
 
-            {{-- Action Button --}}
-            <div style="margin-top: 28px; text-align: center;">
-                <a href="{{ url('/leads/' . $leadProduct?->lead_id) }}"
-                   style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 8px; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);">
-                    View Lead Details
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}

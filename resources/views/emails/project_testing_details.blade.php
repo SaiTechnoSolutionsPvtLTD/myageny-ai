@@ -102,12 +102,6 @@
                     @endif
                 </div>
 
-                {{-- Action Button --}}
-                <div style="margin-top:24px;text-align:center;">
-                    <a href="{{ route('projects.show', ['productionInitiation' => $project->id, 'tab' => 'testing']) }}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#fe5f04 0%,#ff8745 100%);color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;box-shadow:0 10px 22px rgba(254,95,4,.3);">
-                        View Project Details in System
-                    </a>
-                </div>
 
                 <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center;">
                     Automated notification sent by Myagenci System. CC: projects@saitechnosolutions.net & Project Team Leads.

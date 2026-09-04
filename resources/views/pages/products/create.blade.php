@@ -74,9 +74,9 @@
 
                 <div class="pm-form-actions">
                     <a href="{{ route('products.index') }}" class="pm-btn pm-btn--ghost">Cancel</a>
-                    <button type="submit" name="_action" value="save_and_new" class="pm-btn pm-btn--outline">
+                    {{--  <button type="submit" name="_action" value="save_and_new" class="pm-btn pm-btn--outline">
                         Save &amp; Create Another
-                    </button>
+                    </button>  --}}
                     <button type="submit" class="pm-btn pm-btn--primary" id="btnSubmit">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="20 6 9 17 4 12"/>

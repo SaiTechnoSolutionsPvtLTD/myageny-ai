@@ -66,13 +66,6 @@
                 </tbody>
             </table>
 
-            {{-- Action Button --}}
-            <div style="margin-top: 30px; text-align: center;">
-                <a href="{{ route('lead-price-requests.index', ['lead_id' => $lead?->id, 'status' => 'pending']) }}"
-                   style="display: inline-block; background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 8px; box-shadow: 0 4px 12px rgba(254, 95, 4, 0.25);">
-                    Review & Approve Price Requests
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}

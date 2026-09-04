@@ -149,12 +149,6 @@
                     </tbody>
                 </table>
             @endif
-
-            <div class="cta-box">
-                <a href="{{ url('/crm/tasks') }}" class="btn-cta" target="_blank">
-                    Open Tasks & Reminders Page &rarr;
-                </a>
-            </div>
         </div>
 
         <div class="footer">

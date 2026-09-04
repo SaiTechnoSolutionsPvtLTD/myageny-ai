@@ -92,13 +92,6 @@
                 </table>
             </div>
 
-            {{-- Action Button --}}
-            <div style="margin-top: 28px; text-align: center;">
-                <a href="{{ route('production-approvals.index', ['bucket' => 'approval']) }}"
-                   style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 13px 32px; border-radius: 10px; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35); transition: all 0.2s ease;">
-                    View Approved Production Items
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}
