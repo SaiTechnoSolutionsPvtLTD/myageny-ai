@@ -475,8 +475,6 @@
                 </a>
                 @endcan
 
-                @if(! $hrmsSelfService)
-                @can('announcements.menuview')
                 <a href="{{ route('hrms-announcements.index') }}" class="nav-item {{ request()->routeIs('hrms-announcements.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms-announcements.*'))
                         <div class="active-indicator"></div>
@@ -489,8 +487,6 @@
                         <span>Announcements</span>
                     </div>
                 </a>
-                @endcan
-                @endif
 
                 @if(! $hrmsSelfService)
                 @can('leave_requests.menuview')
@@ -621,8 +617,6 @@
                 @endcan
                 @endif
 
-                @if(! $hrmsSelfService)
-                @can('holiday_calendar.menuview')
                 <a href="{{ route('settings.holiday-calendars.index') }}" class="nav-item {{ request()->routeIs('settings.holiday-calendars.*') ? 'active' : '' }}">
                     @if(request()->routeIs('settings.holiday-calendars.*'))
                         <div class="active-indicator"></div>
@@ -637,8 +631,6 @@
                         <span>Holiday Calendar</span>
                     </div>
                 </a>
-                @endcan
-                @endif
 
             </div>
         </div>

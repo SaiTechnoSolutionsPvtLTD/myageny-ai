@@ -120,8 +120,7 @@ return [
                 'label' => 'Holidays',
                 'section' => 'HRMS',
                 'order' => 60,
-                'permission' => 'holiday_calendar.menuview',
-                'forbid_method' => 'isHrmsAttendanceOnlyUser'
+                'permission' => null,
             ],
             [
                 'key' => 'hrms.leave',

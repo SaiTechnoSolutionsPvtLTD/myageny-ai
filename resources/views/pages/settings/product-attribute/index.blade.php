@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Outcome Sub Category — Settings')
+@section('title', 'Product Category Attributes — Settings')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -7,7 +7,6 @@
 
 @section('content')
 <main class="main-content">
-
 
     <div class="crm-page-body">
         <div class="crm-page-header">
@@ -39,14 +38,20 @@
                             <details class="crm-table-dropdown">
                                 <summary class="crm-table-dropdown-trigger">Actions</summary>
                                 <div class="crm-table-dropdown-menu">
-                            <button class="crm-icon-btn"
-                                onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->product_category_id }}, {{ $sub->id }})">✏️</button>
-                            <form action="{{ route('settings.product-attribute.destroy', $sub) }}" method="POST" style="display:inline"
-                                  onsubmit="return confirm('Delete this sub-category?')">
-                                @csrf @method('DELETE')
-                                <input type="hidden" name="id" value="{{ $sub->id }}">
-                                <button class="crm-icon-btn danger">🗑️</button>
-                            </form>
+                                    <button type="button" class="crm-table-dropdown-item"
+                                        onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->product_category_id }}, {{ $sub->id }}); this.closest('details')?.removeAttribute('open');">
+                                        <i class="bi bi-pencil"></i>
+                                        <span>Edit</span>
+                                    </button>
+                                    <form action="{{ route('settings.product-attribute.destroy', $sub) }}" method="POST"
+                                          onsubmit="return confirm('Delete this sub-category?')">
+                                        @csrf @method('DELETE')
+                                        <input type="hidden" name="id" value="{{ $sub->id }}">
+                                        <button type="submit" class="crm-table-dropdown-item danger">
+                                            <i class="bi bi-trash"></i>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
                                 </div>
                             </details>
                         </td>

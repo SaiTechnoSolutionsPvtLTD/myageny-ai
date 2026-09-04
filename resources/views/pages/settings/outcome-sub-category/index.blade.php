@@ -39,13 +39,19 @@
                             <details class="crm-table-dropdown">
                                 <summary class="crm-table-dropdown-trigger">Actions</summary>
                                 <div class="crm-table-dropdown-menu">
-                            <button class="crm-icon-btn"
-                                onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->category_id }})">✏️</button>
-                            <form action="{{ route('settings.outcome-sub-categories.destroy', $sub) }}" method="POST" style="display:inline"
-                                  onsubmit="return confirm('Delete this sub-category?')">
-                                @csrf @method('DELETE')
-                                <button class="crm-icon-btn danger">🗑️</button>
-                            </form>
+                                    <button type="button" class="crm-table-dropdown-item"
+                                        onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->category_id }}); this.closest('details')?.removeAttribute('open');">
+                                        <i class="bi bi-pencil"></i>
+                                        <span>Edit</span>
+                                    </button>
+                                    <form action="{{ route('settings.outcome-sub-categories.destroy', $sub) }}" method="POST"
+                                          onsubmit="return confirm('Delete this sub-category?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="crm-table-dropdown-item danger">
+                                            <i class="bi bi-trash"></i>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
                                 </div>
                             </details>
                         </td>

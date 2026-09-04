@@ -40,11 +40,19 @@
             <div class="han-head">
                 <div>
                     <h2 class="han-title">Announcements</h2>
-                    <div class="han-sub">Create and review announcements that should appear on every employee dashboard.</div>
+                    <div class="han-sub">
+                        @if($canManage ?? false)
+                            Create and review announcements that should appear on every employee dashboard.
+                        @else
+                            Latest organization announcements and important updates.
+                        @endif
+                    </div>
                 </div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <a href="{{ route('hrms.dashboard') }}" class="han-btn han-btn-ghost">Back</a>
-                    <a href="{{ route('hrms-announcements.create') }}" class="han-btn han-btn-primary">Create Announcement</a>
+                    @if($canManage ?? false)
+                        <a href="{{ route('hrms-announcements.create') }}" class="han-btn han-btn-primary">Create Announcement</a>
+                    @endif
                 </div>
             </div>
         </div>
@@ -58,8 +66,10 @@
                     </div>
                     <div class="han-item-message">{{ $announcement->message }}</div>
                     <div class="han-meta" style="margin-top:12px;">
-                        <div class="han-status">{{ optional($announcement->announcement_date)->format('d M Y') ?: 'N/A' }}</div>
-                        <div class="han-status">{{ $announcement->is_active ? 'Active' : 'Inactive' }}</div>
+                        <div class="han-status">📅 {{ optional($announcement->announcement_date)->format('d M Y') ?: 'N/A' }}</div>
+                        @if($canManage ?? false)
+                            <div class="han-status">{{ $announcement->is_active ? 'Active' : 'Inactive' }}</div>
+                        @endif
                     </div>
                 </div>
             @empty

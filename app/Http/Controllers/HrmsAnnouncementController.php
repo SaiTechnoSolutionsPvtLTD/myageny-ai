@@ -11,15 +11,22 @@ class HrmsAnnouncementController extends Controller
 {
     public function index(): View
     {
-        $this->authorizeAnnouncementManagement();
+        $user = auth()->user();
+        $canManage = $this->canManageAnnouncements();
 
-        $announcements = HrmsAnnouncement::query()
-            ->visibleForCompany(auth()->user()?->company_id)
+        $query = HrmsAnnouncement::query()
+            ->visibleForCompany($user?->company_id);
+
+        if (! $canManage) {
+            $query->active();
+        }
+
+        $announcements = $query
             ->latest('announcement_date')
             ->latest('id')
             ->paginate(12);
 
-        return view('pages.hrms.announcements.index', compact('announcements'));
+        return view('pages.hrms.announcements.index', compact('announcements', 'canManage'));
     }
 
     public function create(): View
@@ -57,10 +64,15 @@ class HrmsAnnouncementController extends Controller
             ->with('success', 'Announcement created successfully.');
     }
 
-    private function authorizeAnnouncementManagement(): void
+    private function canManageAnnouncements(): bool
     {
         $user = auth()->user();
 
-        abort_unless($user && ($user->belongsToHrDepartment() || $user->hasHrLikeRole()), 403);
+        return (bool) ($user && ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()));
+    }
+
+    private function authorizeAnnouncementManagement(): void
+    {
+        abort_unless($this->canManageAnnouncements(), 403);
     }
 }

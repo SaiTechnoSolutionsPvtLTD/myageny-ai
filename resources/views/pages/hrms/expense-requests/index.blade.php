@@ -320,6 +320,43 @@
     z-index: 99999 !important;
 }
 
+/* Detail Modal & Button Styling */
+.exp-detail-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #ea580c;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    margin-top: 4px;
+}
+.exp-detail-btn:hover {
+    background: #ffedd5;
+    border-color: #fdba74;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.15);
+}
+.exp-att-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ea580c;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    border-radius: 10px;
+    padding: 1px 5px;
+    min-width: 15px;
+    height: 15px;
+}
+
 /* Confirmation Modals */
 .exp-confirm-modal {
     position: fixed;
@@ -607,7 +644,7 @@
                     <th>Applicant</th>
                     <th>Category</th>
                     <th>Amount</th>
-                    <th>Description</th>
+                    <th>Details & Receipts</th>
                     <th>Current Approver Stage</th>
                     <th>Status</th>
                     <th>Date</th>
@@ -637,15 +674,28 @@
                     <td>
                         <strong style="color:#111827; font-size:15px;">₹{{ number_format($req->amount, 2) }}</strong>
                     </td>
-                    <td style="color:#4b5563; max-width:220px;">
-                        {{ Str::limit($req->description, 75) }}
-                        @if($req->attachment)
-                            <div style="margin-top:4px;">
-                                <a href="{{ asset('storage/' . $req->attachment) }}" target="_blank" style="font-size:11px; color:#fe5f04; text-decoration:underline; font-weight:700;">
-                                    📎 View Receipt / Bill
-                                </a>
-                            </div>
-                        @endif
+                    <td>
+                        <button type="button"
+                                class="exp-detail-btn"
+                                data-details="{{ json_encode([
+                                    'id' => $req->id,
+                                    'applicant' => $req->user?->name ?? ('User #'.$req->user_id),
+                                    'role' => $applicantRole,
+                                    'branch' => $req->user?->branch?->name ?? 'Main Branch',
+                                    'category' => $req->category?->name ?? 'General',
+                                    'amount' => number_format($req->amount, 2),
+                                    'description' => $req->description,
+                                    'status' => $req->status,
+                                    'attachments' => $req->attachment_urls,
+                                    'created_at' => $req->created_at ? $req->created_at->format('d M Y, h:i A') : '-'
+                                ]) }}"
+                                onclick="openExpenseDetailModal(this)">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            <span>View Details & Receipts</span>
+                            @if(!empty($req->attachment_urls))
+                                <span class="exp-att-count">{{ count($req->attachment_urls) }}</span>
+                            @endif
+                        </button>
                     </td>
                     <td>
                         @if(!empty($stages))
@@ -794,9 +844,9 @@
                 </div>
 
                 <div class="exp-form-group">
-                    <label class="exp-form-label">Attach Receipt / Invoice (Optional)</label>
-                    <input type="file" name="attachment" class="exp-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx">
-                    <span style="font-size:11px; color:#6b7280; margin-top:2px;">PDF, PNG, JPG up to 5MB</span>
+                    <label class="exp-form-label">Attach Receipts / Invoices (Optional)</label>
+                    <input type="file" name="attachments[]" class="exp-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" multiple>
+                    <span style="font-size:11px; color:#6b7280; margin-top:2px;">PDF, PNG, JPG up to 5MB each (Select multiple files if needed)</span>
                 </div>
 
             </div>
@@ -831,6 +881,62 @@
                 <button type="button" class="exp-req-btn exp-req-btn-primary" style="background:#dc2626;" onclick="showConfirmRejectModal()">Reject Request</button>
             </div>
         </form>
+    </div>
+</div>
+
+{{-- Expense Details & Attachments Modal --}}
+<div class="exp-modal-overlay" id="expenseDetailModal" style="display:none;">
+    <div class="exp-modal" style="max-width: 620px; max-height: 90vh;">
+        <div class="exp-modal-head">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="exp-modal-title">Expense Request Details</div>
+                <span id="detailStatusBadge" class="exp-badge"></span>
+            </div>
+            <button class="exp-modal-close" onclick="closeExpenseDetailModal()">✕</button>
+        </div>
+
+        <div class="exp-modal-body" style="overflow-y: auto; max-height: calc(90vh - 140px); gap: 16px;">
+            
+            {{-- Quick Overview Cards --}}
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <div style="padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">Applicant</span>
+                    <div id="detailApplicant" style="font-size: 14px; font-weight: 800; color: #0f172a;"></div>
+                    <span id="detailRoleBranch" style="font-size: 11px; color: #64748b;"></span>
+                </div>
+                <div style="padding: 12px 14px; background: #fff7ed; border: 1px solid #ffedd5; border-radius: 12px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #c2410c; text-transform: uppercase; display: block; margin-bottom: 2px;">Category & Amount</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span id="detailCategory" style="font-size: 13px; font-weight: 700; color: #ea580c;"></span>
+                        <span id="detailAmount" style="font-size: 16px; font-weight: 800; color: #9a3412;"></span>
+                    </div>
+                    <span id="detailDate" style="font-size: 11px; color: #9a3412; opacity: 0.8; margin-top: 2px; display: block;"></span>
+                </div>
+            </div>
+
+            {{-- Full Description Box --}}
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label class="exp-form-label" style="color: #374151;">Description & Reason</label>
+                <div id="detailDescription" style="padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 13px; line-height: 1.6; color: #374151; white-space: pre-wrap; word-break: break-word;"></div>
+            </div>
+
+            {{-- Attachments Gallery / List --}}
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label class="exp-form-label" style="color: #374151; margin-bottom: 0;">Attachments & Receipts</label>
+                    <span id="detailAttCount" style="font-size: 11px; font-weight: 700; color: #6b7280;"></span>
+                </div>
+                
+                <div id="detailAttachmentsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                    {{-- Dynamically populated via JS --}}
+                </div>
+            </div>
+
+        </div>
+
+        <div class="exp-modal-foot">
+            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeExpenseDetailModal()">Close</button>
+        </div>
     </div>
 </div>
 
@@ -954,6 +1060,80 @@ function openRejectModal(requestId) {
 }
 function closeRejectModal() {
     document.getElementById('rejectModal').style.display = 'none';
+}
+
+function openExpenseDetailModal(btn) {
+    try {
+        const raw = btn.getAttribute('data-details');
+        const data = JSON.parse(raw);
+
+        document.getElementById('detailApplicant').textContent = data.applicant || 'Unknown';
+        document.getElementById('detailRoleBranch').textContent = (data.role || '') + (data.branch ? (' • ' + data.branch) : '');
+        document.getElementById('detailCategory').textContent = data.category || 'General';
+        document.getElementById('detailAmount').textContent = '₹' + data.amount;
+        document.getElementById('detailDate').textContent = 'Submitted on: ' + (data.created_at || '-');
+        document.getElementById('detailDescription').textContent = data.description || '-';
+
+        // Status Badge
+        const statusBadge = document.getElementById('detailStatusBadge');
+        statusBadge.className = 'exp-badge ' + (data.status === 'approved' ? 'eb-approved' : (data.status === 'rejected' ? 'eb-rejected' : 'eb-pending'));
+        statusBadge.textContent = data.status === 'approved' ? '✓ Approved' : (data.status === 'rejected' ? '✕ Rejected' : '⏳ Pending');
+
+        // Attachments
+        const container = document.getElementById('detailAttachmentsContainer');
+        container.innerHTML = '';
+        const attachments = data.attachments || [];
+        document.getElementById('detailAttCount').textContent = attachments.length + ' file(s)';
+
+        if (attachments.length === 0) {
+            container.innerHTML = `
+                <div style="padding: 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; text-align: center; color: #94a3b8; font-size: 13px;">
+                    📎 No receipts or attachments uploaded with this request.
+                </div>
+            `;
+        } else {
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;">';
+            attachments.forEach((url, idx) => {
+                const ext = url.split('.').pop().toLowerCase().split('?')[0];
+                const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+                const isPdf = ext === 'pdf';
+                const fileLabel = `Receipt #${idx + 1}`;
+
+                html += `
+                    <div style="padding: 10px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                            ${isImage 
+                                ? `<a href="${url}" target="_blank" style="display:block; width:44px; height:44px; border-radius:8px; overflow:hidden; border:1px solid #e2e8f0; flex-shrink:0;">
+                                    <img src="${url}" style="width:100%; height:100%; object-fit:cover;" alt="Receipt">
+                                   </a>`
+                                : `<div style="width:44px; height:44px; border-radius:8px; background:${isPdf ? '#fee2e2' : '#e0e7ff'}; color:${isPdf ? '#dc2626' : '#4f46e5'}; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; flex-shrink:0;">
+                                    ${isPdf ? 'PDF' : 'DOC'}
+                                   </div>`
+                            }
+                            <div style="min-width: 0; flex: 1;">
+                                <div style="font-size: 13px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${fileLabel}</div>
+                                <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">${ext.toUpperCase()} File</span>
+                            </div>
+                        </div>
+                        <a href="${url}" target="_blank" style="display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; background: #fe5f04; color: #fff; border-radius: 8px; font-size: 11px; font-weight: 700; text-decoration: none; flex-shrink: 0; gap: 4px;" title="Open in new tab">
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            View
+                        </a>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        document.getElementById('expenseDetailModal').style.display = 'flex';
+    } catch (e) {
+        console.error('Error opening expense details modal:', e);
+    }
+}
+
+function closeExpenseDetailModal() {
+    document.getElementById('expenseDetailModal').style.display = 'none';
 }
 
 // Confirmation Modals Logic

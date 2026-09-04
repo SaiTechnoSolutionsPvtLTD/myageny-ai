@@ -66,14 +66,24 @@
                             <td style="padding: 8px 0; font-size: 13px; color: #6b7280; font-weight: 700; vertical-align: top;">Description & Reason:</td>
                             <td style="padding: 8px 0; font-size: 14px; color: #374151; line-height: 1.6; white-space: pre-wrap;">{{ $description }}</td>
                         </tr>
+                        @php
+                            $emailAttUrls = !empty($attachmentUrls) ? $attachmentUrls : (!empty($attachmentUrl) ? [$attachmentUrl] : []);
+                        @endphp
+                        @if(!empty($emailAttUrls))
+                        <tr>
+                            <td style="padding: 8px 0; font-size: 13px; color: #6b7280; font-weight: 700; vertical-align: top;">Attachment(s) / Receipt(s):</td>
+                            <td style="padding: 8px 0; font-size: 14px; color: #fe5f04; font-weight: 700;">
+                                @foreach($emailAttUrls as $idx => $url)
+                                    <div style="margin-bottom: 4px;">
+                                        <a href="{{ $url }}" target="_blank" style="color: #fe5f04; text-decoration: underline; font-weight: 700;">
+                                            📎 {{ count($emailAttUrls) > 1 ? ('View Receipt #' . ($idx + 1)) : 'View Receipt / Bill' }}
+                                        </a>
+                                    </div>
+                                @endforeach
+                            </td>
+                        </tr>
+                        @endif
                     </table>
-                </div>
-
-                {{-- Action CTA --}}
-                <div style="text-align: center; margin-top: 28px;">
-                    <a href="{{ $actionUrl }}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #fe5f04 0%, #ff7c30 100%); color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 800; font-size: 15px; box-shadow: 0 10px 24px rgba(254, 95, 4, 0.28);">
-                        Review & Action Request in HRMS Portal
-                    </a>
                 </div>
 
                 <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f3f4f6; text-align: center; font-size: 12px; color: #9ca3af; line-height: 1.6;">
