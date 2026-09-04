@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\App;
 
+use App\Http\Controllers\App\Concerns\RestrictsEmployeesToOwnBranch;
 use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\LeadReminder;
@@ -28,6 +29,8 @@ use App\Services\NotificationService;
 
 class LeadController extends Controller
 {
+    use RestrictsEmployeesToOwnBranch;
+
     public function __construct(private readonly DataVisibilityService $visibility, private readonly NotificationService $notifications) {}
 
     // =========================================================================
@@ -471,13 +474,84 @@ class LeadController extends Controller
                 'priorities'     => Lead::PRIORITIES,
                 'reminder_types' => LeadReminder::TYPES,
                 'branches'       => Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                'users'          => $this->visibility->visibleAssignableUsers(request()->user())->map(fn($user) => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                ])->values(),
+                'users'          => $this->restrictUserCollectionToOwnBranch(
+                        $this->visibility->visibleAssignableUsers(request()->user()),
+                        request()->user()
+                    )->map(fn($user) => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                    ])->values(),
                 'products'       => tap(Product::query(), fn($query) => $this->visibility->applyProductVisibility($query, request()->user()))
                     ->orderBy('product_name')
                     ->get(['id', 'product_name as name']),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /mobile/leads/employees-search?q=&page= — paginated, searchable
+     * "Assigned To" / employee lookup for search-as-you-type pickers
+     * app-wide (Lead create/edit, Lead List filter, Lead Products filter,
+     * Call Updates filter, CRM Tasks filter, Price Requests filter, CST
+     * Allocation filter). Mirrors ReportApiController::leadsSearchApi()'s
+     * response shape (id/name rows, 20/page, meta.has_more) but for
+     * employees — built as its own paginated query (not by reusing
+     * DataVisibilityService::visibleAssignableUsers(), which loads the
+     * full list into memory; the whole point of this endpoint is to never
+     * do that) while applying the exact same sales/CRM department+role
+     * filter and hierarchy visibility (visibleUserIds()) that method uses,
+     * plus this file's own branch-isolation trait on top. Mobile-only.
+     */
+    public function employeesSearch(Request $request): JsonResponse
+    {
+        $request->validate([
+            'q'    => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $user = $request->user();
+        $companyId = $this->visibility->companyIdFor($user);
+        $q = trim((string) $request->input('q', ''));
+
+        $query = User::query()
+            ->where('is_active', true)
+            ->where(function (\Illuminate\Database\Eloquent\Builder $sub) {
+                $sub->whereHas('roles.department', function (\Illuminate\Database\Eloquent\Builder $q) {
+                    $q->whereIn(DB::raw('LOWER(name)'), [
+                        'sales', 'crm', 'business development', 'marketing', 'telecalling',
+                    ])->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales', 'crm', 'business_development', 'marketing', 'telecalling',
+                    ]);
+                })->orWhereHas('roles', function (\Illuminate\Database\Eloquent\Builder $q) {
+                    $q->whereIn(DB::raw('LOWER(name)'), [
+                        'sales_manager', 'sales_executive', 'sales_tl', 'sales_intern', 'bde', 'business_development_executive', 'telecaller',
+                    ])->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales_manager', 'sales_executive', 'sales_tl', 'sales_intern', 'bde', 'business_development_executive', 'telecaller',
+                    ]);
+                });
+            })
+            ->when($companyId, fn ($qq) => $qq->where('company_id', $companyId));
+
+        $visibleIds = ($user && $user->hasPreSalesLikeRole()) ? null : $this->visibility->visibleUserIds($user);
+        if ($visibleIds !== null) {
+            $query->whereIn('id', $visibleIds);
+        }
+
+        $query = $this->scopeEmployeeQueryToOwnBranch($query, $user);
+
+        if ($q !== '') {
+            $query->where('name', 'like', "%{$q}%");
+        }
+
+        $employees = $query->orderBy('name')->paginate(20, ['id', 'name']);
+
+        return response()->json([
+            'status' => true,
+            'data' => collect($employees->items())->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+            'meta' => [
+                'current_page' => $employees->currentPage(),
+                'last_page'    => $employees->lastPage(),
+                'has_more'     => $employees->currentPage() < $employees->lastPage(),
             ],
         ]);
     }
@@ -939,7 +1013,8 @@ class LeadController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $users = \App\Models\User::orderBy('name')
+        $users = $this->scopeEmployeeQueryToOwnBranch(\App\Models\User::query(), $request->user())
+            ->orderBy('name')
             ->get(['id', 'name']);
 
         $products = Product::orderBy('package_name')
@@ -1008,7 +1083,8 @@ class LeadController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $users = \App\Models\User::orderBy('name')
+        $users = $this->scopeEmployeeQueryToOwnBranch(\App\Models\User::query(), $request->user())
+            ->orderBy('name')
             ->get(['id', 'name']);
 
         return response()->json([
@@ -1040,7 +1116,9 @@ class LeadController extends Controller
         if ($request->filled('date_to'))      $query->whereDate('created_at', '<=', $request->date_to);
 
         $requests   = $query->paginate(15)->withQueryString();
-        $requesters = \App\Models\User::orderBy('name')->get(['id', 'name']);
+        $requesters = $this->scopeEmployeeQueryToOwnBranch(\App\Models\User::query(), $request->user())
+            ->orderBy('name')
+            ->get(['id', 'name']);
 
         return response()->json([
             'requests'   => $requests,

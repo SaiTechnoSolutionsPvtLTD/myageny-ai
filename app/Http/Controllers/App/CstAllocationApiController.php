@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\App;
 
+use App\Http\Controllers\App\Concerns\RestrictsEmployeesToOwnBranch;
 use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\User;
@@ -14,6 +15,8 @@ use Throwable;
 
 class CstAllocationApiController extends Controller
 {
+    use RestrictsEmployeesToOwnBranch;
+
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     private function isAdmin($user): bool
@@ -144,7 +147,7 @@ class CstAllocationApiController extends Controller
         try {
             $currentUser = $request->user();
 
-            $cstUsers = User::where('user_status', 'active')
+            $cstUsersQuery = User::where('user_status', 'active')
                 ->where(function ($query) {
                     $query->whereHas('roles.department', function ($q) {
                         $q->where('name', 'like', '%customer support%')
@@ -153,7 +156,9 @@ class CstAllocationApiController extends Controller
                     })->orWhereHas('employeeOnboarding', function ($q) {
                         $q->where('department_id', 5);
                     });
-                })->orderBy('name')->get(['id', 'name']);
+                });
+            $cstUsers = $this->scopeEmployeeQueryToOwnBranch($cstUsersQuery, $currentUser)
+                ->orderBy('name')->get(['id', 'name']);
 
             $branches = $this->visibility->visibleBranches($currentUser);
 

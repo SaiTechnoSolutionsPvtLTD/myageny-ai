@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExpenseCategory;
 use App\Models\ExpensePipeline;
 use App\Models\ExpenseRequest;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
@@ -182,8 +183,7 @@ class ExpenseRequestApiController extends Controller
                 ? (count($uploadedPaths) === 1 ? $uploadedPaths[0] : json_encode($uploadedPaths))
                 : null;
 
-            $pipeline = $this->resolvePipelineForUser($user, $companyId);
-            $approvalChain = $pipeline->approval_chain ?? [];
+            $approvalChain = $this->resolveApprovalChainForUser($user, $companyId);
             $currentStep = 1;
             $currentApproverRoleId = ! empty($approvalChain) ? (int) $approvalChain[0] : null;
 
@@ -243,9 +243,8 @@ class ExpenseRequestApiController extends Controller
 
             $applicantUser = $expenseRequest->user;
             $applicantCompanyId = $applicantUser?->company_id ?: $expenseRequest->company_id;
-            $pipeline = $this->resolvePipelineForUser($applicantUser, $applicantCompanyId);
+            $approvalChain = $this->resolveApprovalChainForUser($applicantUser, $applicantCompanyId);
 
-            $approvalChain = $pipeline->approval_chain ?? [];
             $currentStep = $expenseRequest->current_step;
             $currentRole = Role::withoutGlobalScopes()->find($expenseRequest->current_approver_role_id);
             $currentRoleName = $currentRole?->display_name ?: ($currentRole ? ucfirst(str_replace('_', ' ', preg_replace('/^company_\d+__/', '', $currentRole->name))) : "Stage {$currentStep}");
@@ -376,24 +375,78 @@ class ExpenseRequestApiController extends Controller
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
-     * Same pipeline lookup web's store()/approve() perform inline — the
-     * applicant's first active ExpensePipeline matching any of their roles,
-     * scoped to their company. No caching/service extraction here since web
-     * doesn't have one either (kept as a 1:1 mirror, not a refactor).
+     * 1:1 mirror of web's inline pipeline resolution, duplicated identically
+     * in both ExpenseRequestController::store() and ::approve() — exact
+     * role-ID match (unscoped + same-company-or-null), then a normalized
+     * role-name fallback match, then a hardcoded Dev Project Coordinator ->
+     * HR fallback chain if a role still has no pipeline configured at all.
+     * Returns the raw approval_chain array directly (never a nullable
+     * Pipeline) so callers can't hit "property on null" mistakes.
+     *
+     * This replaces a prior, weaker version that only did a single scoped
+     * exact-ID match (no withoutGlobalScopes(), no fuzzy fallback, no
+     * hardcoded fallback) — that gap could leave a mobile-created request's
+     * current_approver_role_id null when the applicant's role had no exact
+     * pipeline row, which then made canUserAction() unable to resolve an
+     * approver for it at all.
      */
-    private function resolvePipelineForUser(?User $user, $companyId): ?ExpensePipeline
+    private function resolveApprovalChainForUser(?User $user, $companyId): array
     {
         if (! $user) {
-            return null;
+            return [];
         }
-        $roleIds = $user->roles->pluck('id')->toArray();
-        if (empty($roleIds)) {
-            return null;
+
+        $userRoleIds = \DB::table('model_has_roles')
+            ->where('model_type', User::class)
+            ->where('model_id', $user->id)
+            ->pluck('role_id')
+            ->toArray();
+
+        if (empty($userRoleIds) && $user->relationLoaded('roles')) {
+            $userRoleIds = $user->roles->pluck('id')->toArray();
         }
-        return ExpensePipeline::whereIn('role_id', $roleIds)
-            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
-            ->where('is_active', true)
-            ->first();
+
+        $pipeline = null;
+        if (! empty($userRoleIds)) {
+            $pipeline = ExpensePipeline::withoutGlobalScopes()
+                ->whereIn('role_id', $userRoleIds)
+                ->when($companyId, fn ($q) => $q->where(fn ($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->where('is_active', true)
+                ->first();
+        }
+
+        if (! $pipeline && ! empty($userRoleIds)) {
+            $userRoles = Role::withoutGlobalScopes()->whereIn('id', $userRoleIds)->get();
+            foreach ($userRoles as $uRole) {
+                $baseName = strtolower(preg_replace('/^company_\d+__/', '', $uRole->name));
+                $matchingRoleIds = Role::withoutGlobalScopes()
+                    ->where('name', 'like', "%{$baseName}%")
+                    ->pluck('id')
+                    ->toArray();
+
+                $pipeline = ExpensePipeline::withoutGlobalScopes()
+                    ->whereIn('role_id', $matchingRoleIds)
+                    ->when($companyId, fn ($q) => $q->where(fn ($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($pipeline) {
+                    break;
+                }
+            }
+        }
+
+        $approvalChain = $pipeline->approval_chain ?? [];
+
+        if (empty($approvalChain)) {
+            $devCoordinatorRole = Role::withoutGlobalScopes()->where('name', 'like', '%development_project_coordinator%')->first();
+            $hrRole = Role::withoutGlobalScopes()->where('name', 'like', '%human_resource%')->orWhere('name', 'like', '%hr%')->first();
+            if ($devCoordinatorRole && $hrRole) {
+                $approvalChain = [$devCoordinatorRole->id, $hrRole->id];
+            }
+        }
+
+        return $approvalChain;
     }
 
     private function roleLabel(?\App\Models\Role $role): ?string
@@ -408,8 +461,7 @@ class ExpenseRequestApiController extends Controller
     {
         $applicant = $r->user;
         $applicantCompanyId = $applicant?->company_id ?: $r->company_id;
-        $pipeline = $this->resolvePipelineForUser($applicant, $applicantCompanyId);
-        $chain = $pipeline->approval_chain ?? [];
+        $chain = $this->resolveApprovalChainForUser($applicant, $applicantCompanyId);
 
         $roles = ! empty($chain)
             ? \App\Models\Role::whereIn('id', $chain)->get()->keyBy('id')
@@ -427,9 +479,16 @@ class ExpenseRequestApiController extends Controller
             ];
         }
 
-        $userRoleIds = $currentUser->roles->pluck('id')->toArray();
-        $canAction = $r->status === 'pending'
-            && ($currentUser->isHrOrAdmin() || in_array($r->current_approver_role_id, $userRoleIds));
+        // Identical to web's blade: `$canAction = $req->canUserAction();` — the
+        // shared model gate, not a locally re-derived guess. Previously this
+        // used isHrOrAdmin() as a blanket bypass, which is far broader than
+        // the real gate (isCompanyAdmin()/isSystemAdmin() only): any HR-ish
+        // user would see Approve/Reject on every pending request regardless
+        // of whether they were actually the assigned pipeline-stage
+        // approver, then get a 403 from canUserAction() on tap. Using the
+        // same method here as the actual authorization check guarantees the
+        // button is only ever shown when the action will actually succeed.
+        $canAction = $r->canUserAction($currentUser);
 
         return [
             'id' => $r->id,

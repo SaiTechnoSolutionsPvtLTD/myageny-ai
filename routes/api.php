@@ -458,6 +458,14 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::get('meta',             [MobileLeadController::class, 'meta'])->name('meta');
     Route::get('form-fields',      [MobileLeadController::class, 'customFields'])->name('form-fields'); // ← was 'lead-form-fields'
 
+    // Lightweight, paginated employee lookup for "Assigned To" / employee
+    // search-as-you-type pickers app-wide (Lead create/edit, Lead List
+    // filter, Lead Products filter, Call Updates filter, CRM Tasks filter,
+    // Price Requests filter, CST Allocation filter) — mirrors the
+    // leads-search endpoint's shape (id/name, 20/page, meta.has_more).
+    // Mobile-only; not used by web.
+    Route::get('employees-search', [MobileLeadController::class, 'employeesSearch'])->name('employees-search');
+
     Route::get('/lead-products', [MobileLeadController::class, 'leadProductFunction']);
     Route::get('/call-updates',  [MobileLeadController::class, 'callUpdateFunction']);
 

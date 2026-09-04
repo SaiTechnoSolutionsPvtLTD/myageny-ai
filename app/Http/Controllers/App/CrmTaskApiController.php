@@ -15,6 +15,7 @@
 
 namespace App\Http\Controllers\App;
 
+use App\Http\Controllers\App\Concerns\RestrictsEmployeesToOwnBranch;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\LeadReminder;
@@ -26,6 +27,8 @@ use Illuminate\Support\Facades\Validator;
 
 class CrmTaskApiController extends Controller
 {
+    use RestrictsEmployeesToOwnBranch;
+
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     public function index(Request $request): JsonResponse
@@ -112,7 +115,9 @@ class CrmTaskApiController extends Controller
         $tasks->getCollection()->transform(fn (LeadReminder $r) => $this->formatTask($r));
 
         $branches = Branch::orderBy('name')->get(['id', 'name']);
-        $users    = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $users    = $this->scopeEmployeeQueryToOwnBranch(User::where('is_active', true), $request->user())
+            ->orderBy('name')
+            ->get(['id', 'name']);
 
         return response()->json([
             'status'  => true,
