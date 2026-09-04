@@ -15,6 +15,7 @@ use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
+use App\Models\RecruitmentInterview;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -199,6 +200,10 @@ class DashboardApiController extends Controller
         $today_leave_approvals      = $this->todayLeaveApprovals($today);
         $today_permission_approvals = $this->todayPermissionApprovals($today);
 
+        // ── Interviews assigned to me today (mirrors web's Interview
+        // Assigned dashboard panel) ────────────────────────────────────────────
+        $assigned_interviews = $this->assignedInterviewsForUser();
+
         // ── Exit approval queue ───────────────────────────────────────────────
         $canManageExitRequests = $this->canManageExitRequests();
         $exit_approval_queue   = $canManageExitRequests
@@ -270,6 +275,7 @@ class DashboardApiController extends Controller
                 'monthly_leave_data'         => $monthly_leave_data,
                 'today_leave_approvals'      => $today_leave_approvals,
                 'today_permission_approvals' => $today_permission_approvals,
+                'assigned_interviews'        => $assigned_interviews,
                 'exit_approval_queue'        => $exit_approval_queue,
                 'announcements'              => $announcements,
 
@@ -381,6 +387,9 @@ class DashboardApiController extends Controller
         $today_leave_approvals      = $this->todayLeaveApprovals($today);
         $today_permission_approvals = $this->todayPermissionApprovals($today);
 
+        // ── Interviews assigned to me today (same as web) ─────────────────────
+        $assigned_interviews = $this->assignedInterviewsForUser();
+
         // ── Celebrations ──────────────────────────────────────────────────────
         $isBirthdayToday        = $this->isBirthdayToday($employee, $today);
         $isAnniversaryToday     = $this->isAnniversaryToday($employee, $today);
@@ -466,6 +475,7 @@ class DashboardApiController extends Controller
                 'announcements'              => $announcements,
                 'today_leave_approvals'      => $today_leave_approvals,
                 'today_permission_approvals' => $today_permission_approvals,
+                'assigned_interviews'        => $assigned_interviews,
 
                 'today_birthdays'          => $today_birthdays,
                 'today_anniversaries'      => $today_anniversaries,
@@ -639,6 +649,70 @@ class DashboardApiController extends Controller
                 'from_time'      => $pr->from_time,
                 'to_time'        => $pr->to_time,
                 'reason'         => $pr->reason ?? null,
+            ])
+            ->toArray();
+    }
+
+    /**
+     * Mirrors web DashboardController::assignedInterviewsForUser() exactly:
+     * interviews scheduled for today, scoped to the current user as
+     * interviewer unless they can view the Organization Dashboard (HR/Admin/
+     * Branch Admin see everyone's assignments), company-scoped, scheduled
+     * items first then most-recent-first, capped at 15. Included in BOTH
+     * organization and self-service payloads — same as web — since the
+     * "Interview Assigned" panel is about who's interviewing today, not
+     * about dashboard mode.
+     */
+    private function assignedInterviewsForUser(): array
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return [];
+        }
+
+        $isHrOrAdmin = $this->canViewOrganizationDashboard();
+
+        $query = RecruitmentInterview::query()
+            ->with(['candidate'])
+            ->whereDate('scheduled_at', today());
+
+        if (! $isHrOrAdmin) {
+            $employee = $this->currentEmployee();
+
+            $query->where(function ($q) use ($user, $employee) {
+                $q->where('interviewer_id', $user->id)
+                    ->orWhere('interviewer_name', $user->name);
+
+                if ($employee && $employee->name && $employee->name !== $user->name) {
+                    $q->orWhere('interviewer_name', $employee->name);
+                }
+            });
+        }
+
+        return $query
+            ->when($user->company_id, function ($q) use ($user) {
+                $q->where(function ($inner) use ($user) {
+                    $inner->where('company_id', $user->company_id)
+                        ->orWhereNull('company_id');
+                });
+            })
+            ->orderByRaw("CASE WHEN status = 'scheduled' THEN 1 ELSE 2 END")
+            ->orderBy('scheduled_at', 'desc')
+            ->limit(15)
+            ->get()
+            ->map(fn (RecruitmentInterview $interview) => [
+                'id'                       => $interview->id,
+                'recruitment_candidate_id' => $interview->recruitment_candidate_id,
+                'candidate_name'           => $interview->candidate?->name,
+                'candidate_no'             => $interview->candidate?->candidate_no,
+                'job_title'                => $interview->candidate?->job_title,
+                'avatar_initial'           => strtoupper(substr($interview->candidate?->name ?: 'C', 0, 1)),
+                'scheduled_at'             => optional($interview->scheduled_at)->format('Y-m-d H:i:s'),
+                'scheduled_at_formatted'   => optional($interview->scheduled_at)->format('d M Y, h:i A'),
+                'interviewer_name'         => $interview->interviewer_name,
+                'status'                   => $interview->status,
+                'status_label'             => $interview->status_label,
+                'notes'                    => $interview->notes,
             ])
             ->toArray();
     }

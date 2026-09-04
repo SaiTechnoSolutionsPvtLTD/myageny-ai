@@ -180,6 +180,18 @@ return [
                 'permission' => 'od_request.menuview',
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
+            // Matches sidebar.blade.php's `@if(! $hrmsSelfService) @can('recruitment.menuview')`
+            // gate exactly — recruitment.menuview already exists as a real
+            // Spatie permission (see App\Models\Permission's permission map),
+            // so this needed no new migration, unlike od_request.menuview.
+            [
+                'key' => 'hrms.recruitment',
+                'label' => 'Recruitment',
+                'section' => 'HRMS',
+                'order' => 98,
+                'permission' => 'recruitment.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser'
+            ],
             // No web-sidebar equivalent (this workflow is mobile-only), so
             // there's no existing Spatie permission to mirror — gated the
             // same way OutsideOfficeApprovalApiController::canManage() gates
@@ -196,6 +208,19 @@ return [
                     'isCompanyAdmin',
                     'isBranchAdmin',
                 ],
+            ],
+            // Matches sidebar.blade.php's `@if(! $hrmsSelfService) @can('petty_cash.menuview')`
+            // gate exactly — petty_cash.menuview already exists as a real
+            // Spatie permission (it already gates the live web page), so
+            // this needed no new migration, same precedent as
+            // recruitment.menuview above.
+            [
+                'key' => 'hrms.petty_cash',
+                'label' => 'Petty Cash',
+                'section' => 'HRMS',
+                'order' => 99,
+                'permission' => 'petty_cash.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
             [
                 'key' => 'hrms.facility',

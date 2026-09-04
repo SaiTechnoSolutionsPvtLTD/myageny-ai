@@ -30,6 +30,8 @@ use App\Http\Controllers\App\HRMS\FacilityManagementApiController;
 use App\Http\Controllers\App\HRMS\VisitorManagementApiController;
 use App\Http\Controllers\App\HRMS\AttendanceLocationApiController;
 use App\Http\Controllers\App\HRMS\OutsideOfficeApprovalApiController;
+use App\Http\Controllers\App\HRMS\RecruitmentApiController;
+use App\Http\Controllers\App\HRMS\PettyCashApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -230,6 +232,36 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         // Approve / Reject
         Route::post('od-requests/{odRequest}/approvals/{approval}/approve', [OdRequestApiController::class, 'approve'])->name('od-requests.approve');
         Route::post('od-requests/{odRequest}/approvals/{approval}/reject',  [OdRequestApiController::class, 'reject'])->name('od-requests.reject');
+
+        // Recruitment — static routes BEFORE wildcard. List/Details/Call
+        // Update/Interview/Decision only — no create/edit/delete of the
+        // candidate record itself is exposed to mobile (see
+        // RecruitmentApiController's class doc-comment).
+        Route::get('recruitment/meta', [RecruitmentApiController::class, 'meta'])->name('recruitment.meta');
+
+        Route::get('recruitment',              [RecruitmentApiController::class, 'index'])->name('recruitment.index');
+        Route::get('recruitment/{recruitment}', [RecruitmentApiController::class, 'show'])->name('recruitment.show');
+
+        Route::post('recruitment/{recruitment}/call-updates', [RecruitmentApiController::class, 'storeCallUpdate'])
+            ->name('recruitment.call-updates.store');
+        Route::post('recruitment/{recruitment}/interviews', [RecruitmentApiController::class, 'storeInterview'])
+            ->name('recruitment.interviews.store');
+        Route::put('recruitment/{recruitment}/interviews/{interview}', [RecruitmentApiController::class, 'updateInterview'])
+            ->name('recruitment.interviews.update');
+        Route::patch('recruitment/{recruitment}/status', [RecruitmentApiController::class, 'updateStatus'])
+            ->name('recruitment.status.update');
+
+        // Petty Cash — main DR/CR ledger (create + edit only, no delete/approval —
+        // see PettyCashApiController's class doc-comment) plus the separate Rani
+        // side-account (full CRUD). Static routes before wildcard.
+        Route::get('petty-cash', [PettyCashApiController::class, 'report'])->name('petty-cash.report');
+        Route::post('petty-cash', [PettyCashApiController::class, 'store'])->name('petty-cash.store');
+        Route::put('petty-cash/{entry}', [PettyCashApiController::class, 'update'])->name('petty-cash.update');
+
+        Route::get('petty-cash/rani', [PettyCashApiController::class, 'raniIndex'])->name('petty-cash.rani.index');
+        Route::post('petty-cash/rani', [PettyCashApiController::class, 'raniStore'])->name('petty-cash.rani.store');
+        Route::put('petty-cash/rani/{raniEntry}', [PettyCashApiController::class, 'raniUpdate'])->name('petty-cash.rani.update');
+        Route::delete('petty-cash/rani/{raniEntry}', [PettyCashApiController::class, 'raniDestroy'])->name('petty-cash.rani.destroy');
 
         Route::get('facility-titles', [FacilityManagementApiController::class, 'titles'])
             ->name('facility-titles.index');
