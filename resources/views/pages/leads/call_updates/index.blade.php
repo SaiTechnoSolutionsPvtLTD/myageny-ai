@@ -20,10 +20,12 @@
 .cu-label { font-size:11px; font-weight:800; color:#7c7c7c; text-transform:uppercase; letter-spacing:.4px; }
 .cu-input, .cu-select {
     width:100%; padding:10px 12px; border:1px solid #e1dee3; border-radius:10px; background:#faf7f4; color:#121212;
-    font-size:13px; font-family:inherit; outline:none; transition:all .15s;
+    font-size:13px; font-family:inherit; outline:none; transition:all .15s; box-sizing:border-box;
 }
 .cu-input:focus, .cu-select:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.10); }
-.cu-select, .cu-input[type="date"] { background:linear-gradient(180deg,#fff7f1 0%, #fff2e8 100%); border-color:#f7c9ac; color:#c2410c; }
+.cu-select { background:linear-gradient(180deg,#fff7f1 0%, #fff2e8 100%); border-color:#f7c9ac; color:#c2410c; }
+.cu-input[type="date"] { background:#fff; border-color:#e1dee3; color:#121212; cursor:pointer; }
+.cu-input[type="date"]:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.10); }
 .cu-actions { display:flex; align-items:center; gap:8px; }
 .cu-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; border:none; cursor:pointer; font-family:inherit; transition:all .15s; white-space:nowrap; }
 .cu-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 6px 16px rgba(254,95,4,.25); }
@@ -183,11 +185,11 @@
                     </div>
                     <div class="cu-group">
                         <label class="cu-label">Date From</label>
-                        <input type="date" name="date_from" id="date_from" class="cu-input" value="{{ $dateFrom }}" readonly onclick="this.showPicker && this.showPicker()">
+                        <input type="date" name="date_from" id="date_from" class="cu-input" value="{{ $dateFrom }}">
                     </div>
                     <div class="cu-group">
                         <label class="cu-label">Date To</label>
-                        <input type="date" name="date_to" id="date_to" class="cu-input" value="{{ $dateTo }}" readonly onclick="this.showPicker && this.showPicker()">
+                        <input type="date" name="date_to" id="date_to" class="cu-input" value="{{ $dateTo }}">
                     </div>
                     <div class="cu-actions">
                         <button type="submit" class="cu-btn cu-btn-primary">Apply</button>
@@ -393,9 +395,9 @@ function closeCuModal() {
         all:     { from: '', to: '' },
     };
     const urlParams = new URLSearchParams(window.location.search);
-    const hasDateParam = urlParams.has('date_from');
-    const currentFrom = urlParams.get('date_from') || '';
-    const currentTo   = urlParams.get('date_to')   || '';
+    const hasDateParam = urlParams.has('date_from') || urlParams.has('date_to');
+    const currentFrom = urlParams.get('date_from') ?? '';
+    const currentTo   = urlParams.get('date_to')   ?? '';
     const fromInput = document.getElementById('date_from');
     const toInput   = document.getElementById('date_to');
     const form      = document.getElementById('filterForm');
@@ -420,6 +422,16 @@ function closeCuModal() {
             fromInput.value = p.from;
             toInput.value   = p.to;
             form.submit();
+        });
+    });
+
+    [fromInput, toInput].forEach(inp => {
+        if (!inp) return;
+        inp.addEventListener('input', () => {
+            document.querySelectorAll('.cu-qbtn').forEach(b => b.classList.remove('is-active'));
+        });
+        inp.addEventListener('change', () => {
+            document.querySelectorAll('.cu-qbtn').forEach(b => b.classList.remove('is-active'));
         });
     });
 })();

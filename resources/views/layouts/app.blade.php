@@ -602,9 +602,164 @@
     transition: transform 0.3s ease;
 }
 
-.select2-container
-{
-    width:100% !important;
+/* =========================================================
+   GLOBAL SELECT2 MODERN CRM THEME STYLES
+   ========================================================= */
+.select2-container {
+    width: 100% !important;
+    max-width: 100%;
+}
+.select2-container--open {
+    z-index: 999999 !important;
+}
+
+/* Single Select */
+.select2-container--default .select2-selection--single {
+    min-height: 40px;
+    height: auto;
+    border: 1px solid #e1dee3;
+    border-radius: 10px;
+    background-color: #faf7f4;
+    transition: all .15s ease;
+    display: flex;
+    align-items: center;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    color: #121212;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 38px;
+    padding-left: 12px;
+    padding-right: 32px;
+}
+.select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: #9e9e9e;
+    font-size: 13px;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 38px;
+    right: 8px;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow b {
+    border-color: #7c7c7c transparent transparent transparent;
+    border-width: 5px 4px 0 4px;
+}
+.select2-container--default.select2-container--open .select2-selection--single .select2-selection__arrow b {
+    border-color: transparent transparent #fe5f04 transparent;
+    border-width: 0 4px 5px 4px;
+}
+.select2-container--default .select2-selection--single .select2-selection__clear {
+    color: #9e9e9e;
+    font-size: 16px;
+    font-weight: bold;
+    margin-right: 18px;
+}
+.select2-container--default .select2-selection--single .select2-selection__clear:hover {
+    color: #fe5f04;
+}
+
+/* Focus & Open States */
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #fe5f04 !important;
+    background-color: #fff !important;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12) !important;
+    outline: none;
+}
+
+/* Multiple Select */
+.select2-container--default .select2-selection--multiple {
+    min-height: 40px;
+    border: 1px solid #e1dee3;
+    border-radius: 10px;
+    background-color: #faf7f4;
+    padding: 3px 6px;
+    transition: all .15s ease;
+}
+.select2-container--default.select2-container--focus .select2-selection--multiple,
+.select2-container--default.select2-container--open .select2-selection--multiple {
+    border-color: #fe5f04 !important;
+    background-color: #fff !important;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12) !important;
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    background-color: #fff2ea;
+    border: 1px solid #fed7aa;
+    color: #c2410c;
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 3px 4px 3px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    color: #ea580c;
+    margin-right: 4px;
+    font-weight: bold;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+    color: #9a3412;
+}
+
+/* Dropdown Menu */
+.select2-dropdown {
+    border: 1px solid #e1dee3 !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+    box-shadow: 0 14px 30px rgba(18, 18, 18, 0.12) !important;
+    background-color: #fff;
+}
+.select2-search--dropdown {
+    padding: 8px 10px;
+    background: #faf8fb;
+    border-bottom: 1px solid #f1eef2;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #e1dee3 !important;
+    border-radius: 8px !important;
+    padding: 7px 10px !important;
+    font-size: 13px !important;
+    outline: none !important;
+    background: #fff !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: #fe5f04 !important;
+    box-shadow: 0 0 0 2px rgba(254, 95, 4, 0.12) !important;
+}
+.select2-results__options {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.select2-results__option {
+    font-size: 13px;
+    padding: 8px 14px;
+    color: #2e2e2e;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: linear-gradient(135deg, #fe5f04, #ff7c30) !important;
+    color: #fff !important;
+}
+.select2-container--default .select2-results__option--selected {
+    background-color: #fff7f2 !important;
+    color: #fe5f04 !important;
+    font-weight: 700;
+}
+.select2-container--default .select2-results__option[aria-disabled="true"] {
+    color: #b0b0b0;
 }
 
         .has-dropdown.open .chevron {
@@ -919,26 +1074,79 @@
     @stack('scripts')
     <script>
 
-            $(document).ready(function() {
-        $('.select2').each(function() {
-            const $select = $(this);
-            const hasModalParent = $select.closest('#pp-modal-add-product').length > 0;
-            const config = {
-                allowClear: true,
-                width: '100%'
-            };
+    window.initSelect2 = function(scope) {
+        if (!window.jQuery || !window.jQuery.fn.select2) return;
 
-            if (hasModalParent) {
-                config.dropdownParent = $('#pp-modal-add-product');
+        var $context = scope ? $(scope) : $(document);
+        var $selects;
+
+        if ($context.is('select')) {
+            $selects = $context;
+        } else {
+            $selects = $context.find('form select, select.select2, select.form-select, select.form-control');
+        }
+
+        $selects.each(function() {
+            var $select = $(this);
+
+            if ($select.hasClass('no-select2') ||
+                $select.data('no-select2') !== undefined ||
+                $select.hasClass('swal2-select') ||
+                $select.hasClass('select2-hidden-accessible')) {
+                return;
             }
 
-            if ($select.hasClass('select2-hidden-accessible')) {
-                $select.select2('destroy');
+            var $modal = $select.closest('.modal, [role="dialog"], .pp-modal, .cu-modal, .exp-modal, .holiday-modal, .ts-modal, .att-modal, .eob-modal, .modal-dialog');
+            var placeholder = $select.data('placeholder') || $select.attr('placeholder') || '';
+            if (!placeholder && $select.find('option[value=""]').length > 0) {
+                placeholder = $select.find('option[value=""]').first().text() || 'Select an option';
+            }
+
+            var config = {
+                width: '100%',
+                allowClear: Boolean($select.find('option[value=""]').length > 0 || $select.prop('multiple'))
+            };
+
+            if (placeholder) {
+                config.placeholder = placeholder;
+            }
+
+            if ($modal.length > 0) {
+                config.dropdownParent = $modal;
             }
 
             $select.select2(config);
         });
-});
+    };
+
+    $(document).ready(function() {
+        window.initSelect2();
+
+        // Re-initialize Select2 when Bootstrap modals are opened
+        $(document).on('shown.bs.modal', function(e) {
+            window.initSelect2(e.target);
+        });
+
+        // Observer for custom modals/dynamic elements toggling display
+        if (window.MutationObserver) {
+            var select2Observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+                        var target = mutation.target;
+                        if ($(target).is('.modal, [role="dialog"], .cu-modal, .pp-modal, .exp-modal, .holiday-modal, .ts-modal, .att-modal, .eob-modal') && $(target).is(':visible')) {
+                            window.initSelect2(target);
+                        }
+                    }
+                });
+            });
+
+            select2Observer.observe(document.body, {
+                attributes: true,
+                subtree: true,
+                attributeFilter: ['style', 'class']
+            });
+        }
+    });
 
 function toggleDropdown(element) {
     const submenu = element.nextElementSibling;

@@ -99,13 +99,6 @@
             </div>
             @endif
 
-            {{-- Action Button --}}
-            <div style="margin-top: 28px; text-align: center;">
-                <a href="{{ route('ovp-module.index', ['bucket' => 'approved']) }}"
-                   style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 8px; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3);">
-                    View Approved OVP Items
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}

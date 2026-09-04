@@ -72,13 +72,6 @@
                 </table>
             </div>
 
-            {{-- Action Button --}}
-            <div style="margin-top: 28px; text-align: center;">
-                <a href="{{ route('leads.show', $priceRequest->lead_id) }}"
-                   style="display: inline-block; background: {{ $priceRequest->status === 'approved' ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 'linear-gradient(135deg, #4b5563 0%, #6b7280 100%)' }}; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
-                    View Lead Profile
-                </a>
-            </div>
         </div>
 
         {{-- Footer --}}

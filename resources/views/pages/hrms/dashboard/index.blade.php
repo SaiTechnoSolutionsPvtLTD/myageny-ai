@@ -908,16 +908,22 @@
                         <div class="hrms-panel-title">📢 Announcements</div>
                         <div class="hrms-panel-sub">Important updates and notices</div>
                     </div>
-                    @if($stats['can_manage_announcements'] ?? false)
-                    <a href="{{ route('hrms-announcements.create') }}" class="hrms-link">+ Create Announcement</a>
-                    @else
-                    <a href="{{ route('hrms-announcements.index') }}" class="hrms-link">View All</a>
-                    @endif
+                    <div style="display:flex;gap:12px;align-items:center;">
+                        @if($stats['can_manage_announcements'] ?? false)
+                        <a href="{{ route('hrms-announcements.create') }}" class="hrms-link">+ Create</a>
+                        @endif
+                        <a href="{{ route('hrms-announcements.index') }}" class="hrms-link">View All</a>
+                    </div>
                 </div>
                 <div class="hrms-announcement-list">
                     @forelse($stats['announcements'] as $announcement)
                     <div class="hrms-announcement-item hrms-announcement-priority-{{ $announcement['priority'] }}">
-                        <div class="hrms-announcement-title">{{ $announcement['title'] }}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;">
+                            <div class="hrms-announcement-title" style="margin-bottom:0;">{{ $announcement['title'] }}</div>
+                            @if(!empty($announcement['branches']))
+                                <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.7);color:#374151;">🏢 {{ $announcement['branches'] }}</span>
+                            @endif
+                        </div>
                         <div class="hrms-announcement-message">{{ $announcement['message'] }}</div>
                         <div class="hrms-announcement-date">{{ \Carbon\Carbon::parse($announcement['date'])->format('M j, Y') }}</div>
                     </div>

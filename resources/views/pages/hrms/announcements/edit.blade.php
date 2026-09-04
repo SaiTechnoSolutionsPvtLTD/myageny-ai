@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Create Announcement')
+@section('title', 'Edit Announcement')
 
 @push('styles')
 <style>
@@ -57,32 +57,38 @@
 <div class="hac-page">
     <div class="hac-shell">
         <div class="hac-card">
-            <h2 class="hac-title">Create Announcement</h2>
-            <div class="hac-sub">Create an announcement with target branches and schedule date to publish on employee dashboards.</div>
+            <h2 class="hac-title">Edit Announcement</h2>
+            <div class="hac-sub">Update announcement details, priority, active status, or target branches.</div>
         </div>
 
-        <form id="announcementForm" method="POST" action="{{ route('hrms-announcements.store') }}" class="hac-card">
+        @php
+            $savedBranchIds = (array) ($announcement->branch_ids ?? []);
+            $initialTargetType = old('target_type', empty($savedBranchIds) ? 'all' : 'specific');
+        @endphp
+
+        <form id="announcementForm" method="POST" action="{{ route('hrms-announcements.update', $announcement) }}" class="hac-card">
             @csrf
+            @method('PUT')
             <div class="hac-grid">
                 <div class="hac-field full">
                     <label class="hac-label">Title <span class="req">*</span></label>
-                    <input type="text" id="annTitle" name="title" class="hac-input" placeholder="e.g. Office Annual Meetup / Festival Holiday" value="{{ old('title') }}" required>
+                    <input type="text" id="annTitle" name="title" class="hac-input" value="{{ old('title', $announcement->title) }}" required>
                     @error('title')<div class="hac-error">{{ $message }}</div>@enderror
                 </div>
 
                 <div class="hac-field">
                     <label class="hac-label">Priority <span class="req">*</span></label>
                     <select id="annPriority" name="priority" class="hac-select" required>
-                        <option value="high" @selected(old('priority') === 'high')>🔴 High Priority</option>
-                        <option value="medium" @selected(old('priority', 'medium') === 'medium')>🟠 Medium Priority</option>
-                        <option value="low" @selected(old('priority') === 'low')>🔵 Low Priority</option>
+                        <option value="high" @selected(old('priority', $announcement->priority) === 'high')>🔴 High Priority</option>
+                        <option value="medium" @selected(old('priority', $announcement->priority) === 'medium')>🟠 Medium Priority</option>
+                        <option value="low" @selected(old('priority', $announcement->priority) === 'low')>🔵 Low Priority</option>
                     </select>
                     @error('priority')<div class="hac-error">{{ $message }}</div>@enderror
                 </div>
 
                 <div class="hac-field">
                     <label class="hac-label">Announcement Date <span class="req">*</span></label>
-                    <input type="date" id="annDate" name="announcement_date" class="hac-input" value="{{ old('announcement_date', now()->toDateString()) }}" required>
+                    <input type="date" id="annDate" name="announcement_date" class="hac-input" value="{{ old('announcement_date', optional($announcement->announcement_date)->toDateString()) }}" required>
                     @error('announcement_date')<div class="hac-error">{{ $message }}</div>@enderror
                 </div>
 
@@ -91,16 +97,16 @@
                     <label class="hac-label">Target Audience / Branches <span class="req">*</span></label>
                     <div class="hac-target-options">
                         <label class="hac-target-card" id="cardAllBranches">
-                            <input type="radio" name="target_type" value="all" @checked(old('target_type', 'all') === 'all') onchange="toggleBranchSelection()">
+                            <input type="radio" name="target_type" value="all" @checked($initialTargetType === 'all') onchange="toggleBranchSelection()">
                             <span>🌐 All Branches</span>
                         </label>
                         <label class="hac-target-card" id="cardSpecificBranches">
-                            <input type="radio" name="target_type" value="specific" @checked(old('target_type') === 'specific') onchange="toggleBranchSelection()">
+                            <input type="radio" name="target_type" value="specific" @checked($initialTargetType === 'specific') onchange="toggleBranchSelection()">
                             <span>🏢 Select Specific Branches</span>
                         </label>
                     </div>
 
-                    <div id="branchSelectionBox" style="display: {{ old('target_type') === 'specific' ? 'block' : 'none' }}; margin-top: 8px;">
+                    <div id="branchSelectionBox" style="display: {{ $initialTargetType === 'specific' ? 'block' : 'none' }}; margin-top: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 12px; color: #6b7280; font-weight: 600;">Choose one or more branches:</span>
                             <button type="button" onclick="toggleSelectAllBranches()" class="hac-btn" style="padding: 4px 10px; font-size: 12px; background: #f3f4f6; color: #374151; border-radius: 8px;">
@@ -109,8 +115,13 @@
                         </div>
                         <div class="hac-branch-box">
                             @forelse($branches as $branch)
+                                @php
+                                    $isChecked = is_array(old('branch_ids')) 
+                                        ? in_array($branch->id, old('branch_ids')) 
+                                        : in_array($branch->id, $savedBranchIds);
+                                @endphp
                                 <label class="hac-branch-item">
-                                    <input type="checkbox" name="branch_ids[]" class="branch-checkbox" value="{{ $branch->id }}" data-branch-name="{{ $branch->name }}" @checked(is_array(old('branch_ids')) && in_array($branch->id, old('branch_ids')))>
+                                    <input type="checkbox" name="branch_ids[]" class="branch-checkbox" value="{{ $branch->id }}" data-branch-name="{{ $branch->name }}" @checked($isChecked)>
                                     <span>{{ $branch->name }}</span>
                                     @if($branch->city)<span style="font-size: 11px; color: #9ca3af; font-weight: 400;">({{ $branch->city }})</span>@endif
                                 </label>
@@ -125,22 +136,22 @@
                 <div class="hac-field">
                     <label class="hac-label">Status <span class="req">*</span></label>
                     <select id="annStatus" name="is_active" class="hac-select">
-                        <option value="1" @selected(old('is_active', '1') === '1')>Active (Visible)</option>
-                        <option value="0" @selected(old('is_active') === '0')>Inactive (Hidden)</option>
+                        <option value="1" @selected(old('is_active', $announcement->is_active ? '1' : '0') === '1')>Active (Visible)</option>
+                        <option value="0" @selected(old('is_active', $announcement->is_active ? '1' : '0') === '0')>Inactive (Hidden)</option>
                     </select>
                     @error('is_active')<div class="hac-error">{{ $message }}</div>@enderror
                 </div>
 
                 <div class="hac-field full">
                     <label class="hac-label">Message Content <span class="req">*</span></label>
-                    <textarea id="annMessage" name="message" class="hac-textarea" placeholder="Write full details of the announcement here..." required>{{ old('message') }}</textarea>
+                    <textarea id="annMessage" name="message" class="hac-textarea" required>{{ old('message', $announcement->message) }}</textarea>
                     @error('message')<div class="hac-error">{{ $message }}</div>@enderror
                 </div>
             </div>
 
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap;">
                 <a href="{{ route('hrms-announcements.index') }}" class="hac-btn hac-btn-ghost">Cancel</a>
-                <button type="button" class="hac-btn hac-btn-primary" onclick="showCreateConfirmation()">Create Announcement</button>
+                <button type="button" class="hac-btn hac-btn-primary" onclick="showUpdateConfirmation()">Update Announcement</button>
             </div>
         </form>
     </div>
@@ -150,11 +161,11 @@
 <div id="confirmModal" class="hac-modal-overlay" style="display: none;">
     <div class="hac-modal">
         <div class="hac-modal-head">
-            <h3>📢 Confirm Announcement</h3>
+            <h3>📢 Confirm Update</h3>
             <button type="button" onclick="closeConfirmModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #9ca3af;">✕</button>
         </div>
         <div class="hac-modal-body">
-            <p style="margin: 0;">Are you sure you want to create and publish this announcement? Please verify the details below:</p>
+            <p style="margin: 0;">Are you sure you want to save changes to this announcement?</p>
             <div class="hac-summary-box">
                 <div class="hac-summary-row">
                     <span class="hac-summary-label">Title:</span>
@@ -179,8 +190,8 @@
             </div>
         </div>
         <div class="hac-modal-footer">
-            <button type="button" class="hac-btn hac-btn-ghost" onclick="closeConfirmModal()">Go Back & Edit</button>
-            <button type="button" class="hac-btn hac-btn-primary" onclick="submitForm()">Yes, Create Announcement</button>
+            <button type="button" class="hac-btn hac-btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+            <button type="button" class="hac-btn hac-btn-primary" onclick="submitForm()">Yes, Update Announcement</button>
         </div>
     </div>
 </div>
@@ -200,7 +211,7 @@ function toggleSelectAllBranches() {
     checkboxes.forEach(cb => cb.checked = !allChecked);
 }
 
-function showCreateConfirmation() {
+function showUpdateConfirmation() {
     const title = document.getElementById('annTitle').value.trim();
     const message = document.getElementById('annMessage').value.trim();
     const date = document.getElementById('annDate').value;

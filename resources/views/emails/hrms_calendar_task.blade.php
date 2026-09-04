@@ -60,12 +60,6 @@
                     </div>
                 @endif
             </div>
-
-            <div class="cta-box">
-                <a href="{{ url('/hrms/dashboard') }}" class="btn-cta" target="_blank">
-                    Open HRMS Dashboard &rarr;
-                </a>
-            </div>
         </div>
 
         <div class="footer">

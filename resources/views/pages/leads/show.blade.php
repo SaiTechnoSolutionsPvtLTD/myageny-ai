@@ -523,8 +523,8 @@ tbody tr:last-child td { border-bottom: none; }
                         @foreach($lead->callUpdates->sortByDesc('called_at') as $call)
                         @php $oc = $call->outcome_color; @endphp
                         <div class="lsp-call-card type-{{ $call->call_type }}">
-                            <div class="lsp-call-top">
-                                <div class="lsp-call-meta">
+                            <div class="lsp-call-top" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <div class="lsp-call-meta" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                     <span class="lsp-call-type ct-{{ $call->call_type }}">
                                         {{ $call->call_type_label }}
                                     </span>
@@ -533,21 +533,41 @@ tbody tr:last-child td { border-bottom: none; }
                                     <span class="lsp-call-dur">⏱ {{ $call->duration_minutes }} min</span>
                                     @endif
                                 </div>
-
+                                <div class="lsp-call-actions" style="display:flex; align-items:center; gap:6px;">
+                                    <button type="button" 
+                                            class="lsp-action-btn edit-call-btn" 
+                                            title="Edit Call Update"
+                                            onclick="openEditCallModal({{ $call->id }}, {{ $call->outcome ? (int)$call->outcome : 'null' }}, {{ $call->outcome_subcategory ? (int)$call->outcome_subcategory : 'null' }}, {{ json_encode($call->notes ?? '') }}, '{{ $call->next_follow_up ? $call->next_follow_up->format('Y-m-d') : '' }}', '{{ $call->followup_time ? \Carbon\Carbon::parse($call->followup_time)->format('H:i') : '' }}')"
+                                            style="background:#eff6ff; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; cursor:pointer; color:#2563eb; transition:all .15s; display:inline-flex; align-items:center; justify-content:center;">
+                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                    </button>
+                                    <form method="POST" action="{{ route('leads.calls.destroy', [$lead, $call]) }}" style="margin:0; display:inline;" onsubmit="return confirm('Are you sure you want to delete this call update?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" 
+                                                class="lsp-action-btn delete-call-btn" 
+                                                title="Delete Call Update"
+                                                style="background:#fef2f2; border:1px solid #fecaca; padding:4px 8px; border-radius:6px; cursor:pointer; color:#dc2626; transition:all .15s; display:inline-flex; align-items:center; justify-content:center;">
+                                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                             @if($call->notes)
-                            <div class="lsp-call-notes">{{ $call->notes }}</div>
+                            <div class="lsp-call-notes" style="font-size:13px; color:#2e2e2e; line-height:1.5; margin-bottom:8px;">{{ $call->notes }}</div>
                             @endif
-                            <div class="lsp-call-footer">
-                                <span class="lsp-call-outcome" style="background:#f0fdf4;color:#16a34a">
+                            <div class="lsp-call-footer" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:6px; padding-top:6px; border-top:1px dashed #f0e9ee;">
+                                <span class="lsp-call-outcome" style="background:#f0fdf4;color:#16a34a; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;">
                                     {{ $call?->outCome?->name }} - {{ $call?->outComeSubCategory?->name }}
                                 </span>
-                                @if($call->next_follow_up)
-                                <span class="lsp-call-followup">
-                                    📅 Follow-up: {{ $call->next_follow_up->format('d M Y') }}
-                                </span>
-                                @endif
-                                <span class="lsp-call-by">By {{ $call->user?->name }}</span>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    @if($call->next_follow_up)
+                                    <span class="lsp-call-followup" style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:4px;">
+                                        📅 Follow-up: {{ $call->next_follow_up->format('d M Y') }}
+                                    </span>
+                                    @endif
+                                    <span class="lsp-call-by" style="font-size:11px; color:var(--muted);">By {{ $call->user?->name }}</span>
+                                </div>
                             </div>
                         </div>
                         @endforeach
@@ -1418,6 +1438,89 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
 </div>
 
+{{-- EDIT CALL UPDATE MODAL --}}
+<div id="modalEditCallUpdate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div class="lsp-card" style="max-width:580px;width:100%;background:#fff;border-radius:18px;box-shadow:0 20px 45px rgba(0,0,0,0.2);overflow:hidden;margin:0 auto;">
+        <div class="lsp-card-head" style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#fe5f04 0%,#ff8745 100%);padding:14px 20px;">
+            <div class="lsp-card-title" style="color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit Call Update
+            </div>
+            <button type="button" style="border:none;background:rgba(255,255,255,0.2);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;cursor:pointer;color:#fff;line-height:1;" onclick="closeEditCallModal()">&times;</button>
+        </div>
+        <form method="POST" id="editCallForm" action="">
+            @csrf
+            @method('PUT')
+            <div class="lsp-card-body" style="padding:20px;">
+                <div class="lsp-stack" style="display:flex;flex-direction:column;gap:14px;">
+                    <div class="lsp-form-row lsp-form-row-2">
+                        <div class="lsp-group">
+                            <label class="lsp-label">Outcome <span class="lsp-req">*</span></label>
+                            <div class="lsp-fw">
+                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <select name="outcome" id="edit_outcome_category" class="lsp-sel" required>
+                                    <option value="">— Select Outcome —</option>
+                                    @foreach($outcomes as $v)
+                                        <option value="{{ $v->id }}">{{ $v->name }}</option>
+                                    @endforeach
+                                </select>
+                                <svg class="lsp-sel-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </div>
+                        </div>
+
+                        <div class="lsp-group">
+                            <label class="lsp-label">Outcome Subcategory <span class="lsp-req">*</span></label>
+                            <div class="lsp-fw">
+                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                <select name="outcome_sub_category_id" id="edit_outcome_sub_category" class="lsp-sel" required>
+                                    <option value="">— Select sub category —</option>
+                                </select>
+                                <svg class="lsp-sel-caret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lsp-group">
+                        <label class="lsp-label">Call Notes <span class="lsp-req">*</span></label>
+                        <textarea name="notes" id="edit_call_notes" class="lsp-ta" rows="3" placeholder="What was discussed? Any key points…" required></textarea>
+                    </div>
+
+                    <div class="lsp-form-row lsp-form-row-2" id="edit_followup_row">
+                        <div class="lsp-group">
+                            <label class="lsp-label">Next Follow-up Date <span class="lsp-req" id="edit_next_followup_date_req">*</span></label>
+                            <div class="lsp-fw">
+                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                <input type="date" name="next_follow_up" id="edit_next_follow_up" class="lsp-inp" min="{{ now()->toDateString() }}">
+                            </div>
+                        </div>
+                        <div class="lsp-group">
+                            <label class="lsp-label">Follow-up Time <span class="lsp-req" id="edit_next_followup_time_req">*</span></label>
+                            <div class="lsp-fw">
+                                <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                <input type="time" name="followup_time" id="edit_followup_time" class="lsp-inp">
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Reminder Remarks Section --}}
+                    <div class="lsp-group" id="edit_call_update_reminder_box">
+                        <label class="lsp-label">Reminder Remarks / Task Title</label>
+                        <div class="lsp-fw">
+                            <svg class="lsp-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <input type="text" name="reminder_remarks" id="edit_reminder_remarks_input" class="lsp-inp" placeholder="e.g. Call client regarding proposal feedback...">
+                        </div>
+                    </div>
+
+                    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px;padding-top:14px;border-top:1px solid #eee;">
+                        <button type="button" class="lsp-btn lsp-btn-outline" onclick="closeEditCallModal()">Cancel</button>
+                        <button type="submit" class="lsp-btn lsp-btn-primary">Update Call</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -1746,6 +1849,132 @@ $(document).ready(function() {
     $('#outcome_sub_category').change(function() {
         checkFollowupRequirement();
     });
+
+    // ── Edit Call Update Modal JS ─────────────────────────────────────
+    function checkEditFollowupRequirement() {
+        let categoryText = $('#edit_outcome_category option:selected').text().trim().toLowerCase();
+        let subCategoryText = $('#edit_outcome_sub_category option:selected').text().trim().toLowerCase();
+
+        let isNoFollowupNeeded = (categoryText === 'not interested' || categoryText.includes('not interested')) ||
+                                  (categoryText === 'closed' || categoryText.includes('closed')) ||
+                                  (categoryText === 'won' || categoryText.includes('won')) ||
+                                  (categoryText === 'lost' || categoryText.includes('lost')) ||
+                                  (subCategoryText === 'not interested' || subCategoryText.includes('not interested')) ||
+                                  (subCategoryText === 'closed' || subCategoryText.includes('closed')) ||
+                                  (subCategoryText === 'won' || subCategoryText.includes('won')) ||
+                                  (subCategoryText === 'lost' || subCategoryText.includes('lost'));
+
+        if (isNoFollowupNeeded) {
+            $('#edit_next_follow_up').removeAttr('required').val('');
+            $('#edit_followup_time').removeAttr('required').val('');
+            $('#edit_next_followup_date_req').hide();
+            $('#edit_next_followup_time_req').hide();
+            $('#edit_call_update_reminder_box').hide();
+        } else {
+            $('#edit_next_follow_up').attr('required', 'required');
+            $('#edit_followup_time').attr('required', 'required');
+            $('#edit_next_followup_date_req').show();
+            $('#edit_next_followup_time_req').show();
+            $('#edit_call_update_reminder_box').show();
+        }
+    }
+
+    $('#edit_outcome_category').change(function() {
+        let category_id = $(this).val();
+        $('#edit_outcome_sub_category').html('<option value="">Loading...</option>');
+
+        if (category_id != '') {
+            $.ajax({
+                url: '/get-subcategories/' + category_id,
+                type: 'GET',
+                success: function(response) {
+                    let options = '<option value="">— Select sub category —</option>';
+                    response.forEach(function(item) {
+                        options += `<option value="${item.id}">${item.name}</option>`;
+                    });
+                    $('#edit_outcome_sub_category').html(options);
+                    if ($('#edit_outcome_sub_category').hasClass('select2-hidden-accessible')) {
+                        $('#edit_outcome_sub_category').val('').trigger('change.select2');
+                    }
+                    checkEditFollowupRequirement();
+                }
+            });
+        } else {
+            $('#edit_outcome_sub_category').html('<option value="">— Select sub category —</option>');
+            if ($('#edit_outcome_sub_category').hasClass('select2-hidden-accessible')) {
+                $('#edit_outcome_sub_category').val('').trigger('change.select2');
+            }
+        }
+        checkEditFollowupRequirement();
+    });
+
+    $('#edit_outcome_sub_category').change(function() {
+        checkEditFollowupRequirement();
+    });
+
+    window.openEditCallModal = function(callId, outcomeId, subCategoryId, notes, nextFollowUp, followupTime) {
+        const modal = document.getElementById('modalEditCallUpdate');
+        const form = document.getElementById('editCallForm');
+        
+        if (!modal || !form) return;
+
+        form.action = `/leads/{{ $lead->id }}/calls/` + callId;
+
+        $('#edit_call_notes').val(notes);
+        $('#edit_next_follow_up').val(nextFollowUp);
+        $('#edit_followup_time').val(followupTime);
+        $('#edit_reminder_remarks_input').val('');
+
+        if (outcomeId) {
+            $('#edit_outcome_category').val(String(outcomeId));
+            if ($('#edit_outcome_category').hasClass('select2-hidden-accessible')) {
+                $('#edit_outcome_category').trigger('change.select2');
+            }
+            
+            $('#edit_outcome_sub_category').html('<option value="">Loading...</option>');
+            $.ajax({
+                url: '/get-subcategories/' + outcomeId,
+                type: 'GET',
+                success: function(response) {
+                    let options = '<option value="">— Select sub category —</option>';
+                    response.forEach(function(item) {
+                        let selected = (subCategoryId && String(item.id) === String(subCategoryId)) ? 'selected' : '';
+                        options += `<option value="${item.id}" ${selected}>${item.name}</option>`;
+                    });
+                    $('#edit_outcome_sub_category').html(options);
+                    if (subCategoryId) {
+                        $('#edit_outcome_sub_category').val(String(subCategoryId));
+                    }
+                    if ($('#edit_outcome_sub_category').hasClass('select2-hidden-accessible')) {
+                        $('#edit_outcome_sub_category').trigger('change.select2');
+                    }
+                    checkEditFollowupRequirement();
+                }
+            });
+        } else {
+            $('#edit_outcome_category').val('');
+            if ($('#edit_outcome_category').hasClass('select2-hidden-accessible')) {
+                $('#edit_outcome_category').trigger('change.select2');
+            }
+            $('#edit_outcome_sub_category').html('<option value="">— Select sub category —</option>');
+            if ($('#edit_outcome_sub_category').hasClass('select2-hidden-accessible')) {
+                $('#edit_outcome_sub_category').trigger('change.select2');
+            }
+            checkEditFollowupRequirement();
+        }
+
+        modal.style.display = 'flex';
+        if (window.initSelect2) {
+            window.initSelect2(modal);
+        }
+    };
+
+    window.closeEditCallModal = function() {
+        const modal = document.getElementById('modalEditCallUpdate');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    };
 
 });
 </script>

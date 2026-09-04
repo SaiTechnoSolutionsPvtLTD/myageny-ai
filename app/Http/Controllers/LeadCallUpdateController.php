@@ -14,12 +14,14 @@ class LeadCallUpdateController extends Controller
 
     public function index(Request $request)
     {
-        if ($request->has('date_from') && ($request->input('date_from') === '' || $request->input('date_from') === 'all' || $request->input('date_from') === null)) {
-            $dateFrom = null;
-            $dateTo = null;
+        $hasDateFilter = $request->has('date_from') || $request->has('date_to');
+
+        if ($hasDateFilter) {
+            $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
+            $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
         } else {
-            $dateFrom = $request->input('date_from', now()->startOfMonth()->toDateString());
-            $dateTo = $request->input('date_to', now()->endOfMonth()->toDateString());
+            $dateFrom = now()->startOfMonth()->toDateString();
+            $dateTo = now()->endOfMonth()->toDateString();
         }
 
         $query = LeadCallUpdate::with([
