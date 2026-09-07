@@ -9,8 +9,11 @@
 .pts-title { font-size:24px; font-weight:900; color:#111827; }
 .pts-breadcrumb { font-size:12px; color:#64748b; margin-top:4px; }
 .pts-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.pts-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#111827; font-size:13px; font-weight:800; text-decoration:none; cursor:pointer; }
+.pts-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#111827; font-size:13px; font-weight:800; text-decoration:none; cursor:pointer; transition:all 0.2s; }
 .pts-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
+.pts-btn-primary:hover { background:#c2410c; border-color:#c2410c; color:#fff; }
+.pts-btn-outline { border-color:#ea580c; color:#ea580c; background:#fff; }
+.pts-btn-outline:hover { background:#fff7ed; }
 .pts-body { padding:22px 28px 34px; display:grid; gap:18px; }
 .pts-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pts-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
@@ -23,19 +26,23 @@
 .pts-empty { padding:40px 20px; text-align:center; color:#64748b; font-size:13px; }
 .pts-table-wrap { overflow-x:auto; }
 .pts-table { width:100%; border-collapse:collapse; min-width:860px; }
-.pts-table th { padding:12px 14px; text-align:left; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b; background:#f8fafc; border-bottom:1px solid #edf2f7; }
-.pts-table td { padding:14px; border-bottom:1px solid #f1f5f9; font-size:13px; color:#111827; vertical-align:top; }
+.pts-table th { padding:14px 16px; text-align:left; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b; background:#f8fafc; border-bottom:1px solid #edf2f7; }
+.pts-table td { padding:16px; border-bottom:1px solid #f1f5f9; font-size:13px; color:#111827; vertical-align:middle; }
 .pts-meta { margin-top:4px; font-size:11px; color:#64748b; }
 .pts-project { font-weight:900; color:#0f172a; }
-.pts-update-text { line-height:1.65; color:#334155; max-width:520px; }
+.pts-update-text { line-height:1.65; color:#334155; }
 .pts-pill { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid #fed7aa; color:#c2410c; background:#fff7ed; }
-.pts-status { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid transparent; }
-.pts-status.completed { color:#15803d; background:#f0fdf4; border-color:#bbf7d0; }
-.pts-status.pending { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
+
+.pts-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+.pts-badge.pending { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.pts-badge.ongoing { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.pts-badge.completed { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.pts-badge.count { background:#f1f5f9; color:#334155; border:1px solid #e2e8f0; }
+
 .pts-status-select {
     display: inline-flex;
     align-items: center;
-    padding: 6px 10px;
+    padding: 6px 12px;
     border-radius: 999px;
     font-size: 11px;
     font-weight: 800;
@@ -50,21 +57,38 @@
     background-position: right 8px center;
     background-size: 10px;
     padding-right: 24px;
+    transition: all 0.2s;
 }
 .pts-status-select.completed { color:#15803d; background-color:#f0fdf4; border-color:#bbf7d0; }
+.pts-status-select.ongoing { color:#1d4ed8; background-color:#eff6ff; border-color:#bfdbfe; }
 .pts-status-select.pending { color:#b45309; background-color:#fff7ed; border-color:#fed7aa; }
+
 .pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; padding:16px; box-shadow:0 10px 28px rgba(15,23,42,.04); }
 .pts-filter-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; align-items:end; }
 .pts-filter-group { display:grid; gap:7px; }
 .pts-filter-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .pts-reset-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:13px; font-weight:800; text-decoration:none; }
-.pts-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.42); z-index:1200; display:none; }
+
+.pts-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.48); z-index:1200; display:none; }
 .pts-modal-overlay.is-open { display:block; }
 .pts-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(1000px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 24px 60px rgba(15,23,42,.22); z-index:1210; display:none; }
 .pts-modal.is-open { display:block; }
 .pts-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
-.pts-modal-close { width:40px; height:40px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:16px; cursor:pointer; }
+.pts-modal-close { width:40px; height:40px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:16px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.pts-modal-close:hover { background:#f1f5f9; }
 .pts-modal-body { padding:20px; }
+
+.pts-submodal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:1240; display:none; }
+.pts-submodal-overlay.is-open { display:block; }
+.pts-submodal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(620px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 28px 70px rgba(15,23,42,.32); z-index:1250; display:none; }
+.pts-submodal.is-open { display:block; }
+
+.modal-task-table { width:100%; border-collapse:collapse; min-width:820px; table-layout:auto; }
+.modal-task-table th { padding:14px 16px; background:#f8fafc; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#64748b; border-bottom:1px solid #e2e8f0; text-align:left !important; vertical-align:middle; }
+.modal-task-table th.th-center, .modal-task-table td.td-center { text-align:center !important; }
+.modal-task-table th.th-right, .modal-task-table td.td-right { text-align:right !important; }
+.modal-task-table td { padding:14px 16px; border-bottom:1px solid #f1f5f9; vertical-align:middle; font-size:13px; text-align:left !important; color:#111827; }
+
 .pts-form-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:16px; align-items:start; }
 .pts-grid-col-12 { grid-column: span 12; }
 .pts-grid-col-6 { grid-column: span 6; }
@@ -130,7 +154,10 @@
             <div class="pts-breadcrumb">Projects > Timesheets</div>
         </div>
         <div class="pts-actions">
-            <button type="button" class="pts-btn pts-btn-primary" data-open-timesheet-modal>Add Timesheet</button>
+            <button type="button" class="pts-btn pts-btn-primary" data-open-timesheet-modal>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add Timesheet</span>
+            </button>
         </div>
     </div>
 
@@ -179,6 +206,7 @@
                     <select name="filter_status" class="pts-select">
                         <option value="">All Status</option>
                         <option value="pending" @selected(($timesheetFilters['filter_status'] ?? '') === 'pending')>Pending</option>
+                        <option value="ongoing" @selected(($timesheetFilters['filter_status'] ?? '') === 'ongoing')>Ongoing</option>
                         <option value="completed" @selected(($timesheetFilters['filter_status'] ?? '') === 'completed')>Completed</option>
                     </select>
                 </div>
@@ -218,16 +246,17 @@
             </form>
         </section>
 
+        <!-- Saved Timesheets (Grouped by Date & Member) -->
         <section class="pts-card">
             <div class="pts-card-head">
                 <div>
-                    <div class="pts-card-title">Saved Timesheets</div>
-                    <div class="pts-card-sub">Your submitted day closing updates are listed here.</div>
+                    <div class="pts-card-title">Saved Timesheets (Grouped by Date)</div>
+                    <div class="pts-card-sub">Your submitted day closing updates grouped date-wise.</div>
                 </div>
-                <span class="pts-pill">{{ $timesheets->count() }} Entries</span>
+                <span class="pts-pill">{{ $groupedTimesheets->total() }} Submissions</span>
             </div>
             <div class="pts-card-body" style="padding:0;">
-                @if($timesheets->isNotEmpty())
+                @if($groupedTimesheets->isNotEmpty())
                     <div class="pts-table-wrap">
                         <table class="pts-table">
                             <thead>
@@ -236,83 +265,144 @@
                                     @if(($isAdminLike ?? false) || ($canViewTeamTimesheets ?? false))
                                         <th>Employee</th>
                                     @endif
-                                    <th>Project</th>
-                                    <th>Delivery Date</th>
-                                    <th>Status</th>
-                                    @if(auth()->user()?->belongsToDesigningDepartment())
-                                        <th>Committed P/V</th>
-                                        <th>Waiting P/V</th>
-                                    @endif
-                                    <th>Posters</th>
-                                    <th>Videos</th>
-                                    <th>Day Closing Update</th>
+                                    <th>Allocated Lead (Client)</th>
+                                    <th>Timesheets</th>
                                     <th>Submitted</th>
+                                    <th>Status Overview</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($timesheets as $timesheet)
+                                @foreach($groupedTimesheets as $group)
                                     @php
-                                        $statusVal = strtolower($timesheet->status ?? 'pending');
-                                        $statusClass = $statusVal === 'completed' ? 'completed' : 'pending';
-                                        $statusLabel = ucfirst($statusVal);
+                                        $firstTimesheet = $group->first();
+                                        $groupDate = $firstTimesheet->timesheet_date;
+                                        $timesheetUser = $firstTimesheet->user;
+                                        $totalEntries = $group->count();
+                                        
+                                        $pendingCount = $group->where('status', 'pending')->count();
+                                        $ongoingCount = $group->where('status', 'ongoing')->count();
+                                        $completedCount = $group->where('status', 'completed')->count();
+
+                                        // Prepare clean JSON array for modal
+                                        $groupTimesheetsData = $group->map(function($t, $idx) {
+                                            $leadId = $t->project?->lead_id;
+                                            $leadFormatted = $leadId ? 'LD-' . str_pad($leadId, 4, '0', STR_PAD_LEFT) : 'N/A';
+                                            $companyName = $t->project?->company_name ?: ($t->project?->lead?->company_name ?: 'No Company');
+                                            $productName = $t->project?->product_name ?: 'Project removed';
+                                            $deliveryDate = optional($t->project_delivery_date)->format('d M Y') ?: (optional($t->project?->timesheet_delivery_date)->format('d M Y') ?: 'Not available');
+                                            
+                                            $deptName = strtolower((string)($t->project?->department?->name ?? ''));
+                                            $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
+
+                                            return [
+                                                'id' => $t->id,
+                                                'sno' => $idx + 1,
+                                                'lead_id' => $leadFormatted,
+                                                'lead_company' => $companyName,
+                                                'product_name' => $productName,
+                                                'delivery_date' => $deliveryDate,
+                                                'assigned_task' => $t->assigned_task_desc ?? '—',
+                                                'day_closing_update' => $t->user_closing_update ?? '',
+                                                'status' => strtolower($t->status ?: 'pending'),
+                                                'project_type' => $t->project_type ?: 'recurring',
+                                                'is_design_dm' => $isDesignOrDm,
+                                                'poster_count' => (int) $t->poster_count,
+                                                'video_count' => (int) $t->video_count,
+                                                'committed_posters' => (int) $t->committed_posters,
+                                                'committed_videos' => (int) $t->committed_videos,
+                                                'waiting_posters' => (int) $t->waiting_posters,
+                                                'waiting_videos' => (int) $t->waiting_videos,
+                                                'update_status_url' => route('projects.timesheets.update-status', $t->id),
+                                            ];
+                                        })->values();
+
+                                        $uniqueCompanies = $group->map(function ($ts) {
+                                            return $ts->project?->company_name ?: ($ts->project?->lead?->company_name ?: 'No Company');
+                                        })->unique()->values();
+
+                                        $latestSubmitted = $group->sortByDesc('created_at')->first()?->created_at;
                                     @endphp
-                                    <tr>
-                                        <td>{{ optional($timesheet->timesheet_date)->format('d M Y') ?: 'No date' }}</td>
+                                    <tr data-group-row>
+                                        <!-- Date -->
+                                        <td>
+                                            <div style="font-weight:800; color:#0f172a;">
+                                                {{ optional($groupDate)->format('d M Y') ?: 'No date' }}
+                                            </div>
+                                            <div class="pts-meta">{{ optional($groupDate)->format('l') }}</div>
+                                        </td>
+
+                                        <!-- Employee -->
                                         @if(($isAdminLike ?? false) || ($canViewTeamTimesheets ?? false))
                                             <td>
-                                                <div style="font-weight:700;">{{ $timesheet->user?->name ?? 'Unknown' }}</div>
-                                                <div class="pts-meta">{{ $timesheet->user?->designation ?? '' }}</div>
+                                                <div style="display:flex; align-items:center; gap:10px;">
+                                                    <div style="width:36px; height:36px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:13px;">
+                                                        {{ strtoupper(substr($timesheetUser?->name ?: 'U', 0, 2)) }}
+                                                    </div>
+                                                    <div>
+                                                        <div style="font-weight:800; color:#0f172a;">{{ $timesheetUser?->name ?? 'Unknown' }}</div>
+                                                        <div class="pts-meta">{{ $timesheetUser?->designation ?? '' }}</div>
+                                                    </div>
+                                                </div>
                                             </td>
                                         @endif
+
+                                        <!-- Allocated Lead (Client) -->
                                         <td>
-                                            <div class="pts-project">{{ $timesheet->project?->product_name ?: 'Project removed' }}</div>
-                                            <div class="pts-meta">{{ $timesheet->project?->company_name ?: ($timesheet->project?->lead?->company_name ?: 'No company') }}</div>
+                                            <div style="display:flex; flex-direction:column; gap:6px; max-width:280px;">
+                                                @foreach($uniqueCompanies->take(2) as $companyName)
+                                                    <div style="font-weight:800; color:#0f172a; display:flex; align-items:center; gap:7px;">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"></path><path d="M12 7h.01"></path><path d="M12 11h.01"></path><path d="M12 15h.01"></path></svg>
+                                                        <span>{{ $companyName }}</span>
+                                                    </div>
+                                                @endforeach
+                                                @if($uniqueCompanies->count() > 2)
+                                                    <div class="pts-meta" style="font-weight:800; color:#64748b; margin-left:21px;">+ {{ $uniqueCompanies->count() - 2 }} more client(s)</div>
+                                                @endif
+                                            </div>
                                         </td>
-                                        <td>{{ optional($timesheet->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
-                                         <td>
-                                             <form method="POST" action="{{ route('projects.timesheets.update-status', $timesheet->id) }}" style="display:inline;">
-                                                 @csrf
-                                                 @method('PATCH')
-                                                 <select name="status" onchange="this.form.submit()" class="pts-status-select {{ $statusClass }}">
-                                                     <option value="pending" @selected($statusVal === 'pending')>Pending</option>
-                                                     <option value="completed" @selected($statusVal === 'completed')>Completed</option>
-                                                 </select>
-                                             </form>
-                                         </td>
-                                        @if(auth()->user()?->belongsToDesigningDepartment())
-                                            <td style="font-weight:600;">P: {{ (int) $timesheet->committed_posters }} / V: {{ (int) $timesheet->committed_videos }}</td>
-                                            <td style="font-weight:600; color:#ea580c;">P: {{ (int) $timesheet->waiting_posters }} / V: {{ (int) $timesheet->waiting_videos }}</td>
-                                        @endif
-                                        @php
-                                            $deptName = $timesheet->project?->department?->name ? strtolower($timesheet->project->department->name) : '';
-                                            $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
-                                        @endphp
-                                        <td>{{ $isDesignOrDm ? (int) $timesheet->poster_count : '—' }}</td>
-                                        <td>{{ $isDesignOrDm ? (int) $timesheet->video_count : '—' }}</td>
+
+                                        <!-- Timesheets button -->
                                         <td>
-                                            @if(strlen($timesheet->day_closing_update) > 15)
-                                                @php
-                                                    $previewText = str_replace(["\r\n", "\r", "\n"], ' ', $timesheet->day_closing_update);
-                                                    $previewText = preg_replace('/\s+/', ' ', $previewText);
-                                                @endphp
-                                                <div class="pts-update-text view-closing-update"
-                                                     style="display: inline-block; cursor: pointer; color: #ea580c; font-weight: 600; text-decoration: underline;"
-                                                     data-project-name="{{ $timesheet->project?->product_name ?: 'Project removed' }}"
-                                                     data-timesheet-date="{{ optional($timesheet->timesheet_date)->format('d M Y') }}">
-                                                    {{ \Illuminate\Support\Str::limit($previewText, 15, '...') }}
-                                                </div>
-                                                <div class="full-update-text" style="display: none;">{{ $timesheet->day_closing_update }}</div>
-                                            @else
-                                                <div class="pts-update-text">{{ $timesheet->day_closing_update }}</div>
-                                            @endif
+                                            <button type="button" 
+                                                    class="pts-btn pts-btn-outline open-timesheets-modal-btn" 
+                                                    data-user-name="{{ $timesheetUser?->name ?: 'My Timesheets' }}"
+                                                    data-timesheet-date="{{ optional($groupDate)->format('d M Y') }}"
+                                                    data-timesheets='@json($groupTimesheetsData)'>
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                                <span>View Timesheets</span>
+                                                <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalEntries }}</span>
+                                            </button>
                                         </td>
+
+                                        <!-- Submitted -->
                                         <td>
-                                            {{ optional($timesheet->created_at)->format('d M Y h:i A') ?: 'Not available' }}
+                                            <div style="font-weight:700; color:#334155;">
+                                                {{ optional($latestSubmitted)->format('d M Y, h:i A') ?: 'Not available' }}
+                                            </div>
+                                        </td>
+
+                                        <!-- Status Overview -->
+                                        <td>
+                                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                                @if($pendingCount > 0)
+                                                    <span class="pts-badge pending">{{ $pendingCount }} Pending</span>
+                                                @endif
+                                                @if($ongoingCount > 0)
+                                                    <span class="pts-badge ongoing">{{ $ongoingCount }} Ongoing</span>
+                                                @endif
+                                                @if($completedCount > 0)
+                                                    <span class="pts-badge completed">{{ $completedCount }} Completed</span>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @endforeach
                             </tbody>
                         </table>
+                    </div>
+
+                    <div style="padding:16px 20px; border-top:1px solid #edf2f7;">
+                        {{ $groupedTimesheets->links() }}
                     </div>
                 @else
                     <div class="pts-empty">No timesheets submitted yet. Use Add Timesheet to enter today&apos;s day closing update.</div>
@@ -322,6 +412,113 @@
     </div>
 </div>
 
+<!-- View Timesheets Details Modal Popup -->
+<div class="pts-modal-overlay" data-view-timesheets-modal-overlay></div>
+<div class="pts-modal" data-view-timesheets-modal style="width:min(1150px, calc(100vw - 32px));">
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div>
+                <div class="pts-card-title" id="modalTimesheetMemberName" style="font-size:17px; font-weight:900; color:#111827; line-height:1.3;">Timesheet Details</div>
+                <div class="pts-card-sub" id="modalTimesheetSubTitle" style="margin-top:3px; font-size:12px; color:#64748b;">Date: N/A | Total 0 Timesheet(s)</div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" data-close-view-timesheets-modal aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="pts-modal-body" style="padding:0;">
+        <div class="pts-table-wrap">
+            <table class="modal-task-table">
+                <thead>
+                    <tr>
+                        <th class="th-center" style="width:40px;">#</th>
+                        <th style="width:160px;">Lead (Client)</th>
+                        <th style="width:170px;">Product / Delivery</th>
+                        <th style="width:230px;">Assigned Task</th>
+                        <th style="min-width:270px;">Day Closing Update</th>
+                        <th class="th-center" style="width:130px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="modalTimesheetsTableBody">
+                    <!-- Populated dynamically via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Day Closing Update Entry/Edit Submodal Popup -->
+<div class="pts-submodal-overlay" data-entry-closing-modal-overlay></div>
+<div class="pts-submodal" data-entry-closing-modal>
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </div>
+            <div>
+                <div class="pts-card-title" id="entryClosingModalTitle" style="font-size:16px; font-weight:900; color:#111827;">Add Day Closing Update</div>
+                <div class="pts-card-sub" id="entryClosingModalSubTitle" style="margin-top:2px; font-size:12px; color:#64748b;">Project Name - Client</div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" data-close-entry-closing-modal aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="pts-modal-body">
+        <form id="entryClosingForm">
+            <input type="hidden" id="entryClosingTimesheetId">
+            <input type="hidden" id="entryClosingUpdateUrl">
+            <div style="display:grid; gap:16px;">
+                <div>
+                    <label class="pts-label">Day Closing Update Details <span style="color:#ef4444;">*</span></label>
+                    <textarea id="entryClosingTextarea" class="pts-textarea" rows="6" required style="min-height:140px;" placeholder="Write your completed tasks and day closing details here..."></textarea>
+                </div>
+            </div>
+            <div class="pts-actions" style="margin-top:20px; justify-content:flex-end;">
+                <button type="button" class="pts-btn" data-close-entry-closing-modal>Cancel</button>
+                <button type="submit" id="entryClosingSubmitBtn" class="pts-btn pts-btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Save Closing Update</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Day Closing Update Details View Submodal Popup -->
+<div class="pts-submodal-overlay" data-view-closing-modal-overlay></div>
+<div class="pts-submodal" data-view-closing-modal>
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            </div>
+            <div>
+                <div class="pts-card-title" id="viewClosingModalTitle" style="font-size:16px; font-weight:900; color:#111827;">Day Closing Update Details</div>
+                <div class="pts-card-sub" id="viewClosingModalSubTitle" style="margin-top:2px; font-size:12px; color:#64748b;">Project - Date</div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" data-close-view-closing-modal aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="pts-modal-body">
+        <div id="viewClosingModalContent" style="white-space:pre-wrap; line-height:1.65; color:#1e293b; font-size:13.5px; background:#f8fafc; padding:18px; border-radius:10px; border:1px solid #e2e8f0; max-height:350px; overflow-y:auto;">
+        </div>
+        <div class="pts-actions" style="margin-top:18px; justify-content:flex-end; gap:8px;">
+            <button type="button" class="pts-btn" data-close-view-closing-modal>Close</button>
+            <button type="button" id="viewClosingEditShortcutBtn" class="pts-btn pts-btn-primary">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                <span>Edit Update</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Timesheet Modal Popup -->
 <div class="pts-modal-overlay {{ $hasTimesheetErrors ? 'is-open' : '' }}" data-timesheet-modal-overlay></div>
 <div class="pts-modal {{ $hasTimesheetErrors ? 'is-open' : '' }}" data-timesheet-modal>
     <div class="pts-modal-head">
@@ -386,6 +583,7 @@
                     <label class="pts-label">Status</label>
                     <select name="status" class="pts-select" required>
                         <option value="pending" @selected(old('status') === 'pending')>Pending</option>
+                        <option value="ongoing" @selected(old('status') === 'ongoing')>Ongoing</option>
                         <option value="completed" @selected(old('status') === 'completed')>Completed</option>
                     </select>
                     @error('status')
@@ -456,8 +654,6 @@
                     @enderror
                 </div>
 
-
-
                 <div class="pts-grid-col-12" id="dayClosingUpdateContainer">
                     <label class="pts-label">Day Closing Update</label>
                     <textarea name="day_closing_update" id="dayClosingUpdateTextarea" class="pts-textarea" rows="7" required placeholder="Enter your day closing update details...">{{ old('day_closing_update') }}</textarea>
@@ -473,27 +669,6 @@
                 <button type="submit" class="pts-btn pts-btn-primary" @disabled($assignedProjects->isEmpty())>Save Timesheet</button>
             </div>
         </form>
-    </div>
-</div>
-
-{{-- Day Closing Update Full Text Modal --}}
-<div class="pts-modal-overlay" data-update-text-modal-overlay></div>
-<div class="pts-modal" data-update-text-modal style="max-width: 600px;">
-    <div class="pts-modal-head">
-        <div>
-            <div class="pts-card-title">Day Closing Update Details</div>
-            <div class="pts-card-sub" id="updateTextModalProjectDate">Project Name - Date</div>
-        </div>
-        <button type="button" class="pts-modal-close" data-close-update-text-modal aria-label="Close modal">
-            <i class="bi bi-x-lg"></i>
-        </button>
-    </div>
-    <div class="pts-modal-body">
-        <div id="updateTextModalContent" style="white-space: pre-wrap; line-height: 1.65; color: #1e293b; font-size: 14px; background: #f8fafc; padding: 18px; border-radius: 10px; border: 1px solid #e2e8f0; max-height: 400px; overflow-y: auto;">
-        </div>
-        <div class="pts-actions" style="margin-top: 18px; justify-content: flex-end;">
-            <button type="button" class="pts-btn" data-close-update-text-modal>Close</button>
-        </div>
     </div>
 </div>
 @endsection
@@ -815,54 +990,395 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.setTimeout(syncDeliveryDate, 0);
 
-    // Day Closing Update details modal logic
-    const updateTextModal = document.querySelector('[data-update-text-modal]');
-    const updateTextOverlay = document.querySelector('[data-update-text-modal-overlay]');
-    const viewButtons = document.querySelectorAll('.view-closing-update');
-    const closeTextButtons = document.querySelectorAll('[data-close-update-text-modal]');
-    const modalProjectDate = document.getElementById('updateTextModalProjectDate');
-    const modalContent = document.getElementById('updateTextModalContent');
+    // View Timesheets Modal Logic
+    const viewTimesheetsModal = document.querySelector('[data-view-timesheets-modal]');
+    const viewTimesheetsOverlay = document.querySelector('[data-view-timesheets-modal-overlay]');
+    const openTimesheetButtons = document.querySelectorAll('.open-timesheets-modal-btn');
+    const closeViewTimesheetButtons = document.querySelectorAll('[data-close-view-timesheets-modal]');
+    const modalMemberName = document.getElementById('modalTimesheetMemberName');
+    const modalSubTitle = document.getElementById('modalTimesheetSubTitle');
+    const modalTableBody = document.getElementById('modalTimesheetsTableBody');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
 
-    function setUpdateTextModalState(isOpen) {
-        if (!updateTextModal || !updateTextOverlay) {
-            return;
-        }
-        updateTextModal.classList.toggle('is-open', isOpen);
-        updateTextOverlay.classList.toggle('is-open', isOpen);
+    function setViewTimesheetsModalState(isOpen) {
+        if (!viewTimesheetsModal || !viewTimesheetsOverlay) return;
+        viewTimesheetsModal.classList.toggle('is-open', isOpen);
+        viewTimesheetsOverlay.classList.toggle('is-open', isOpen);
         document.body.style.overflow = isOpen ? 'hidden' : '';
     }
 
-    viewButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            const td = this.closest('td');
-            const hiddenDiv = td.querySelector('.full-update-text');
-            const fullText = hiddenDiv ? hiddenDiv.textContent : '';
-            const projectName = this.getAttribute('data-project-name');
-            const dateStr = this.getAttribute('data-timesheet-date');
+    function escapeHtml(str) {
+        if (!str) return '';
+        const p = document.createElement('p');
+        p.textContent = str;
+        return p.innerHTML;
+    }
 
-            modalProjectDate.textContent = projectName + ' - ' + dateStr;
-            modalContent.textContent = fullText;
+    openTimesheetButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userName = this.getAttribute('data-user-name') || 'Team Member';
+            const dateStr = this.getAttribute('data-timesheet-date') || 'N/A';
+            let timesheets = [];
 
-            setUpdateTextModalState(true);
+            try {
+                timesheets = JSON.parse(this.getAttribute('data-timesheets') || '[]');
+            } catch (e) {
+                console.error('Failed to parse timesheets JSON', e);
+            }
+
+            if (modalMemberName) modalMemberName.textContent = 'Timesheets - ' + userName;
+            if (modalSubTitle) modalSubTitle.textContent = 'Date: ' + dateStr + ' | Total ' + timesheets.length + ' Timesheet(s)';
+
+            if (modalTableBody) {
+                modalTableBody.innerHTML = '';
+
+                if (timesheets.length === 0) {
+                    modalTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b;">No timesheets found for this date.</td></tr>';
+                } else {
+                    timesheets.forEach(ts => {
+                        const tr = document.createElement('tr');
+                        tr.setAttribute('data-timesheet-id', ts.id);
+                        const statusClass = (ts.status === 'completed') ? 'completed' : ((ts.status === 'ongoing') ? 'ongoing' : 'pending');
+
+                        let designStatsHtml = '';
+                        if (ts.is_design_dm) {
+                            designStatsHtml = `
+                                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+                                    <span class="pts-badge count" style="font-size:10px; padding:2px 6px;">Done P: ${ts.poster_count} / V: ${ts.video_count}</span>
+                                    ${ts.committed_posters > 0 || ts.committed_videos > 0 ? `<span class="pts-badge pending" style="font-size:10px; padding:2px 6px;">Commit P: ${ts.committed_posters} / V: ${ts.committed_videos}</span>` : ''}
+                                    ${ts.waiting_posters > 0 || ts.waiting_videos > 0 ? `<span class="pts-badge count" style="font-size:10px; padding:2px 6px; color:#ea580c; border-color:#fed7aa;">Wait P: ${ts.waiting_posters} / V: ${ts.waiting_videos}</span>` : ''}
+                                </div>
+                            `;
+                        }
+
+                        let closingActionHtml = '';
+                        if (ts.day_closing_update && ts.day_closing_update.trim() !== '') {
+                            closingActionHtml = `
+                                <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn" 
+                                            data-project-name="${escapeHtml(ts.product_name)}"
+                                            data-lead-name="${escapeHtml(ts.lead_company)}"
+                                            data-delivery-date="${escapeHtml(ts.delivery_date)}"
+                                            data-closing-text="${escapeHtml(ts.day_closing_update)}"
+                                            data-timesheet-id="${ts.id}"
+                                            data-update-url="${ts.update_status_url}"
+                                            style="padding:5px 10px; font-size:12px; gap:5px;" title="View closing update details">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <span>View</span>
+                                    </button>
+                                    <button type="button" class="pts-btn open-entry-closing-btn" 
+                                            data-project-name="${escapeHtml(ts.product_name)}"
+                                            data-lead-name="${escapeHtml(ts.lead_company)}"
+                                            data-delivery-date="${escapeHtml(ts.delivery_date)}"
+                                            data-closing-text="${escapeHtml(ts.day_closing_update)}"
+                                            data-timesheet-id="${ts.id}"
+                                            data-update-url="${ts.update_status_url}"
+                                            style="padding:5px 9px; font-size:12px; gap:5px; background:#f8fafc; border-color:#cbd5e1;" title="Edit closing update">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                        <span>Edit</span>
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            closingActionHtml = `
+                                <div class="closing-btn-group">
+                                    <button type="button" class="pts-btn pts-btn-primary open-entry-closing-btn" 
+                                            data-project-name="${escapeHtml(ts.product_name)}"
+                                            data-lead-name="${escapeHtml(ts.lead_company)}"
+                                            data-delivery-date="${escapeHtml(ts.delivery_date)}"
+                                            data-closing-text=""
+                                            data-timesheet-id="${ts.id}"
+                                            data-update-url="${ts.update_status_url}"
+                                            style="padding:6px 12px; font-size:12px; gap:6px;">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                        <span>Add Update</span>
+                                    </button>
+                                </div>
+                            `;
+                        }
+
+                        tr.innerHTML = `
+                            <td class="td-center" style="font-weight:800; color:#64748b;">${ts.sno}</td>
+                            <td>
+                                <div style="font-weight:800; color:#0f172a;">${escapeHtml(ts.lead_company)}</div>
+                                <div class="pts-meta" style="font-weight:700; color:#ea580c;">${escapeHtml(ts.lead_id)}</div>
+                            </td>
+                            <td>
+                                <div class="pts-project">${escapeHtml(ts.product_name)}</div>
+                                <div class="pts-meta">Delivery: ${escapeHtml(ts.delivery_date)}</div>
+                                ${designStatsHtml}
+                            </td>
+                            <td>
+                                <div style="font-size:12px; color:#334155; line-height:1.55; white-space:pre-wrap; background:#f8fafc; padding:8px 10px; border-radius:8px; border:1px solid #e2e8f0; max-height:140px; overflow-y:auto;">${escapeHtml(ts.assigned_task || '—')}</div>
+                            </td>
+                            <td>
+                                ${closingActionHtml}
+                            </td>
+                            <td class="td-center">
+                                <select class="pts-status-select ${statusClass} modal-timesheet-status-select" 
+                                        data-timesheet-id="${ts.id}" 
+                                        data-update-url="${ts.update_status_url}">
+                                    <option value="pending" ${ts.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="ongoing" ${ts.status === 'ongoing' ? 'selected' : ''}>Ongoing</option>
+                                    <option value="completed" ${ts.status === 'completed' ? 'selected' : ''}>Completed</option>
+                                </select>
+                            </td>
+                        `;
+                        modalTableBody.appendChild(tr);
+                    });
+
+                    // Attach change listeners to status selects
+                    modalTableBody.querySelectorAll('.modal-timesheet-status-select').forEach(sel => {
+                        sel.addEventListener('change', function() {
+                            const newStatus = this.value;
+                            const updateUrl = this.getAttribute('data-update-url');
+                            const currentSelect = this;
+                            
+                            // Visual feedback
+                            currentSelect.style.opacity = '0.6';
+
+                            fetch(updateUrl, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken
+                                },
+                                body: JSON.stringify({ status: newStatus })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                currentSelect.style.opacity = '1';
+                                if (data.success) {
+                                    currentSelect.classList.remove('pending', 'ongoing', 'completed');
+                                    currentSelect.classList.add(newStatus);
+                                } else {
+                                    alert(data.message || 'Failed to update status.');
+                                }
+                            })
+                            .catch(err => {
+                                currentSelect.style.opacity = '1';
+                                console.error('Error updating timesheet status:', err);
+                                alert('An error occurred while updating the status.');
+                            });
+                        });
+                    });
+                }
+            }
+
+            setViewTimesheetsModalState(true);
         });
     });
 
-    closeTextButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            setUpdateTextModalState(false);
+    closeViewTimesheetButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            setViewTimesheetsModalState(false);
         });
     });
 
-    if (updateTextOverlay) {
-        updateTextOverlay.addEventListener('click', function () {
-            setUpdateTextModalState(false);
+    if (viewTimesheetsOverlay) {
+        viewTimesheetsOverlay.addEventListener('click', function() {
+            setViewTimesheetsModalState(false);
+        });
+    }
+
+    // Submodals Logic (Entry Modal and View Modal)
+    const entryClosingModal = document.querySelector('[data-entry-closing-modal]');
+    const entryClosingOverlay = document.querySelector('[data-entry-closing-modal-overlay]');
+    const closeEntryClosingButtons = document.querySelectorAll('[data-close-entry-closing-modal]');
+    const entryClosingTitle = document.getElementById('entryClosingModalTitle');
+    const entryClosingSubTitle = document.getElementById('entryClosingModalSubTitle');
+    const entryClosingTextarea = document.getElementById('entryClosingTextarea');
+    const entryClosingTimesheetId = document.getElementById('entryClosingTimesheetId');
+    const entryClosingUpdateUrl = document.getElementById('entryClosingUpdateUrl');
+    const entryClosingForm = document.getElementById('entryClosingForm');
+    const entryClosingSubmitBtn = document.getElementById('entryClosingSubmitBtn');
+
+    const viewClosingModal = document.querySelector('[data-view-closing-modal]');
+    const viewClosingOverlay = document.querySelector('[data-view-closing-modal-overlay]');
+    const closeViewClosingButtons = document.querySelectorAll('[data-close-view-closing-modal]');
+    const viewClosingTitle = document.getElementById('viewClosingModalTitle');
+    const viewClosingSubTitle = document.getElementById('viewClosingModalSubTitle');
+    const viewClosingContent = document.getElementById('viewClosingModalContent');
+    const viewClosingEditShortcutBtn = document.getElementById('viewClosingEditShortcutBtn');
+
+    let currentActiveRow = null;
+
+    function setEntryClosingModalState(isOpen) {
+        if (!entryClosingModal || !entryClosingOverlay) return;
+        entryClosingModal.classList.toggle('is-open', isOpen);
+        entryClosingOverlay.classList.toggle('is-open', isOpen);
+    }
+
+    function setViewClosingModalState(isOpen) {
+        if (!viewClosingModal || !viewClosingOverlay) return;
+        viewClosingModal.classList.toggle('is-open', isOpen);
+        viewClosingOverlay.classList.toggle('is-open', isOpen);
+    }
+
+    // Delegate click for open-entry-closing-btn
+    document.addEventListener('click', function(e) {
+        const entryBtn = e.target.closest('.open-entry-closing-btn');
+        if (entryBtn) {
+            const projectName = entryBtn.getAttribute('data-project-name') || 'Project';
+            const leadName = entryBtn.getAttribute('data-lead-name') || '';
+            const closingText = entryBtn.getAttribute('data-closing-text') || '';
+            const updateUrl = entryBtn.getAttribute('data-update-url') || '';
+            const timesheetId = entryBtn.getAttribute('data-timesheet-id') || '';
+
+            currentActiveRow = entryBtn.closest('tr');
+
+            if (entryClosingTitle) entryClosingTitle.textContent = closingText ? 'Edit Day Closing Update' : 'Add Day Closing Update';
+            if (entryClosingSubTitle) entryClosingSubTitle.textContent = projectName + (leadName ? ' | ' + leadName : '');
+            if (entryClosingTextarea) entryClosingTextarea.value = closingText;
+            if (entryClosingTimesheetId) entryClosingTimesheetId.value = timesheetId;
+            if (entryClosingUpdateUrl) entryClosingUpdateUrl.value = updateUrl;
+
+            setEntryClosingModalState(true);
+            setTimeout(() => { if (entryClosingTextarea) entryClosingTextarea.focus(); }, 100);
+            return;
+        }
+
+        const viewBtn = e.target.closest('.open-view-closing-btn');
+        if (viewBtn) {
+            const projectName = viewBtn.getAttribute('data-project-name') || 'Project';
+            const leadName = viewBtn.getAttribute('data-lead-name') || '';
+            const closingText = viewBtn.getAttribute('data-closing-text') || 'No closing update recorded.';
+
+            if (viewClosingTitle) viewClosingTitle.textContent = 'Day Closing Update Details';
+            if (viewClosingSubTitle) viewClosingSubTitle.textContent = projectName + (leadName ? ' | ' + leadName : '');
+            if (viewClosingContent) viewClosingContent.textContent = closingText;
+
+            // Store attributes on shortcut edit button
+            if (viewClosingEditShortcutBtn) {
+                viewClosingEditShortcutBtn.onclick = function() {
+                    setViewClosingModalState(false);
+                    // Trigger entry edit button on the same row
+                    const tr = viewBtn.closest('tr');
+                    const editBtn = tr ? tr.querySelector('.open-entry-closing-btn') : null;
+                    if (editBtn) {
+                        editBtn.click();
+                    }
+                };
+            }
+
+            setViewClosingModalState(true);
+            return;
+        }
+    });
+
+    closeEntryClosingButtons.forEach(btn => {
+        btn.addEventListener('click', () => setEntryClosingModalState(false));
+    });
+    if (entryClosingOverlay) {
+        entryClosingOverlay.addEventListener('click', () => setEntryClosingModalState(false));
+    }
+
+    closeViewClosingButtons.forEach(btn => {
+        btn.addEventListener('click', () => setViewClosingModalState(false));
+    });
+    if (viewClosingOverlay) {
+        viewClosingOverlay.addEventListener('click', () => setViewClosingModalState(false));
+    }
+
+    if (entryClosingForm) {
+        entryClosingForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const updateUrl = entryClosingUpdateUrl ? entryClosingUpdateUrl.value : '';
+            const newText = entryClosingTextarea ? entryClosingTextarea.value.trim() : '';
+
+            if (!newText) {
+                alert('Please enter day closing update details.');
+                return;
+            }
+
+            if (entryClosingSubmitBtn) {
+                entryClosingSubmitBtn.disabled = true;
+                entryClosingSubmitBtn.innerHTML = '<span>Saving...</span>';
+            }
+
+            fetch(updateUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    day_closing_update: newText
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (entryClosingSubmitBtn) {
+                    entryClosingSubmitBtn.disabled = false;
+                    entryClosingSubmitBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Save Closing Update</span>';
+                }
+
+                if (data.success) {
+                    setEntryClosingModalState(false);
+
+                    // Update active row
+                    if (currentActiveRow) {
+                        const cell = currentActiveRow.querySelector('td:nth-child(5)');
+                        const projectName = currentActiveRow.querySelector('.pts-project')?.textContent || '';
+                        const leadName = currentActiveRow.querySelector('td:nth-child(2) > div:first-child')?.textContent || '';
+                        const timesheetId = entryClosingTimesheetId ? entryClosingTimesheetId.value : '';
+
+                        if (cell) {
+                            cell.innerHTML = `
+                                <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn" 
+                                            data-project-name="${escapeHtml(projectName)}"
+                                            data-lead-name="${escapeHtml(leadName)}"
+                                            data-closing-text="${escapeHtml(newText)}"
+                                            data-timesheet-id="${timesheetId}"
+                                            data-update-url="${updateUrl}"
+                                            style="padding:5px 10px; font-size:12px; gap:5px;" title="View closing update details">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <span>View</span>
+                                    </button>
+                                    <button type="button" class="pts-btn open-entry-closing-btn" 
+                                            data-project-name="${escapeHtml(projectName)}"
+                                            data-lead-name="${escapeHtml(leadName)}"
+                                            data-closing-text="${escapeHtml(newText)}"
+                                            data-timesheet-id="${timesheetId}"
+                                            data-update-url="${updateUrl}"
+                                            style="padding:5px 9px; font-size:12px; gap:5px; background:#f8fafc; border-color:#cbd5e1;" title="Edit closing update">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                        <span>Edit</span>
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    alert(data.message || 'Failed to save closing update.');
+                }
+            })
+            .catch(err => {
+                if (entryClosingSubmitBtn) {
+                    entryClosingSubmitBtn.disabled = false;
+                    entryClosingSubmitBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Save Closing Update</span>';
+                }
+                console.error('Error saving closing update:', err);
+                alert('An error occurred while saving.');
+            });
         });
     }
 
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
+            if (entryClosingModal && entryClosingModal.classList.contains('is-open')) {
+                setEntryClosingModalState(false);
+                return;
+            }
+            if (viewClosingModal && viewClosingModal.classList.contains('is-open')) {
+                setViewClosingModalState(false);
+                return;
+            }
             setModalState(false);
-            setUpdateTextModalState(false);
+            setViewTimesheetsModalState(false);
         }
     });
 });

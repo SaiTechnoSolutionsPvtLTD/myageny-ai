@@ -1,0 +1,359 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\ProductionInitiation;
+use App\Models\ProductionTask;
+use App\Models\ProjectTimesheet;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
+
+class ProductionTaskController extends Controller
+{
+    public function index(Request $request): View
+    {
+        $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+
+        $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->orderBy('name')->get(['users.id', 'users.name']);
+        $hasMappedUsers = $managedUsers->isNotEmpty();
+        $accessibleUserIds = $isAdminLike
+            ? null
+            : ($hasMappedUsers
+                ? array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all()))
+                : [$user->id]);
+
+        $filterDate = trim((string) $request->query('filter_date', ''));
+        $filterLeadId = trim((string) $request->query('filter_lead_id', ''));
+        $filterProjectId = trim((string) $request->query('filter_project_id', ''));
+        $filterUserId = trim((string) $request->query('filter_user_id', ''));
+        $filterStatus = trim((string) $request->query('filter_status', ''));
+
+        $allTasks = ProductionTask::query()
+            ->with(['creator', 'assignedUser', 'lead', 'project'])
+            ->when(!$isAdminLike, function ($query) use ($accessibleUserIds, $user) {
+                $query->where(function ($q) use ($accessibleUserIds, $user) {
+                    $q->whereIn('assigned_to', $accessibleUserIds)
+                      ->orWhere('created_by', $user->id);
+                });
+            })
+            ->when($filterDate !== '', function ($query) use ($filterDate) {
+                try {
+                    $query->whereDate('task_date', Carbon::parse($filterDate)->toDateString());
+                } catch (\Throwable) {
+                    // Ignore invalid date
+                }
+            })
+            ->when($filterLeadId !== '', function ($query) use ($filterLeadId) {
+                $query->where('lead_id', (int) $filterLeadId);
+            })
+            ->when($filterProjectId !== '', function ($query) use ($filterProjectId) {
+                $query->where('production_initiation_id', (int) $filterProjectId);
+            })
+            ->when($filterUserId !== '', function ($query) use ($filterUserId) {
+                $query->where('assigned_to', (int) $filterUserId);
+            })
+            ->when($filterStatus !== '', function ($query) use ($filterStatus) {
+                $query->where('status', $filterStatus);
+            })
+            ->latest('task_date')
+            ->latest('id')
+            ->get();
+
+        // Group tasks by Date + Assigned User
+        $groupedTasks = $allTasks->groupBy(function ($task) {
+            return ($task->task_date ? $task->task_date->toDateString() : 'no_date') . '_' . $task->assigned_to;
+        });
+
+        $page = (int) $request->query('page', 1);
+        $perPage = 15;
+        $totalGroups = $groupedTasks->count();
+        $slicedGroups = $groupedTasks->slice(($page - 1) * $perPage, $perPage)->values();
+
+        $paginatedGroups = new \Illuminate\Pagination\LengthAwarePaginator(
+            $slicedGroups,
+            $totalGroups,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        $assignedProjects = $this->getAccessibleProjects($user);
+        $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
+            $firstProj = $projects->first();
+            return [
+                'lead_id' => $firstProj->lead_id,
+                'company_name' => $firstProj->company_name ?: ($firstProj->lead?->company_name ?: 'No Company')
+            ];
+        })->values();
+
+        $mappedTeamMembers = $this->getMappedTeamMembers($user);
+
+        return view('pages.projects.tasks.index', [
+            'groupedTasks' => $paginatedGroups,
+            'assignedProjects' => $assignedProjects,
+            'uniqueLeads' => $uniqueLeads,
+            'mappedTeamMembers' => $mappedTeamMembers,
+            'isAdminLike' => $isAdminLike,
+            'filters' => [
+                'filter_date' => $filterDate,
+                'filter_lead_id' => $filterLeadId,
+                'filter_project_id' => $filterProjectId,
+                'filter_user_id' => $filterUserId,
+                'filter_status' => $filterStatus,
+            ],
+        ]);
+    }
+
+    public function create(): View
+    {
+        $user = auth()->user();
+        $assignedProjects = $this->getAccessibleProjects($user);
+
+        $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
+            $firstProj = $projects->first();
+            return [
+                'lead_id' => $firstProj->lead_id,
+                'company_name' => $firstProj->company_name ?: ($firstProj->lead?->company_name ?: 'No Company')
+            ];
+        })->values();
+
+        $mappedTeamMembers = $this->getMappedTeamMembers($user);
+        $today = Carbon::today()->toDateString();
+
+        return view('pages.projects.tasks.create', [
+            'assignedProjects' => $assignedProjects,
+            'uniqueLeads' => $uniqueLeads,
+            'mappedTeamMembers' => $mappedTeamMembers,
+            'today' => $today,
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'task_date' => ['required', 'date'],
+            'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
+            'tasks' => ['required', 'array', 'min:1'],
+            'tasks.*.lead_id' => ['required', 'integer', 'exists:leads,id'],
+            'tasks.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
+            'tasks.*.task_description' => ['required', 'string', 'min:1'],
+        ], [
+            'task_date.required' => 'The date field is mandatory.',
+            'assigned_to_user_id.required' => 'Selecting a team member is mandatory.',
+            'tasks.required' => 'Please add at least one task item.',
+            'tasks.*.lead_id.required' => 'Lead Name is mandatory for all task rows.',
+            'tasks.*.production_initiation_id.required' => 'Product Name is mandatory for all task rows.',
+            'tasks.*.task_description.required' => 'Task Description is mandatory for all task rows.',
+        ]);
+
+        $taskDate = Carbon::parse($validated['task_date'])->toDateString();
+        $assignedUserId = (int) $validated['assigned_to_user_id'];
+        $projectIds = collect($validated['tasks'])->pluck('production_initiation_id')->unique()->all();
+        $projects = ProductionInitiation::whereIn('id', $projectIds)->get()->keyBy('id');
+
+        DB::transaction(function () use ($validated, $user, $taskDate, $assignedUserId, $projects) {
+            foreach ($validated['tasks'] as $taskRow) {
+                $projectId = (int) $taskRow['production_initiation_id'];
+                $leadId = (int) $taskRow['lead_id'];
+                $project = $projects->get($projectId);
+                $productName = $project?->product_name ?? 'Project Task';
+                $taskDesc = trim((string) $taskRow['task_description']);
+
+                ProductionTask::create([
+                    'company_id' => $user->company_id,
+                    'created_by' => $user->id,
+                    'assigned_to' => $assignedUserId,
+                    'task_date' => $taskDate,
+                    'lead_id' => $leadId,
+                    'production_initiation_id' => $projectId,
+                    'product_name' => $productName,
+                    'task_description' => $taskDesc,
+                    'status' => 'pending',
+                ]);
+
+                // Auto-create or sync pending ProjectTimesheet for the assigned team member
+                $existingTimesheet = ProjectTimesheet::where('production_initiation_id', $projectId)
+                    ->where('user_id', $assignedUserId)
+                    ->whereDate('timesheet_date', $taskDate)
+                    ->first();
+
+                $deliveryDate = $project ? ($project->project_delivery_date?->toDateString()) : null;
+
+                if (! $existingTimesheet) {
+                    ProjectTimesheet::create([
+                        'company_id' => $project?->company_id ?? $user->company_id,
+                        'production_initiation_id' => $projectId,
+                        'user_id' => $assignedUserId,
+                        'timesheet_date' => $taskDate,
+                        'project_delivery_date' => $deliveryDate,
+                        'status' => 'pending',
+                        'project_type' => 'recurring',
+                        'poster_count' => 0,
+                        'video_count' => 0,
+                        'committed_posters' => 0,
+                        'committed_videos' => 0,
+                        'waiting_posters' => 0,
+                        'waiting_videos' => 0,
+                        'day_closing_update' => "Assigned Task:\n" . $taskDesc,
+                    ]);
+                } else {
+                    if (empty(trim((string)$existingTimesheet->day_closing_update))) {
+                        $existingTimesheet->update([
+                            'day_closing_update' => "Assigned Task:\n" . $taskDesc,
+                        ]);
+                    }
+                }
+            }
+        });
+
+        return redirect()
+            ->route('projects.tasks.index')
+            ->with('success', 'Tasks created and assigned successfully.');
+    }
+
+    public function updateStatus(Request $request, ProductionTask $task): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+
+        // Permission check: user must be assigned, creator, or admin
+        if (!$isAdminLike && $task->assigned_to !== $user->id && $task->created_by !== $user->id) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:pending,in_progress,completed'],
+        ]);
+
+        $task->update([
+            'status' => $validated['status'],
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Task status updated successfully.',
+                'status' => $task->status,
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Task status updated successfully.');
+    }
+
+    public function destroy(ProductionTask $task): RedirectResponse
+    {
+        $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+
+        if (!$isAdminLike && $task->created_by !== $user->id) {
+            abort(403, 'Unauthorized to delete this task.');
+        }
+
+        $task->delete();
+
+        return redirect()
+            ->route('projects.tasks.index')
+            ->with('success', 'Task deleted successfully.');
+    }
+
+    private function getAccessibleProjects(User $user): Collection
+    {
+        $isAdminLike = $user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator() || $user->hasTlLikeRole();
+
+        if ($isAdminLike) {
+            return ProductionInitiation::query()
+                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->latest('id')
+                ->get()
+                ->map(function (ProductionInitiation $project) {
+                    $project->timesheet_delivery_date = $project->project_delivery_date?->toDateString();
+                    return $project;
+                });
+        }
+
+        $managedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
+
+        $projects = ProductionInitiation::query()
+            ->with(['lead.branch', 'leadProduct', 'department'])
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->where(function ($q) use ($user, $managedUserIds) {
+                $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                  ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
+                  ->orWhere(function ($sub) use ($managedUserIds) {
+                      foreach ($managedUserIds as $mId) {
+                          $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId);
+                      }
+                  })
+                  ->orWhereHas('testingDetails', function ($tq) use ($user) {
+                      $tq->where('testing_tl_id', $user->id)
+                         ->orWhere('moved_by_user_id', $user->id);
+                  });
+            })
+            ->latest('id')
+            ->get();
+
+        if ($projects->isEmpty()) {
+            $projects = ProductionInitiation::query()
+                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->latest('id')
+                ->get();
+        }
+
+        return $projects->map(function (ProductionInitiation $project) {
+            $project->timesheet_delivery_date = $project->project_delivery_date?->toDateString();
+            return $project;
+        });
+    }
+
+    private function getMappedTeamMembers(User $user): Collection
+    {
+        if ($user->hasAdminLikeRole()) {
+            return User::where('is_active', true)
+                ->where('user_status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']);
+        }
+
+        $managed = $user->managedUsers()
+            ->where('users.is_active', true)
+            ->where('users.user_status', 'active')
+            ->orderBy('name')
+            ->get(['users.id', 'users.name', 'users.email']);
+
+        if ($user->belongsToDesigningDepartment()) {
+            $designDeptMembers = User::where('users.is_active', true)
+                ->where('users.user_status', 'active')
+                ->whereHas('roles.department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']))
+                ->orderBy('name')
+                ->get(['users.id', 'users.name', 'users.email']);
+
+            return $managed->concat($designDeptMembers)->push($user)->unique('id')->sortBy('name')->values();
+        }
+
+        if ($user->belongsToDigitalMarketingDepartment()) {
+            $dmDeptMembers = User::where('users.is_active', true)
+                ->where('users.user_status', 'active')
+                ->whereHas('roles.department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
+                ->orderBy('name')
+                ->get(['users.id', 'users.name', 'users.email']);
+
+            return $managed->concat($dmDeptMembers)->push($user)->unique('id')->sortBy('name')->values();
+        }
+
+        return $managed->push($user)->unique('id')->sortBy('name')->values();
+    }
+}

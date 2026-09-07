@@ -45,7 +45,7 @@
         @if(session('success'))
             <div class="eob-alert eob-alert-success">{!! session('success') !!}</div>
         @endif
-        @if($errors->any())
+        @if(isset($errors) && $errors->any())
             <div class="eob-alert eob-alert-error">Please check the remarks field and try again.</div>
         @endif
 

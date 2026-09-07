@@ -80,6 +80,8 @@ class OdRequestController extends Controller
                 'employee_id' => $this->resolveEmployee($user)?->id,
                 'from_date' => $validated['from_date'],
                 'to_date' => $validated['to_date'],
+                'gate_out_time' => $validated['gate_out_time'],
+                'gate_in_time' => $validated['gate_in_time'],
                 'total_days' => $totalDays,
                 'reason' => $validated['reason'],
                 'status' => OdRequest::STATUS_PENDING,
@@ -227,13 +229,30 @@ class OdRequestController extends Controller
 
     private function markAttendanceRecords(OdRequest $odRequest): void
     {
-        $employee = $odRequest->employee;
+        $employee = $odRequest->employee ?: $this->resolveEmployee($odRequest->user);
+
         if (! $employee) {
             return;
         }
 
         $current = Carbon::parse($odRequest->from_date);
         $end = Carbon::parse($odRequest->to_date);
+
+        $loginTime = $odRequest->gate_out_time ? Carbon::parse($odRequest->gate_out_time)->format('H:i:s') : '09:30:00';
+        $logoutTime = $odRequest->gate_in_time ? Carbon::parse($odRequest->gate_in_time)->format('H:i:s') : '18:30:00';
+
+        $workingHours = '08:00:00';
+        if ($odRequest->gate_out_time && $odRequest->gate_in_time) {
+            $in = Carbon::parse($odRequest->gate_out_time);
+            $out = Carbon::parse($odRequest->gate_in_time);
+            $diffSeconds = (int) max($in->diffInSeconds($out, false), 0);
+            $workingHours = sprintf(
+                '%02d:%02d:%02d',
+                floor($diffSeconds / 3600),
+                floor(($diffSeconds % 3600) / 60),
+                $diffSeconds % 60
+            );
+        }
 
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
@@ -247,6 +266,10 @@ class OdRequestController extends Controller
                 $existing->update([
                     'attendance_status' => 'od',
                     'login_location' => 'On Duty (OD)',
+                    'logout_location' => 'On Duty (OD)',
+                    'login_time' => $loginTime,
+                    'logout_time' => $logoutTime,
+                    'overall_working_hours' => $workingHours,
                     'remarks' => $odRequest->reason,
                 ]);
             } else {
@@ -259,12 +282,12 @@ class OdRequestController extends Controller
                     'login_location' => 'On Duty (OD)',
                     'login_latitude' => 0,
                     'login_longitude' => 0,
-                    'login_time' => '09:30:00',
+                    'login_time' => $loginTime,
                     'logout_location' => 'On Duty (OD)',
                     'logout_latitude' => 0,
                     'logout_longitude' => 0,
-                    'logout_time' => '18:30:00',
-                    'overall_working_hours' => '08:00',
+                    'logout_time' => $logoutTime,
+                    'overall_working_hours' => $workingHours,
                     'attendance_date' => $dateStr,
                     'attendance_status' => 'od',
                     'remarks' => $odRequest->reason,

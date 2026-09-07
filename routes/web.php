@@ -48,6 +48,7 @@ use App\Http\Controllers\ProductAttributeController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductionApprovalController;
+use App\Http\Controllers\ProductionTaskController;
 use App\Http\Controllers\ProductOvpFormController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QuotationController;
@@ -211,6 +212,17 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.dashboard.update-planned-task');
         Route::post('/projects/dashboard/allocate-task', [ProjectController::class, 'allocateDailyTask'])
             ->name('projects.dashboard.allocate-task');
+
+        Route::get('/projects/tasks', [ProductionTaskController::class, 'index'])
+            ->name('projects.tasks.index');
+        Route::get('/projects/tasks/create', [ProductionTaskController::class, 'create'])
+            ->name('projects.tasks.create');
+        Route::post('/projects/tasks', [ProductionTaskController::class, 'store'])
+            ->name('projects.tasks.store');
+        Route::patch('/projects/tasks/{task}/status', [ProductionTaskController::class, 'updateStatus'])
+            ->name('projects.tasks.update-status');
+        Route::delete('/projects/tasks/{task}', [ProductionTaskController::class, 'destroy'])
+            ->name('projects.tasks.destroy');
 
         Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
             ->name('projects.timesheets');

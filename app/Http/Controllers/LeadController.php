@@ -147,7 +147,7 @@ class LeadController extends Controller
         $activeLeadIds = (clone $query)->pluck('leads.id');
 
         $leads    = $query->paginate(15)->withQueryString();
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = $this->visibility->visibleBranches();
         $users    = $this->visibility->visibleAssignableUsers()
             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
             ->values();
@@ -306,7 +306,7 @@ class LeadController extends Controller
             'pending' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_pending),
         ];
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = $this->visibility->visibleBranches();
         $users = $this->visibility->visibleAssignableUsers();
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);

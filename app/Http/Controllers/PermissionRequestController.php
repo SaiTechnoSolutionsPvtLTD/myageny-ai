@@ -69,6 +69,7 @@ class PermissionRequestController extends Controller
 
         $permissionRequest = DB::transaction(function () use ($user, $validated, $approvalRows) {
             $permissionRequest = PermissionRequest::create([
+                'company_id' => $user->company_id,
                 'user_id' => $user->id,
                 'employee_id' => $this->resolveEmployee($user)?->id,
                 'permission_date' => $validated['permission_date'],
@@ -97,6 +98,8 @@ class PermissionRequestController extends Controller
     public function show(PermissionRequest $permissionRequest): View
     {
         $permissionRequest->load(['user.roles', 'employee.role', 'employee.department', 'approvals.approver.roles', 'approvals.actionedBy.roles']);
+
+        abort_unless($this->canViewPermissionRequest($permissionRequest, auth()->user()), 403);
 
         $approvalActions = $permissionRequest->approvals
             ->mapWithKeys(fn (PermissionApproval $approval) => [

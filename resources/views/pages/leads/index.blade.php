@@ -411,34 +411,6 @@
                         </div>
 
                         <div class="ld-fw">
-                            <label class="ld-field-label" for="f_status">Lead Status</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-kanban ld-fi"></i>
-                                <select name="lead_status" class="ld-fs" id="f_status" onchange="updateFilters()">
-                                    <option value="">All Status</option>
-                                    @foreach(\App\Models\Lead::statusOptions() as $key => $label)
-                                        <option value="{{ $key }}" {{ request('lead_status') == $key ? 'selected':'' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                                <i class="bi bi-chevron-down ld-fc"></i>
-                            </div>
-                        </div>
-
-                        <div class="ld-fw">
-                            <label class="ld-field-label" for="f_priority">Priority</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-flag ld-fi"></i>
-                                <select name="priority" class="ld-fs" id="f_priority" onchange="updateFilters()">
-                                    <option value="">All Priorities</option>
-                                    @foreach(\App\Models\Lead::PRIORITIES as $key => $label)
-                                        <option value="{{ $key }}" {{ request('priority') == $key ? 'selected':'' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                                <i class="bi bi-chevron-down ld-fc"></i>
-                            </div>
-                        </div>
-
-                        <div class="ld-fw">
                             <label class="ld-field-label" for="f_user">Assigned To</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-person ld-fi"></i>
@@ -466,14 +438,6 @@
                             </div>
                         </div>
 
-                        <div class="ld-fw">
-                            <label class="ld-field-label" for="f_product">Product</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-box-seam ld-fi"></i>
-                                <input type="text" name="product_name" class="ld-fi-input" id="f_product"
-                                       placeholder="Product name" value="{{ request('product_name') }}" oninput="updateFilters()">
-                            </div>
-                        </div>
 
                         <div class="ld-date-range">
                             <div class="ld-fw">
@@ -879,10 +843,7 @@ const ff = {
     f_branch:    { label:'Branch',   sel:'#f_branch' },
     f_mobile:    { label:'Mobile',   sel:'#f_mobile' },
     f_source:    { label:'Source',   sel:'#f_source' },
-    f_status:    { label:'Status',   sel:'#f_status' },
-    f_priority:  { label:'Priority', sel:'#f_priority' },
     f_user:      { label:'User',     sel:'#f_user' },
-    f_product:   { label:'Product',  sel:'#f_product' },
     f_date_from: { label:'From',     sel:'#f_date_from' },
     f_date_to:   { label:'To',       sel:'#f_date_to' },
 };

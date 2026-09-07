@@ -1,13 +1,6 @@
 {{-- Sidebar - matches exact design from static HTML --}}
 @php
-    $isProjectsModule = request()->routeIs('projects.dashboard')
-        || request()->routeIs('projects.index')
-        || request()->routeIs('projects.show')
-        || request()->routeIs('projects.allocate')
-        || request()->routeIs('projects.employee-allocate')
-        || request()->routeIs('projects.timesheets')
-        || request()->routeIs('projects.my-accounts')
-        || request()->routeIs('projects.my-accounts.show');
+    $isProjectsModule = request()->routeIs('projects.*');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
         || request()->routeIs('hrms.calendar.*')
         || request()->routeIs('hrms.petty-cash.*')
@@ -194,6 +187,19 @@
                     </div>
                 </a>
                 @endif
+
+                <a href="{{ route('projects.tasks.index') }}" class="nav-item {{ request()->routeIs('projects.tasks.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.tasks.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        <span>Tasks</span>
+                    </div>
+                </a>
 
                 <a href="{{ route('projects.timesheets') }}" class="nav-item {{ request()->routeIs('projects.timesheets') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.timesheets'))

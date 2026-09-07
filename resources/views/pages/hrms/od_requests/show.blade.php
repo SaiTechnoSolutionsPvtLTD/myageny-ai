@@ -167,9 +167,14 @@
                             <div class="od-muted">{{ $odRequest->employee?->employee_id ?: $odRequest->user?->email }}</div>
                         </div>
                         <div class="eob-show-item">
-                            <div class="eob-show-label">OD Date Range</div>
+                            <div class="eob-show-label">OD Date Range & Timing</div>
                             <div class="eob-show-value">{{ $odRequest->from_date->format('d M Y') }} - {{ $odRequest->to_date->format('d M Y') }}</div>
-                            <div class="od-muted">{{ $odRequest->total_days }} day(s)</div>
+                            <div class="od-muted">
+                                {{ $odRequest->total_days }} day(s)
+                                @if($odRequest->gate_out_time || $odRequest->gate_in_time)
+                                    &bull; Gateout: <strong>{{ $odRequest->gate_out_time ? \Carbon\Carbon::parse($odRequest->gate_out_time)->format('h:i A') : '-' }}</strong> &bull; Gatein: <strong>{{ $odRequest->gate_in_time ? \Carbon\Carbon::parse($odRequest->gate_in_time)->format('h:i A') : '-' }}</strong>
+                                @endif
+                            </div>
                         </div>
                         <div class="eob-show-item">
                             <div class="eob-show-label">Status</div>

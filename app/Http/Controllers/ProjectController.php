@@ -648,9 +648,63 @@ class ProjectController extends Controller
             ->latest('timesheet_date')
             ->get();
 
+        $timesheetUserIds = $timesheets->pluck('user_id')->unique()->filter()->all();
+        $timesheetProjectIds = $timesheets->pluck('production_initiation_id')->unique()->filter()->all();
+
+        $allProductionTasks = (!empty($timesheetUserIds) && !empty($timesheetProjectIds))
+            ? \App\Models\ProductionTask::query()
+                ->whereIn('assigned_to', $timesheetUserIds)
+                ->whereIn('production_initiation_id', $timesheetProjectIds)
+                ->get()
+            : collect();
+
+        $timesheets->each(function ($t) use ($allProductionTasks) {
+            $tDateStr = $t->timesheet_date ? $t->timesheet_date->toDateString() : '';
+            $matchingTasks = $allProductionTasks->filter(function ($pt) use ($t, $tDateStr) {
+                return (int)$pt->assigned_to === (int)$t->user_id 
+                    && (int)$pt->production_initiation_id === (int)$t->production_initiation_id
+                    && ($pt->task_date ? $pt->task_date->toDateString() : '') === $tDateStr;
+            });
+
+            if ($matchingTasks->isNotEmpty()) {
+                $t->assigned_task_desc = $matchingTasks->pluck('task_description')->filter()->implode("\n\n");
+            } else {
+                if (str_starts_with((string)$t->day_closing_update, "Assigned Task:\n")) {
+                    $t->assigned_task_desc = trim(substr((string)$t->day_closing_update, strlen("Assigned Task:\n")));
+                } else {
+                    $t->assigned_task_desc = '—';
+                }
+            }
+
+            if (str_starts_with((string)$t->day_closing_update, "Assigned Task:\n")) {
+                $t->user_closing_update = '';
+            } else {
+                $t->user_closing_update = (string) $t->day_closing_update;
+            }
+        });
+
+        // Group timesheets by Date + User
+        $groupedTimesheets = $timesheets->groupBy(function ($item) {
+            return ($item->timesheet_date ? $item->timesheet_date->toDateString() : 'no_date') . '_' . $item->user_id;
+        });
+
+        $page = (int) $request->query('page', 1);
+        $perPage = 15;
+        $totalGroups = $groupedTimesheets->count();
+        $slicedGroups = $groupedTimesheets->slice(($page - 1) * $perPage, $perPage)->values();
+
+        $paginatedGroups = new \Illuminate\Pagination\LengthAwarePaginator(
+            $slicedGroups,
+            $totalGroups,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
         return view('pages.projects.timesheets', [
             'assignedProjects' => $assignedProjects,
             'timesheets' => $timesheets,
+            'groupedTimesheets' => $paginatedGroups,
             'timesheetFilters' => $timesheetFilters,
             'today' => Carbon::today()->toDateString(),
             'isAdminLike' => $isAdminLike,
@@ -667,7 +721,7 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
             'timesheet_date' => ['required', 'date', 'after_or_equal:today'],
-            'status' => ['required', 'string', 'in:pending,completed'],
+            'status' => ['required', 'string', 'in:pending,ongoing,completed'],
             'project_type' => ['nullable', 'string', 'in:recurring,onetime'],
             'poster_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'video_count' => ['nullable', 'integer', 'min:0', 'max:100000'],
@@ -804,22 +858,60 @@ class ProjectController extends Controller
         ]);
     }
 
-    public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): RedirectResponse
+    public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): JsonResponse|RedirectResponse
     {
         $user = auth()->user();
-        if ($timesheet->user_id !== $user->id && !$user->hasAdminLikeRole()) {
+        if ($timesheet->user_id !== $user->id && !$user->hasAdminLikeRole() && !$user->hasTlLikeRole()) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
             abort(403);
         }
 
         $validated = $request->validate([
-            'status' => ['required', 'string', 'in:pending,completed'],
+            'status' => ['nullable', 'string', 'in:pending,ongoing,completed'],
+            'day_closing_update' => ['nullable', 'string'],
+            'poster_count' => ['nullable', 'integer', 'min:0'],
+            'video_count' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $timesheet->update([
-            'status' => $validated['status'],
-        ]);
+        $updateData = [];
+        if (isset($validated['status'])) {
+            $updateData['status'] = $validated['status'];
+        }
+        if (isset($validated['day_closing_update'])) {
+            $updateData['day_closing_update'] = $validated['day_closing_update'];
+        }
+        if (isset($validated['poster_count'])) {
+            $updateData['poster_count'] = (int) $validated['poster_count'];
+        }
+        if (isset($validated['video_count'])) {
+            $updateData['video_count'] = (int) $validated['video_count'];
+        }
 
-        return back()->with('success', 'Timesheet status updated successfully.');
+        if (!empty($updateData)) {
+            $timesheet->update($updateData);
+
+            if (!empty($updateData['day_closing_update'])) {
+                \App\Models\ProjectUpdate::create([
+                    'production_initiation_id' => $timesheet->production_initiation_id,
+                    'type' => 'timesheet',
+                    'content' => "Timesheet Date: " . optional($timesheet->timesheet_date)->format('d M Y') . "\nUpdate:\n" . $updateData['day_closing_update'],
+                    'created_by' => $user->id,
+                ]);
+            }
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Timesheet updated successfully.',
+                'status' => $timesheet->status,
+                'day_closing_update' => $timesheet->day_closing_update,
+            ]);
+        }
+
+        return back()->with('success', 'Timesheet updated successfully.');
     }
 
     public function updatePlannedTask(Request $request): RedirectResponse

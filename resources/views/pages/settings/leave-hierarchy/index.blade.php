@@ -125,7 +125,7 @@
 }
 .lh-table {
     width: 100%;
-    min-width: 860px;
+    min-width: 960px;
     border-collapse: collapse;
     font-size: 13px;
 }
@@ -147,6 +147,32 @@
     vertical-align: middle;
 }
 .lh-table tr:hover { background: #fffdfb; }
+
+/* Branch Stack & Pills */
+.lh-branch-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 260px;
+}
+.lh-branch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    white-space: nowrap;
+}
+.lh-branch-pill.all {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
 
 /* Chain Flow View */
 .lh-flow-chain {
@@ -230,7 +256,7 @@
     background: #ffffff;
     border-radius: 20px;
     width: 92%;
-    max-width: 740px;
+    max-width: 760px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
@@ -379,6 +405,29 @@
     height: 40px;
     right: 10px;
 }
+.select2-container--default .select2-selection--multiple {
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    min-height: 42px;
+    padding: 4px 8px;
+}
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    background-color: #fff1e8;
+    border: 1px solid #fed7aa;
+    color: #c2410c;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 700;
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    color: #c2410c;
+    margin-right: 4px;
+}
 .select2-dropdown {
     border: 1px solid #e5e7eb;
     border-radius: 12px;
@@ -421,7 +470,7 @@
                 Leave Workflow Management
             </div>
             <h2 class="lh-title">Leave Hierarchy Settings</h2>
-            <p class="lh-subtitle">Define multi-stage role approval flows for leave requests (e.g. Sales Executive ➔ Sales TL ➔ Sales Manager ➔ COO ➔ HR).</p>
+            <p class="lh-subtitle">Define branch-wise multi-stage role approval flows for leave, permission, and OD requests (e.g. Sales Executive ➔ Sales TL ➔ Sales Manager ➔ HR across Sales, Madurai, Chennai branches).</p>
         </div>
         <div style="display: flex; gap: 12px;">
             <a href="{{ route('settings.index') }}" class="lh-btn lh-btn-ghost">Back to Settings</a>
@@ -454,9 +503,10 @@
                 <thead>
                     <tr>
                         <th style="width: 50px; white-space: nowrap;">#</th>
-                        <th style="width: 200px; min-width: 180px; white-space: nowrap;">Applicant Role</th>
-                        <th style="min-width: 340px;">Leave Approval Hierarchy Chain</th>
-                        <th style="width: 120px; min-width: 110px; white-space: nowrap;">Status</th>
+                        <th style="width: 180px; min-width: 160px; white-space: nowrap;">Applicant Role</th>
+                        <th style="width: 220px; min-width: 180px;">Applicable Branches</th>
+                        <th style="min-width: 320px;">Leave Approval Hierarchy Chain</th>
+                        <th style="width: 110px; min-width: 100px; white-space: nowrap;">Status</th>
                         <th style="width: 140px; min-width: 130px; text-align: right; white-space: nowrap;">Actions</th>
                     </tr>
                 </thead>
@@ -465,6 +515,7 @@
                     @php
                         $roleMap = $roles->keyBy('id');
                         $chainRoleIds = $hierarchy->approval_chain ?? [];
+                        $branchList = $hierarchy->branches();
                     @endphp
                     <tr>
                         <td style="color: #9ca3af; font-weight: 600;">{{ $index + 1 }}</td>
@@ -472,6 +523,17 @@
                             <strong style="color: #111827; font-size: 14px;">
                                 {{ $hierarchy->role?->display_name ?? ucfirst(str_replace('_',' ', $hierarchy->role?->name ?? 'Role')) }}
                             </strong>
+                        </td>
+                        <td>
+                            @if($hierarchy->isAllBranches())
+                                <span class="lh-branch-pill all">🌐 All Branches</span>
+                            @else
+                                <div class="lh-branch-stack">
+                                    @foreach($branchList as $branch)
+                                        <span class="lh-branch-pill">🏢 {{ $branch->name }}</span>
+                                    @endforeach
+                                </div>
+                            @endif
                         </td>
                         <td>
                             <div class="lh-flow-chain">
@@ -520,7 +582,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 48px 20px; color: #6b7280;">
+                        <td colspan="6" style="text-align: center; padding: 48px 20px; color: #6b7280;">
                             <div style="font-size: 32px; margin-bottom: 8px;">🌴</div>
                             <div style="font-weight: 700; color: #374151; font-size: 15px;">No Leave Hierarchies Configured</div>
                             <div style="font-size: 13px; margin-top: 4px;">Click "Create Leave Hierarchy" to map role approval steps for leave requests.</div>
@@ -559,6 +621,25 @@
                         </option>
                         @endforeach
                     </select>
+                </div>
+
+                {{-- Branch Selection --}}
+                <div class="lh-form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <label class="lh-form-label" style="margin:0;">Applicable Branches</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="lh-step-btn" style="font-size: 11px; padding: 2px 8px;" onclick="selectAllBranches()">Select All</button>
+                            <button type="button" class="lh-step-btn" style="font-size: 11px; padding: 2px 8px;" onclick="clearAllBranches()">Clear (All Branches)</button>
+                        </div>
+                    </div>
+                    <select name="branch_ids[]" id="branch_ids" class="lh-select select2-branches" multiple="multiple" style="width:100%;" onchange="renderPreview()">
+                        @foreach($branches as $branch)
+                        <option value="{{ $branch->id }}" data-name="{{ $branch->name }}">
+                            {{ $branch->name }} ({{ $branch->code }})
+                        </option>
+                        @endforeach
+                    </select>
+                    <span style="font-size: 11px; color: #6b7280;">Leave empty to apply this hierarchy across <strong>All Branches</strong>, or select specific branches (e.g. Sales, Madurai, Chennai).</span>
                 </div>
 
                 {{-- Approval Chain Builder --}}
@@ -603,6 +684,7 @@
 @push('scripts')
 <script>
 const availableRoles = @json($formattedRoles);
+const availableBranches = @json($formattedBranches);
 let currentSteps = [];
 
 $(document).ready(function() {
@@ -612,13 +694,29 @@ $(document).ready(function() {
             allowClear: true,
             dropdownParent: $('#hierarchyModal'),
             width: '100%'
+        }).on('change', function() {
+            renderPreview();
         });
 
-        $('#role_id').on('change', function() {
+        $('#branch_ids').select2({
+            placeholder: 'All Branches (Default)',
+            allowClear: true,
+            dropdownParent: $('#hierarchyModal'),
+            width: '100%'
+        }).on('change', function() {
             renderPreview();
         });
     }
 });
+
+function selectAllBranches() {
+    const allIds = availableBranches.map(b => b.id.toString());
+    $('#branch_ids').val(allIds).trigger('change');
+}
+
+function clearAllBranches() {
+    $('#branch_ids').val([]).trigger('change');
+}
 
 function openEditModalFromData(btn) {
     const hierarchy = JSON.parse(btn.getAttribute('data-hierarchy'));
@@ -632,6 +730,7 @@ function openCreateModal() {
     document.getElementById('role_id').value = '';
     if (window.jQuery && window.jQuery.fn.select2) {
         $('#role_id').val('').trigger('change.select2');
+        $('#branch_ids').val([]).trigger('change.select2');
     }
     document.getElementById('notes').value = '';
     currentSteps = [availableRoles[0]?.id || ''];
@@ -647,6 +746,8 @@ function openEditModal(hierarchy) {
     document.getElementById('role_id').value = hierarchy.role_id;
     if (window.jQuery && window.jQuery.fn.select2) {
         $('#role_id').val(hierarchy.role_id).trigger('change.select2');
+        const branchIds = Array.isArray(hierarchy.branch_ids) ? hierarchy.branch_ids.map(id => id.toString()) : [];
+        $('#branch_ids').val(branchIds).trigger('change.select2');
     }
     document.getElementById('notes').value = hierarchy.notes || '';
     currentSteps = Array.isArray(hierarchy.approval_chain) ? [...hierarchy.approval_chain] : [];
@@ -737,7 +838,22 @@ function renderPreview() {
         return;
     }
 
-    let html = `<div class="lh-flow-chain"><span class="lh-role-pill applicant">👤 ${applicantName}</span>`;
+    const selectedBranchIds = $('#branch_ids').val() || [];
+    let branchBadgeHtml = '';
+    if (selectedBranchIds.length === 0) {
+        branchBadgeHtml = '<span class="lh-branch-pill all" style="font-size: 11px;">🌐 Applicable for All Branches</span>';
+    } else {
+        const branchMap = {};
+        availableBranches.forEach(b => branchMap[b.id] = b.name);
+        const branchNames = selectedBranchIds.map(id => branchMap[id] || `Branch #${id}`).join(', ');
+        branchBadgeHtml = `<span class="lh-branch-pill" style="font-size: 11px;">🏢 Branches: <strong>${branchNames}</strong></span>`;
+    }
+
+    let html = `
+        <div style="margin-bottom: 10px;">${branchBadgeHtml}</div>
+        <div class="lh-flow-chain">
+            <span class="lh-role-pill applicant">👤 ${applicantName}</span>
+    `;
 
     const roleMap = {};
     availableRoles.forEach(r => roleMap[r.id] = r.name);

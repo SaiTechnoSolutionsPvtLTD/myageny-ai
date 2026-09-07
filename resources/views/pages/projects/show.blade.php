@@ -105,15 +105,17 @@
 .ps-allocation-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .ps-allocation-meta { margin-top:10px; font-size:12px; color:#64748b; line-height:1.7; }
 .ps-allocation-team { display:grid; gap:10px; margin-top:14px; }
-.ps-select { width:100%; min-height:180px; padding:12px; border:1px solid #dbe1e8; border-radius:14px; background:#fff; font-size:13px; color:#111827; }
+.ps-select { width:100%; min-height:44px; padding:10px 12px; border:1px solid #dbe1e8; border-radius:12px; background:#fff; font-size:13px; color:#111827; }
 .ps-select:focus { outline:none; border-color:#93c5fd; box-shadow:0 0 0 4px rgba(59,130,246,.12); }
 .ps-select-help { margin-top:8px; font-size:12px; color:#64748b; line-height:1.55; }
 .select2-container--default .select2-selection--multiple.ps-select2-selection {
-    min-height: 180px;
+    min-height: 44px;
     border: 1px solid #dbe1e8;
-    border-radius: 14px;
+    border-radius: 12px;
     background: #fff;
-    padding: 10px 12px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
 }
 .select2-container--default.select2-container--focus .select2-selection--multiple.ps-select2-selection,
 .select2-container--default.select2-container--open .select2-selection--multiple.ps-select2-selection {
@@ -123,16 +125,18 @@
 .select2-container--default .select2-selection--multiple.ps-select2-selection .select2-selection__rendered {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
     padding: 0;
+    width: 100%;
 }
 .select2-container--default .select2-selection--multiple.ps-select2-selection .select2-selection__choice {
-    margin-top: 0;
+    margin: 2px 0;
     background: #eff6ff;
     border: 1px solid #bfdbfe;
     color: #1d4ed8;
     border-radius: 999px;
-    padding: 4px 10px;
+    padding: 3px 10px;
     font-size: 12px;
     font-weight: 700;
 }
@@ -141,9 +145,14 @@
     margin-right: 6px;
     border-right: none;
 }
+.select2-container--default .select2-selection--multiple.ps-select2-selection .select2-search--inline {
+    margin: 2px 0;
+}
 .select2-container--default .select2-selection--multiple.ps-select2-selection .select2-search--inline .select2-search__field {
     margin-top: 0;
     font-size: 13px;
+    height: 28px;
+    line-height: 28px;
 }
 .select2-dropdown {
     border: 1px solid #dbe1e8;

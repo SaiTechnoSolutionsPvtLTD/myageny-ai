@@ -347,8 +347,11 @@ class HrmsApprovalNotificationService
         $fromDate = $odRequest->from_date?->format('d M Y') ?? '-';
         $toDate = $odRequest->to_date?->format('d M Y') ?? '-';
         $days = $odRequest->total_days ?? 1;
+        $gateOut = $odRequest->gate_out_time ? substr((string) $odRequest->gate_out_time, 0, 5) : null;
+        $gateIn = $odRequest->gate_in_time ? substr((string) $odRequest->gate_in_time, 0, 5) : null;
+        $timeStr = ($gateOut && $gateIn) ? " (Gateout: {$gateOut}, Gatein: {$gateIn})" : '';
 
-        return "OD from {$fromDate} to {$toDate} ({$days} day(s)).";
+        return "OD from {$fromDate} to {$toDate} ({$days} day(s)){$timeStr}.";
     }
 
     private function currentLeaveApproval(LeaveRequest $leaveRequest): ?LeaveApproval

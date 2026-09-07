@@ -195,9 +195,11 @@ class OdRequestApiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'from_date' => ['required', 'date', 'after_or_equal:today'],
-            'to_date'   => ['required', 'date', 'after_or_equal:from_date'],
-            'reason'    => ['required', 'string', 'max:2000'],
+            'from_date'     => ['required', 'date', 'after_or_equal:today'],
+            'to_date'       => ['required', 'date', 'after_or_equal:from_date'],
+            'gate_out_time' => ['nullable', 'date_format:H:i'],
+            'gate_in_time'  => ['nullable', 'date_format:H:i'],
+            'reason'        => ['required', 'string', 'max:2000'],
         ], [
             'from_date.after_or_equal' => 'Past dates cannot be selected for OD requests.',
             'to_date.after_or_equal'   => 'To Date must be equal to or after From Date.',
@@ -221,20 +223,22 @@ class OdRequestApiController extends Controller
 
         $odRequest = DB::transaction(function () use ($user, $validated, $approvalRows, $totalDays, $branchId) {
             $od = OdRequest::create([
-                'company_id'   => $user->company_id,
-                'user_id'      => $user->id,
-                'employee_id'  => $this->resolveEmployee($user)?->id,
+                'company_id'    => $user->company_id,
+                'user_id'       => $user->id,
+                'employee_id'   => $this->resolveEmployee($user)?->id,
                 // Mobile-only — see class docblock. Stamped from the
                 // requester's own branch so listing/detail can be scoped by
                 // it later; web-created rows are left null and unaffected.
-                'branch_id'    => $branchId,
-                'from_date'    => $validated['from_date'],
-                'to_date'      => $validated['to_date'],
-                'total_days'   => $totalDays,
-                'reason'       => $validated['reason'],
-                'status'       => OdRequest::STATUS_PENDING,
-                'current_step' => $approvalRows[0]['step_key'],
-                'submitted_at' => now(),
+                'branch_id'     => $branchId,
+                'from_date'     => $validated['from_date'],
+                'to_date'       => $validated['to_date'],
+                'gate_out_time' => $validated['gate_out_time'] ?? null,
+                'gate_in_time'  => $validated['gate_in_time'] ?? null,
+                'total_days'    => $totalDays,
+                'reason'        => $validated['reason'],
+                'status'        => OdRequest::STATUS_PENDING,
+                'current_step'  => $approvalRows[0]['step_key'],
+                'submitted_at'  => now(),
             ]);
 
             $od->approvals()->createMany($approvalRows);
@@ -500,6 +504,22 @@ class OdRequestApiController extends Controller
         $current = Carbon::parse($odRequest->from_date);
         $end     = Carbon::parse($odRequest->to_date);
 
+        $loginTime  = $odRequest->gate_out_time ? Carbon::parse($odRequest->gate_out_time)->format('H:i:s') : '09:30:00';
+        $logoutTime = $odRequest->gate_in_time ? Carbon::parse($odRequest->gate_in_time)->format('H:i:s') : '18:30:00';
+
+        $workingHours = '08:00:00';
+        if ($odRequest->gate_out_time && $odRequest->gate_in_time) {
+            $in          = Carbon::parse($odRequest->gate_out_time);
+            $out         = Carbon::parse($odRequest->gate_in_time);
+            $diffSeconds = (int) max($in->diffInSeconds($out, false), 0);
+            $workingHours = sprintf(
+                '%02d:%02d:%02d',
+                floor($diffSeconds / 3600),
+                floor(($diffSeconds % 3600) / 60),
+                $diffSeconds % 60
+            );
+        }
+
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
 
@@ -510,9 +530,13 @@ class OdRequestApiController extends Controller
 
             if ($existing) {
                 $existing->update([
-                    'attendance_status' => 'od',
-                    'login_location'    => 'On Duty (OD)',
-                    'remarks'           => $odRequest->reason,
+                    'attendance_status'     => 'od',
+                    'login_location'        => 'On Duty (OD)',
+                    'logout_location'       => 'On Duty (OD)',
+                    'login_time'            => $loginTime,
+                    'logout_time'           => $logoutTime,
+                    'overall_working_hours' => $workingHours,
+                    'remarks'               => $odRequest->reason,
                 ]);
             } else {
                 DailyAttendance::create([
@@ -524,12 +548,12 @@ class OdRequestApiController extends Controller
                     'login_location'        => 'On Duty (OD)',
                     'login_latitude'        => 0,
                     'login_longitude'       => 0,
-                    'login_time'            => '09:30:00',
+                    'login_time'            => $loginTime,
                     'logout_location'       => 'On Duty (OD)',
                     'logout_latitude'       => 0,
                     'logout_longitude'      => 0,
-                    'logout_time'           => '18:30:00',
-                    'overall_working_hours' => '08:00',
+                    'logout_time'           => $logoutTime,
+                    'overall_working_hours' => $workingHours,
                     'attendance_date'       => $dateStr,
                     'attendance_status'     => 'od',
                     'remarks'               => $odRequest->reason,
@@ -547,17 +571,19 @@ class OdRequestApiController extends Controller
     private function mapOdRequest(OdRequest $r, bool $withApprovals = false): array
     {
         $data = [
-            'id'           => $r->id,
-            'from_date'    => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
-            'to_date'      => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
-            'total_days'   => $r->total_days,
-            'reason'       => $r->reason ?? '',
-            'status'       => $r->status,
-            'current_step' => $r->current_step,
-            'branch_id'    => $r->branch_id,
-            'submitted_at' => $r->submitted_at?->format('Y-m-d H:i:s'),
-            'approved_at'  => $r->approved_at?->format('Y-m-d H:i:s'),
-            'rejected_at'  => $r->rejected_at?->format('Y-m-d H:i:s'),
+            'id'            => $r->id,
+            'from_date'     => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
+            'to_date'       => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
+            'gate_out_time' => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,
+            'gate_in_time'  => $r->gate_in_time ? substr((string) $r->gate_in_time, 0, 5) : null,
+            'total_days'    => $r->total_days,
+            'reason'        => $r->reason ?? '',
+            'status'        => $r->status,
+            'current_step'  => $r->current_step,
+            'branch_id'     => $r->branch_id,
+            'submitted_at'  => $r->submitted_at?->format('Y-m-d H:i:s'),
+            'approved_at'   => $r->approved_at?->format('Y-m-d H:i:s'),
+            'rejected_at'   => $r->rejected_at?->format('Y-m-d H:i:s'),
         ];
 
         if ($withApprovals && $r->relationLoaded('approvals')) {

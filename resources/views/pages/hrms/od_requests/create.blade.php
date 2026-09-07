@@ -236,6 +236,24 @@
                                 <div class="eob-help" id="totalDaysHelp">Total: 1 day(s)</div>
                             </div>
 
+                            {{-- Gateout Time --}}
+                            <div class="eob-group">
+                                <label class="eob-label">Gateout Time <span class="eob-label-required">*</span></label>
+                                <input type="time" name="gate_out_time" id="gate_out_time" class="eob-input"
+                                       value="{{ old('gate_out_time') }}" required>
+                                <div class="eob-help">Departure / gate out time.</div>
+                                @error('gate_out_time')<div class="eob-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+                            </div>
+
+                            {{-- Gatein Time --}}
+                            <div class="eob-group">
+                                <label class="eob-label">Gatein Time <span class="eob-label-required">*</span></label>
+                                <input type="time" name="gate_in_time" id="gate_in_time" class="eob-input"
+                                       value="{{ old('gate_in_time') }}" required>
+                                <div class="eob-help">Return / gate in time.</div>
+                                @error('gate_in_time')<div class="eob-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
+                            </div>
+
                             {{-- Reason / Remarks --}}
                             <div class="eob-group full">
                                 <label class="eob-label">Remarks / Reason <span class="eob-label-required">*</span></label>

@@ -29,6 +29,8 @@ class OdRequest extends Model
         'branch_id',
         'from_date',
         'to_date',
+        'gate_out_time',
+        'gate_in_time',
         'total_days',
         'reason',
         'status',

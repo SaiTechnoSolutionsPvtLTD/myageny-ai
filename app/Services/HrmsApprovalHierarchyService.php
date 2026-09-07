@@ -43,6 +43,7 @@ class HrmsApprovalHierarchyService
     public function leaveApprovalChainFor(User $requester): Collection
     {
         $companyId = $requester->company_id;
+        $requesterBranchId = $requester->branch_id;
 
         $userRoleIds = \DB::table('model_has_roles')
             ->where('model_type', User::class)
@@ -62,7 +63,7 @@ class HrmsApprovalHierarchyService
 
         $hierarchy = null;
         if (!empty($userRoleIds) || !empty($roleNames)) {
-            $hierarchy = \App\Models\LeaveHierarchy::withoutGlobalScopes()
+            $allMatchingHierarchies = \App\Models\LeaveHierarchy::withoutGlobalScopes()
                 ->where(function($q) use ($userRoleIds, $roleNames) {
                     if (!empty($userRoleIds)) {
                         $q->whereIn('role_id', $userRoleIds);
@@ -74,7 +75,21 @@ class HrmsApprovalHierarchyService
                 ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
                 ->where('is_active', true)
                 ->orderBy('id', 'desc')
-                ->first();
+                ->get();
+
+            // 1. Priority 1: Match hierarchy configured specifically for requester's branch
+            if ($requesterBranchId) {
+                $hierarchy = $allMatchingHierarchies->first(function ($h) use ($requesterBranchId) {
+                    return is_array($h->branch_ids) && in_array((int)$requesterBranchId, array_map('intval', $h->branch_ids), true);
+                });
+            }
+
+            // 2. Priority 2: Fallback to hierarchy configured for All Branches (branch_ids is empty/null)
+            if (! $hierarchy) {
+                $hierarchy = $allMatchingHierarchies->first(function ($h) {
+                    return empty($h->branch_ids);
+                });
+            }
         }
 
         if ($hierarchy && !empty($hierarchy->approval_chain)) {
@@ -114,8 +129,10 @@ class HrmsApprovalHierarchyService
                         ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                         ->where('is_active', true)
                         ->get()
-                        ->sortBy(function ($u) use ($requester) {
-                            return ($u->branch_id && $requester->branch_id && (int)$u->branch_id === (int)$requester->branch_id) ? 0 : 1;
+                        ->sortBy(function ($u) use ($requester, $requesterBranchId) {
+                            $uBranch = $u->branch_id;
+                            $reqBranch = $requesterBranchId ?: $requester->branch_id;
+                            return ($uBranch && $reqBranch && (int)$uBranch === (int)$reqBranch) ? 0 : 1;
                         });
 
                     $approver = $users->first(fn($u) => (int)$u->id !== (int)$requester->id);
