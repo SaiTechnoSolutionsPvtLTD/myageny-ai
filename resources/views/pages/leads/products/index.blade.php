@@ -248,6 +248,11 @@
                 </div>
 
                 <div class="lpd-field">
+                    <label class="lpd-label" for="customer_name">Customer Name</label>
+                    <input id="customer_name" type="text" name="customer_name" class="lpd-input" value="{{ request('customer_name') }}" placeholder="Client / Company name">
+                </div>
+
+                <div class="lpd-field">
                     <label class="lpd-label" for="mobile_number">Mobile Number</label>
                     <input id="mobile_number" type="text" name="mobile_number" class="lpd-input" value="{{ request('mobile_number') }}" placeholder="Client mobile number">
                 </div>
@@ -277,9 +282,11 @@
                 <div class="lpd-field">
                     <label class="lpd-label" for="branch_id">Branch</label>
                     <select id="branch_id" name="branch_id" class="lpd-select">
-                        <option value="">All Branches</option>
+                        @if(auth()->user() && app(\App\Services\DataVisibilityService::class)->isCompanyWideUser(auth()->user()))
+                            <option value="">All Branches</option>
+                        @endif
                         @foreach($branches as $branch)
-                            <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
+                            <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id || (count($branches) === 1 && !request()->has('branch_id')))>{{ $branch->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -291,15 +298,6 @@
                         @foreach($users as $user)
                             <option value="{{ $user->id }}" @selected((string) request('assigned_to') === (string) $user->id)>{{ $user->name }}</option>
                         @endforeach
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="product_active">Product Status (Catalog)</label>
-                    <select id="product_active" name="product_active" class="lpd-select">
-                        <option value="">All Status</option>
-                        <option value="active" @selected(request('product_active') === 'active')>Active</option>
-                        <option value="inactive" @selected(request('product_active') === 'inactive')>Inactive</option>
                     </select>
                 </div>
 

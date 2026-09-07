@@ -85,7 +85,7 @@ class DataVisibilityService
             ->filter()
             ->map(fn (string $name) => $this->roleKey($name));
 
-        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo', 'pre_sale_executive', 'pre_sales_executive', 'pre_sale', 'pre_sales'])->isNotEmpty()) {
+        if ($keys->intersect(['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo', 'chief_executive_officer', 'ceo', 'pre_sale_executive', 'pre_sales_executive', 'pre_sale', 'pre_sales'])->isNotEmpty()) {
             return RoleMapping::ACCESS_COMPANY;
         }
 
@@ -470,37 +470,40 @@ class DataVisibilityService
     {
         $user ??= auth()->user();
 
-        $leadBranchQuery = Lead::query()->whereNotNull('branch_id');
-        $this->applyLeadVisibility($leadBranchQuery, $user);
-        $leadBranchIds = $leadBranchQuery->distinct()->pluck('branch_id');
+        if (! $user) {
+            return collect();
+        }
 
-        $visibleIds = $this->visibleUserIds($user);
         $companyId = $this->companyIdFor($user);
 
-        $userBranchIds = User::query()
-            ->whereNotNull('branch_id')
-            ->when($companyId, fn (Builder $query) => $query->where('company_id', $companyId))
-            ->when($visibleIds !== null, fn (Builder $query) => $query->whereIn('id', $visibleIds))
-            ->distinct()
-            ->pluck('branch_id');
+        if ($this->isCompanyWideUser($user)) {
+            return DB::table('branches')
+                ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
+                ->where('is_active', true)
+                ->pluck('id');
+        }
 
-        return $leadBranchIds
-            ->merge($userBranchIds)
-            ->filter()
-            ->unique()
-            ->values();
+        $branchIds = collect($user->getMyBranchIds());
+
+        if ($branchIds->isEmpty() && $user->branch_id) {
+            $branchIds->push((int) $user->branch_id);
+        }
+
+        return $branchIds->filter()->unique()->values();
     }
 
     public function visibleBranches(?User $user = null): Collection
     {
+        $user ??= auth()->user();
         $branchIds = $this->visibleBranchIds($user);
         $companyId = $this->companyIdFor($user);
 
         return DB::table('branches')
             ->select('id', 'name')
             ->where('is_active', true)
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->when($branchIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $branchIds))
-            ->when($branchIds->isEmpty() && $companyId, fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($branchIds->isEmpty(), fn ($query) => $query->whereRaw('1 = 0'))
             ->orderBy('name')
             ->get();
     }
@@ -533,8 +536,8 @@ class DataVisibilityService
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo', 'chief_executive_officer', 'ceo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo', 'chief_executive_officer', 'ceo'], true);
         });
     }
 

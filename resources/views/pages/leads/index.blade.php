@@ -378,9 +378,11 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-building ld-fi"></i>
                                 <select name="branch_id" class="ld-fs" id="f_branch" onchange="updateFilters()">
-                                    <option value="">All Branches</option>
+                                    @if(auth()->user() && app(\App\Services\DataVisibilityService::class)->isCompanyWideUser(auth()->user()))
+                                        <option value="">All Branches</option>
+                                    @endif
                                     @foreach($branches as $b)
-                                        <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
+                                        <option value="{{ $b->id }}" {{ request('branch_id') == $b->id || (count($branches) === 1 && !request()->has('branch_id')) ? 'selected':'' }}>{{ $b->name }}</option>
                                     @endforeach
                                 </select>
                                 <i class="bi bi-chevron-down ld-fc"></i>
@@ -404,34 +406,6 @@
                                     <option value="">All Sources</option>
                                     @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
                                         <option value="{{ $key }}" {{ request('lead_source') == $key ? 'selected':'' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                                <i class="bi bi-chevron-down ld-fc"></i>
-                            </div>
-                        </div>
-
-                        <div class="ld-fw">
-                            <label class="ld-field-label" for="f_status">Lead Status</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-kanban ld-fi"></i>
-                                <select name="lead_status" class="ld-fs" id="f_status" onchange="updateFilters()">
-                                    <option value="">All Status</option>
-                                    @foreach(\App\Models\Lead::statusOptions() as $key => $label)
-                                        <option value="{{ $key }}" {{ request('lead_status') == $key ? 'selected':'' }}>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                                <i class="bi bi-chevron-down ld-fc"></i>
-                            </div>
-                        </div>
-
-                        <div class="ld-fw">
-                            <label class="ld-field-label" for="f_priority">Priority</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-flag ld-fi"></i>
-                                <select name="priority" class="ld-fs" id="f_priority" onchange="updateFilters()">
-                                    <option value="">All Priorities</option>
-                                    @foreach(\App\Models\Lead::PRIORITIES as $key => $label)
-                                        <option value="{{ $key }}" {{ request('priority') == $key ? 'selected':'' }}>{{ $label }}</option>
                                     @endforeach
                                 </select>
                                 <i class="bi bi-chevron-down ld-fc"></i>
@@ -463,15 +437,6 @@
                                     @endforeach
                                 </select>
                                 <i class="bi bi-chevron-down ld-fc"></i>
-                            </div>
-                        </div>
-
-                        <div class="ld-fw">
-                            <label class="ld-field-label" for="f_product">Product</label>
-                            <div class="ld-input-wrap">
-                                <i class="bi bi-box-seam ld-fi"></i>
-                                <input type="text" name="product_name" class="ld-fi-input" id="f_product"
-                                       placeholder="Product name" value="{{ request('product_name') }}" oninput="updateFilters()">
                             </div>
                         </div>
 
@@ -661,24 +626,24 @@
 
             @php
                 $statItems = [
-                    ['label'=>'Total Leads',         'value'=> $stats['total'],          'sub'=>'Matching current filters', 'color'=>'#fe5f04','bg'=>'#fff0e6','icon'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'],
-                    ['label'=>'Total Product Count', 'value'=> $stats['total_products'], 'sub'=>'Products linked to leads', 'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'],
-                    ['label'=>'Pipeline Value',      'value'=> '₹'.number_format($stats['pipeline'], 2), 'sub'=>'Value across selected leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
-                    ['label'=>'Untouched Leads Count',     'value'=> $stats['new'],            'sub'=>'No call updates yet',      'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'],
+                    ['label'=>'Total Leads',         'value'=> $stats['total'],          'sub'=>'Matching current filters', 'color'=>'#fe5f04','bg'=>'#fff0e6','icon'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>', 'url' => route('leads.index', array_merge(request()->except(['untouched', 'page']), ['untouched' => null]))],
+                    ['label'=>'Total Product Count', 'value'=> $stats['total_products'], 'sub'=>'Products linked to leads', 'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>', 'url' => route('leads.products.index')],
+                    ['label'=>'Pipeline Value',      'value'=> '₹'.number_format($stats['pipeline'], 2), 'sub'=>'Value across selected leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', 'url' => null],
+                    ['label'=>'Untouched Leads Count',     'value'=> $stats['new'],            'sub'=>'Overall leads without call updates (Click to view)',      'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 'url' => route('leads.index', ['untouched' => 1])],
                 ];
             @endphp
             @foreach($statItems as $s)
-            <div class="ld-stat" style="--stat-color: {{ $s['color'] }}">
+            <{{ !empty($s['url']) ? 'a href='.$s['url'] : 'div' }} class="ld-stat" style="--stat-color: {{ $s['color'] }}; text-decoration:none; color:inherit; {{ !empty($s['url']) ? 'cursor:pointer;' : '' }}">
                 <div class="ld-stat-top">
                     <div class="ld-stat-icon" style="background:{{ $s['bg'] }}">
                         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="{{ $s['color'] }}" stroke-width="2">{!! $s['icon'] !!}</svg>
                     </div>
-                    <div class="ld-stat-trend">Summary</div>
+                    <div class="ld-stat-trend">{{ !empty($s['url']) ? 'View →' : 'Summary' }}</div>
                 </div>
                 <div class="ld-stat-label">{{ $s['label'] }}</div>
                 <div class="ld-stat-value">{{ $s['value'] }}</div>
                 <div class="ld-stat-sub">{{ $s['sub'] }}</div>
-            </div>
+            </{{ !empty($s['url']) ? 'a' : 'div' }}>
             @endforeach
         </div>
 
@@ -686,8 +651,21 @@
         <div class="ld-table-card">
             <div class="ld-table-top">
                 <div>
-                    <div class="ld-table-title">Lead Sheet</div>
-                    <div class="ld-table-sub">Recent automation runs across workflows</div>
+                    <div class="ld-table-title" style="display:flex; align-items:center; gap:8px;">
+                        @if(request('untouched') == '1')
+                            <span style="color:#16a34a;"><i class="bi bi-telephone-x-fill"></i> Untouched Leads</span>
+                            <a href="{{ route('leads.index', request()->except(['untouched', 'page'])) }}" style="font-size:11px; color:#fe5f04; text-decoration:none; font-weight:600; padding:2px 8px; background:#fff0e6; border-radius:12px; border:1px solid #fed7aa;">Show All Leads ✕</a>
+                        @else
+                            Lead Sheet
+                        @endif
+                    </div>
+                    <div class="ld-table-sub">
+                        @if(request('untouched') == '1')
+                            Showing only leads without any call updates
+                        @else
+                            Recent automation runs across workflows
+                        @endif
+                    </div>
                 </div>
                 <div class="ld-results">
                     Showing <strong>{{ $leads->firstItem() ?? 0 }}-{{ $leads->lastItem() ?? 0 }}</strong>
@@ -879,10 +857,7 @@ const ff = {
     f_branch:    { label:'Branch',   sel:'#f_branch' },
     f_mobile:    { label:'Mobile',   sel:'#f_mobile' },
     f_source:    { label:'Source',   sel:'#f_source' },
-    f_status:    { label:'Status',   sel:'#f_status' },
-    f_priority:  { label:'Priority', sel:'#f_priority' },
     f_user:      { label:'User',     sel:'#f_user' },
-    f_product:   { label:'Product',  sel:'#f_product' },
     f_date_from: { label:'From',     sel:'#f_date_from' },
     f_date_to:   { label:'To',       sel:'#f_date_to' },
 };

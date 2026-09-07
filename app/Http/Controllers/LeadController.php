@@ -136,18 +136,26 @@ class LeadController extends Controller
             $query->where('product_name', 'like', '%' . $request->product_name . '%');
         }
 
-        if ($request->filled('date_from')) {
-            $query->whereDate('lead_date', '>=', $request->date_from);
+        $isUntouched = $request->filled('untouched') && $request->untouched == '1';
+
+        if (! $isUntouched) {
+            if ($request->filled('date_from')) {
+                $query->whereDate('lead_date', '>=', $request->date_from);
+            }
+
+            if ($request->filled('date_to')) {
+                $query->whereDate('lead_date', '<=', $request->date_to);
+            }
         }
 
-        if ($request->filled('date_to')) {
-            $query->whereDate('lead_date', '<=', $request->date_to);
+        if ($isUntouched) {
+            $query->whereDoesntHave('callUpdates');
         }
 
         $activeLeadIds = (clone $query)->pluck('leads.id');
 
         $leads    = $query->paginate(15)->withQueryString();
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = $this->visibility->visibleBranches();
         $users    = $this->visibility->visibleAssignableUsers()
             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
             ->values();
@@ -168,12 +176,17 @@ class LeadController extends Controller
         $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
 
+        // Overall untouched leads count (unrestricted by date filter)
+        $untouchedCountQuery = Lead::query();
+        $this->visibility->applyLeadVisibility($untouchedCountQuery);
+        $untouchedCount = $untouchedCountQuery->whereDoesntHave('callUpdates')->count();
+
         // Stats for top cards
         $stats = [
             'total'         => $activeLeadIds->count(),
             'total_products'=> LeadProduct::whereIn('lead_id', $activeLeadIds)->count(),
             'pipeline'      => LeadProduct::whereIn('lead_id', $activeLeadIds)->sum('total_price'),
-            'new'           => Lead::whereIn('id', $activeLeadIds)->whereDoesntHave('callUpdates')->count(),
+            'new'           => $untouchedCount,
         ];
 
         $filterPanelOpen = !$request->has('reset') && (
@@ -264,9 +277,10 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
-        if ($request->filled('product_active')) {
-            $status = $request->product_active;
-            $query->whereHas('product', fn ($q) => $q->where('status', $status));
+        if ($request->filled('customer_name')) {
+            $customerName = $request->customer_name;
+            $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('contact_name', 'like', '%' . $customerName . '%')
+                ->orWhere('company_name', 'like', '%' . $customerName . '%'));
         }
 
         if ($request->filled('mobile_number')) {
@@ -306,7 +320,7 @@ class LeadController extends Controller
             'pending' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_pending),
         ];
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        $branches = $this->visibility->visibleBranches();
         $users = $this->visibility->visibleAssignableUsers();
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
@@ -314,10 +328,10 @@ class LeadController extends Controller
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
         $filterPanelOpen = !$request->has('reset') && (
             $request->filled('lead_id')
+            || $request->filled('customer_name')
             || $request->filled('mobile_number')
             || $request->filled('product_id')
             || $request->filled('product_status')
-            || $request->filled('product_active')
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
             || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
