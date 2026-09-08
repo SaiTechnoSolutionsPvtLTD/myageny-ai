@@ -204,6 +204,7 @@
             </div>
             <div class="crm-pay-body">
                 <form method="GET" action="{{ route('reports.crm.payment-collection') }}" class="crm-pay-form" id="paymentCollectionForm">
+                    <input type="hidden" name="tab" id="crmActiveTabInput" value="{{ request('tab', 'payment-data-panel') }}">
                     <div class="crm-pay-field">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
                             <label class="crm-pay-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
@@ -232,14 +233,7 @@
 
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="company_name">Company</label>
-                        <select id="company_name" name="company_name" class="crm-pay-select select2">
-                            <option value="">All Companies</option>
-                            @foreach($companyOptions as $company)
-                                <option value="{{ $company }}" @selected((string) request('company_name') === (string) $company)>
-                                    {{ $company }}
-                                </option>
-                            @endforeach
-                        </select>
+                        <input id="company_name" type="text" name="company_name" class="crm-pay-input" value="{{ request('company_name') }}" placeholder="Search company...">
                     </div>
 
                     <div class="crm-pay-field">
@@ -346,7 +340,7 @@
                                     @php
                                         $rowTotalAmount = (float) ($row->total_amount ?? 0);
                                         $rowReceivedAmount = (float) ($row->received_amount ?? 0);
-                                        $rowOutstandingAmount = max(0, $rowTotalAmount - $rowReceivedAmount);
+                                        $rowOutstandingAmount = (float) ($row->outstanding_amount ?? max(0, $rowTotalAmount - $rowReceivedAmount));
                                     @endphp
                                     <tr style="cursor:pointer;" onclick="window.location='{{ route('leads.show', $row->customer_id) }}'" title="Click to view lead details for {{ $row->company_name ?: $row->customer_name }}">
                                         <td><span class="crm-pay-code">PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
@@ -448,13 +442,32 @@
 (() => {
     const tabs = document.querySelectorAll('#crmPaymentTabs [data-tab-target]');
     const panels = document.querySelectorAll('.crm-pay-panel');
+    const tabInput = document.getElementById('crmActiveTabInput');
+
+    function activateTab(targetId) {
+        const activeTabBtn = document.querySelector(`#crmPaymentTabs [data-tab-target="${targetId}"]`);
+        const activePanel = document.getElementById(targetId);
+        if (activeTabBtn && activePanel) {
+            tabs.forEach((button) => button.classList.remove('is-active'));
+            panels.forEach((panel) => panel.classList.remove('is-active'));
+            activeTabBtn.classList.add('is-active');
+            activePanel.classList.add('is-active');
+            if (tabInput) tabInput.value = targetId;
+        }
+    }
+
+    const initialTab = new URLSearchParams(window.location.search).get('tab') || (tabInput ? tabInput.value : 'payment-data-panel');
+    if (initialTab) {
+        activateTab(initialTab);
+    }
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
-            tabs.forEach((button) => button.classList.remove('is-active'));
-            panels.forEach((panel) => panel.classList.remove('is-active'));
-            tab.classList.add('is-active');
-            document.getElementById(tab.dataset.tabTarget)?.classList.add('is-active');
+            const targetId = tab.dataset.tabTarget;
+            activateTab(targetId);
+            const url = new URL(window.location);
+            url.searchParams.set('tab', targetId);
+            window.history.replaceState({}, '', url);
         });
     });
 

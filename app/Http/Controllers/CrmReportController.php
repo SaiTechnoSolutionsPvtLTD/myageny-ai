@@ -192,12 +192,22 @@ class CrmReportController extends Controller
         }
 
         $rows = $allRows->map(function ($row) use ($paymentsMap) {
-            $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
-            $entryCarbon = $entryDate ? \Illuminate\Support\Carbon::parse($entryDate) : null;
+            $entryDate = !empty($row->lead_date) ? $row->lead_date : optional($row->lead_created_at)?->toDateString();
+            $entryCarbon = $entryDate ? \Illuminate\Support\Carbon::parse($entryDate)->startOfDay() : null;
             $convertedCarbon = $row->converted_at ? \Illuminate\Support\Carbon::parse($row->converted_at) : null;
-            $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
+            $leadStatus = trim((string) ($row->product_lead_status ?: $row->base_lead_status));
+            if ($leadStatus === '' || $leadStatus === '-') {
+                $leadStatus = 'New';
+            }
             $receivedAmount = (float) ($paymentsMap[$row->lead_product_id] ?? 0);
             $pendingCost = max(0, (float) ($row->total_price ?? 0) - $receivedAmount);
+
+            if ($entryCarbon) {
+                $days = $entryCarbon->isFuture() ? 0 : (int) $entryCarbon->diffInDays(now()->startOfDay());
+                $leadAge = $days === 1 ? '1 Day' : "{$days} Days";
+            } else {
+                $leadAge = '-';
+            }
 
             return [
                 'Lead ID' => 'LD-' . str_pad((string) $row->lead_id, 4, '0', STR_PAD_LEFT),
@@ -205,7 +215,7 @@ class CrmReportController extends Controller
                 'Email' => $row->email ?: '-',
                 'Mobile Number' => $row->mobile_number ?: '-',
                 'Lead Source' => $row->lead_source ?: '-',
-                'Lead Status' => $leadStatus ?: '-',
+                'Lead Status' => $leadStatus,
                 'Product Name' => $row->product_name ?: '-',
                 'Entry Date' => $entryCarbon?->format('d-m-Y') ?: '-',
                 'Converted Date' => $convertedCarbon?->format('d-m-Y') ?: '-',
@@ -213,7 +223,7 @@ class CrmReportController extends Controller
                 'Received Cost' => number_format($receivedAmount, 2, '.', ''),
                 'Pending Cost' => number_format($pendingCost, 2, '.', ''),
                 'Allocated To' => $row->allocated_to_name ?: '-',
-                'Lead Age' => $entryCarbon ? $entryCarbon->diffForHumans(now(), true) : '-',
+                'Lead Age' => $leadAge,
             ];
         });
 
@@ -373,11 +383,16 @@ class CrmReportController extends Controller
         }
         $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
+        $latestProductRows = $analyticsRows->unique('lead_product_id');
+        $totalAmount = (float) $latestProductRows->sum('total_amount');
+        $receivedAmount = (float) $analyticsRows->sum('received_amount');
+        $outstandingAmount = (float) $latestProductRows->sum('outstanding_amount');
+
         $summary = [
             'rows' => $totalCount,
-            'total_amount' => (float) $analyticsRows->sum('total_amount'),
-            'received_amount' => (float) $analyticsRows->sum('received_amount'),
-            'outstanding_amount' => (float) $analyticsRows->sum('outstanding_amount'),
+            'total_amount' => $totalAmount,
+            'received_amount' => $receivedAmount,
+            'outstanding_amount' => $outstandingAmount,
         ];
 
         $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -433,7 +448,7 @@ class CrmReportController extends Controller
         $rows = $this->buildPaymentCollectionQuery($request)->get()->map(function ($row) {
             $totalAmount = (float) ($row->total_amount ?? 0);
             $receivedAmount = (float) ($row->received_amount ?? 0);
-            $outstandingAmount = max(0, $totalAmount - $receivedAmount);
+            $outstandingAmount = (float) ($row->outstanding_amount ?? max(0, $totalAmount - $receivedAmount));
 
             return [
                 'Payment ID' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
@@ -647,6 +662,8 @@ class CrmReportController extends Controller
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
             ->select([
                 'lead_product_payments.id as payment_id',
+                'lead_product_payments.lead_id',
+                'lead_product_payments.lead_product_id',
                 'lead_product_payments.payment_date',
                 'lead_product_payments.payment_mode',
                 'lead_product_payments.reference_number as transaction_reference',
@@ -655,7 +672,7 @@ class CrmReportController extends Controller
                 'leads.company_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
-                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(lead_product_payments.amount, 0), 0) as outstanding_amount'),
+                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
             ])
             ->orderByDesc('lead_product_payments.payment_date')
@@ -677,7 +694,7 @@ class CrmReportController extends Controller
         }
 
         if ($request->filled('company_name')) {
-            $query->where('leads.company_name', $request->company_name);
+            $query->where('leads.company_name', 'like', '%' . trim($request->company_name) . '%');
         }
 
         if ($request->filled('sales_executive_id')) {
@@ -706,14 +723,17 @@ class CrmReportController extends Controller
     private function buildLeadsSummaryAnalytics($rows): array
     {
         $normalizedRows = collect($rows)->map(function ($row) {
-            $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
-            $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
+            $entryDate = !empty($row->lead_date) ? $row->lead_date : optional($row->lead_created_at)?->toDateString();
+            $leadStatus = trim((string) ($row->product_lead_status ?: $row->base_lead_status));
+            if ($leadStatus === '' || $leadStatus === '-') {
+                $leadStatus = 'New';
+            }
             $totalCost = (float) ($row->total_price ?? 0);
             $receivedCost = (float) ($row->amount_paid ?? 0);
 
             return [
                 'source' => $row->lead_source ?: 'Unknown',
-                'status' => $leadStatus ?: 'Unknown',
+                'status' => $leadStatus,
                 'allocated_to' => $row->allocated_to_name ?: 'Unassigned',
                 'product' => $row->product_name ?: 'No Product',
                 'entry_month' => $entryDate ? \Illuminate\Support\Carbon::parse($entryDate)->format('M Y') : 'Unknown',
@@ -837,6 +857,7 @@ class CrmReportController extends Controller
             $date = $row->payment_date ? Carbon::parse($row->payment_date) : null;
 
             return [
+                'lead_product_id' => $row->lead_product_id,
                 'payment_mode' => LeadProduct::PAYMENT_MODES[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                 'customer_name' => $row->customer_name ?: 'Unknown Customer',
                 'received_by' => $row->received_by ?: 'Unknown User',
@@ -855,7 +876,7 @@ class CrmReportController extends Controller
                     'label' => $items->first()['month_label'],
                     'sort' => $items->first()['month_sort'],
                     'received_amount' => round($items->sum('received_amount'), 2),
-                    'outstanding_amount' => round($items->sum('outstanding_amount'), 2),
+                    'outstanding_amount' => round($items->unique('lead_product_id')->sum('outstanding_amount'), 2),
                     'count' => $items->count(),
                 ])
                 ->sortBy('sort')
@@ -882,7 +903,7 @@ class CrmReportController extends Controller
                 ->map(fn ($items, $label) => [
                     'label' => $label,
                     'received_amount' => round($items->sum('received_amount'), 2),
-                    'outstanding_amount' => round($items->sum('outstanding_amount'), 2),
+                    'outstanding_amount' => round($items->unique('lead_product_id')->sum('outstanding_amount'), 2),
                     'count' => $items->count(),
                 ])
                 ->sortByDesc('received_amount')

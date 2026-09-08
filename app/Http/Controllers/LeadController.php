@@ -508,6 +508,24 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
+        if ($request->filled('search')) {
+            $search = trim((string) $request->search);
+            $cleanId = preg_replace('/[^0-9]/', '', $search);
+
+            $query->whereHas('lead', function ($leadQuery) use ($search, $cleanId) {
+                $leadQuery->where(function ($q) use ($search, $cleanId) {
+                    $q->where('contact_name', 'like', '%' . $search . '%')
+                      ->orWhere('company_name', 'like', '%' . $search . '%')
+                      ->orWhere('mobile_number', 'like', '%' . $search . '%')
+                      ->orWhere('email', 'like', '%' . $search . '%');
+
+                    if ($cleanId !== '' && is_numeric($cleanId)) {
+                        $q->orWhere('id', (int) $cleanId);
+                    }
+                });
+            });
+        }
+
         if ($request->filled('mobile_number')) {
             $mobileNumber = $request->mobile_number;
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('mobile_number', 'like', '%' . $mobileNumber . '%'));
@@ -552,7 +570,8 @@ class LeadController extends Controller
         $products = $productOptions->get(['id', 'package_name', 'product_name']);
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
         $filterPanelOpen = !$request->has('reset') && (
-            $request->filled('lead_id')
+            $request->filled('search')
+            || $request->filled('lead_id')
             || $request->filled('mobile_number')
             || $request->filled('product_id')
             || $request->filled('product_status')

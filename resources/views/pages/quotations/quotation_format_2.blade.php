@@ -291,9 +291,12 @@
 {{-- TOTALS --}}
 <div class="totals-outer clearfix">
   <div class="totals-box">
-    <div class="t-row clearfix"><span>Sub Total</span><span class="t-val">₹{{ number_format($quotation->subtotal, 2) }}</span></div>
-    <div class="t-row clearfix"><span >CGST 9%</span><span class="t-val">₹{{ number_format($quotation->tax_amount / 2, 2) }}</span></div>
-    <div class="t-row clearfix"><span >SGST 9%</span><span class="t-val">₹{{ number_format($quotation->tax_amount / 2, 2) }}</span></div>
+    @if($quotation->tax_type === 'igst' || $quotation->igst_amount > 0)
+    <div class="t-row clearfix"><span>IGST {{ number_format($quotation->igst_rate ?: 18, 2) }}%</span><span class="t-val">₹{{ number_format($quotation->igst_amount ?: $quotation->tax_amount, 2) }}</span></div>
+    @else
+    <div class="t-row clearfix"><span>CGST {{ number_format($quotation->cgst_rate ?: 9, 2) }}%</span><span class="t-val">₹{{ number_format($quotation->cgst_amount ?: ($quotation->tax_amount / 2), 2) }}</span></div>
+    <div class="t-row clearfix"><span>SGST {{ number_format($quotation->sgst_rate ?: 9, 2) }}%</span><span class="t-val">₹{{ number_format($quotation->sgst_amount ?: ($quotation->tax_amount / 2), 2) }}</span></div>
+    @endif
     <div class="t-row clearfix"><span >Rounding</span><span class="t-val">₹{{ number_format($quotation->rounding, 2) }}</span></div>
     <div class="t-grand clearfix">
       <span >Total</span>

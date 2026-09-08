@@ -12,16 +12,21 @@ class LeadProduct extends Model
 {
     use HasFactory, SoftDeletes, BelongsToCompany;
 
-protected static function booted()
-{
-    static::creating(function ($model) {
+    protected static function booted()
+    {
+        static::creating(function ($model) {
+            if (!$model->company_id && $model->lead_id) {
+                $lead = \App\Models\Lead::withoutGlobalScopes()->find($model->lead_id);
+                if ($lead && $lead->company_id) {
+                    $model->company_id = $lead->company_id;
+                }
+            }
 
-        if (auth()->check() && !$model->company_id) {
-            $model->company_id = auth()->user()->company_id;
-        }
-
-    });
-}
+            if (!$model->company_id && auth()->check()) {
+                $model->company_id = auth()->user()->company_id;
+            }
+        });
+    }
     const PAYMENT_MODE_CONFIG = [
         'cash'          => ['label' => 'Cash',          'icon' => '💵', 'color' => '#16a34a'],
         'bank_transfer' => ['label' => 'Bank Transfer', 'icon' => '🏦', 'color' => '#1d4ed8'],

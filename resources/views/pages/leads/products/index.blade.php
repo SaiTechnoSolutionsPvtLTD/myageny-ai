@@ -240,14 +240,9 @@
             </summary>
             <div class="lpd-filter-body" id="leadProductFiltersBody">
                 <form method="GET" action="{{ route('leads.products.index') }}" class="lpd-filter-form" id="lpdFilterForm">
-                    <div class="lpd-field">
-                        <label class="lpd-label" for="lead_id">Lead ID</label>
-                        <input id="lead_id" type="text" name="lead_id" class="lpd-input" value="{{ request('lead_id') }}" placeholder="Example: 25">
-                    </div>
-
-                    <div class="lpd-field">
-                        <label class="lpd-label" for="mobile_number">Mobile Number</label>
-                        <input id="mobile_number" type="text" name="mobile_number" class="lpd-input" value="{{ request('mobile_number') }}" placeholder="Client mobile number">
+                    <div class="lpd-field lpd-field-wide">
+                        <label class="lpd-label" for="search">Search</label>
+                        <input id="search" type="text" name="search" class="lpd-input" value="{{ request('search', request('lead_id')) }}" placeholder="Search client name, mobile, Lead ID, company, email...">
                     </div>
 
                     <div class="lpd-field">

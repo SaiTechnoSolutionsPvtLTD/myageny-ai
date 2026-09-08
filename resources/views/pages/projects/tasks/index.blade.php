@@ -320,9 +320,9 @@
                         </table>
                     </div>
 
-                    <div style="padding:16px 20px; border-top:1px solid #edf2f7;">
-                        {{ $groupedTasks->links() }}
-                    </div>
+                    @if($groupedTasks->hasPages())
+                        @include('partials.table-pagination', ['paginator' => $groupedTasks])
+                    @endif
                 @else
                     <div class="pts-empty">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" style="margin-bottom:12px;"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>

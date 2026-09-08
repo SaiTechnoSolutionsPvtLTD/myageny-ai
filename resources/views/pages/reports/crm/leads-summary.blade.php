@@ -236,6 +236,7 @@
                     </button>
                 </div>
                 <form method="GET" action="{{ route('reports.crm.leads-summary') }}" class="crm-summary-form" id="leadsSummaryForm">
+                    <input type="hidden" name="tab" id="crmActiveTabInput" value="{{ request('tab', 'data-panel') }}">
                     <div class="crm-summary-field">
                         <label class="crm-summary-label" for="lead_source">Lead Source</label>
                         <select id="lead_source" name="lead_source" class="crm-summary-select">
@@ -347,11 +348,20 @@
 
                                 @foreach($reportRows as $row)
                                     @php
-                                        $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
-                                        $entryCarbon = $entryDate ? \Illuminate\Support\Carbon::parse($entryDate) : null;
+                                        $entryDate = !empty($row->lead_date) ? $row->lead_date : optional($row->lead_created_at)?->toDateString();
+                                        $entryCarbon = $entryDate ? \Illuminate\Support\Carbon::parse($entryDate)->startOfDay() : null;
                                         $convertedCarbon = $row->converted_at ? \Illuminate\Support\Carbon::parse($row->converted_at) : null;
-                                        $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
+                                        $leadStatus = trim((string) ($row->product_lead_status ?: $row->base_lead_status));
+                                        if ($leadStatus === '' || $leadStatus === '-') {
+                                            $leadStatus = 'New';
+                                        }
                                         $pendingCost = max(0, (float) ($row->total_price ?? 0) - (float) ($row->amount_paid ?? 0));
+                                        if ($entryCarbon) {
+                                            $days = $entryCarbon->isFuture() ? 0 : (int) $entryCarbon->diffInDays(now()->startOfDay());
+                                            $leadAge = $days === 1 ? '1 Day' : "{$days} Days";
+                                        } else {
+                                            $leadAge = '-';
+                                        }
                                     @endphp
                                     <tr>
                                         <td>
@@ -366,7 +376,7 @@
                                         <td>
                                             <span class="crm-summary-status">
                                                 <span class="crm-summary-dot"></span>
-                                                {{ $leadStatus ?: '-' }}
+                                                {{ $leadStatus }}
                                             </span>
                                         </td>
                                         <td>{{ $row->product_name ?: '-' }}</td>
@@ -376,7 +386,7 @@
                                         <td class="crm-summary-money" style="color:#15803d;">Rs {{ number_format((float) ($row->amount_paid ?? 0), 2) }}</td>
                                         <td class="crm-summary-money" style="color:#dc2626;">Rs {{ number_format($pendingCost, 2) }}</td>
                                         <td>{{ $row->allocated_to_name ?: '-' }}</td>
-                                        <td>{{ $entryCarbon ? $entryCarbon->diffForHumans(now(), true) : '-' }}</td>
+                                        <td>{{ $leadAge }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -489,16 +499,34 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (() => {
-    const tabs = document.querySelectorAll('[data-tab-target]');
+    const tabs = document.querySelectorAll('#crmSummaryTabs [data-tab-target]');
     const panels = document.querySelectorAll('.crm-summary-panel');
+    const tabInput = document.getElementById('crmActiveTabInput');
+
+    function activateTab(targetId) {
+        const activeTabBtn = document.querySelector(`#crmSummaryTabs [data-tab-target="${targetId}"]`);
+        const activePanel = document.getElementById(targetId);
+        if (activeTabBtn && activePanel) {
+            tabs.forEach((button) => button.classList.remove('is-active'));
+            panels.forEach((panel) => panel.classList.remove('is-active'));
+            activeTabBtn.classList.add('is-active');
+            activePanel.classList.add('is-active');
+            if (tabInput) tabInput.value = targetId;
+        }
+    }
+
+    const initialTab = new URLSearchParams(window.location.search).get('tab') || (tabInput ? tabInput.value : 'data-panel');
+    if (initialTab) {
+        activateTab(initialTab);
+    }
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
-            tabs.forEach((button) => button.classList.remove('is-active'));
-            panels.forEach((panel) => panel.classList.remove('is-active'));
-
-            tab.classList.add('is-active');
-            document.getElementById(tab.dataset.tabTarget)?.classList.add('is-active');
+            const targetId = tab.dataset.tabTarget;
+            activateTab(targetId);
+            const url = new URL(window.location);
+            url.searchParams.set('tab', targetId);
+            window.history.replaceState({}, '', url);
         });
     });
 

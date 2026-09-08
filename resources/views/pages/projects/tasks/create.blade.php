@@ -28,7 +28,28 @@
 .pts-label { display:block; margin-bottom:8px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#475569; }
 .pts-label .req { color:#ef4444; margin-left:2px; font-size:13px; }
 .pts-input, .pts-select, .pts-textarea { width:100%; border:1px solid #dbe2ea; border-radius:10px; background:#fff; font-size:14px; color:#111827; transition:border-color 0.2s, box-shadow 0.2s; }
-.pts-input, .pts-select { min-height:44px; padding:10px 14px; }
+.pts-input { min-height:44px; padding:10px 14px; }
+.pts-select {
+    min-height:44px;
+    height:44px;
+    padding:10px 36px 10px 14px;
+    background-color:#fff;
+    font-weight:600;
+    appearance:none;
+    -webkit-appearance:none;
+    -moz-appearance:none;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+    background-repeat:no-repeat;
+    background-position:right 14px center;
+    background-size:14px;
+    cursor:pointer;
+}
+.pts-select:disabled {
+    background-color:#f1f5f9;
+    color:#94a3b8;
+    cursor:not-allowed;
+    border-color:#e2e8f0;
+}
 .pts-textarea { min-height:90px; padding:12px 14px; resize:vertical; line-height:1.55; }
 .pts-input:focus, .pts-select:focus, .pts-textarea:focus { outline:none; border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.14); }
 .pts-help { margin-top:6px; font-size:12px; color:#64748b; }
@@ -42,17 +63,102 @@
 .task-remove-btn:hover:not(:disabled) { background:#ef4444; color:#fff; }
 .task-remove-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
-.select2-container--default .select2-selection--single.pts-select2-selection { height:44px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; display:flex; align-items:center; }
-.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__rendered { line-height:42px; padding-left:14px; padding-right:34px; font-size:14px; color:#111827 !important; width:100%; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__placeholder { color:#94a3b8; font-size:14px; }
-.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__arrow { height:42px; right:10px; top:0; display:flex; align-items:center; justify-content:center; }
-.select2-container--default.select2-container--focus .select2-selection--single.pts-select2-selection,
-.select2-container--default.select2-container--open .select2-selection--single.pts-select2-selection { border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.14); }
-.select2-dropdown { border:1px solid #dbe2ea; border-radius:10px; overflow:hidden; box-shadow:0 16px 36px rgba(15,23,42,.12); z-index:9999; }
-.select2-search--dropdown { padding:10px; }
-.select2-search--dropdown .select2-search__field { border:1px solid #dbe2ea; border-radius:8px; padding:8px 10px; font-size:13px; }
-.select2-results__option { font-size:13px; padding:10px 12px; }
-.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable { background:#ea580c; color:#fff; }
+/* Select2 Custom Styles with Search */
+.pts-page .select2-container { width: 100% !important; }
+.pts-page .select2-container--default .select2-selection--single {
+    min-height: 44px !important;
+    height: 44px !important;
+    border: 1px solid #dbe2ea !important;
+    border-radius: 10px !important;
+    background: #fff !important;
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    padding-left: 14px !important;
+    padding-right: 36px !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+.pts-page .select2-container--default.select2-container--focus .select2-selection--single,
+.pts-page .select2-container--default.select2-container--open .select2-selection--single {
+    border-color: #ea580c !important;
+    box-shadow: 0 0 0 4px rgba(234,88,12,.14) !important;
+    outline: none !important;
+}
+.pts-page .select2-container--default .select2-selection--single .select2-selection__rendered {
+    color: #111827 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 42px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+.pts-page .select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: #94a3b8 !important;
+    font-weight: 400 !important;
+}
+.pts-page .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 42px !important;
+    width: 28px !important;
+    position: absolute !important;
+    right: 8px !important;
+    top: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+.select2-dropdown {
+    border: 1px solid #dbe2ea !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    box-shadow: 0 16px 36px rgba(15,23,42,.12) !important;
+    z-index: 9999 !important;
+    background: #fff !important;
+}
+.select2-search--dropdown {
+    padding: 10px !important;
+    background: #f8fafc !important;
+    border-bottom: 1px solid #edf2f7 !important;
+}
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    outline: none !important;
+    width: 100% !important;
+    background: #fff !important;
+}
+.select2-search--dropdown .select2-search__field:focus {
+    border-color: #ea580c !important;
+    box-shadow: 0 0 0 3px rgba(234,88,12,.12) !important;
+}
+.select2-results__option {
+    font-size: 13px !important;
+    padding: 10px 14px !important;
+    color: #111827 !important;
+}
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    background: #ea580c !important;
+    color: #fff !important;
+}
+.select2-container--default .select2-results__option--selected {
+    background-color: #fff7ed !important;
+    color: #ea580c !important;
+    font-weight: 700 !important;
+}
+.select2-container--default.select2-container--disabled .select2-selection--single {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+    cursor: not-allowed !important;
+}
+.select2-container--default.select2-container--disabled .select2-selection--single .select2-selection__rendered {
+    color: #94a3b8 !important;
+}
 
 .pts-form-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:18px; align-items:start; }
 .pts-grid-col-12 { grid-column: span 12; }
@@ -247,8 +353,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const addRowBtnBottom = document.getElementById('addRowBtnBottom');
     const assignedUserSelect = document.getElementById('assignedUserSelect');
 
-    function initSelect2ForElement($elem, placeholder) {
-        if (!window.jQuery || !window.jQuery.fn.select2 || !$elem || !$elem.length) return;
+    function applySelect2(elem, placeholder) {
+        if (!window.jQuery || !window.jQuery.fn.select2 || !elem) return;
+        const $elem = window.jQuery(elem);
+        if (!$elem.length) return;
 
         if ($elem.hasClass('select2-hidden-accessible')) {
             $elem.select2('destroy');
@@ -259,8 +367,6 @@ document.addEventListener('DOMContentLoaded', function () {
             placeholder: placeholder || 'Select an option',
             allowClear: false
         });
-
-        $elem.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
     }
 
     function getSelectedUserId() {
@@ -269,29 +375,48 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Populate Lead dropdown based on selected Mapped Team Member
     function populateLeadsForUser(userId, leadSelect, selectedLeadId) {
+        if (!leadSelect) return;
         const $lead = window.jQuery ? window.jQuery(leadSelect) : null;
+        if ($lead && $lead.hasClass('select2-hidden-accessible')) {
+            $lead.select2('destroy');
+        }
         leadSelect.innerHTML = '';
 
         if (!userId) {
-            leadSelect.innerHTML = '<option value="">Select Team Member First</option>';
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Select Team Member First';
+            leadSelect.appendChild(opt);
             leadSelect.disabled = true;
             if ($lead) {
                 $lead.prop('disabled', true);
-                $lead.val('');
-                initSelect2ForElement($lead, 'Select Team Member First');
+                applySelect2($lead, 'Select Team Member First');
             }
             return;
         }
 
-        // Filter projects allocated to this user
-        const memberProjects = assignedProjects.filter(function (p) {
+        // Filter member allocated projects if any, otherwise fallback to all assigned projects
+        const memberAllocatedProjects = assignedProjects.filter(function (p) {
             const allocIds = (p.allocated_user_ids || []).map(Number);
             return allocIds.includes(Number(userId));
         });
 
+        // Use member projects if available, otherwise all assigned projects so any project can be assigned
+        const sourceProjects = memberAllocatedProjects.length > 0 ? memberAllocatedProjects : assignedProjects;
+
         // Extract unique leads
         const leadMap = new Map();
-        memberProjects.forEach(function (p) {
+        sourceProjects.forEach(function (p) {
+            if (p.lead_id && !leadMap.has(p.lead_id)) {
+                leadMap.set(p.lead_id, {
+                    lead_id: p.lead_id,
+                    company_name: p.resolved_company_name || 'No Company'
+                });
+            }
+        });
+
+        // Also ensure all other accessible leads are included
+        assignedProjects.forEach(function (p) {
             if (p.lead_id && !leadMap.has(p.lead_id)) {
                 leadMap.set(p.lead_id, {
                     lead_id: p.lead_id,
@@ -303,12 +428,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const uniqueMemberLeads = Array.from(leadMap.values());
 
         if (uniqueMemberLeads.length === 0) {
-            leadSelect.innerHTML = '<option value="">No leads mapped to this member</option>';
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'No leads available';
+            leadSelect.appendChild(opt);
             leadSelect.disabled = true;
             if ($lead) {
                 $lead.prop('disabled', true);
-                $lead.val('');
-                initSelect2ForElement($lead, 'No leads mapped to this member');
+                applySelect2($lead, 'No leads available');
             }
             return;
         }
@@ -337,13 +464,17 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 $lead.val('');
             }
-            initSelect2ForElement($lead, 'Select Lead');
+            applySelect2($lead, 'Select Lead');
         }
     }
 
     // Populate Product / Project dropdown based on selected Lead and Team Member
     function populateProjectsForLead(leadId, projectSelect, selectedProjId, userId) {
+        if (!projectSelect) return;
         const $proj = window.jQuery ? window.jQuery(projectSelect) : null;
+        if ($proj && $proj.hasClass('select2-hidden-accessible')) {
+            $proj.select2('destroy');
+        }
         projectSelect.innerHTML = '<option value="">Select product / project</option>';
 
         if (!leadId) {
@@ -351,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if ($proj) {
                 $proj.prop('disabled', true);
                 $proj.val('');
-                initSelect2ForElement($proj, 'Select product / project');
+                applySelect2($proj, 'Select product / project');
             }
             return;
         }
@@ -360,11 +491,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return String(p.lead_id) === String(leadId);
         });
 
-        if (userId) {
-            filtered = filtered.filter(function (p) {
+        if (userId && filtered.length > 0) {
+            const userSpecificProjects = filtered.filter(function (p) {
                 const allocIds = (p.allocated_user_ids || []).map(Number);
                 return allocIds.includes(Number(userId));
             });
+            // If user has specific allocation on this lead, prioritize those
+            if (userSpecificProjects.length > 0) {
+                filtered = userSpecificProjects;
+            }
         }
 
         if (filtered.length === 0) {
@@ -376,7 +511,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if ($proj) {
                 $proj.prop('disabled', true);
                 $proj.val('');
-                initSelect2ForElement($proj, 'Select product / project');
+                applySelect2($proj, 'Select product / project');
             }
             return;
         }
@@ -403,7 +538,7 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 $proj.val('');
             }
-            initSelect2ForElement($proj, 'Select product / project');
+            applySelect2($proj, 'Select product / project');
         }
     }
 
@@ -411,29 +546,19 @@ document.addEventListener('DOMContentLoaded', function () {
         const leadSelect = row.querySelector('.task-lead-select');
         const projectSelect = row.querySelector('.task-project-select');
         const removeBtn = row.querySelector('.task-remove-btn');
+        const $lead = window.jQuery ? window.jQuery(leadSelect) : null;
 
-        if (window.jQuery) {
-            const $lead = window.jQuery(leadSelect);
-            const $proj = window.jQuery(projectSelect);
-
-            initSelect2ForElement($lead, 'Select Lead');
-            initSelect2ForElement($proj, 'Select product / project');
-
-            $lead.off('change').on('change', function () {
+        if ($lead) {
+            $lead.off('change select2:select').on('change select2:select', function () {
                 const selectedVal = window.jQuery(this).val();
                 const currentUserId = getSelectedUserId();
                 populateProjectsForLead(selectedVal, projectSelect, null, currentUserId);
             });
-        } else {
-            leadSelect.addEventListener('change', function () {
-                const currentUserId = getSelectedUserId();
-                populateProjectsForLead(this.value, projectSelect, null, currentUserId);
-            });
         }
 
         const currentUserId = getSelectedUserId();
-        const initialLeadId = leadSelect.getAttribute('data-selected') || leadSelect.value;
-        const initialSelectedProjId = projectSelect.getAttribute('data-selected');
+        const initialLeadId = leadSelect ? (leadSelect.getAttribute('data-selected') || leadSelect.value) : '';
+        const initialSelectedProjId = projectSelect ? projectSelect.getAttribute('data-selected') : '';
 
         if (currentUserId) {
             populateLeadsForUser(currentUserId, leadSelect, initialLeadId);
@@ -503,13 +628,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="pts-form-grid">
                     <div class="pts-grid-col-6">
                         <label class="pts-label">Lead (Client) <span class="req">*</span></label>
-                        <select name="tasks[${newIndex}][lead_id]" class="pts-select task-lead-select no-select2" data-placeholder="Select Lead" required disabled>
+                        <select name="tasks[${newIndex}][lead_id]" class="pts-select task-lead-select no-select2" required disabled>
                             <option value="">Select Team Member First</option>
                         </select>
                     </div>
                     <div class="pts-grid-col-6">
                         <label class="pts-label">Product / Project <span class="req">*</span></label>
-                        <select name="tasks[${newIndex}][production_initiation_id]" class="pts-select task-project-select no-select2" data-placeholder="Select product / project" required disabled>
+                        <select name="tasks[${newIndex}][production_initiation_id]" class="pts-select task-project-select no-select2" required disabled>
                             <option value="">Select product / project</option>
                         </select>
                     </div>
@@ -530,13 +655,9 @@ document.addEventListener('DOMContentLoaded', function () {
         updateRowNumbersAndIndices();
     }
 
-    // Init assigned user select2 and change listener
-    const $assignedUser = window.jQuery ? window.jQuery('#assignedUserSelect') : null;
-    if ($assignedUser && $assignedUser.length) {
-        initSelect2ForElement($assignedUser, 'Select Team Member');
-
-        $assignedUser.off('change').on('change', function () {
-            const selectedUserId = window.jQuery(this).val();
+    if (assignedUserSelect) {
+        assignedUserSelect.addEventListener('change', function () {
+            const selectedUserId = this.value;
             container.querySelectorAll('.task-item-row').forEach(row => {
                 const leadSelect = row.querySelector('.task-lead-select');
                 const projectSelect = row.querySelector('.task-project-select');
