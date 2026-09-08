@@ -142,7 +142,8 @@ class LeadProductController extends Controller
 
         $statusOptions = $this->statusOptionsForLead($lead);
 
-        $products = LeadProduct::with([
+        $products = LeadProduct::withoutGlobalScope('company')
+            ->with([
                 'payments.recordedBy',
                 'leadStatus',
                 'product.departments:id,name',
@@ -250,13 +251,13 @@ class LeadProductController extends Controller
                     'product_name'     => $product->package_name,
                     'description'      => $product->description,
                     'unit_price'       => $unitPrice,
-                    'company_id'       => $request->company_id,
+                    'company_id'       => $request->company_id ?? $lead->company_id ?? auth()->user()?->company_id,
                     'quantity'         => $qty,
                     'discount_percent' => $disc,
                     'remarks'          => $row['remarks'] ?? null,
                     'product_status'   => LeadProduct::statusKey($defaultStatus?->name ?? 'new'),
                     'lead_status_id'   => $defaultStatus?->id,
-                    'created_by'       =>  auth()->id(),
+                    'created_by'       => auth()->id(),
                 ]);
             }
             return $rows;

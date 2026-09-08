@@ -549,42 +549,48 @@ $(function () {
     recalcTotals();
 }
 
+    function isTamilNaduState(stateStr) {
+        if (!stateStr) return false;
+        const clean = stateStr.toString().trim().toLowerCase().replace(/[\s\-_]/g, '');
+        return clean === 'tamilnadu' || clean === 'tn';
+    }
+
     /* ── Recalculate grand totals ────────────────────────────────────────── */
-   function recalcTotals(el = null) {
+    function recalcTotals(el = null) {
 
-    // 🔥 If element passed → find its table
-    let container = el
-        ? $(el).closest('.products-table-wrapper')
-        : $('.products-table-wrapper');
+        // 🔥 If element passed → find its table
+        let container = el
+            ? $(el).closest('.products-table-wrapper')
+            : $('.products-table-wrapper');
 
-    let subtotal = 0;
+        let subtotal = 0;
 
-    container.find('.row-total-val').each(function () {
-        subtotal += parseFloat($(this).text().replace('₹', '') || 0);
-    });
+        container.find('.row-total-val').each(function () {
+            subtotal += parseFloat($(this).text().replace('₹', '') || 0);
+        });
 
-    const customerState = ($('#customerStateInput').val() || '').trim().toLowerCase();
-    const isTamilNaduSale = customerState !== '' && customerState === sellerState;
-    const cgstRate = isTamilNaduSale ? (GST_RATE / 2) : 0;
-    const sgstRate = isTamilNaduSale ? (GST_RATE / 2) : 0;
-    const igstRate = isTamilNaduSale ? 0 : GST_RATE;
-    const cgstAmount = subtotal * (cgstRate / 100);
-    const sgstAmount = subtotal * (sgstRate / 100);
-    const igstAmount = subtotal * (igstRate / 100);
-    const grand = subtotal + cgstAmount + sgstAmount + igstAmount;
+        const customerState = ($('#customerStateInput').val() || '').trim();
+        const isTamilNaduSale = isTamilNaduState(customerState);
+        const cgstRate = isTamilNaduSale ? (GST_RATE / 2) : 0;
+        const sgstRate = isTamilNaduSale ? (GST_RATE / 2) : 0;
+        const igstRate = isTamilNaduSale ? 0 : GST_RATE;
+        const cgstAmount = subtotal * (cgstRate / 100);
+        const sgstAmount = subtotal * (sgstRate / 100);
+        const igstAmount = subtotal * (igstRate / 100);
+        const grand = subtotal + cgstAmount + sgstAmount + igstAmount;
 
-    $('#displaySubtotal').text(fmt(subtotal));
-    $('#displayTaxPctCgst').text(cgstRate.toFixed(2));
-    $('#displayTaxPctSgst').text(sgstRate.toFixed(2));
-    $('#displayTaxPctIgst').text(igstRate.toFixed(2));
-    $('#displayTaxAmtCgst').text(fmt(cgstAmount));
-    $('#displayTaxAmtSgst').text(fmt(sgstAmount));
-    $('#displayTaxAmtIgst').text(fmt(igstAmount));
-    $('#cgstLine').toggle(isTamilNaduSale);
-    $('#sgstLine').toggle(isTamilNaduSale);
-    $('#igstLine').toggle(!isTamilNaduSale);
-    $('#displayTotal').text(fmt(grand));
-}
+        $('#displaySubtotal').text(fmt(subtotal));
+        $('#displayTaxPctCgst').text(cgstRate.toFixed(2));
+        $('#displayTaxPctSgst').text(sgstRate.toFixed(2));
+        $('#displayTaxPctIgst').text(igstRate.toFixed(2));
+        $('#displayTaxAmtCgst').text(fmt(cgstAmount));
+        $('#displayTaxAmtSgst').text(fmt(sgstAmount));
+        $('#displayTaxAmtIgst').text(fmt(igstAmount));
+        $('#cgstLine').toggle(isTamilNaduSale);
+        $('#sgstLine').toggle(isTamilNaduSale);
+        $('#igstLine').toggle(!isTamilNaduSale);
+        $('#displayTotal').text(fmt(grand));
+    }
 
     /* ── Event: product select changes ──────────────────────────────────── */
     $(document).on('change', '.product-select', function () {
@@ -705,6 +711,7 @@ $(function () {
 if ($('#itemsBody tr').length === 0) {
     addRow();
 }
+recalcTotals();
 
     /* ── Form submit guard ───────────────────────────────────────────────── */
     $('#quotationForm').on('submit', function () {

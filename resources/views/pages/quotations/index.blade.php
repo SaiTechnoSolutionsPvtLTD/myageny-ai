@@ -320,10 +320,6 @@ tbody tr:last-child td { border-bottom: none; }
                             <div class="empty-state">
                                 <i class="bi bi-file-earmark-text"></i>
                                 No quotations found.
-                                <br><br>
-                                <a href="/quotations/create" class="btn-primary" style="display:inline-flex">
-                                    Create First Quotation
-                                </a>
                             </div>
                         </td>
                     </tr>
@@ -331,7 +327,6 @@ tbody tr:last-child td { border-bottom: none; }
                 </tbody>
             </table>
         </div>
-
         {{-- Pagination --}}
         @if($quotations->hasPages())
         <div style="padding: 0;">

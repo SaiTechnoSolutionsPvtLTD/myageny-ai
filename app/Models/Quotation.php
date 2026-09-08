@@ -269,9 +269,10 @@ class Quotation extends Model
         $sellerState = self::normalizeState($sellerState ?: self::DEFAULT_SELLER_STATE) ?? self::DEFAULT_SELLER_STATE;
         $customerState = self::normalizeState($customerState);
 
-        $taxRate = self::GST_RATE;
-        $isIntraState = $customerState !== null && strcasecmp($customerState, $sellerState) === 0;
+        $cleanState = strtolower((string) preg_replace('/[\s\-_]/', '', (string) $customerState));
+        $isIntraState = ($cleanState === 'tamilnadu' || $cleanState === 'tn' || ($customerState !== null && strcasecmp($customerState, $sellerState) === 0));
 
+        $taxRate = self::GST_RATE;
         $cgstRate = $isIntraState ? round($taxRate / 2, 2) : 0.0;
         $sgstRate = $isIntraState ? round($taxRate / 2, 2) : 0.0;
         $igstRate = $isIntraState ? 0.0 : $taxRate;

@@ -410,9 +410,9 @@
                         </table>
                     </div>
 
-                    <div style="padding:16px 20px; border-top:1px solid #edf2f7;">
-                        {{ $groupedTimesheets->links() }}
-                    </div>
+                    @if($groupedTimesheets->hasPages())
+                        @include('partials.table-pagination', ['paginator' => $groupedTimesheets])
+                    @endif
                 @else
                     <div class="pts-empty">No timesheets submitted yet. Use Add Timesheet to enter today&apos;s day closing update.</div>
                 @endif

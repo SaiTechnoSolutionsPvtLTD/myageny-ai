@@ -118,12 +118,22 @@ class ReportApiController extends Controller
                 ->get(['id', 'name']);
 
             $rowsData = $reportRows->getCollection()->map(function ($row) {
-                $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
-                $entryCarbon = $entryDate ? Carbon::parse($entryDate) : null;
+                $entryDate = !empty($row->lead_date) ? $row->lead_date : optional($row->lead_created_at)?->toDateString();
+                $entryCarbon = $entryDate ? Carbon::parse($entryDate)->startOfDay() : null;
                 $convertedCarbon = $row->converted_at ? Carbon::parse($row->converted_at) : null;
-                $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
+                $leadStatus = trim((string) ($row->product_lead_status ?: $row->base_lead_status));
+                if ($leadStatus === '' || $leadStatus === '-') {
+                    $leadStatus = 'New';
+                }
                 $receivedAmount = (float) ($row->amount_paid ?? 0);
                 $pendingCost = max(0, (float) ($row->total_price ?? 0) - $receivedAmount);
+
+                if ($entryCarbon) {
+                    $days = $entryCarbon->isFuture() ? 0 : (int) $entryCarbon->diffInDays(now()->startOfDay());
+                    $leadAge = $days === 1 ? '1 Day' : "{$days} Days";
+                } else {
+                    $leadAge = null;
+                }
 
                 return [
                     'lead_id'        => $row->lead_id,
@@ -132,7 +142,7 @@ class ReportApiController extends Controller
                     'email'          => $row->email ?: null,
                     'mobile_number'  => $row->mobile_number ?: null,
                     'lead_source'    => $row->lead_source ?: null,
-                    'lead_status'    => $leadStatus ?: null,
+                    'lead_status'    => $leadStatus,
                     'product_name'   => $row->product_name ?: null,
                     'entry_date'     => $entryCarbon?->toDateString(),
                     'converted_date' => $convertedCarbon?->toDateString(),
@@ -140,7 +150,7 @@ class ReportApiController extends Controller
                     'received_cost'  => round($receivedAmount, 2),
                     'pending_cost'   => round($pendingCost, 2),
                     'allocated_to'   => $row->allocated_to_name ?: null,
-                    'lead_age'       => $entryCarbon ? $entryCarbon->diffForHumans(now(), true) : null,
+                    'lead_age'       => $leadAge,
                 ];
             })->values();
 
@@ -389,15 +399,14 @@ class ReportApiController extends Controller
             $perPage = (int) $request->input('per_page', 20);
             $reportRows = $query->paginate($perPage)->withQueryString();
 
-            // Same as the web controller: totals + analytics computed over the
-            // full filtered set, not just the current page.
             $analyticsRows = (clone $query)->get();
+            $latestProductRows = $analyticsRows->unique('lead_product_id');
 
             $summary = [
                 'rows'                => $analyticsRows->count(),
-                'total_amount'        => round((float) $analyticsRows->sum('total_amount'), 2),
+                'total_amount'        => round((float) $latestProductRows->sum('total_amount'), 2),
                 'received_amount'     => round((float) $analyticsRows->sum('received_amount'), 2),
-                'outstanding_amount'  => round((float) $analyticsRows->sum('outstanding_amount'), 2),
+                'outstanding_amount'  => round((float) $latestProductRows->sum('outstanding_amount'), 2),
             ];
 
             $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -571,6 +580,7 @@ class ReportApiController extends Controller
             $date = $row->payment_date ? Carbon::parse($row->payment_date) : null;
 
             return [
+                'lead_product_id' => $row->lead_product_id,
                 'payment_mode' => LeadProduct::PAYMENT_MODES[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                 'customer_name' => $row->customer_name ?: 'Unknown Customer',
                 'received_by' => $row->received_by ?: 'Unknown User',
@@ -589,7 +599,7 @@ class ReportApiController extends Controller
                     'label' => $items->first()['month_label'],
                     'sort' => $items->first()['month_sort'],
                     'received_amount' => round($items->sum('received_amount'), 2),
-                    'outstanding_amount' => round($items->sum('outstanding_amount'), 2),
+                    'outstanding_amount' => round($items->unique('lead_product_id')->sum('outstanding_amount'), 2),
                     'count' => $items->count(),
                 ])
                 ->sortBy('sort')
@@ -616,7 +626,7 @@ class ReportApiController extends Controller
                 ->map(fn($items, $label) => [
                     'label' => $label,
                     'received_amount' => round($items->sum('received_amount'), 2),
-                    'outstanding_amount' => round($items->sum('outstanding_amount'), 2),
+                    'outstanding_amount' => round($items->unique('lead_product_id')->sum('outstanding_amount'), 2),
                     'count' => $items->count(),
                 ])
                 ->sortByDesc('received_amount')

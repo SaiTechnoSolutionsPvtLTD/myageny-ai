@@ -130,6 +130,7 @@
             </div>
             <div class="crm-rev-body">
                 <form method="GET" action="{{ route('reports.crm.revenue-comparison') }}" class="crm-rev-form">
+                    <input type="hidden" name="tab" id="crmActiveTabInput" value="{{ request('tab', 'crm-rev-data') }}">
                     <div class="crm-rev-field">
                         <label class="crm-rev-label" for="period_type">Period Type</label>
                         <select id="period_type" name="period_type" class="crm-rev-select">
@@ -297,12 +298,32 @@
         }
     };
 
-    tabs.forEach((tab) => {
-        tab.addEventListener('click', () => {
+    const tabInput = document.getElementById('crmActiveTabInput');
+
+    function activateTab(targetId) {
+        const activeTabBtn = document.querySelector(`#crmRevTabs [data-tab-target="${targetId}"]`);
+        const activePanel = document.getElementById(targetId);
+        if (activeTabBtn && activePanel) {
             tabs.forEach((button) => button.classList.remove('is-active'));
             panels.forEach((panel) => panel.classList.remove('is-active'));
-            tab.classList.add('is-active');
-            document.getElementById(tab.dataset.tabTarget)?.classList.add('is-active');
+            activeTabBtn.classList.add('is-active');
+            activePanel.classList.add('is-active');
+            if (tabInput) tabInput.value = targetId;
+        }
+    }
+
+    const initialTab = new URLSearchParams(window.location.search).get('tab') || (tabInput ? tabInput.value : 'crm-rev-data');
+    if (initialTab) {
+        activateTab(initialTab);
+    }
+
+    tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+            const targetId = tab.dataset.tabTarget;
+            activateTab(targetId);
+            const url = new URL(window.location);
+            url.searchParams.set('tab', targetId);
+            window.history.replaceState({}, '', url);
         });
     });
 

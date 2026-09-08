@@ -6,6 +6,7 @@ use App\Models\ProductionInitiation;
 use App\Models\ProductionTask;
 use App\Models\ProjectTimesheet;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -132,11 +133,23 @@ class ProductionTaskController extends Controller
             ];
         })->values();
 
+        $assignedProjectsPayload = $assignedProjects->map(function ($project) {
+            return [
+                'id' => $project->id,
+                'lead_id' => $project->lead_id,
+                'allocated_user_ids' => $project->allocated_user_ids ?? [],
+                'resolved_product_name' => $project->resolved_product_name ?? ($project->product_name ?: 'Product'),
+                'resolved_company_name' => $project->resolved_company_name ?? 'No Company',
+                'product_name' => $project->product_name ?: 'Product',
+                'timesheet_delivery_date' => $project->timesheet_delivery_date ?? null,
+            ];
+        })->values();
+
         $mappedTeamMembers = $this->getMappedTeamMembers($user);
         $today = Carbon::today()->toDateString();
 
         return view('pages.projects.tasks.create', [
-            'assignedProjects' => $assignedProjects,
+            'assignedProjects' => $assignedProjectsPayload,
             'uniqueLeads' => $uniqueLeads,
             'mappedTeamMembers' => $mappedTeamMembers,
             'today' => $today,
@@ -350,36 +363,21 @@ class ProductionTaskController extends Controller
         if ($user->hasAdminLikeRole()) {
             return User::where('is_active', true)
                 ->where('user_status', 'active')
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']);
         }
 
-        $managed = $user->managedUsers()
-            ->where('users.is_active', true)
-            ->where('users.user_status', 'active')
+        $visibility = app(DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+        $allMappedIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->values();
+
+        return User::whereIn('id', $allMappedIds)
+            ->where('is_active', true)
+            ->where('user_status', 'active')
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
             ->orderBy('name')
-            ->get(['users.id', 'users.name', 'users.email']);
-
-        if ($user->belongsToDesigningDepartment()) {
-            $designDeptMembers = User::where('users.is_active', true)
-                ->where('users.user_status', 'active')
-                ->whereHas('roles.department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']))
-                ->orderBy('name')
-                ->get(['users.id', 'users.name', 'users.email']);
-
-            return $managed->concat($designDeptMembers)->push($user)->unique('id')->sortBy('name')->values();
-        }
-
-        if ($user->belongsToDigitalMarketingDepartment()) {
-            $dmDeptMembers = User::where('users.is_active', true)
-                ->where('users.user_status', 'active')
-                ->whereHas('roles.department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
-                ->orderBy('name')
-                ->get(['users.id', 'users.name', 'users.email']);
-
-            return $managed->concat($dmDeptMembers)->push($user)->unique('id')->sortBy('name')->values();
-        }
-
-        return $managed->push($user)->unique('id')->sortBy('name')->values();
+            ->get(['id', 'name', 'email']);
     }
 }

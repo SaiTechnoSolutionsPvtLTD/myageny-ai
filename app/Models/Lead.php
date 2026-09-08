@@ -348,7 +348,7 @@ class Lead extends Model
 
     public function products()
     {
-        return $this->hasMany(\App\Models\LeadProduct::class);
+        return $this->hasMany(\App\Models\LeadProduct::class)->withoutGlobalScope('company');
     }
 
     public function quotations()

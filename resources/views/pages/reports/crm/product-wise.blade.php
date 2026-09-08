@@ -211,6 +211,7 @@
                     </button>
                 </div>
                 <form method="GET" action="{{ route('reports.crm.product-wise') }}" class="crm-product-form" id="productWiseForm">
+                    <input type="hidden" name="tab" id="crmActiveTabInput" value="{{ request('tab', 'product-data-panel') }}">
                     <div class="crm-product-field">
                         <label class="crm-product-label" for="product_id">Products</label>
                         <select id="product_id" name="product_id" class="crm-product-select">
@@ -370,13 +371,32 @@
 (() => {
     const tabs = document.querySelectorAll('#crmProductTabs [data-tab-target]');
     const panels = document.querySelectorAll('.crm-product-panel');
+    const tabInput = document.getElementById('crmActiveTabInput');
+
+    function activateTab(targetId) {
+        const activeTabBtn = document.querySelector(`#crmProductTabs [data-tab-target="${targetId}"]`);
+        const activePanel = document.getElementById(targetId);
+        if (activeTabBtn && activePanel) {
+            tabs.forEach((button) => button.classList.remove('is-active'));
+            panels.forEach((panel) => panel.classList.remove('is-active'));
+            activeTabBtn.classList.add('is-active');
+            activePanel.classList.add('is-active');
+            if (tabInput) tabInput.value = targetId;
+        }
+    }
+
+    const initialTab = new URLSearchParams(window.location.search).get('tab') || (tabInput ? tabInput.value : 'product-data-panel');
+    if (initialTab) {
+        activateTab(initialTab);
+    }
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
-            tabs.forEach((button) => button.classList.remove('is-active'));
-            panels.forEach((panel) => panel.classList.remove('is-active'));
-            tab.classList.add('is-active');
-            document.getElementById(tab.dataset.tabTarget)?.classList.add('is-active');
+            const targetId = tab.dataset.tabTarget;
+            activateTab(targetId);
+            const url = new URL(window.location);
+            url.searchParams.set('tab', targetId);
+            window.history.replaceState({}, '', url);
         });
     });
 

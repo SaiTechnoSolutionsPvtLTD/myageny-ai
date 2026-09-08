@@ -514,23 +514,20 @@ tbody tr:last-child td { border-bottom: none; }
                                     @endif
                                 </div>
                                 <div class="lsp-call-actions" style="display:flex; align-items:center; gap:6px;">
-                                    <button type="button" 
-                                            class="lsp-action-btn edit-call-btn" 
+                                    <button type="button"
+                                            class="lsp-action-btn edit-call-btn"
                                             title="Edit Call Update"
                                             onclick="openEditCallModal({{ $call->id }}, {{ $call->outcome ? (int)$call->outcome : 'null' }}, {{ $call->outcome_subcategory ? (int)$call->outcome_subcategory : 'null' }}, {{ json_encode($call->notes ?? '') }}, '{{ $call->next_follow_up ? $call->next_follow_up->format('Y-m-d') : '' }}', '{{ $call->followup_time ? \Carbon\Carbon::parse($call->followup_time)->format('H:i') : '' }}')"
                                             style="background:#eff6ff; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; cursor:pointer; color:#2563eb; transition:all .15s; display:inline-flex; align-items:center; justify-content:center;">
                                         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                     </button>
-                                    <form method="POST" action="{{ route('leads.calls.destroy', [$lead, $call]) }}" style="margin:0; display:inline;" onsubmit="return confirm('Are you sure you want to delete this call update?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" 
-                                                class="lsp-action-btn delete-call-btn" 
-                                                title="Delete Call Update"
-                                                style="background:#fef2f2; border:1px solid #fecaca; padding:4px 8px; border-radius:6px; cursor:pointer; color:#dc2626; transition:all .15s; display:inline-flex; align-items:center; justify-content:center;">
-                                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                                        </button>
-                                    </form>
+                                    <button type="button"
+                                            class="lsp-action-btn delete-call-btn"
+                                            title="Delete Call Update"
+                                            onclick="confirmDeleteCall('{{ route('leads.calls.destroy', [$lead, $call]) }}', '{{ $call->called_at ? $call->called_at->format('d M Y, h:i A') : '' }} ({{ $call->call_type_label ?? 'Call' }})', {{ json_encode($call->notes ?? '') }})"
+                                            style="background:#fef2f2; border:1px solid #fecaca; padding:4px 8px; border-radius:6px; cursor:pointer; color:#dc2626; transition:all .15s; display:inline-flex; align-items:center; justify-content:center;">
+                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                                    </button>
                                 </div>
                             </div>
                             @if($call->notes)
@@ -1218,11 +1215,17 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="lsp-panel" id="panel-quotations">
 
             <div class="page-header">
-        <div class="page-title"></div>
-        <a href="/quotations/create/{{ $lead->id }}" class="btn-primary">
-            <i class="bi bi-plus-lg"></i> New Quotation
-        </a>
-    </div>
+                <div class="page-title"></div>
+
+                    <a href="/quotations/create/{{ $lead->id }}" class="btn-primary">
+                        <i class="bi bi-plus-lg"></i> New Quotation
+                    </a>
+                {{--  @else
+                    <button type="button" class="btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;" title="Please add products to lead before creating a quotation">
+                        <i class="bi bi-plus-lg"></i> New Quotation
+                    </button>
+                @endif  --}}
+            </div>
 
             {{-- Create new quotation form --}}
             <div class="lsp-qt-form-wrap">
@@ -1294,10 +1297,6 @@ tbody tr:last-child td { border-bottom: none; }
                             <div class="empty-state">
                                 <i class="bi bi-file-earmark-text"></i>
                                 No quotations found.
-                                <br><br>
-                                <a href="/quotations/create/{{ $lead->id }}" class="btn-primary" style="display:inline-flex">
-                                    Create First Quotation
-                                </a>
                             </div>
                         </td>
                     </tr>
@@ -1496,6 +1495,36 @@ tbody tr:last-child td { border-bottom: none; }
                         <button type="submit" class="lsp-btn lsp-btn-primary">Update Call</button>
                     </div>
                 </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Delete Call Update Confirmation Modal --}}
+<div id="modalDeleteCallUpdate" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:18px; width:100%; max-width:420px; box-shadow:0 24px 48px -12px rgba(15,23,42,0.25); overflow:hidden; border:1px solid #f1f5f9;">
+        <div style="padding:28px 24px 20px; text-align:center;">
+            <div style="width:54px; height:54px; background:#fef2f2; border:2px solid #fee2e2; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:#dc2626; margin:0 auto 16px;">
+                <svg width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+            </div>
+            <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0 0 6px;">Delete Call History</h3>
+            <p style="font-size:13px; color:#64748b; line-height:1.5; margin:0;">Are you sure you want to delete this call update record? This action cannot be undone.</p>
+            <div id="deleteCallPreviewBox" style="margin-top:14px; padding:12px 14px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; font-size:12px; color:#334155; text-align:left; display:none;">
+                <div style="font-weight:700; color:#0f172a;" id="deleteCallMetaText"></div>
+                <div style="margin-top:4px; color:#64748b; font-style:italic; word-break:break-word;" id="deleteCallNotesText"></div>
+            </div>
+        </div>
+        <form method="POST" id="deleteCallForm" action="" style="margin:0;">
+            @csrf
+            @method('DELETE')
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:14px 24px; background:#f8fafc; border-top:1px solid #f1f5f9;">
+                <button type="button" class="lsp-btn" onclick="closeDeleteCallModal()" style="border:1px solid #cbd5e1; background:#fff; color:#475569; font-weight:700; border-radius:10px; padding:9px 18px; font-size:13px; cursor:pointer;">Cancel</button>
+                <button type="submit" class="lsp-btn" style="background:#dc2626; border:1px solid #dc2626; color:#fff; font-weight:700; border-radius:10px; padding:9px 20px; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(220,38,38,0.25);">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    <span>Yes, Delete</span>
+                </button>
             </div>
         </form>
     </div>
@@ -1895,7 +1924,7 @@ $(document).ready(function() {
     window.openEditCallModal = function(callId, outcomeId, subCategoryId, notes, nextFollowUp, followupTime) {
         const modal = document.getElementById('modalEditCallUpdate');
         const form = document.getElementById('editCallForm');
-        
+
         if (!modal || !form) return;
 
         form.action = `/leads/{{ $lead->id }}/calls/` + callId;
@@ -1910,7 +1939,7 @@ $(document).ready(function() {
             if ($('#edit_outcome_category').hasClass('select2-hidden-accessible')) {
                 $('#edit_outcome_category').trigger('change.select2');
             }
-            
+
             $('#edit_outcome_sub_category').html('<option value="">Loading...</option>');
             $.ajax({
                 url: '/get-subcategories/' + outcomeId,
@@ -1951,6 +1980,37 @@ $(document).ready(function() {
 
     window.closeEditCallModal = function() {
         const modal = document.getElementById('modalEditCallUpdate');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    };
+
+    window.confirmDeleteCall = function(deleteUrl, metaText, notesText) {
+        const modal = document.getElementById('modalDeleteCallUpdate');
+        const form = document.getElementById('deleteCallForm');
+        const previewBox = document.getElementById('deleteCallPreviewBox');
+        const metaEl = document.getElementById('deleteCallMetaText');
+        const notesEl = document.getElementById('deleteCallNotesText');
+
+        if (!modal || !form) return;
+        form.action = deleteUrl;
+
+        if (metaText || notesText) {
+            if (metaEl) metaEl.textContent = metaText || '';
+            if (notesEl) {
+                const cleanNotes = (notesText || '').trim();
+                notesEl.textContent = cleanNotes ? (cleanNotes.length > 90 ? cleanNotes.substring(0, 90) + '...' : cleanNotes) : 'No notes entered';
+            }
+            if (previewBox) previewBox.style.display = 'block';
+        } else {
+            if (previewBox) previewBox.style.display = 'none';
+        }
+
+        modal.style.display = 'flex';
+    };
+
+    window.closeDeleteCallModal = function() {
+        const modal = document.getElementById('modalDeleteCallUpdate');
         if (modal) {
             modal.style.display = 'none';
         }
@@ -2011,7 +2071,7 @@ $(document).ready(function() {
     // 1. Handle standard form submissions (Call Updates, Reminders, etc.)
     $('form').on('submit', function() {
         var $form = $(this);
-        
+
         // Skip if browser validity check fails
         if (this.checkValidity && !this.checkValidity()) {
             return;
@@ -2034,14 +2094,14 @@ $(document).ready(function() {
     // 2. Prevent double clicks on buttons generally
     $(document).on('click', 'button, .lsp-btn, .ppf-btn, .pp-act-btn', function(e) {
         var $btn = $(this);
-        
+
         // Skip if already disabled
         if ($btn.prop('disabled') || $btn.hasClass('disabled') || $btn.hasClass('clicked-disabled')) {
             e.preventDefault();
             e.stopImmediatePropagation();
             return false;
         }
-        
+
         // Temporary disable pointer events to prevent rapid multiple clicks
         $btn.addClass('clicked-disabled');
         setTimeout(function() {
