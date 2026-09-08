@@ -119,8 +119,11 @@
 .da-fin-bar-inner { height:100%; border-radius:3px; transition:width .8s ease; }
 
 /* ─── Two/three col layouts ─── */
-.da-two-col   { display:grid; grid-template-columns:1fr 380px; gap:16px; }
+.da-two-col   { display:grid; grid-template-columns:8fr 4fr; gap:16px; }
 .da-half      { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width: 991px) {
+    .da-two-col, .da-half { grid-template-columns:1fr; }
+}
 
 /* ─── Funnel bars ─── */
 .da-funnel-row { margin-bottom:12px; }
@@ -429,14 +432,26 @@
     <div class="da-filter-wrap">
         <div class="da-filter-inner">
 
-            {{-- Quick date --}}
-            <div class="da-quick-btns" id="daQuickBtns">
-                <button type="button" class="da-qb" data-val="today"   onclick="setQuick('today')">Today</button>
-                <button type="button" class="da-qb" data-val="week"    onclick="setQuick('week')">This Week</button>
-                <button type="button" class="da-qb" data-val="month"   onclick="setQuick('month')">This Month</button>
-                <button type="button" class="da-qb" data-val="quarter" onclick="setQuick('quarter')">Quarter</button>
-                <button type="button" class="da-qb" data-val="year"    onclick="setQuick('year')">This Year</button>
-                <button type="button" class="da-qb" data-val="all"     onclick="setQuick('all')">Show All</button>
+            {{-- Quick Dates Dropdown --}}
+            <div class="da-fw">
+                <svg class="da-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <select class="da-fsel" id="fQuickDate" onchange="onQuickDateSelect(this.value)">
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month" selected>This Month</option>
+                    <option value="quarter">This Quarter</option>
+                    <option value="year">This Year</option>
+                    <option value="all">Show All</option>
+                    <option value="custom">Custom Dates</option>
+                </select>
+                <svg class="da-fcaret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+
+            {{-- Date range (Right next to Quick Dates) --}}
+            <div class="da-date-pair" id="daCustomDateWrap" style="display:none">
+                <input type="date" class="da-date-inp" id="fDateFrom">
+                <span class="da-date-sep">→</span>
+                <input type="date" class="da-date-inp" id="fDateTo">
             </div>
 
             <div class="da-sep"></div>
@@ -489,14 +504,7 @@
                 <svg class="da-fcaret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
 
-            {{-- Date range --}}
-            <div class="da-date-pair">
-                <input type="date" class="da-date-inp" id="fDateFrom" onchange="onDateChange()">
-                <span class="da-date-sep">→</span>
-                <input type="date" class="da-date-inp" id="fDateTo" onchange="onDateChange()">
-            </div>
-
-            <button type="button" class="da-apply-btn" onclick="dashboardLoad()">
+            <button type="button" class="da-apply-btn" onclick="applyFilters()">
                 <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                 Apply
             </button>
@@ -669,7 +677,7 @@
         <div class="da-two-col">
             <div class="da-card">
                 <div class="da-card-head">
-                    <div class="da-card-title">📊 Pipeline Funnel</div>
+                    <div class="da-card-title">📊 Pipeline Funnel (Product Wise)</div>
                     <span class="da-badge" id="daFunnelTotal">–</span>
                 </div>
                 <div class="da-card-body" id="daFunnelBody">
@@ -724,23 +732,12 @@
             </div>
         </div>
 
-        {{-- ── Today Scheduled Followups Card ── --}}
-        <div class="da-card" style="margin-bottom:24px">
-            <div class="da-card-head">
-                <div class="da-card-title">📅 Today Scheduled Followups</div>
-                <span class="da-badge" id="daScheduledFollowupBadge">–</span>
-            </div>
-            <div id="daScheduledFollowupBody" style="max-height:420px;overflow-y:auto">
-                <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
-            </div>
-        </div>
-
-        {{-- ── Follow-ups + Reminders ── --}}
+        {{-- ── Call Updates (8 cols) + Reminders (4 cols) ── --}}
         <div class="da-two-col">
             <div class="da-card">
                 <div class="da-card-head">
-                    <div class="da-card-title">📞 Today's Follow-ups</div>
-                    <span class="da-badge" id="daFollowupBadge">–</span>
+                    <div class="da-card-title">📞 Recent Call Updates</div>
+                    <a href="{{ route('leads.calls.index') }}" style="font-size:12px;font-weight:700;color:var(--da-orange);text-decoration:none">Show all →</a>
                 </div>
                 <div id="daFollowupBody" style="max-height:400px;overflow-y:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:180px"></div></div>
@@ -748,9 +745,12 @@
             </div>
             <div class="da-card">
                 <div class="da-card-head">
-                    <div class="da-card-title">🔔 Pending Reminders</div>
-                    <div id="daReminderBadge" style="display:flex;gap:6px;align-items:center">
-                        <span class="da-badge">–</span>
+                    <div class="da-card-title">🔔 Reminders</div>
+                    <div style="display:flex;gap:10px;align-items:center">
+                        <div id="daReminderBadge" style="display:flex;gap:6px;align-items:center">
+                            <span class="da-badge">–</span>
+                        </div>
+                        <a href="{{ route('tasks.index') }}" style="font-size:12px;font-weight:700;color:var(--da-orange);text-decoration:none">Show all →</a>
                     </div>
                 </div>
                 <div id="daReminderBody" style="max-height:400px;overflow-y:auto">
@@ -794,54 +794,128 @@ var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
 // State
 var state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
 var data  = null;
-document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.toggle('active', b.dataset.val === 'month'); });
+
+function calcPresetDates(val) {
+    var today = new Date();
+    var fmt = function(d) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    };
+
+    if (val === 'today') {
+        var d = fmt(today);
+        return { from: d, to: d };
+    }
+    if (val === 'week') {
+        var mon = new Date(today);
+        var dayOfWeek = today.getDay();
+        var diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        mon.setDate(today.getDate() + diff);
+        var sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        return { from: fmt(mon), to: fmt(sun) };
+    }
+    if (val === 'month') {
+        var first = new Date(today.getFullYear(), today.getMonth(), 1);
+        var last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { from: fmt(first), to: fmt(last) };
+    }
+    if (val === 'quarter') {
+        var qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        var firstQ = new Date(today.getFullYear(), qStartMonth, 1);
+        var lastQ = new Date(today.getFullYear(), qStartMonth + 3, 0);
+        return { from: fmt(firstQ), to: fmt(lastQ) };
+    }
+    if (val === 'year') {
+        return { from: today.getFullYear() + '-01-01', to: today.getFullYear() + '-12-31' };
+    }
+    return { from: '', to: '' };
+}
 
 /* ═══════════════════════════════════════════════════════
    FILTER HELPERS
 ═══════════════════════════════════════════════════════ */
-window.setQuick = function(val) {
-    state.quick    = state.quick === val ? '' : val;
-    state.dateFrom = '';
-    state.dateTo   = '';
-    document.getElementById('fDateFrom').value = '';
-    document.getElementById('fDateTo').value   = '';
-    document.querySelectorAll('.da-qb').forEach(function(b) {
-        b.classList.toggle('active', b.dataset.val === state.quick);
-    });
-    dashboardLoad();
+window.onQuickDateSelect = function(val) {
+    var customWrap = document.getElementById('daCustomDateWrap');
+    if (val === 'custom') {
+        if (customWrap) customWrap.style.display = 'inline-flex';
+    } else {
+        if (customWrap) customWrap.style.display = 'none';
+        if (val === 'all') {
+            document.getElementById('fDateFrom').value = '';
+            document.getElementById('fDateTo').value   = '';
+        } else {
+            var dates = calcPresetDates(val);
+            document.getElementById('fDateFrom').value = dates.from;
+            document.getElementById('fDateTo').value   = dates.to;
+        }
+    }
 };
 
 window.onFilterChange = function() {
-    state.quick  = '';
-    document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.remove('active'); });
+    updateFilterStyles();
+};
+
+window.applyFilters = function() {
+    var qSel = document.getElementById('fQuickDate');
+    state.quick = qSel ? qSel.value : 'month';
     state.branch = document.getElementById('fBranch').value;
     state.user   = document.getElementById('fUser').value;
     state.stage  = document.getElementById('fStage').value;
     state.source = document.getElementById('fSource').value;
+    if (state.quick === 'custom') {
+        state.dateFrom = document.getElementById('fDateFrom').value;
+        state.dateTo   = document.getElementById('fDateTo').value;
+    } else if (state.quick === 'all') {
+        state.dateFrom = '';
+        state.dateTo   = '';
+    } else {
+        var dates = calcPresetDates(state.quick);
+        state.dateFrom = dates.from;
+        state.dateTo   = dates.to;
+    }
     updateFilterStyles();
     renderChips();
-};
-
-window.onDateChange = function() {
-    state.quick    = '';
-    state.dateFrom = document.getElementById('fDateFrom').value;
-    state.dateTo   = document.getElementById('fDateTo').value;
-    document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.remove('active'); });
-    document.getElementById('fDateFrom').classList.toggle('active', !!state.dateFrom);
-    document.getElementById('fDateTo').classList.toggle('active', !!state.dateTo);
-    renderChips();
+    dashboardLoad();
 };
 
 window.resetFilters = function() {
     state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
     ['fBranch','fUser','fStage','fSource'].forEach(function(id) { document.getElementById(id).value = ''; });
-    document.getElementById('fDateFrom').value = '';
-    document.getElementById('fDateTo').value   = '';
-    document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.toggle('active', b.dataset.val === 'month'); });
+    var qSel = document.getElementById('fQuickDate');
+    if (qSel) qSel.value = 'month';
+    var dates = calcPresetDates('month');
+    document.getElementById('fDateFrom').value = dates.from;
+    document.getElementById('fDateTo').value   = dates.to;
+    var customWrap = document.getElementById('daCustomDateWrap');
+    if (customWrap) customWrap.style.display = 'none';
     updateFilterStyles();
     renderChips();
     dashboardLoad();
 };
+
+// Auto-switch to custom when date input is manually picked
+document.addEventListener('DOMContentLoaded', function() {
+    var dFrom = document.getElementById('fDateFrom');
+    var dTo = document.getElementById('fDateTo');
+    if (dFrom) dFrom.addEventListener('change', function() {
+        document.getElementById('fQuickDate').value = 'custom';
+        var customWrap = document.getElementById('daCustomDateWrap');
+        if (customWrap) customWrap.style.display = 'inline-flex';
+    });
+    if (dTo) dTo.addEventListener('change', function() {
+        document.getElementById('fQuickDate').value = 'custom';
+        var customWrap = document.getElementById('daCustomDateWrap');
+        if (customWrap) customWrap.style.display = 'inline-flex';
+    });
+
+    // Initial dates on page load
+    var initDates = calcPresetDates('month');
+    if (dFrom && !dFrom.value) dFrom.value = initDates.from;
+    if (dTo && !dTo.value) dTo.value = initDates.to;
+});
 
 function updateFilterStyles() {
     ['fBranch','fUser','fStage','fSource'].forEach(function(id) {
@@ -857,16 +931,16 @@ function buildParams() {
     if (state.user)     p.user_id    = state.user;
     if (state.stage)    p.stage      = state.stage;
     if (state.source)   p.source     = state.source;
-    if (state.dateFrom) p.date_from  = state.dateFrom;
-    if (state.dateTo)   p.date_to    = state.dateTo;
+    if (state.quick === 'custom') {
+        if (state.dateFrom) p.date_from  = state.dateFrom;
+        if (state.dateTo)   p.date_to    = state.dateTo;
+    }
     return p;
 }
 
 function countFilters() {
     return Object.keys(buildParams()).length;
 }
-
-
 
   function setLoading(on) {
     const el = document.getElementById('daLoading');
@@ -883,11 +957,10 @@ function countFilters() {
     }
 }
 
-
 function renderChips() {
     var chips = document.getElementById('daChips');
     var labels = {
-        quick_date: { label:'Period',  sel:null },
+        quick_date: { label:'Period',  sel:'fQuickDate' },
         branch_id:  { label:'Branch',  sel:'fBranch' },
         user_id:    { label:'User',    sel:'fUser' },
         stage:      { label:'Stage',   sel:'fStage' },
@@ -923,7 +996,13 @@ window.removeFilter = function(key) {
     if (selMap[k]) document.getElementById(selMap[k]).value = '';
     if (k === 'dateFrom') document.getElementById('fDateFrom').value = '';
     if (k === 'dateTo')   document.getElementById('fDateTo').value   = '';
-    if (k === 'quick') document.querySelectorAll('.da-qb').forEach(function(b) { b.classList.remove('active'); });
+    if (k === 'quick') {
+        var qSel = document.getElementById('fQuickDate');
+        if (qSel) qSel.value = 'all';
+        state.quick = 'all';
+        var customWrap = document.getElementById('daCustomDateWrap');
+        if (customWrap) customWrap.style.display = 'none';
+    }
     updateFilterStyles();
     renderChips();
     dashboardLoad();
@@ -1012,7 +1091,6 @@ function renderAll(d) {
     renderBranchPerf(d.branch_performance);
     renderTeamPerf(d.team_performance);
     renderFollowups(d.today_followups);
-    renderScheduledFollowups(d.today_scheduled_followups || d.today_followups);
     renderReminders(d.reminders);
     renderRecentLeads(d.recent_leads);
 }
@@ -1124,11 +1202,13 @@ function renderKpis(k, filters) {
 
     var kpis = [
         { accent:'orange', val:k.total_leads,    label:'Overall Leads Count', sub:'All in scope',
+          clickAction: "viewAllLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
         { accent:'blue',   val:k.won_leads,      label:'Active Customers', sub:'Converted leads count',
           clickAction: "viewConvertedLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' },
         { accent:'green',  val:k.converted_products_count, label:'Converted Products', sub:'Total Converted Products',
+          clickAction: "viewConvertedProducts()",
           svg:'<polyline points="20 6 9 17 4 12"/>' },
         { accent:'purple', val:fmtL(k.upcoming_amount), label:'Upcoming Amount', sub:'Products without converted',
           svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
@@ -1136,12 +1216,12 @@ function renderKpis(k, filters) {
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
         { accent:'amber',  val:k.converted_percentage + '%', label:'Converted Percentage', sub:'Converted ÷ Total Products',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
-        { accent:'orange', val:(k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0), label:'Today Planned Followups', sub:'Reminders & followups set for today',
-          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+        { accent:'orange', val:(k.today_reminders_count !== undefined ? k.today_reminders_count : (k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0)), label:'Today Remainders', sub:'Reminders set for today',
+          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', clickAction: "navigateToTasks('today')" },
         { accent:'rose',   val:(k.overdue_reminders_count !== undefined ? k.overdue_reminders_count : 0), label:'Overdue Reminders', sub:'Pending reminders past due',
-          svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', clickAction: "switchReminderTab('overdue', true)" },
+          svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', clickAction: "navigateToTasks('overdue')" },
         { accent:'teal',   val:(k.today_completed_calls_count !== undefined ? k.today_completed_calls_count : 0), label:'Today Completed Calls', sub:'Call updates logged today',
-          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
+          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>', clickAction: "navigateToTodayCalls()" },
     ];
 
     var html = kpis.map(function(kpi) {
@@ -1160,13 +1240,14 @@ function renderKpis(k, filters) {
 /* ── Financials ── */
 function renderFinancials(f) {
     var cards = [
-        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Collected', bar:100 },
-        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of Total',  bar:f.payment_percent },
+        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Total', bar:100 },
+        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% of Collected',  bar:f.payment_percent },
         { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
-        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0 },
+        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0, clickAction: "viewConvertedProducts()" },
     ];
     var html = cards.map(function(c) {
-        return '<div class="da-fin" style="border-left-color:' + c.bc + '">' +
+        var clickAttr = c.clickAction ? ' onclick="' + c.clickAction + '" style="border-left-color:' + c.bc + ';cursor:pointer;" title="Click to view Converted Products"' : ' style="border-left-color:' + c.bc + '"';
+        return '<div class="da-fin"' + clickAttr + '>' +
             '<div class="da-fin-lbl">' + c.label + '</div>' +
             '<div class="da-fin-val" style="color:' + c.bc + '">' + fmt(c.val) + '</div>' +
             '<div class="da-fin-sub">' + c.sub + '</div>' +
@@ -1220,6 +1301,34 @@ function getFilterDates() {
     return { from: from, to: to };
 }
 
+window.viewAllLeads = function() {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+    if (state.source) {
+        params.set('lead_source', state.source);
+    }
+    if (state.stage) {
+        params.set('lead_status', state.stage);
+    }
+
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
+
 window.viewConvertedLeads = function() {
     var dates = getFilterDates();
     var params = new URLSearchParams();
@@ -1241,6 +1350,57 @@ window.viewConvertedLeads = function() {
     }
 
     window.location.href = '{{ url("/leads") }}?' + params.toString();
+};
+
+window.viewConvertedProducts = function() {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    params.set('product_status', 'converted');
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+
+    window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
+};
+
+window.navigateToTasks = function(tab) {
+    var params = new URLSearchParams();
+    params.set('tab', tab || 'today');
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('user_id', state.user);
+    }
+    window.location.href = '{{ route("tasks.index") }}?' + params.toString();
+};
+
+window.navigateToTodayCalls = function() {
+    var now = new Date();
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var todayStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    var params = new URLSearchParams();
+    params.set('date_from', todayStr);
+    params.set('date_to', todayStr);
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('user_id', state.user);
+    }
+    window.location.href = '{{ route("leads.calls.index") }}?' + params.toString();
 };
 
 window.navigateToFunnelStage = function(stageVal) {
@@ -1485,39 +1645,10 @@ function renderTeamPerf(team) {
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-/* ── Today's Follow-ups ── */
+/* ── Recent Call Updates ── */
 function renderFollowups(fu) {
-    document.getElementById('daFollowupBadge').textContent = fu.count + ' due today';
-    if (!fu.items.length) { document.getElementById('daFollowupBody').innerHTML = empty('📭','No follow-ups scheduled today'); return; }
-
-    var html = fu.items.map(function(f) {
-        var oc = f.outcome_color || { bg:'#f5f4f6', text:'#7c7c7c' };
-        return '<div class="da-followup-item">' +
-            '<div class="da-followup-dot" style="background:' + oc.text + '"></div>' +
-            '<div class="da-followup-body">' +
-            '<a href="' + LEAD_BASE + '/' + (f.lead?.id || '') + '" class="da-followup-company">' + (f.lead?.company_name || 'Unknown') + '</a>' +
-            '<div class="da-followup-meta">' + (f.lead?.contact_name || '') + ' · ' + (f.lead?.mobile_number || '') + '</div>' +
-            '<div class="da-followup-tags">' +
-            '<span class="da-pill" style="font-size:10px;background:' + oc.bg + ';color:' + oc.text + '">' + (f.outcome_label || f.outcome) + '</span>' +
-            (f.notes ? '<span style="font-size:11px;color:var(--da-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">' + f.notes + '</span>' : '') +
-            '</div>' +
-            (f.logged_by?.name ? '<div style="font-size:10px;color:var(--da-muted);margin-top:3px">By ' + f.logged_by.name + '</div>' : '') +
-            '</div>' +
-            '<div class="da-followup-time">' + (f.next_follow_up || '') + '</div></div>';
-    }).join('');
-    document.getElementById('daFollowupBody').innerHTML = html;
-}
-
-/* ── Today Scheduled Followups ── */
-function renderScheduledFollowups(fu) {
-    var count = fu ? (fu.count !== undefined ? fu.count : (fu.items ? fu.items.length : 0)) : 0;
-    var badgeEl = document.getElementById('daScheduledFollowupBadge');
-    if (badgeEl) {
-        badgeEl.textContent = count + ' scheduled today';
-    }
-
     if (!fu || !fu.items || !fu.items.length) {
-        document.getElementById('daScheduledFollowupBody').innerHTML = empty('📅', 'No follow-ups scheduled for today');
+        document.getElementById('daFollowupBody').innerHTML = empty('📭','No recent call updates');
         return;
     }
 
@@ -1526,27 +1657,39 @@ function renderScheduledFollowups(fu) {
         var leadId = f.lead?.id;
         var clickAttr = leadId ? 'onclick="window.location=\'' + LEAD_BASE + '/' + leadId + '\'" style="cursor:pointer;"' : '';
 
+        var callTimeStr = '';
+        if (f.called_at_formatted) {
+            callTimeStr = f.called_at_formatted;
+        } else if (f.called_at) {
+            var parsed = new Date(f.called_at);
+            if (!isNaN(parsed.getTime())) {
+                callTimeStr = parsed.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + parsed.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            } else {
+                callTimeStr = f.called_at;
+            }
+        }
+
         return '<div class="da-followup-item" ' + clickAttr + '>' +
             '<div class="da-followup-dot" style="background:' + oc.text + '"></div>' +
             '<div class="da-followup-body">' +
             '<div class="da-followup-company" style="font-weight:700;color:var(--da-dark);font-size:14px">' + (f.lead?.company_name || f.lead?.contact_name || ('Lead #' + (f.lead?.id || ''))) + '</div>' +
             '<div class="da-followup-meta">' + (f.lead?.contact_name || '') + (f.lead?.mobile_number ? ' · ' + f.lead.mobile_number : '') + '</div>' +
-            '<div class="da-followup-tags" style="margin-top:4px">' +
-            '<span class="da-pill" style="font-size:10px;background:' + oc.bg + ';color:' + oc.text + '">' + (f.outcome_label || f.outcome || 'Scheduled') + '</span>' +
-            (f.notes ? '<span style="font-size:11px;color:var(--da-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px">' + f.notes + '</span>' : '') +
+            '<div class="da-followup-tags" style="margin-top:4px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' +
+            '<span class="da-pill" style="font-size:10px;background:' + oc.bg + ';color:' + oc.text + '">' + (f.outcome_label || f.outcome || 'Call Update') + '</span>' +
+            (f.outcome_subcategory_label ? '<span class="da-pill" style="font-size:10px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">' + f.outcome_subcategory_label + '</span>' : '') +
+            (f.notes ? '<span style="font-size:11px;color:var(--da-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">' + f.notes + '</span>' : '') +
             '</div>' +
             '<div style="font-size:11px;color:var(--da-muted);margin-top:4px">' +
             (f.lead?.assigned_to?.name ? 'Assigned to: <strong>' + f.lead.assigned_to.name + '</strong>' : '') +
-            (f.logged_by?.name ? ' · Scheduled by: ' + f.logged_by.name : '') +
+            (f.logged_by?.name ? ' · By: ' + f.logged_by.name : '') +
             '</div>' +
             '</div>' +
             '<div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
-            '<span class="da-pill" style="background:#fff7ed;color:#ea580c;font-weight:700;font-size:11px">Today</span>' +
+            (callTimeStr ? '<div class="da-followup-time" style="font-weight:600">' + callTimeStr + '</div>' : (f.next_follow_up ? '<div class="da-followup-time" style="font-weight:600">' + f.next_follow_up + '</div>' : '')) +
             (leadId ? '<span style="font-size:11px;color:var(--da-orange);font-weight:700">View Lead →</span>' : '') +
             '</div></div>';
     }).join('');
-
-    document.getElementById('daScheduledFollowupBody').innerHTML = html;
+    document.getElementById('daFollowupBody').innerHTML = html;
 }
 
 /* ── Reminders ── */

@@ -285,13 +285,6 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
         </div>
         <div class="lsp-hero-right">
-            <span class="lsp-badge" style="background:{{ $sc['bg'] }};color:{{ $sc['text'] }};border-color:{{ $sc['border'] }}">
-                <span class="lsp-dot" style="background:{{ $sc['text'] }}"></span>
-                {{ $lead->status_label }}
-            </span>
-            <span class="lsp-badge" style="background:{{ $pc['bg'] }};color:{{ $pc['text'] }};border-color:{{ $pc['border'] }}">
-                {{ $lead->priority_label }} Priority
-            </span>
             @if($lead->deal_value)
             <span style="font-size:15px;font-weight:800;color:var(--text);">{{ $lead->formatted_deal_value }}</span>
             @endif
@@ -454,7 +447,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 
                     <div class="lsp-card">
-                        <div class="lsp-card-head"><div class="lsp-card-title">💰 Deal & Status</div></div>
+                        <div class="lsp-card-head"><div class="lsp-card-title">💰 Deal Overview</div></div>
                         <div class="lsp-card-body">
                             <div class="lsp-stat-grid">
                                 <div class="lsp-stat-box">
@@ -466,23 +459,10 @@ tbody tr:last-child td { border-bottom: none; }
                                     <div class="lsp-deal-big">{{ $lead->products->count() ?? 0 }}</div>
                                 </div>
                             </div>
-                            {{--  <div style="margin-bottom:6px;font-size:11px;font-weight:700;color:#3d3d3d;text-transform:uppercase;letter-spacing:.4px;">Quick Status Change</div>
-                            <form method="POST" action="{{ route('leads.update-status', $lead) }}">
-                                @csrf @method('PATCH')
-                                <div style="position:relative;">
-                                    <select name="lead_status" class="lsp-status-select" onchange="this.form.submit()">
-                                        @foreach(\App\Models\Lead::statusOptions() as $k => $v)
-                                        <option value="{{ $k }}" {{ $lead->lead_status===$k?'selected':'' }}>{{ $v }}</option>
-                                        @endforeach
-                                    </select>
-                                    <svg style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:#9e9e9e;width:11px;height:11px;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                                </div>
-                            </form>  --}}
 
                             <div class="lsp-meta-line">
                                 <div>
-                                    <div class="lsp-il">Current Status</div>
-                                    <div class="lsp-meta-value">{{ $lead->status_label }}</div>
+                                    <div class="lsp-il">Lead Age</div>
                                 </div>
                                 <span class="lsp-age-pill">{{ $lead->created_at?->diffForHumans() ?? '—' }}</span>
                             </div>

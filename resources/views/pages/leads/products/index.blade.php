@@ -57,22 +57,21 @@
     border:1px solid #e8e3e8; background:#fff; color:#7c7c7c; transition:transform .18s ease, color .18s ease, border-color .18s ease;
 }
 .lpd-filter-card[open] .lpd-filter-chevron { transform:rotate(180deg); color:#fe5f04; border-color:#fed7aa; }
-.lpd-filter-body { display:none; }
-.lpd-filter-card[open] .lpd-filter-body { display:block; }
-.lpd-filter-form { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; padding:16px; }
-.lpd-field { display:flex; flex-direction:column; gap:7px; }
-.lpd-label { font-size:11px; font-weight:800; color:#7c7c7c; text-transform:uppercase; letter-spacing:.5px; }
+.lpd-filter-form { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; padding:20px; align-items:flex-start; }
+.lpd-field { display:flex; flex-direction:column; gap:6px; }
+.lpd-label { font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.5px; }
 .lpd-input, .lpd-select {
-    width:100%; padding:11px 13px; border:1px solid #e1dee3; border-radius:12px;
+    width:100%; padding:9px 13px; border:1px solid #e1dee3; border-radius:10px;
     background:#fbfbfc; font-size:13px; font-family:inherit; color:#111827; outline:none; transition:all .15s ease;
 }
 .lpd-input:hover, .lpd-select:hover { border-color:#d7d1d8; background:#fff; }
-.lpd-input:focus, .lpd-select:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 4px rgba(254,95,4,.1); }
+.lpd-input:focus, .lpd-select:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
 .lpd-field-wide { grid-column:span 2; }
-.lpd-filter-actions { display:flex; align-items:flex-end; gap:10px; }
-.lpd-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; border-color:transparent; box-shadow:0 4px 14px rgba(254,95,4,.22); }
-.lpd-btn-primary:hover { color:#fff; border-color:transparent; background:linear-gradient(135deg,#f35700,#ff7422); }
-.lpd-btn-ghost { background:#fff; }
+.lpd-filter-actions-row { grid-column:1 / -1; display:flex; align-items:center; justify-content:flex-end; gap:10px; padding-top:14px; border-top:1px solid #f0eef2; margin-top:4px; }
+.lpd-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; border:none; box-shadow:0 4px 14px rgba(254,95,4,.22); font-weight:700; }
+.lpd-btn-primary:hover { color:#fff; background:linear-gradient(135deg,#f35700,#ff7422); transform:translateY(-1px); box-shadow:0 6px 18px rgba(254,95,4,.32); }
+.lpd-btn-ghost { background:#fff; font-weight:600; }
+.lpd-btn-ghost:hover { border-color:#dc2626 !important; color:#dc2626 !important; }
 .lpd-table-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-bottom:1px solid #f0eef2; }
 .lpd-table-title { font-size:15px; font-weight:800; color:#111827; }
 .lpd-table-sub { font-size:11px; color:#9e9e9e; margin-top:2px; }
@@ -240,96 +239,96 @@
                 </div>
             </summary>
             <div class="lpd-filter-body" id="leadProductFiltersBody">
-            <form method="GET" action="{{ route('leads.products.index') }}" class="lpd-filter-form">
-                <input type="hidden" name="quick_date" id="quick_date_input" value="{{ request('quick_date', 'month') }}">
-                <div class="lpd-field">
-                    <label class="lpd-label" for="lead_id">Lead ID</label>
-                    <input id="lead_id" type="text" name="lead_id" class="lpd-input" value="{{ request('lead_id') }}" placeholder="Example: 25">
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="mobile_number">Mobile Number</label>
-                    <input id="mobile_number" type="text" name="mobile_number" class="lpd-input" value="{{ request('mobile_number') }}" placeholder="Client mobile number">
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="product_id">Product</label>
-                    <select id="product_id" name="product_id" class="lpd-select">
-                        <option value="">All Products</option>
-                        @foreach($products as $product)
-                            <option value="{{ $product->id }}" @selected((string) request('product_id') === (string) $product->id)>
-                                {{ $product->package_name ?: $product->product_name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="product_status">Product Status</label>
-                    <select id="product_status" name="product_status" class="lpd-select">
-                        <option value="">All Product Status</option>
-                        @foreach($statusOptions as $statusOption)
-                            <option value="{{ $statusOption->id }}" @selected((string) request('product_status') === (string) $statusOption->id)>{{ $statusOption->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="branch_id">Branch</label>
-                    <select id="branch_id" name="branch_id" class="lpd-select">
-                        <option value="">All Branches</option>
-                        @foreach($branches as $branch)
-                            <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="assigned_to">Assigned To</label>
-                    <select id="assigned_to" name="assigned_to" class="lpd-select">
-                        <option value="">All Users</option>
-                        @foreach($users as $user)
-                            <option value="{{ $user->id }}" @selected((string) request('assigned_to') === (string) $user->id)>{{ $user->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="product_active">Product Status (Catalog)</label>
-                    <select id="product_active" name="product_active" class="lpd-select">
-                        <option value="">All Status</option>
-                        <option value="active" @selected(request('product_active') === 'active')>Active</option>
-                        <option value="inactive" @selected(request('product_active') === 'inactive')>Inactive</option>
-                    </select>
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="date_from">Created From</label>
-                    <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from') }}">
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label" for="date_to">Created To</label>
-                    <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to') }}">
-                </div>
-
-                <div class="lpd-field">
-                    <label class="lpd-label">Quick Dates</label>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickToday" onclick="setQ('today')">Today</button>
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickWeek" onclick="setQ('week')">Week</button>
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickMonth" onclick="setQ('month')">Month</button>
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickQuarter" onclick="setQ('quarter')">Quarter</button>
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickYear" onclick="setQ('year')">Year</button>
-                        <button type="button" class="lpd-btn" style="padding: 8px 12px; font-size:12px; border-radius:10px; cursor:pointer;" id="quickAll" onclick="setQ('all')">Show All</button>
+                <form method="GET" action="{{ route('leads.products.index') }}" class="lpd-filter-form" id="lpdFilterForm">
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="lead_id">Lead ID</label>
+                        <input id="lead_id" type="text" name="lead_id" class="lpd-input" value="{{ request('lead_id') }}" placeholder="Example: 25">
                     </div>
-                </div>
 
-                <div class="lpd-filter-actions">
-                    <button type="submit" class="lpd-btn lpd-btn-primary">Filter</button>
-                    <a href="{{ route('leads.products.index', ['reset' => 1]) }}" class="lpd-btn lpd-btn-ghost">Reset</a>
-                </div>
-            </form>
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="mobile_number">Mobile Number</label>
+                        <input id="mobile_number" type="text" name="mobile_number" class="lpd-input" value="{{ request('mobile_number') }}" placeholder="Client mobile number">
+                    </div>
+
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="product_id">Product</label>
+                        <select id="product_id" name="product_id" class="lpd-select">
+                            <option value="">All Products</option>
+                            @foreach($products as $product)
+                                <option value="{{ $product->id }}" @selected((string) request('product_id') === (string) $product->id)>
+                                    {{ $product->package_name ?: $product->product_name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="product_status">Product Status</label>
+                        <select id="product_status" name="product_status" class="lpd-select">
+                            <option value="">All Product Status</option>
+                            @foreach($statusOptions as $statusOption)
+                                <option value="{{ $statusOption->id }}" @selected((string) request('product_status') === (string) $statusOption->id)>{{ $statusOption->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="branch_id">Branch</label>
+                        <select id="branch_id" name="branch_id" class="lpd-select">
+                            <option value="">All Branches</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="lpd-field">
+                        <label class="lpd-label" for="assigned_to">Assigned To</label>
+                        <select id="assigned_to" name="assigned_to" class="lpd-select">
+                            <option value="">All Users</option>
+                            @foreach($users as $user)
+                                <option value="{{ $user->id }}" @selected((string) request('assigned_to') === (string) $user->id)>{{ $user->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="lpd-field">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                            <label class="lpd-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
+                            <span id="lpdQuickDateRange" style="font-size:11px;font-weight:700;color:var(--lpd-primary,#fe5f04);"></span>
+                        </div>
+                        <select id="quick_date_select" name="quick_date" class="lpd-select" onchange="onLpdQuickDateChange(this.value)">
+                            <option value="today" {{ request('quick_date') == 'today' ? 'selected' : '' }}>Today</option>
+                            <option value="week" {{ request('quick_date') == 'week' ? 'selected' : '' }}>This Week</option>
+                            <option value="month" {{ request('quick_date', 'month') == 'month' ? 'selected' : '' }}>This Month</option>
+                            <option value="quarter" {{ request('quick_date') == 'quarter' ? 'selected' : '' }}>This Quarter</option>
+                            <option value="year" {{ request('quick_date') == 'year' ? 'selected' : '' }}>This Year</option>
+                            <option value="all" {{ request('quick_date') == 'all' ? 'selected' : '' }}>Show All</option>
+                            <option value="custom" {{ request('quick_date') == 'custom' ? 'selected' : '' }}>Custom Dates</option>
+                        </select>
+                    </div>
+
+                    <div class="lpd-field" id="lpdFromField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
+                        <label class="lpd-label" for="date_from">From Date</label>
+                        <input id="date_from" type="date" name="date_from" class="lpd-input" value="{{ request('date_from', $defaultFromDate) }}">
+                    </div>
+
+                    <div class="lpd-field" id="lpdToField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
+                        <label class="lpd-label" for="date_to">To Date</label>
+                        <input id="date_to" type="date" name="date_to" class="lpd-input" value="{{ request('date_to', $defaultToDate) }}">
+                    </div>
+
+                    <div class="lpd-filter-actions-row">
+                        <button type="submit" class="lpd-btn lpd-btn-primary" style="display:inline-flex; align-items:center; gap:6px; padding:9px 20px; font-size:13px; border-radius:10px; cursor:pointer;">
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                            Apply Filter
+                        </button>
+                        <a href="{{ route('leads.products.index', ['reset' => 1]) }}" class="lpd-btn lpd-btn-ghost" style="display:inline-flex; align-items:center; gap:6px; padding:9px 18px; font-size:13px; border-radius:10px; border:1px solid #e1dee3; color:#6b7280; text-decoration:none;">
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
+                            Reset
+                        </a>
+                    </div>
+                </form>
             </div>
         </details>
 
@@ -438,7 +437,7 @@ const defaultFromDate = @json($defaultFromDate);
 const defaultToDate = @json($defaultToDate);
 
 function updateFilters() {
-    const qVal = document.getElementById('quick_date_input')?.value;
+    const qVal = document.getElementById('quick_date_select')?.value || document.getElementById('quick_date_input')?.value;
     const from = document.getElementById('date_from')?.value;
     const to = document.getElementById('date_to')?.value;
 
@@ -475,64 +474,127 @@ function updateFilters() {
     document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (from === qStart && to === qEnd));
 }
 
-function setQ(p) {
-    const qEl = document.getElementById('quick_date_input');
-    if (qEl) qEl.value = p;
-
-    const parts = defaultToDate.split('-').map(Number);
-    const today = new Date(parts[0], parts[1] - 1, parts[2]);
+function calcPresetDates(val) {
+    const today = new Date();
     const fmt = d => {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     };
-    const f = document.getElementById('date_from');
-    const t = document.getElementById('date_to');
-    if (!f || !t) return;
 
-    if (p === 'all') {
-        f.value = '';
-        t.value = '';
-        updateFilters();
-        f.closest('form').submit();
-        return;
+    if (val === 'today') {
+        const d = fmt(today);
+        return { from: d, to: d };
     }
-
-    let targetFrom = '';
-    let targetTo = '';
-
-    if (p === 'today') {
-        targetFrom = todayDate;
-        targetTo = todayDate;
-    } else if (p === 'week') {
+    if (val === 'week') {
         const mon = new Date(today);
-        mon.setDate(today.getDate() - today.getDay() + 1);
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        mon.setDate(today.getDate() + diff);
         const sun = new Date(mon);
         sun.setDate(mon.getDate() + 6);
-        targetFrom = fmt(mon);
-        targetTo = fmt(sun);
-    } else if (p === 'month') {
-        targetFrom = defaultFromDate;
-        targetTo = defaultToDate;
-    } else if (p === 'quarter') {
-        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
-        const firstQ = new Date(parts[0], qStartMonth, 1);
-        const lastQ = new Date(parts[0], qStartMonth + 3, 0);
-        targetFrom = fmt(firstQ);
-        targetTo = fmt(lastQ);
-    } else if (p === 'year') {
-        targetFrom = `${parts[0]}-01-01`;
-        targetTo = `${parts[0]}-12-31`;
+        return { from: fmt(mon), to: fmt(sun) };
     }
-
-    f.value = targetFrom;
-    t.value = targetTo;
-
-    updateFilters();
-    f.closest('form').submit();
+    if (val === 'month') {
+        const first = new Date(today.getFullYear(), today.getMonth(), 1);
+        const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { from: fmt(first), to: fmt(last) };
+    }
+    if (val === 'quarter') {
+        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(today.getFullYear(), qStartMonth, 1);
+        const lastQ = new Date(today.getFullYear(), qStartMonth + 3, 0);
+        return { from: fmt(firstQ), to: fmt(lastQ) };
+    }
+    if (val === 'year') {
+        return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+    }
+    return { from: '', to: '' };
 }
 
-document.addEventListener('DOMContentLoaded', updateFilters);
+function formatDisplayDate(dStr) {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+}
+
+function updateLpdQuickDateRangeSpan(val) {
+    const span = document.getElementById('lpdQuickDateRange');
+    if (!span) return;
+    if (val === 'all') {
+        span.textContent = '';
+        return;
+    }
+    if (val === 'custom') {
+        const f = document.getElementById('date_from')?.value;
+        const t = document.getElementById('date_to')?.value;
+        span.textContent = (f && t) ? `${formatDisplayDate(f)} - ${formatDisplayDate(t)}` : '';
+        return;
+    }
+    const dates = calcPresetDates(val);
+    if (dates.from && dates.to) {
+        span.textContent = `${formatDisplayDate(dates.from)} - ${formatDisplayDate(dates.to)}`;
+    } else {
+        span.textContent = '';
+    }
+}
+
+function onLpdQuickDateChange(val) {
+    const fromField = document.getElementById('lpdFromField');
+    const toField = document.getElementById('lpdToField');
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+
+    if (val === 'custom') {
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+    } else {
+        if (fromField) fromField.style.display = 'none';
+        if (toField) toField.style.display = 'none';
+        if (val === 'all') {
+            if (f) f.value = '';
+            if (t) t.value = '';
+        } else {
+            const dates = calcPresetDates(val);
+            if (f) f.value = dates.from;
+            if (t) t.value = dates.to;
+        }
+    }
+    updateLpdQuickDateRangeSpan(val);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+    const q = document.getElementById('quick_date_select');
+
+    if (f) f.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('lpdFromField');
+        const toField = document.getElementById('lpdToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateLpdQuickDateRangeSpan('custom');
+    });
+    if (t) t.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('lpdFromField');
+        const toField = document.getElementById('lpdToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateLpdQuickDateRangeSpan('custom');
+    });
+
+    if (q && q.value !== 'all' && (!f?.value || !t?.value)) {
+        const dates = calcPresetDates(q.value || 'month');
+        if (f && !f.value) f.value = dates.from;
+        if (t && !t.value) t.value = dates.to;
+    }
+    updateLpdQuickDateRangeSpan(q?.value || 'month');
+});
 </script>
 @endpush

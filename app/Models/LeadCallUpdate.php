@@ -52,7 +52,30 @@ class LeadCallUpdate extends Model
 
     public function getOutcomeLabelAttribute(): string
     {
-        return self::OUTCOMES[$this->outcome] ?? ucfirst($this->outcome);
+        if ($this->relationLoaded('outCome') && $this->outCome?->name) {
+            return $this->outCome->name;
+        }
+        if (is_numeric($this->outcome)) {
+            $cat = OutcomeCategory::find($this->outcome);
+            if ($cat) {
+                return $cat->name;
+            }
+        }
+        return self::OUTCOMES[$this->outcome] ?? ucfirst((string) $this->outcome);
+    }
+
+    public function getOutcomeSubcategoryLabelAttribute(): ?string
+    {
+        if ($this->relationLoaded('outComeSubCategory') && $this->outComeSubCategory?->name) {
+            return $this->outComeSubCategory->name;
+        }
+        if (is_numeric($this->outcome_subcategory)) {
+            $sub = OutcomeSubCategory::find($this->outcome_subcategory);
+            if ($sub) {
+                return $sub->name;
+            }
+        }
+        return $this->outcome_subcategory ? (string) $this->outcome_subcategory : null;
     }
 
     public function getOutcomeColorAttribute(): array
@@ -62,7 +85,7 @@ class LeadCallUpdate extends Model
 
     public function getCallTypeLabelAttribute(): string
     {
-        return self::CALL_TYPES[$this->call_type] ?? ucfirst($this->call_type);
+        return self::CALL_TYPES[$this->call_type] ?? ucfirst((string) $this->call_type);
     }
 
     public function outCome()

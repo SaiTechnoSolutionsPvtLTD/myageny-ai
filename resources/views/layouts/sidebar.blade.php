@@ -188,6 +188,7 @@
                 </a>
                 @endif
 
+                @can('tasks.menuview')
                 <a href="{{ route('projects.tasks.index') }}" class="nav-item {{ request()->routeIs('projects.tasks.*') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.tasks.*'))
                         <div class="active-indicator"></div>
@@ -200,7 +201,9 @@
                         <span>Tasks</span>
                     </div>
                 </a>
+                @endcan
 
+                @can('timesheets.menuview')
                 <a href="{{ route('projects.timesheets') }}" class="nav-item {{ request()->routeIs('projects.timesheets') ? 'active' : '' }}">
                     @if(request()->routeIs('projects.timesheets'))
                         <div class="active-indicator"></div>
@@ -218,6 +221,7 @@
                         <span>Timesheets</span>
                     </div>
                 </a>
+                @endcan
                 @endif
             </div>
         </div>

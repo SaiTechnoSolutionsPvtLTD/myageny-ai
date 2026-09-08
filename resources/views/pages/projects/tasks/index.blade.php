@@ -108,10 +108,12 @@
             <div class="pts-breadcrumb">Projects &gt; Tasks (Assigned Directory)</div>
         </div>
         <div class="pts-actions">
+            @can('tasks.create')
             <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 <span>Create Task</span>
             </a>
+            @endcan
         </div>
     </div>
 
@@ -230,7 +232,7 @@
                                                 'product_name' => $t->product_name ?: ($t->project?->product_name ?: 'General Task'),
                                                 'task_description' => $t->task_description,
                                                 'status' => $t->status,
-                                                'can_delete' => auth()->user()?->hasAdminLikeRole() || $t->created_by === auth()->id(),
+                                                'can_delete' => auth()->user()?->hasAdminLikeRole() || auth()->user()?->can('tasks.delete') || $t->created_by === auth()->id(),
                                                 'delete_url' => route('projects.tasks.destroy', $t->id),
                                             ];
                                         })->values();
@@ -326,12 +328,14 @@
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" style="margin-bottom:12px;"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                         <div style="font-weight:800; font-size:15px; color:#1e293b; margin-bottom:4px;">No Tasks Found</div>
                         <div>No tasks match your filter criteria. Click below to create a new task.</div>
+                        @can('tasks.create')
                         <div style="margin-top:16px;">
                             <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                 <span>Create First Task</span>
                             </a>
                         </div>
+                        @endcan
                     </div>
                 @endif
             </div>

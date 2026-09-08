@@ -355,6 +355,11 @@ class CrmReportController extends Controller
 
     public function paymentCollection(Request $request): View
     {
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate = now()->endOfMonth()->toDateString();
+
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
+
         $query = $this->buildPaymentCollectionQuery($request);
         
         // Clone query BEFORE running paginate to avoid builder mutation limits/offsets
@@ -379,13 +384,19 @@ class CrmReportController extends Controller
         $paymentModes = LeadProduct::PAYMENT_MODES;
         $customers = $this->paymentCollectionCustomerOptions();
         $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
-        $companyOptions = Lead::query()
+        $companyQuery = Lead::query()
             ->whereNotNull('company_name')
-            ->where('company_name', '!=', '')
-            ->distinct()
-            ->orderBy('company_name')
-            ->pluck('company_name');
-        $salesExecutives = $this->visibility->visibleAssignableUsers();
+            ->where('company_name', '!=', '');
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+        if ($companyId) {
+            $companyQuery->where('company_id', $companyId);
+        }
+        if ($visibleUserIds !== null) {
+            $companyQuery->whereIn('assigned_to', $visibleUserIds);
+        }
+        $companyOptions = $companyQuery->distinct()->orderBy('company_name')->pluck('company_name');
+        $salesExecutives = $this->paymentCollectionSalesExecutives();
 
         $filterPanelOpen =
             $request->filled('customer_id')
@@ -393,8 +404,9 @@ class CrmReportController extends Controller
             || $request->filled('sales_executive_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
-            || $request->filled('date_from')
-            || $request->filled('date_to');
+            || ($request->filled('quick_date') && $request->quick_date !== 'month')
+            || ($request->filled('date_from') && $request->date_from !== $defaultFromDate)
+            || ($request->filled('date_to') && $request->date_to !== $defaultToDate);
 
         return view('pages.reports.crm.payment-collection', compact(
             'reportRows',
@@ -405,7 +417,9 @@ class CrmReportController extends Controller
             'branches',
             'companyOptions',
             'salesExecutives',
-            'filterPanelOpen'
+            'filterPanelOpen',
+            'defaultFromDate',
+            'defaultToDate'
         ));
     }
 
@@ -414,12 +428,13 @@ class CrmReportController extends Controller
         $defaultFromDate = now()->startOfMonth()->toDateString();
         $defaultToDate = now()->endOfMonth()->toDateString();
 
-        $request->merge([
-            'date_from' => $request->input('date_from', $defaultFromDate),
-            'date_to'   => $request->input('date_to', $defaultToDate),
-        ]);
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
         $rows = $this->buildPaymentCollectionQuery($request)->get()->map(function ($row) {
+            $totalAmount = (float) ($row->total_amount ?? 0);
+            $receivedAmount = (float) ($row->received_amount ?? 0);
+            $outstandingAmount = max(0, $totalAmount - $receivedAmount);
+
             return [
                 'Payment ID' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
                 'Payment Date' => $row->payment_date ? Carbon::parse($row->payment_date)->format('d-m-Y') : '-',
@@ -427,9 +442,9 @@ class CrmReportController extends Controller
                 'Customer ID' => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
                 'Company Name' => $row->company_name ?: '-',
                 'Customer Name' => $row->customer_name ?: '-',
-                'Total Amount' => number_format((float) ($row->total_amount ?? 0), 2, '.', ''),
-                'Received Amount' => number_format((float) ($row->received_amount ?? 0), 2, '.', ''),
-                'Outstanding Amount' => number_format((float) ($row->outstanding_amount ?? 0), 2, '.', ''),
+                'Total Amount' => number_format($totalAmount, 2, '.', ''),
+                'Received Amount' => number_format($receivedAmount, 2, '.', ''),
+                'Outstanding Amount' => number_format($outstandingAmount, 2, '.', ''),
                 'Payment Mode' => LeadProduct::PAYMENT_MODES[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                 'Transaction Reference' => $row->transaction_reference ?: '-',
                 'Received By' => $row->received_by ?: '-',
@@ -626,17 +641,10 @@ class CrmReportController extends Controller
 
     private function buildPaymentCollectionQuery(Request $request)
     {
-        $paidSubquery = LeadProductPayment::query()
-            ->selectRaw('lead_product_id, SUM(amount) as total_received')
-            ->groupBy('lead_product_id');
-
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
-            ->leftJoinSub($paidSubquery, 'payment_totals', function ($join) {
-                $join->on('payment_totals.lead_product_id', '=', 'lead_products.id');
-            })
             ->select([
                 'lead_product_payments.id as payment_id',
                 'lead_product_payments.payment_date',
@@ -647,7 +655,7 @@ class CrmReportController extends Controller
                 'leads.company_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
-                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0) as outstanding_amount'),
+                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(lead_product_payments.amount, 0), 0) as outstanding_amount'),
                 'collectors.name as received_by',
             ])
             ->orderByDesc('lead_product_payments.payment_date')
@@ -918,6 +926,183 @@ class CrmReportController extends Controller
         }
 
         return $query->get();
+    }
+
+    private function paymentCollectionSalesExecutives()
+    {
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+
+        $query = User::query()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereHas('roles.department', function ($dq) {
+                    $dq->whereIn(DB::raw('LOWER(name)'), [
+                        'sales',
+                        'crm',
+                        'business development',
+                        'marketing',
+                        'telecalling',
+                        'customer support',
+                        'customer support team',
+                        'customer success',
+                        'customer success team',
+                        'cst',
+                        'support',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales',
+                        'crm',
+                        'business_development',
+                        'marketing',
+                        'telecalling',
+                        'customer_support',
+                        'customer_support_team',
+                        'customer_success',
+                        'customer_success_team',
+                        'cst',
+                        'support',
+                    ]);
+                })
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereIn(DB::raw('LOWER(name)'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                        'customer_support_team_tl',
+                        'customer_support_team_executive',
+                        'senior_customer_success_team_executive',
+                        'customer_success_executive',
+                        'cst_executive',
+                        'cst_tl',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                        'customer_support_team_tl',
+                        'customer_support_team_executive',
+                        'senior_customer_success_team_executive',
+                        'customer_success_executive',
+                        'cst_executive',
+                        'cst_tl',
+                    ]);
+                });
+            });
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($visibleUserIds !== null) {
+            $query->whereIn('id', $visibleUserIds);
+        }
+
+        return $query->orderBy('name')->get(['id', 'name']);
+    }
+
+    private function resolveQuickDate(Request $request, string $defaultFromDate, string $defaultToDate): void
+    {
+        if ($request->has('reset')) {
+            $request->merge([
+                'date_from'  => null,
+                'date_to'    => null,
+                'quick_date' => null,
+            ]);
+            return;
+        }
+
+        $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
+
+        if ($quickDate === 'all') {
+            $request->merge([
+                'date_from'  => null,
+                'date_to'    => null,
+                'quick_date' => 'all',
+            ]);
+            return;
+        }
+
+        if ($quickDate === 'custom') {
+            $parsedFrom = $this->parseDateInput($request->input('date_from'));
+            $parsedTo   = $this->parseDateInput($request->input('date_to'));
+            $request->merge([
+                'date_from'  => $parsedFrom,
+                'date_to'    => $parsedTo,
+                'quick_date' => 'custom',
+            ]);
+            return;
+        }
+
+        if ($quickDate) {
+            $dates = match ($quickDate) {
+                'today'               => [now()->toDateString(), now()->toDateString()],
+                'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                'month', 'this_month' => [$defaultFromDate, $defaultToDate],
+                'quarter'             => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
+                'year', 'this_year'   => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                default               => null,
+            };
+
+            if ($dates) {
+                $request->merge([
+                    'date_from'  => $dates[0],
+                    'date_to'    => $dates[1],
+                    'quick_date' => $quickDate,
+                ]);
+                return;
+            }
+        }
+
+        $hasFrom = $request->filled('date_from');
+        $hasTo   = $request->filled('date_to');
+        if ($hasFrom || $hasTo) {
+            $parsedFrom = $this->parseDateInput($request->input('date_from'));
+            $parsedTo   = $this->parseDateInput($request->input('date_to'));
+            $request->merge([
+                'date_from'  => $parsedFrom,
+                'date_to'    => $parsedTo,
+                'quick_date' => 'custom',
+            ]);
+            return;
+        }
+
+        $request->merge([
+            'date_from'  => $defaultFromDate,
+            'date_to'    => $defaultToDate,
+            'quick_date' => 'month',
+        ]);
+    }
+
+    private function parseDateInput(?string $dateStr): ?string
+    {
+        if (empty($dateStr)) {
+            return null;
+        }
+
+        $dateStr = trim($dateStr);
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr)) {
+            return $dateStr;
+        }
+
+        try {
+            if (preg_match('/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/', $dateStr, $matches)) {
+                return Carbon::createFromDate((int)$matches[3], (int)$matches[2], (int)$matches[1])->toDateString();
+            }
+
+            return Carbon::parse($dateStr)->toDateString();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function revenueComparisonFilterOptions(): array

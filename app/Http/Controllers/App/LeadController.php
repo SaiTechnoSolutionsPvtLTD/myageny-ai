@@ -206,6 +206,20 @@ class LeadController extends Controller
                 $leadData['lead_source'] = $leadSource?->name;
             }
 
+            $assignedUser = User::find($leadData['assigned_to']);
+            if ($assignedUser && ($assignedUser->belongsToCustomerSupportDepartment() || $assignedUser->hasCustomerSupportLikeRole())) {
+                $mappedTl = $assignedUser->mappedManagers()
+                    ->where(function ($q) {
+                        $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%tl%')->orWhere('name', 'like', '%lead%'))
+                          ->orWhereHas('roles.department', fn ($dq) => $dq->where('name', 'like', '%support%')->orWhere('name', 'like', '%cst%'));
+                    })
+                    ->first();
+
+                $leadData['customer_support_tl_id'] = $mappedTl?->id ?: $assignedUser->id;
+                $leadData['customer_support_executive_id'] = $assignedUser->id;
+                $leadData['customer_support_allocated_at'] = now();
+            }
+
             $lead = Lead::create($leadData);
 
             if (!empty($validated['reminder'])) {
