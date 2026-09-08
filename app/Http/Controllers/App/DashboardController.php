@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\App;
 
+use App\Http\Controllers\App\Concerns\ScopesLeadStatusAndSourceToCompany;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Lead;
@@ -9,6 +10,8 @@ use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
+use App\Models\LeadStatus;
+use App\Models\SalesTarget;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +24,8 @@ use OpenApi\Attributes as OA;
 
 class DashboardController extends Controller
 {
+    use ScopesLeadStatusAndSourceToCompany;
+
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     // =========================================================================
@@ -103,30 +108,24 @@ class DashboardController extends Controller
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
-        // ── 2. Stage funnel ────────────────────────────────────────
-        $stageTotal  = 0;
-        $stageFunnel = [];
-        foreach (Lead::statusOptions() as $key => $label) {
-            $count = (clone $base())->where('lead_status', $key)->count();
-            $stageTotal += $count;
-            $stageFunnel[] = [
-                'key'   => $key,
-                'label' => $label,
-                'count' => $count,
-                'color' => Lead::STATUS_COLORS[$key] ?? ['bg' => '#f5f4f6', 'text' => '#7c7c7c', 'border' => '#e1dee3'],
-            ];
-        }
-        foreach ($stageFunnel as &$stage_item) {
-            $stage_item['percent'] = $stageTotal > 0
-                ? round($stage_item['count'] / $stageTotal * 100, 1)
-                : 0;
-        }
-        unset($stage_item);
+        // ── 2. Pipeline funnel ──────────────────────────────────────
+        // Web's Pipeline Funnel counts lead PRODUCTS grouped by each
+        // product's own pipeline stage (lead_products.lead_status_id against
+        // the company's LeadStatus master rows) — not leads grouped by
+        // Lead::lead_status like this used to. The two totals differ
+        // whenever a lead has zero or multiple products, which is why web's
+        // funnel total and its "Overall Leads Count" KPI aren't the same
+        // number. See buildProductStatusFunnel() below (ported from
+        // SuperAdminDashboardController).
+        $leadIds = (clone $base())->pluck('id');
+        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
+        $stageTotal  = $productStatusFunnel['total'];
+        $stageFunnel = $productStatusFunnel['stages'];
 
         // ── 3. Source distribution ─────────────────────────────────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        foreach (Lead::sourceOptions() as $key => $label) {
+        foreach ($this->companyScopedLeadSourceOptions($request->user()) as $key => $label) {
             $count = (clone $base())->where('lead_source', $key)->count();
             $sourceTotal += $count;
             $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
@@ -146,6 +145,15 @@ class DashboardController extends Controller
         $convertedValue    = (float) $lpProducts->where('product_status', 'converted')->sum('total_price');
         $convertedCount    = $lpProducts->where('product_status', 'converted')->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
+
+        // Mirrors SuperAdminDashboardController's KPI block — these were
+        // previously computed nowhere on the mobile side, so the "Converted
+        // Products" / "Upcoming Amount" / "Converted Value" / "Converted
+        // Percentage" Key Metrics cards always showed 0 on mobile even
+        // though $lpProducts (above) already has everything needed.
+        $upcomingAmount      = (float) $lpProducts->where('product_status', '!=', 'converted')->sum('total_price');
+        $totalProductsCount  = $lpProducts->count();
+        $convertedPercentage = $totalProductsCount > 0 ? round($convertedCount / $totalProductsCount * 100, 1) : 0;
 
         $leadProductIds = $lpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
@@ -317,6 +325,7 @@ class DashboardController extends Controller
 
         // ── 8. Branch-wise performance ────────────────────────────
         $branchPerformance = Branch::where('is_active', true)
+            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
             ->get()
             ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
                 $q = Lead::where('branch_id', $branch->id)
@@ -438,6 +447,11 @@ class DashboardController extends Controller
                     'pipeline_value'  => $pipelineValue,
                     'won_value'       => $wonValue,
                     'conversion_rate'            => $convRate,
+                    'converted_products_count'   => $convertedCount,
+                    'upcoming_amount'            => $upcomingAmount,
+                    'converted_value'            => $convertedValue,
+                    'converted_percentage'       => $convertedPercentage,
+                    'scheduled_followups_count'  => $todayFollowups->count(),
                     'overdue_reminders_count'    => $overdueCount,
                     'today_completed_calls_count' => LeadCallUpdate::whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))->whereDate('called_at', today())->count(),
                 ],
@@ -483,10 +497,12 @@ class DashboardController extends Controller
 
                 'month_trend' => $monthTrend,
 
+                'sales_target_stats' => $this->getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $request->user()),
+
                 // Enum references for mobile UI rendering
                 'enums' => [
-                    'statuses'         => Lead::statusOptions(),
-                    'sources'          => Lead::sourceOptions(),
+                    'statuses'         => $this->companyScopedLeadStatusOptions($request->user()),
+                    'sources'          => $this->companyScopedLeadSourceOptions($request->user()),
                     'priorities'       => Lead::PRIORITIES,
                     'status_colors'    => Lead::STATUS_COLORS,
                     'priority_colors'  => Lead::PRIORITY_COLORS,
@@ -500,6 +516,165 @@ class DashboardController extends Controller
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
+
+    // Ported from SuperAdminDashboardController::getSalesTargetStats() — same
+    // computation (per-user target if one is assigned/viewing their own data,
+    // else per-branch, else company-wide), so the mobile "Sales Target
+    // Tracking" card (Flutter UI/model already existed but had nothing to
+    // read) shows the same numbers as web's.
+    private function getSalesTargetStats($branchId, $userId, $dateFrom, $dateTo, $currentUser): array
+    {
+        $targetUserId = $userId ?: (!$currentUser->can('settings.manage') ? $currentUser->id : null);
+        $effectiveBranchId = null;
+
+        if ($targetUserId) {
+            $target = (float) SalesTarget::where('user_id', $targetUserId)->value('target_amount');
+            $userObj = User::find($targetUserId);
+            $targetName = $userObj ? $userObj->name : 'Representative';
+            $isIndividual = true;
+            $title = "{$targetName}'s Target";
+        } else {
+            $effectiveBranchId = $branchId ?: $currentUser->branch_id;
+
+            if ($effectiveBranchId) {
+                $branchObj = Branch::find($effectiveBranchId);
+                $targetName = $branchObj ? $branchObj->name : 'Branch';
+
+                $userIds = User::where('branch_id', $effectiveBranchId)->pluck('id');
+                $target = (float) SalesTarget::whereIn('user_id', $userIds)->sum('target_amount');
+                $isIndividual = false;
+                $title = "{$targetName} Target";
+            } else {
+                $target = (float) SalesTarget::sum('target_amount');
+                $targetName = 'Overall';
+                $isIndividual = false;
+                $title = 'Overall Sales Target';
+            }
+        }
+
+        $achievedQuery = LeadProductPayment::query();
+        if ($targetUserId) {
+            $achievedQuery->whereHas('lead', function ($q) use ($targetUserId) {
+                $q->where('assigned_to', $targetUserId);
+            });
+        } elseif ($effectiveBranchId) {
+            $achievedQuery->whereHas('lead', function ($q) use ($effectiveBranchId) {
+                $q->where('branch_id', $effectiveBranchId);
+            });
+        }
+
+        if ($dateFrom) {
+            $achievedQuery->whereDate('payment_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $achievedQuery->whereDate('payment_date', '<=', $dateTo);
+        }
+
+        $achieved = (float) $achievedQuery->sum('amount');
+        $pending  = max(0.00, $target - $achieved);
+        $percent  = $target > 0 ? round(($achieved / $target) * 100, 1) : 0;
+
+        return [
+            'name'          => $targetName,
+            'is_individual' => $isIndividual,
+            'target'        => $target,
+            'achieved'      => $achieved,
+            'pending'       => $pending,
+            'percent'       => $percent,
+            'title'         => $title,
+        ];
+    }
+
+    // Ported from SuperAdminDashboardController::buildProductStatusFunnel() —
+    // see the "── 2. Pipeline funnel ──" comment above for why this replaced
+    // the old lead-status-based grouping. $leadIds is accepted to match the
+    // original signature but, same as web's version, isn't actually used
+    // inside — every count here comes from $this->getLeadProductBaseQuery().
+    private function buildProductStatusFunnel($leadIds, Request $request): array
+    {
+        $companyId = $request->user()?->company_id;
+
+        // 1. Try grouping by LeadStatus if present and yields results
+        $statuses = LeadStatus::query()
+            ->when(
+                $companyId,
+                fn($query) => $query->where(fn($statusQuery) => $statusQuery
+                    ->where('company_id', $companyId)
+                    ->orWhereNull('company_id'))
+            )
+            ->orderBy('id')
+            ->get(['id', 'name']);
+
+        $leadProducts = $this->getLeadProductBaseQuery($request)->get(['id', 'lead_status_id', 'product_status']);
+
+        if ($statuses->isNotEmpty() && $leadProducts->isNotEmpty()) {
+            $statusByName = [];
+            foreach ($statuses as $s) {
+                $statusByName[strtolower(trim($s->name))] = $s->id;
+            }
+
+            $counts = [];
+            foreach ($statuses as $s) {
+                $counts[$s->id] = 0;
+            }
+
+            foreach ($leadProducts as $lp) {
+                if (!empty($lp->lead_status_id) && isset($counts[$lp->lead_status_id])) {
+                    $counts[$lp->lead_status_id]++;
+                } elseif (!empty($lp->product_status)) {
+                    $pStatusKey = strtolower(trim($lp->product_status));
+                    if (isset($statusByName[$pStatusKey])) {
+                        $counts[$statusByName[$pStatusKey]]++;
+                    }
+                }
+            }
+
+            $stageTotal = (int) array_sum($counts);
+
+            if ($stageTotal > 0) {
+                $stages = $statuses->map(function ($status) use ($counts, $stageTotal) {
+                    $key = LeadProduct::statusKey($status->name);
+                    $count = (int) ($counts[$status->id] ?? 0);
+
+                    return [
+                        'key'     => (string) $status->id,
+                        'label'   => $status->name,
+                        'count'   => $count,
+                        'percent' => $stageTotal > 0 ? round($count / $stageTotal * 100, 1) : 0,
+                        'color'   => LeadProduct::PRODUCT_STATUS_CONFIG[$key]
+                            ?? ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'],
+                    ];
+                })->values()->toArray();
+
+                return ['total' => $stageTotal, 'stages' => $stages];
+            }
+        }
+
+        // 2. Default fallback: Group by product_status column (case insensitive)
+        $rawCounts = $leadProducts->isEmpty()
+            ? collect()
+            : $leadProducts->groupBy(fn ($lp) => strtolower(trim($lp->product_status)))
+                ->map(fn ($group) => $group->count());
+
+        $stageTotal = (int) $rawCounts->sum();
+        $stages = [];
+
+        foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
+            $count = (int) ($rawCounts[$pkey] ?? 0);
+            $config = LeadProduct::PRODUCT_STATUS_CONFIG[$pkey]
+                ?? ['bg' => '#eff6ff', 'text' => '#2563eb', 'border' => '#bfdbfe'];
+
+            $stages[] = [
+                'key'     => $pkey,
+                'label'   => $plabel,
+                'count'   => $count,
+                'percent' => $stageTotal > 0 ? round($count / $stageTotal * 100, 1) : 0,
+                'color'   => $config,
+            ];
+        }
+
+        return ['total' => $stageTotal, 'stages' => $stages];
+    }
 
     private function getLeadProductBaseQuery(Request $request): \Illuminate\Database\Eloquent\Builder
     {

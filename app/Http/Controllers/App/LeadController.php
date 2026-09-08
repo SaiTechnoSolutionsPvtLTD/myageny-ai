@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\App\Concerns\RestrictsEmployeesToOwnBranch;
+use App\Http\Controllers\App\Concerns\ScopesLeadStatusAndSourceToCompany;
 use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\LeadReminder;
@@ -30,6 +31,7 @@ use App\Services\NotificationService;
 class LeadController extends Controller
 {
     use RestrictsEmployeesToOwnBranch;
+    use ScopesLeadStatusAndSourceToCompany;
 
     public function __construct(private readonly DataVisibilityService $visibility, private readonly NotificationService $notifications) {}
 
@@ -85,7 +87,17 @@ class LeadController extends Controller
             });
         }
 
-        if ($request->filled('branch_id'))     $query->where('branch_id',    $request->branch_id);
+        // Only apply the branch_id filter param if the requesting user is
+        // actually allowed to see that branch (canAssignBranch() doubles as
+        // "may target/view this branch" here) — silently ignoring an
+        // unauthorized value rather than erroring keeps this a well-behaved
+        // filter while still closing off the "pass another branch_id to
+        // peek at it" bypass named in the ticket. applyLeadVisibility()
+        // above already bounds the result set by assigned_to visibility
+        // regardless, so this is defense in depth, not the only guard.
+        if ($request->filled('branch_id') && $this->canAssignBranch((int) $request->branch_id, $request->user())) {
+            $query->where('branch_id', $request->branch_id);
+        }
         if ($request->filled('mobile_number')) $query->where('mobile_number', 'like', '%' . $request->mobile_number . '%');
         // Mobile's Filter Leads modal sources its Lead Source / Lead Status
         // dropdown options from meta() below, whose keys are
@@ -197,12 +209,29 @@ class LeadController extends Controller
             $leadData['branch_id'] = $leadData['branch_id'] ?? $request->user()->branch_id;
 
             abort_unless($this->visibility->canAssignTo($leadData['assigned_to'], $request->user()), 403);
+            abort_unless($this->canAssignBranch($leadData['branch_id'], $request->user()), 403);
+
+            // `exists:lead_sources,id` / `exists:lead_statuses,id` above only
+            // check the id exists *somewhere* across every company — they
+            // run a raw DB query with no model scope. This is the actual
+            // company-ownership check (see ScopesLeadStatusAndSourceToCompany),
+            // closing off a client-supplied id from another company being
+            // saved onto this lead.
+            abort_unless($this->isLeadSourceIdAllowedForCompany($leadData['lead_source_id'] ?? null, $request->user()), 403);
+            abort_unless($this->isLeadStatusIdAllowedForCompany($leadData['lead_status_id'] ?? null, $request->user()), 403);
 
             // Get source name from lead_source_id
             $leadData['lead_source'] = null;
 
             if (!empty($leadData['lead_source_id'])) {
-                $leadSource = LeadSource::find($leadData['lead_source_id']);
+                // withoutGlobalScope: the id was just confirmed above to
+                // belong to this company OR be a shared NULL-company_id
+                // default — BelongsToCompany's own global scope would only
+                // match the former (it excludes NULL-company_id rows
+                // whenever the acting user has a company_id), so a bare
+                // find() here could wrongly drop the resolved name for a
+                // legitimate global default.
+                $leadSource = LeadSource::withoutGlobalScope('company')->find($leadData['lead_source_id']);
                 $leadData['lead_source'] = $leadSource?->name;
             }
 
@@ -333,6 +362,32 @@ class LeadController extends Controller
 
         if (array_key_exists('assigned_to', $validated) && $validated['assigned_to']) {
             abort_unless($this->visibility->canAssignTo($validated['assigned_to'], $request->user()), 403);
+        }
+
+        // Same company-ownership check as store() — `exists:lead_sources,id`
+        // / `exists:lead_statuses,id` above don't check company at all, so
+        // without this a lead_source_id/lead_status_id from another
+        // company could be written onto this lead by editing the request.
+        if (array_key_exists('lead_source_id', $validated)) {
+            abort_unless($this->isLeadSourceIdAllowedForCompany($validated['lead_source_id'], $request->user()), 403);
+        }
+        if (array_key_exists('lead_status_id', $validated)) {
+            abort_unless($this->isLeadStatusIdAllowedForCompany($validated['lead_status_id'], $request->user()), 403);
+        }
+
+        // Only enforce the branch guard when branch_id is actually being
+        // *changed* to something new — the mobile Edit screen's Branch
+        // field is read-only and simply resubmits the lead's existing
+        // branch_id unchanged on every save (e.g. when the user only
+        // edited the company name). A lead's branch_id isn't guaranteed to
+        // be one of the editor's own branches (lead visibility is based on
+        // assigned_to, not branch_id), so blocking a same-value
+        // resubmission here would break ordinary edits for leads that
+        // happen to sit in another branch. A genuine reassignment attempt
+        // — the value actually differing from what's stored — still goes
+        // through canAssignBranch().
+        if (array_key_exists('branch_id', $validated) && $validated['branch_id'] !== $lead->branch_id) {
+            abort_unless($this->canAssignBranch($validated['branch_id'], $request->user()), 403);
         }
 
         $lead->update($validated);
@@ -466,14 +521,39 @@ class LeadController extends Controller
     )]
     public function meta(): JsonResponse
     {
+        $user = request()->user();
+        // Branch Add/Edit/Filter restriction: company-wide/admin users still
+        // see every branch; everyone else only sees their own (usually a
+        // single branch, but getMyBranchIds() covers the branch_user pivot
+        // for a user linked to more than one). See canAssignBranch() for
+        // the matching write-side enforcement.
+        $branchesQuery = Branch::where('is_active', true);
+        // Branch also carries BelongsToCompany, but (like LeadStatus/
+        // LeadSource) that global scope isn't something this file leans
+        // on anywhere else — explicit here too, so a company-wide/admin
+        // user's meta() never lists another company's branches alongside
+        // their own.
+        if ($user?->company_id) {
+            $branchesQuery->where('company_id', $user->company_id);
+        }
+        if (! $this->visibility->isCompanyWideUser($user)) {
+            $branchesQuery->whereIn('id', $user->getMyBranchIds());
+        }
+
         return response()->json([
             'status' => true,
             'data'   => [
-                'sources'        => Lead::sourceOptions(),
-                'statuses'       => Lead::statusOptions(),
+                // Company-scoped, non-cached alternative to
+                // Lead::sourceOptions()/statusOptions() — see
+                // ScopesLeadStatusAndSourceToCompany's doc comment for why
+                // those shared-model helpers can't be trusted here (no
+                // company filter reaches an `exists:` validation rule, and
+                // their static cache doesn't distinguish between companies).
+                'sources'        => $this->companyScopedLeadSourceOptions($user),
+                'statuses'       => $this->companyScopedLeadStatusOptions($user),
                 'priorities'     => Lead::PRIORITIES,
                 'reminder_types' => LeadReminder::TYPES,
-                'branches'       => Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+                'branches'       => $branchesQuery->orderBy('name')->get(['id', 'name']),
                 'users'          => $this->restrictUserCollectionToOwnBranch(
                         $this->visibility->visibleAssignableUsers(request()->user()),
                         request()->user()
@@ -554,6 +634,51 @@ class LeadController extends Controller
                 'has_more'     => $employees->currentPage() < $employees->lastPage(),
             ],
         ]);
+    }
+
+    /**
+     * Branch-restriction guard for Lead create/update/list (mobile-only —
+     * see "Fix Branch Field Access in Lead Add, Edit & Filter"). Mirrors
+     * canAssignTo()'s pattern: null/omitted is always fine (defaults to the
+     * user's own branch downstream), company-wide/admin roles (System
+     * Admin, Company Admin, the top-tier "Branch Admin" role, CBO/COO — the
+     * same set DataVisibilityService::isCompanyWideUser() already treats as
+     * unrestricted everywhere else) may target any branch, and everyone
+     * else may only target a branch they themselves belong to
+     * (User::getMyBranchIds() — usually just one, but a user can be linked
+     * to more than one branch via the branch_user pivot). This is enforced
+     * here (not just hidden in the mobile UI) so a non-admin user can't
+     * bypass the restriction by sending an arbitrary branch_id directly.
+     *
+     * Company isolation: "company-wide" only ever meant "every branch
+     * *within this user's own company*", not literally every branch row in
+     * the shared `branches` table. `exists:branches,id` validation checks
+     * existence only, with no company scope, so without the explicit
+     * company_id check below a company-wide user could target a branch_id
+     * belonging to a different company entirely — see "Lead Status & Source
+     * – Company and Branch-wise Data Filtering", section 4.
+     */
+    private function canAssignBranch(?int $branchId, User $user): bool
+    {
+        if ($branchId === null) {
+            return true;
+        }
+
+        if ($user->company_id) {
+            $branchCompanyId = Branch::withoutGlobalScope('company')
+                ->whereKey($branchId)
+                ->value('company_id');
+
+            if ($branchCompanyId !== null && (int) $branchCompanyId !== (int) $user->company_id) {
+                return false;
+            }
+        }
+
+        if ($this->visibility->isCompanyWideUser($user)) {
+            return true;
+        }
+
+        return in_array($branchId, $user->getMyBranchIds(), true);
     }
 
     // =========================================================================
@@ -929,11 +1054,15 @@ class LeadController extends Controller
 
     public function leadProductFunction(Request $request)
     {
-        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->toDateString();
-        $dateTo   = $request->filled('date_to')   ? $request->date_to   : now()->toDateString();
+        // Default to the current month — matches web's productsIndex()
+        // default (now()->startOfMonth()/endOfMonth()). Previously defaulted
+        // to today only, which silently diverged from web whenever this
+        // endpoint is hit without explicit dates.
+        $hasDateFilter = $request->filled('date_from') || $request->filled('date_to');
+        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->startOfMonth()->toDateString();
+        $dateTo   = $request->filled('date_to')   ? $request->date_to   : now()->endOfMonth()->toDateString();
 
-        // Default to today if no dates supplied
-        if (!$request->filled('date_from') && !$request->filled('date_to')) {
+        if (!$hasDateFilter) {
             $request->merge([
                 'date_from' => $dateFrom,
                 'date_to'   => $dateTo,
@@ -941,9 +1070,17 @@ class LeadController extends Controller
         }
 
         $query = LeadProduct::query()
-            ->with(['lead.branch', 'lead.assignedTo', 'product'])
+            ->with(['lead.branch', 'lead.assignedTo', 'product', 'leadStatus'])
             ->whereHas('lead')
             ->latest('created_at');
+
+        // Company/branch/assignment scoping — web's productsIndex() applies
+        // this via $this->visibility->applyLeadRelationVisibility($query);
+        // this mobile endpoint never did, so any authenticated user could
+        // see lead products outside their own company/branch/assignment
+        // scope. Mirrors the same fix already applied elsewhere in this
+        // controller (see leadsMeta/index) and in LeadController.php (web).
+        $this->visibility->applyLeadRelationVisibility($query, 'lead', $request->user());
 
         // ── Search ──────────────────────────────────────────────
         if ($request->filled('search')) {
@@ -980,12 +1117,46 @@ class LeadController extends Controller
             $lq->where('assigned_to', $request->assigned_to));
         }
 
+        // Product Status — the filter dropdown sends a LeadStatus id (the
+        // app's statuses come from the statusOptions list below, same as
+        // web). Previously this compared the raw value directly against the
+        // string `product_status` column, so selecting any status from a
+        // real (numeric-id) dropdown could never match anything. Mirrors
+        // web's productsIndex(): accept either a numeric lead_status_id or a
+        // literal product_status key/name.
         if ($request->filled('product_status')) {
-            $query->where('product_status', $request->product_status);
+            $statusVal = $request->product_status;
+            if (is_numeric($statusVal)) {
+                $statusRecord = LeadStatus::find($statusVal);
+                $statusName = $statusRecord ? strtolower($statusRecord->name) : null;
+                $query->where(function ($q) use ($statusVal, $statusName) {
+                    $q->where('lead_status_id', (int) $statusVal);
+                    if ($statusName) {
+                        $q->orWhere('product_status', $statusName);
+                    }
+                });
+            } else {
+                $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
+                $statusId = $statusRecord?->id;
+                $query->where(function ($q) use ($statusVal, $statusId) {
+                    $q->where('product_status', $statusVal);
+                    if ($statusId) {
+                        $q->orWhere('lead_status_id', $statusId);
+                    }
+                });
+            }
         }
 
         if ($request->filled('product_id')) {
             $query->where('product_id', $request->product_id);
+        }
+
+        // Product Active — Product catalog's own active/inactive flag, as
+        // opposed to product_status (the lead-product's pipeline status
+        // above). Present on web (product_active), was entirely absent here.
+        if ($request->filled('product_active')) {
+            $status = $request->product_active;
+            $query->whereHas('product', fn ($q) => $q->where('status', $status));
         }
 
         if ($request->filled('date_from')) {
@@ -1010,6 +1181,7 @@ class LeadController extends Controller
 
         // ── Filter option lists ──────────────────────────────────
         $branches = Branch::where('is_active', true)
+            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
             ->orderBy('name')
             ->get(['id', 'name']);
 
@@ -1020,19 +1192,40 @@ class LeadController extends Controller
         $products = Product::orderBy('package_name')
             ->get(['id', 'package_name', 'product_name']);
 
+        // Status filter options — was missing entirely, so the Flutter
+        // screen's Product Status dropdown was hardcoded to a fixed
+        // New/Active/Closed list that doesn't correspond to any real
+        // product_status value. Sourced the same way web's productsIndex()
+        // does: this company's LeadStatus rows (falling back to global ones).
+        $companyId = $request->user()?->company_id;
+        $statusOptions = LeadStatus::query()
+            ->when(
+                $companyId,
+                fn ($q) => $q->where(fn ($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')),
+                fn ($q) => $q->whereNull('company_id')
+            )
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return response()->json([
-            'lead_products' => $leadProducts,
-            'stats'         => $stats,
-            'branches'      => $branches,
-            'users'         => $users,
+            'lead_products'  => $leadProducts,
+            'stats'          => $stats,
+            'branches'       => $branches,
+            'users'          => $users,
+            'status_options' => $statusOptions,
             'products'      => $products,
         ]);
     }
 
     public function callUpdateFunction(Request $request)
     {
-        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->toDateString();
-        $dateTo   = $request->filled('date_to')   ? $request->date_to   : now()->toDateString();
+        // Default to the current month when neither date is supplied —
+        // matches web's LeadCallUpdateController::index() default. Was
+        // defaulting to today only, so this list silently diverged from web
+        // (and from Lead Products' own default) whenever no date filter was
+        // picked.
+        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->startOfMonth()->toDateString();
+        $dateTo   = $request->filled('date_to')   ? $request->date_to   : now()->endOfMonth()->toDateString();
 
         $query = LeadCallUpdate::with([
             'lead:id,company_name,contact_name,mobile_number,email',
@@ -1040,6 +1233,14 @@ class LeadController extends Controller
             'outCome:id,name',
             'outComeSubCategory:id,name',
         ])->latest('called_at');
+
+        // Company/branch/assignment scoping — was entirely missing here (web's
+        // LeadCallUpdateController::index() applies
+        // $this->visibility->applyLeadRelationVisibility($query)), so any
+        // authenticated mobile user could see call updates for leads outside
+        // their own company/branch/assignment scope. Same class of gap as
+        // leadProductFunction() above.
+        $this->visibility->applyLeadRelationVisibility($query, 'lead', $request->user());
 
         // ── Search ──────────────────────────────────────────────
         if ($request->filled('search')) {
@@ -1080,6 +1281,7 @@ class LeadController extends Controller
 
         // ── Filter option lists ──────────────────────────────────
         $branches = Branch::where('is_active', true)
+            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
             ->orderBy('name')
             ->get(['id', 'name']);
 
@@ -1137,7 +1339,9 @@ class LeadController extends Controller
         }
 
         DB::transaction(function () use ($request, $req) {
-            $defaultStatus = LeadStatus::first();
+            // Was a bare LeadStatus::first() — no company scope guarantee
+            // and no defined ordering (see ScopesLeadStatusAndSourceToCompany).
+            $defaultStatus = $this->companyScopedDefaultLeadStatus($request->user());
             $leadProduct = LeadProduct::create([
                 'lead_id'          => $req->lead_id,
                 'product_id'       => $req->product_id,

@@ -135,6 +135,88 @@ class LeadShowController extends Controller
         ], 201);
     }
 
+    #[OA\Put(
+        path: "/api/mobile/leads/{lead}/calls/{call}",
+        summary: "Update a call update",
+        security: [["sanctum" => []]],
+        tags: ["Lead Sub-Resources"],
+        parameters: [
+            new OA\Parameter(name: "lead", in: "path", required: true, description: "Lead ID",        schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: "call", in: "path", required: true, description: "Call Update ID", schema: new OA\Schema(type: "integer")),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["outcome", "outcome_subcategory_id"],
+                properties: [
+                    new OA\Property(property: "outcome",                 type: "string", example: "interested", description: "Key from LeadCallUpdate::OUTCOMES"),
+                    new OA\Property(property: "outcome_subcategory_id",  type: "string"),
+                    new OA\Property(property: "notes",                   type: "string", nullable: true, example: "Customer wants demo next week"),
+                    new OA\Property(property: "next_follow_up",          type: "string", format: "date", nullable: true, example: "2027-01-22"),
+                    new OA\Property(property: "followup_time",           type: "string", nullable: true, example: "10:30:00"),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: "Call update updated",
+                content: new OA\JsonContent(properties: [
+                    new OA\Property(property: "status",  type: "boolean", example: true),
+                    new OA\Property(property: "message", type: "string",  example: "Call update updated successfully."),
+                    new OA\Property(property: "data",    type: "object"),
+                ])
+            ),
+            new OA\Response(response: 403, description: "Forbidden",       content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
+            new OA\Response(response: 404, description: "Not found",       content: new OA\JsonContent(ref: "#/components/schemas/ErrorResponse")),
+            new OA\Response(response: 422, description: "Validation error", content: new OA\JsonContent(ref: "#/components/schemas/ValidationErrorResponse")),
+        ]
+    )]
+    public function updateCall(Request $request, Lead $lead, LeadCallUpdate $call): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+        abort_if($call->lead_id !== $lead->id, 403, 'Call does not belong to this lead.');
+
+        $data = $request->validate([
+            'outcome'                => ['required'],
+            'outcome_subcategory_id' => ['required'],
+            'notes'                  => ['nullable', 'string', 'max:1000'],
+            'next_follow_up'         => ['nullable', 'date'],
+            'followup_time'          => ['nullable'],
+            'reminder_remarks'       => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $call->update([
+            'outcome'             => $data['outcome'],
+            'outcome_subcategory' => $data['outcome_subcategory_id'],
+            'notes'               => $data['notes'] ?? null,
+            'next_follow_up'      => $data['next_follow_up'] ?: null,
+            'followup_time'       => $data['followup_time'] ?: null,
+        ]);
+
+        // Mirrors web's updateCall(): editing a call can also raise a new
+        // follow-up reminder, same as creating one does, when a follow-up
+        // date is (re)selected and the user typed a reminder title for it.
+        if (! empty($data['next_follow_up']) && ! empty($data['reminder_remarks'])) {
+            \App\Models\LeadReminder::create([
+                'lead_id'        => $lead->id,
+                'user_id'        => $request->user()->id,
+                'title'          => \Illuminate\Support\Str::limit(trim($data['reminder_remarks']), 150),
+                'description'    => $data['notes'] ? \Illuminate\Support\Str::limit((string) $data['notes'], 500) : null,
+                'remind_at'      => $data['next_follow_up'],
+                'remainder_time' => $data['followup_time'] ?: '10:00:00',
+                'type'           => 'follow_up',
+                'priority'       => 'high',
+            ]);
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Call update updated successfully.',
+            'data'    => $this->formatCall($call->fresh()),
+        ]);
+    }
+
     #[OA\Delete(
         path: "/api/mobile/leads/{lead}/calls/{call}",
         summary: "Delete a call update",
@@ -518,8 +600,12 @@ class LeadShowController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Resolve from the company-scoped $statuses collection above, not a
+        // bare LeadStatus::find() — the latter would accept a client-supplied
+        // lead_status_id belonging to another company (exists:lead_statuses,id
+        // validates existence only, not company ownership).
         $status = $request->filled('lead_status_id')
-            ? \App\Models\LeadStatus::find($request->lead_status_id)
+            ? $statuses->firstWhere('id', (int) $request->lead_status_id)
             : $statuses->first(
                 fn($option) =>
                 LeadProduct::statusKey($option->name) === LeadProduct::statusKey($request->product_status)
@@ -1136,9 +1222,20 @@ class LeadShowController extends Controller
             'duration_minutes'    => $call->duration_minutes,
             'outcome'             => $call->outCome?->name ?? $call->outcome,
             'outcome_label'       => $call->outComeSubCategory?->name ?? $call->outcome_subcategory,
+            // Raw foreign key ids, separate from the display strings above —
+            // 'outcome'/'outcome_label' resolve to names for display, but the
+            // mobile Edit Call form needs the actual ids to preselect the
+            // right dropdown/subcategory chip. Both `outcome` and
+            // `outcome_subcategory` columns on this model already *are* the
+            // FK ids (see LeadCallUpdate::outCome()/outComeSubCategory()),
+            // so these just expose the raw, unresolved values under
+            // unambiguous names.
+            'outcome_id'          => $call->getRawOriginal('outcome'),
+            'outcome_subcategory_id' => $call->getRawOriginal('outcome_subcategory'),
             'outcome_color'       => $call->outcome_color,
             'notes'               => $call->notes,
             'next_follow_up'      => $call->next_follow_up?->toDateString(),
+            'followup_time'       => $call->followup_time,
             'user'                => $call->user ? ['id' => $call->user->id, 'name' => $call->user->name] : null,
         ];
     }

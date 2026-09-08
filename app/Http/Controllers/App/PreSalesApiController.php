@@ -32,6 +32,14 @@ class PreSalesApiController extends Controller
             $query = Lead::with(['branch', 'assignedTo', 'preSaleExecutive', 'createdBy'])
                 ->latest('lead_date');
 
+            // Company isolation — web's PreSalesController relies on request-
+            // level middleware/global scoping for this; that guarantee isn't
+            // available here, so it's applied explicitly. Without it, an
+            // admin/company-wide user would see every company's pre-sales
+            // leads instead of just their own. See "Lead Status & Source –
+            // Company and Branch-wise Data Filtering", section 3/4.
+            $this->visibility->applyCompanyVisibility($query, $user);
+
             // Identical scoping rule to web: admins see every lead that has
             // a pre-sales executive set, everyone else only sees leads
             // that are theirs (as pre-sales executive OR as assignee).
@@ -98,7 +106,10 @@ class PreSalesApiController extends Controller
     {
         try {
             $salesExecutives = $this->visibility->visibleAssignableUsers($request->user());
-            $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+            $branches = Branch::where('is_active', true)
+                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name']);
 
             return response()->json([
                 'success' => true,
@@ -138,8 +149,24 @@ class PreSalesApiController extends Controller
                 'sales_person_id' => 'required|exists:users,id',
             ]);
 
-            $salesPerson = User::findOrFail($validated['sales_person_id']);
-            $leadIds = $validated['lead_ids'];
+            $companyId = $this->visibility->companyIdFor($request->user());
+
+            $salesPersonQuery = User::query()->whereKey($validated['sales_person_id']);
+            if ($companyId) {
+                $salesPersonQuery->where('company_id', $companyId);
+            }
+            $salesPerson = $salesPersonQuery->first();
+            abort_unless($salesPerson, 403, 'Selected user does not belong to your company.');
+
+            // `exists:leads,id` above only checks existence across every
+            // company — re-derive lead_ids against this user's own visible
+            // leads so an id from another company can't be allocated here.
+            // See "Lead Status & Source – Company and Branch-wise Data
+            // Filtering", section 4.
+            $leadIdsQuery = Lead::query()->whereIn('id', $validated['lead_ids']);
+            $this->visibility->applyCompanyVisibility($leadIdsQuery, $request->user());
+            $leadIds = $leadIdsQuery->pluck('id')->all();
+            abort_if(empty($leadIds), 403, 'None of the selected leads belong to your company.');
 
             Lead::whereIn('id', $leadIds)->update([
                 'assigned_to' => $salesPerson->id,

@@ -70,14 +70,38 @@ class AttendanceApiController extends Controller
     {
         $user = auth()->user();
 
-        return EmployeeOnboarding::query()
-            ->where(function ($query) use ($user) {
-                $query->where('portal_user_id', $user?->id)
-                    ->orWhere('email', $user?->email);
-            })
-            ->active()
+        return $this->withActivePortalAccount(
+            EmployeeOnboarding::query()
+                ->where(function ($query) use ($user) {
+                    $query->where('portal_user_id', $user?->id)
+                        ->orWhere('email', $user?->email);
+                })
+                ->active()
+        )
             ->latest('id')
             ->first();
+    }
+
+    /**
+     * Excludes an employee/intern whose linked portal login account has been
+     * deactivated (User.is_active = false) — mirrors
+     * AttendanceController::activeEmployeesQuery()/activeInternsQuery()
+     * exactly (web). This is a *separate* flag from EmployeeOnboarding's own
+     * `status` column (active/resigned, already covered by the `active()`
+     * scope): an employee can stay status=active in their onboarding record
+     * while HR deactivates just their portal account, and that deactivation
+     * is what the app's Employee module surfaces as "Inactive". Records with
+     * no linked portal account at all (portal_user_id null) are left alone,
+     * same as web. Applied everywhere an employee/intern is listed, searched,
+     * or selected in the Attendance module so a deactivated user's row can
+     * never appear (as "Absent" or any other status).
+     */
+    private function withActivePortalAccount(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('portal_user_id')
+                ->orWhereHas('portalUser', fn ($uq) => $uq->where('is_active', true));
+        });
     }
 
     /**
@@ -87,9 +111,9 @@ class AttendanceApiController extends Controller
      */
     private function accessibleAttendees(): \Illuminate\Support\Collection
     {
-        $employeeQuery = EmployeeOnboarding::query()
-            ->active()
-            ->whereNotNull('name');
+        $employeeQuery = $this->withActivePortalAccount(
+            EmployeeOnboarding::query()->active()
+        )->whereNotNull('name');
 
         if (! $this->canViewAllAttendance()) {
             $currentEmployee = $this->currentEmployee();
@@ -129,9 +153,9 @@ class AttendanceApiController extends Controller
             return $employees->values();
         }
 
-        $internQuery = InternJoiningForm::query()
-            ->active()
-            ->whereNotNull('name');
+        $internQuery = $this->withActivePortalAccount(
+            InternJoiningForm::query()->active()
+        )->whereNotNull('name');
 
         if ($this->shouldFilterByBranch()) {
             $branchIds = auth()->user()?->getMyBranchIds() ?? [];

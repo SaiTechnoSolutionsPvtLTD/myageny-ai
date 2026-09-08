@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\App;
 
+use App\Http\Controllers\App\Concerns\ScopesLeadStatusAndSourceToCompany;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,8 @@ use App\Models\Role;
 
 class ReportApiController extends Controller
 {
+    use ScopesLeadStatusAndSourceToCompany;
+
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     public function leadsSummaryApi(Request $request): JsonResponse
@@ -93,15 +96,26 @@ class ReportApiController extends Controller
 
             $analytics = $this->buildLeadsSummaryAnalytics($analyticsRows);
 
-            $sourceOptions = LeadSource::query()->orderBy('name')->pluck('name')->values();
-            $statusOptions = LeadStatus::query()->orderBy('name')->pluck('name')->values();
+            // Company-scoped — see ScopesLeadStatusAndSourceToCompany. Same
+            // "names only" shape as before (LeadSource::query()->...->pluck
+            // ('name')->values()), just no longer able to pull in another
+            // company's identically-named defaults.
+            $sourceOptions = array_values($this->companyScopedLeadSourceOptions($request->user()));
+            $statusOptions = array_values($this->companyScopedLeadStatusOptions($request->user()));
             $users = $this->visibility->visibleAssignableUsers();
 
             $productOptions = Product::query()->orderBy('package_name');
             $this->visibility->applyProductVisibility($productOptions);
             $products = $productOptions->get(['id', 'package_name', 'product_name']);
 
-            $branches = Branch::query()->orderBy('name')->get(['id', 'name']);
+            // Branch also carries BelongsToCompany, but (as elsewhere in the
+            // mobile controllers) that global scope isn't relied on here —
+            // explicit filter so this report's branch filter list can't
+            // include another company's branches.
+            $branches = Branch::query()
+                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name']);
 
             $rowsData = $reportRows->getCollection()->map(function ($row) {
                 $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
@@ -390,7 +404,10 @@ class ReportApiController extends Controller
 
             $paymentModes = LeadProduct::PAYMENT_MODES; // [key => label]
             $customers = $this->paymentCollectionCustomerOptions();
-            $branches = Branch::query()->orderBy('name')->get(['id', 'name']);
+            $branches = Branch::query()
+                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name']);
 
             $rowsData = $reportRows->getCollection()->map(function ($row) use ($paymentModes) {
                 $paymentDate = $row->payment_date ? Carbon::parse($row->payment_date) : null;
@@ -665,7 +682,10 @@ class ReportApiController extends Controller
                     'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
                 ]);
 
-            $branches = Branch::query()->orderBy('name')->get(['id', 'name'])
+            $branches = Branch::query()
+                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name'])
                 ->map(fn($b) => ['id' => $b->id, 'name' => $b->name]);
 
             $data = $reportRows->getCollection()->map(fn($row) => [
@@ -2017,7 +2037,11 @@ class ReportApiController extends Controller
         $currentYear = now()->year;
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
-        $branches = \App\Models\Branch::query()->orderBy('name')->get(['id', 'name']);
+        $branchesQuery = \App\Models\Branch::query()->orderBy('name');
+        if ($companyId = $this->visibility->companyIdFor()) {
+            $branchesQuery->where('company_id', $companyId);
+        }
+        $branches = $branchesQuery->get(['id', 'name']);
 
         return [
             'period_types' => [

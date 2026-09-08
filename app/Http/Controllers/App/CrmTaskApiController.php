@@ -114,7 +114,10 @@ class CrmTaskApiController extends Controller
 
         $tasks->getCollection()->transform(fn (LeadReminder $r) => $this->formatTask($r));
 
-        $branches = Branch::orderBy('name')->get(['id', 'name']);
+        $branches = Branch::query()
+            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
         $users    = $this->scopeEmployeeQueryToOwnBranch(User::where('is_active', true), $request->user())
             ->orderBy('name')
             ->get(['id', 'name']);

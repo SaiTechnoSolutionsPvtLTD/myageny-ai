@@ -4,6 +4,7 @@ namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -358,6 +359,16 @@ class AuthController extends Controller
             // Testing Dashboard visibility and ModuleFab's auto-routing.
             'is_testing_department' => $user->belongsToTestingDepartment() || $user->hasTestingLikeRole(),
             'is_active'       => $user->is_active,
+            // Drives the mobile app's Branch-field lockdown on Lead
+            // Add/Edit/Filter (see LeadController's branch restriction):
+            // company-wide/admin roles (System Admin, Company Admin, the
+            // top-tier "Branch Admin" role, CBO/COO — the exact same set
+            // DataVisibilityService::isCompanyWideUser() already treats as
+            // unrestricted everywhere else) keep the full branch picker;
+            // everyone else gets a read-only field locked to their own
+            // branch. Read-only call into the shared service — never
+            // modify DataVisibilityService itself (web depends on it too).
+            'can_select_any_branch' => app(DataVisibilityService::class)->isCompanyWideUser($user),
             'branch_id'       => $activeBranchId ?? $user->branch_id,
             'branch' => $user->branch ? [
                 'id'                       => $user->branch->id,

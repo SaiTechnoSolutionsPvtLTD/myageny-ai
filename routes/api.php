@@ -485,6 +485,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
 
     // ── Call Updates ────────────────────────────────────────────────────────
     Route::post('/{lead}/calls',          [MobileLeadShowController::class, 'storeCall'])->name('calls.store');
+    Route::put('/{lead}/calls/{call}',    [MobileLeadShowController::class, 'updateCall'])->name('calls.update');
     Route::delete('/{lead}/calls/{call}', [MobileLeadShowController::class, 'destroyCall'])->name('calls.destroy');
 
     // ── Reminders ───────────────────────────────────────────────────────────

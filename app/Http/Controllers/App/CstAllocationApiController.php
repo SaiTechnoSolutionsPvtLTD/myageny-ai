@@ -59,6 +59,19 @@ class CstAllocationApiController extends Controller
                     ->selectRaw('COALESCE(SUM(amount_paid), 0)');
             }, 'payment_amount_paid');
 
+            // Company isolation — this query previously had no visibility
+            // scoping applied at all, so it returned converted leads across
+            // every company sharing the database. Deliberately using
+            // applyCompanyVisibility() here, not applyLeadVisibility(): the
+            // latter would also restrict CST-role users to only leads
+            // already assigned to them (customer_support_tl_id /
+            // customer_support_executive_id), which would break the TL
+            // partition logic below (TLs must see every unassigned
+            // "pending" lead in their company, not just their own). See
+            // "Lead Status & Source – Company and Branch-wise Data
+            // Filtering", section 3/4.
+            $this->visibility->applyCompanyVisibility($leadsQuery, $currentUser);
+
             // 2. Filters — identical semantics to web
             if ($branchId = $request->get('branch_id')) {
                 $leadsQuery->where('branch_id', $branchId);
