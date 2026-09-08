@@ -42,9 +42,10 @@
 .task-remove-btn:hover:not(:disabled) { background:#ef4444; color:#fff; }
 .task-remove-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
-.select2-container--default .select2-selection--single.pts-select2-selection { height:44px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; }
-.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__rendered { line-height:42px; padding-left:14px; padding-right:34px; font-size:14px; color:#111827; }
-.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__arrow { height:42px; right:10px; }
+.select2-container--default .select2-selection--single.pts-select2-selection { height:44px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; display:flex; align-items:center; }
+.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__rendered { line-height:42px; padding-left:14px; padding-right:34px; font-size:14px; color:#111827 !important; width:100%; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__placeholder { color:#94a3b8; font-size:14px; }
+.select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__arrow { height:42px; right:10px; top:0; display:flex; align-items:center; justify-content:center; }
 .select2-container--default.select2-container--focus .select2-selection--single.pts-select2-selection,
 .select2-container--default.select2-container--open .select2-selection--single.pts-select2-selection { border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.14); }
 .select2-dropdown { border:1px solid #dbe2ea; border-radius:10px; overflow:hidden; box-shadow:0 16px 36px rgba(15,23,42,.12); z-index:9999; }
@@ -128,7 +129,7 @@
                         <!-- Mapped Team Member (Column 2) -->
                         <div class="pts-grid-col-6">
                             <label class="pts-label">Mapped Team Member <span class="req">*</span></label>
-                            <select name="assigned_to_user_id" id="assignedUserSelect" class="pts-select select2" data-placeholder="Select Team Member" required>
+                            <select name="assigned_to_user_id" id="assignedUserSelect" class="pts-select no-select2" data-placeholder="Select Team Member" required>
                                 <option value="">Select Team Member</option>
                                 @foreach($mappedTeamMembers as $member)
                                     <option value="{{ $member->id }}" @selected((string) old('assigned_to_user_id') === (string) $member->id)>
@@ -153,7 +154,7 @@
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                             Task Details (Products &amp; Descriptions)
                         </div>
-                        <div class="pts-card-sub">Select Lead &amp; Product on a single row, write task description, and use the plus (+) button to add more.</div>
+                        <div class="pts-card-sub">Select Lead &amp; Product mapped to the selected team member, write task description, and use the plus (+) button to add more.</div>
                     </div>
                     <button type="button" class="pts-btn pts-btn-primary" id="addRowBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -184,13 +185,8 @@
                                     <!-- Lead Dropdown (Single row left) -->
                                     <div class="pts-grid-col-6">
                                         <label class="pts-label">Lead (Client) <span class="req">*</span></label>
-                                        <select name="tasks[{{ $index }}][lead_id]" class="pts-select task-lead-select select2" data-placeholder="Select Lead" required>
-                                            <option value="">Select Lead</option>
-                                            @foreach($uniqueLeads as $lead)
-                                                <option value="{{ $lead['lead_id'] }}" @selected((string) ($row['lead_id'] ?? '') === (string) $lead['lead_id'])>
-                                                    LD-{{ str_pad($lead['lead_id'], 4, '0', STR_PAD_LEFT) }} | {{ $lead['company_name'] }}
-                                                </option>
-                                            @endforeach
+                                        <select name="tasks[{{ $index }}][lead_id]" class="pts-select task-lead-select no-select2" data-placeholder="Select Lead" data-selected="{{ $row['lead_id'] ?? '' }}" required disabled>
+                                            <option value="">Select Team Member First</option>
                                         </select>
                                         @error("tasks.{$index}.lead_id")
                                             <div class="pts-error">{{ $message }}</div>
@@ -200,7 +196,7 @@
                                     <!-- Product / Project Dropdown (Single row right) -->
                                     <div class="pts-grid-col-6">
                                         <label class="pts-label">Product / Project <span class="req">*</span></label>
-                                        <select name="tasks[{{ $index }}][production_initiation_id]" class="pts-select task-project-select select2" data-placeholder="Select product / project" data-selected="{{ $row['production_initiation_id'] ?? '' }}" required disabled>
+                                        <select name="tasks[{{ $index }}][production_initiation_id]" class="pts-select task-project-select no-select2" data-placeholder="Select product / project" data-selected="{{ $row['production_initiation_id'] ?? '' }}" required disabled>
                                             <option value="">Select product / project</option>
                                         </select>
                                         @error("tasks.{$index}.production_initiation_id")
@@ -246,56 +242,151 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const assignedProjects = @json($assignedProjects);
-    const uniqueLeads = @json($uniqueLeads);
     const container = document.getElementById('tasksContainer');
     const addRowBtn = document.getElementById('addRowBtn');
     const addRowBtnBottom = document.getElementById('addRowBtnBottom');
+    const assignedUserSelect = document.getElementById('assignedUserSelect');
 
     function initSelect2ForElement($elem, placeholder) {
-        if (window.jQuery && window.jQuery.fn.select2) {
-            if ($elem.hasClass('select2-hidden-accessible')) {
-                $elem.select2('destroy');
-            }
-            $elem.select2({
-                width: '100%',
-                placeholder: placeholder || 'Select an option',
-                allowClear: false
-            });
-            $elem.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+        if (!window.jQuery || !window.jQuery.fn.select2 || !$elem || !$elem.length) return;
+
+        if ($elem.hasClass('select2-hidden-accessible')) {
+            $elem.select2('destroy');
         }
+
+        $elem.select2({
+            width: '100%',
+            placeholder: placeholder || 'Select an option',
+            allowClear: false
+        });
+
+        $elem.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
     }
 
-    // Init assigned user select2
-    const $assignedUser = window.jQuery ? window.jQuery('#assignedUserSelect') : null;
-    if ($assignedUser && $assignedUser.length) {
-        initSelect2ForElement($assignedUser, 'Select Team Member');
+    function getSelectedUserId() {
+        return assignedUserSelect ? (assignedUserSelect.value || '') : '';
     }
 
-    function populateProjectsForLead(leadId, projectSelect, selectedProjId) {
-        projectSelect.innerHTML = '<option value="">Select product / project</option>';
-        if (!leadId) {
-            projectSelect.disabled = true;
-            if (window.jQuery && window.jQuery.fn.select2) {
-                const $proj = window.jQuery(projectSelect);
-                if ($proj.hasClass('select2-hidden-accessible')) {
-                    $proj.select2('destroy');
-                }
-                projectSelect.disabled = true;
-                $proj.select2({
-                    width: '100%',
-                    placeholder: 'Select product / project',
-                    allowClear: false
-                });
-                $proj.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
+    // Populate Lead dropdown based on selected Mapped Team Member
+    function populateLeadsForUser(userId, leadSelect, selectedLeadId) {
+        const $lead = window.jQuery ? window.jQuery(leadSelect) : null;
+        leadSelect.innerHTML = '';
+
+        if (!userId) {
+            leadSelect.innerHTML = '<option value="">Select Team Member First</option>';
+            leadSelect.disabled = true;
+            if ($lead) {
+                $lead.prop('disabled', true);
+                $lead.val('');
+                initSelect2ForElement($lead, 'Select Team Member First');
             }
             return;
         }
 
-        const filtered = assignedProjects.filter(p => String(p.lead_id) === String(leadId));
-        filtered.forEach(p => {
+        // Filter projects allocated to this user
+        const memberProjects = assignedProjects.filter(function (p) {
+            const allocIds = (p.allocated_user_ids || []).map(Number);
+            return allocIds.includes(Number(userId));
+        });
+
+        // Extract unique leads
+        const leadMap = new Map();
+        memberProjects.forEach(function (p) {
+            if (p.lead_id && !leadMap.has(p.lead_id)) {
+                leadMap.set(p.lead_id, {
+                    lead_id: p.lead_id,
+                    company_name: p.resolved_company_name || 'No Company'
+                });
+            }
+        });
+
+        const uniqueMemberLeads = Array.from(leadMap.values());
+
+        if (uniqueMemberLeads.length === 0) {
+            leadSelect.innerHTML = '<option value="">No leads mapped to this member</option>';
+            leadSelect.disabled = true;
+            if ($lead) {
+                $lead.prop('disabled', true);
+                $lead.val('');
+                initSelect2ForElement($lead, 'No leads mapped to this member');
+            }
+            return;
+        }
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = 'Select Lead';
+        leadSelect.appendChild(defaultOpt);
+
+        uniqueMemberLeads.forEach(function (lead) {
+            const opt = document.createElement('option');
+            opt.value = lead.lead_id;
+            const leadNum = String(lead.lead_id).padStart(4, '0');
+            opt.textContent = `LD-${leadNum} | ${lead.company_name}`;
+            if (selectedLeadId && String(lead.lead_id) === String(selectedLeadId)) {
+                opt.selected = true;
+            }
+            leadSelect.appendChild(opt);
+        });
+
+        leadSelect.disabled = false;
+        if ($lead) {
+            $lead.prop('disabled', false);
+            if (selectedLeadId && uniqueMemberLeads.some(l => String(l.lead_id) === String(selectedLeadId))) {
+                $lead.val(selectedLeadId);
+            } else {
+                $lead.val('');
+            }
+            initSelect2ForElement($lead, 'Select Lead');
+        }
+    }
+
+    // Populate Product / Project dropdown based on selected Lead and Team Member
+    function populateProjectsForLead(leadId, projectSelect, selectedProjId, userId) {
+        const $proj = window.jQuery ? window.jQuery(projectSelect) : null;
+        projectSelect.innerHTML = '<option value="">Select product / project</option>';
+
+        if (!leadId) {
+            projectSelect.disabled = true;
+            if ($proj) {
+                $proj.prop('disabled', true);
+                $proj.val('');
+                initSelect2ForElement($proj, 'Select product / project');
+            }
+            return;
+        }
+
+        let filtered = assignedProjects.filter(function (p) {
+            return String(p.lead_id) === String(leadId);
+        });
+
+        if (userId) {
+            filtered = filtered.filter(function (p) {
+                const allocIds = (p.allocated_user_ids || []).map(Number);
+                return allocIds.includes(Number(userId));
+            });
+        }
+
+        if (filtered.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'No products found for this lead';
+            projectSelect.appendChild(opt);
+            projectSelect.disabled = true;
+            if ($proj) {
+                $proj.prop('disabled', true);
+                $proj.val('');
+                initSelect2ForElement($proj, 'Select product / project');
+            }
+            return;
+        }
+
+        filtered.forEach(function (p) {
             const opt = document.createElement('option');
             opt.value = p.id;
-            opt.textContent = (p.product_name || 'Product') + (p.timesheet_delivery_date ? ' (Delivery: ' + p.timesheet_delivery_date + ')' : '');
+            const pName = p.resolved_product_name || p.product_name || (p.lead_product ? p.lead_product.product_name : 'Product');
+            const delDate = p.timesheet_delivery_date ? ` (Delivery: ${p.timesheet_delivery_date})` : '';
+            opt.textContent = `${pName}${delDate}`;
             if (selectedProjId && String(p.id) === String(selectedProjId)) {
                 opt.selected = true;
             }
@@ -303,21 +394,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         projectSelect.disabled = false;
-        if (window.jQuery && window.jQuery.fn.select2) {
-            const $proj = window.jQuery(projectSelect);
-            if ($proj.hasClass('select2-hidden-accessible')) {
-                $proj.select2('destroy');
+        if ($proj) {
+            $proj.prop('disabled', false);
+            if (selectedProjId && filtered.some(p => String(p.id) === String(selectedProjId))) {
+                $proj.val(selectedProjId);
+            } else if (filtered.length === 1) {
+                $proj.val(filtered[0].id);
+            } else {
+                $proj.val('');
             }
-            projectSelect.disabled = false;
-            $proj.select2({
-                width: '100%',
-                placeholder: 'Select product / project',
-                allowClear: false
-            });
-            $proj.next('.select2-container').find('.select2-selection--single').addClass('pts-select2-selection');
-            if (selectedProjId) {
-                $proj.val(selectedProjId).trigger('change');
-            }
+            initSelect2ForElement($proj, 'Select product / project');
         }
     }
 
@@ -329,29 +415,47 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.jQuery) {
             const $lead = window.jQuery(leadSelect);
             const $proj = window.jQuery(projectSelect);
+
             initSelect2ForElement($lead, 'Select Lead');
             initSelect2ForElement($proj, 'Select product / project');
 
-            $lead.off('change select2:select select2:clear').on('change select2:select select2:clear', function () {
-                populateProjectsForLead(this.value, projectSelect, null);
+            $lead.off('change').on('change', function () {
+                const selectedVal = window.jQuery(this).val();
+                const currentUserId = getSelectedUserId();
+                populateProjectsForLead(selectedVal, projectSelect, null, currentUserId);
             });
         } else {
             leadSelect.addEventListener('change', function () {
-                populateProjectsForLead(this.value, projectSelect, null);
+                const currentUserId = getSelectedUserId();
+                populateProjectsForLead(this.value, projectSelect, null, currentUserId);
             });
         }
 
-        // Check if initial lead is selected (e.g. from old input)
-        const initialLeadId = leadSelect.value;
+        const currentUserId = getSelectedUserId();
+        const initialLeadId = leadSelect.getAttribute('data-selected') || leadSelect.value;
         const initialSelectedProjId = projectSelect.getAttribute('data-selected');
-        if (initialLeadId) {
-            populateProjectsForLead(initialLeadId, projectSelect, initialSelectedProjId);
+
+        if (currentUserId) {
+            populateLeadsForUser(currentUserId, leadSelect, initialLeadId);
+            if (initialLeadId) {
+                populateProjectsForLead(initialLeadId, projectSelect, initialSelectedProjId, currentUserId);
+            }
+        } else {
+            populateLeadsForUser('', leadSelect, null);
+            populateProjectsForLead('', projectSelect, null, '');
         }
 
         if (removeBtn) {
             removeBtn.addEventListener('click', function () {
                 const totalRows = container.querySelectorAll('.task-item-row').length;
                 if (totalRows > 1) {
+                    if (window.jQuery) {
+                        window.jQuery(row).find('select').each(function() {
+                            if (window.jQuery(this).hasClass('select2-hidden-accessible')) {
+                                window.jQuery(this).select2('destroy');
+                            }
+                        });
+                    }
                     row.remove();
                     updateRowNumbersAndIndices();
                 }
@@ -385,12 +489,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const currentRows = container.querySelectorAll('.task-item-row');
         const newIndex = currentRows.length;
 
-        let leadsOptionsHtml = '<option value="">Select Lead</option>';
-        uniqueLeads.forEach(lead => {
-            const leadNum = String(lead.lead_id).padStart(4, '0');
-            leadsOptionsHtml += `<option value="${lead.lead_id}">LD-${leadNum} | ${lead.company_name}</option>`;
-        });
-
         const newRowHtml = `
             <div class="task-item-row" data-row-index="${newIndex}">
                 <div class="task-row-header">
@@ -405,13 +503,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="pts-form-grid">
                     <div class="pts-grid-col-6">
                         <label class="pts-label">Lead (Client) <span class="req">*</span></label>
-                        <select name="tasks[${newIndex}][lead_id]" class="pts-select task-lead-select select2" data-placeholder="Select Lead" required>
-                            ${leadsOptionsHtml}
+                        <select name="tasks[${newIndex}][lead_id]" class="pts-select task-lead-select no-select2" data-placeholder="Select Lead" required disabled>
+                            <option value="">Select Team Member First</option>
                         </select>
                     </div>
                     <div class="pts-grid-col-6">
                         <label class="pts-label">Product / Project <span class="req">*</span></label>
-                        <select name="tasks[${newIndex}][production_initiation_id]" class="pts-select task-project-select select2" data-placeholder="Select product / project" required disabled>
+                        <select name="tasks[${newIndex}][production_initiation_id]" class="pts-select task-project-select no-select2" data-placeholder="Select product / project" required disabled>
                             <option value="">Select product / project</option>
                         </select>
                     </div>
@@ -430,6 +528,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setupRowEvents(newRowElem);
         updateRowNumbersAndIndices();
+    }
+
+    // Init assigned user select2 and change listener
+    const $assignedUser = window.jQuery ? window.jQuery('#assignedUserSelect') : null;
+    if ($assignedUser && $assignedUser.length) {
+        initSelect2ForElement($assignedUser, 'Select Team Member');
+
+        $assignedUser.off('change').on('change', function () {
+            const selectedUserId = window.jQuery(this).val();
+            container.querySelectorAll('.task-item-row').forEach(row => {
+                const leadSelect = row.querySelector('.task-lead-select');
+                const projectSelect = row.querySelector('.task-project-select');
+                populateLeadsForUser(selectedUserId, leadSelect, null);
+                populateProjectsForLead('', projectSelect, null, selectedUserId);
+            });
+        });
     }
 
     // Init existing rows

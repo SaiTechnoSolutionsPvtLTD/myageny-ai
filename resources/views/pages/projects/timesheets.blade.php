@@ -173,8 +173,13 @@
         <section class="pts-filter-card">
             <form method="GET" action="{{ route('projects.timesheets') }}" class="pts-filter-form">
                 <div class="pts-filter-group">
-                    <label class="pts-label">Date</label>
-                    <input type="date" name="filter_date" value="{{ $timesheetFilters['filter_date'] ?? '' }}" class="pts-input">
+                    <label class="pts-label">From Date</label>
+                    <input type="date" name="filter_date_from" value="{{ $timesheetFilters['filter_date_from'] ?? '' }}" class="pts-input">
+                </div>
+
+                <div class="pts-filter-group">
+                    <label class="pts-label">To Date</label>
+                    <input type="date" name="filter_date_to" value="{{ $timesheetFilters['filter_date_to'] ?? '' }}" class="pts-input">
                 </div>
 
                 <div class="pts-filter-group">
@@ -211,11 +216,13 @@
                     </select>
                 </div>
 
-                @if(($isAdminLike ?? false) && $departments->isNotEmpty())
+                @if($departments->isNotEmpty())
                     <div class="pts-filter-group">
                         <label class="pts-label">Department</label>
                         <select name="filter_department_id" class="pts-select">
-                            <option value="">All Departments</option>
+                            @if($isAdminLike ?? false)
+                                <option value="">All Departments</option>
+                            @endif
                             @foreach($departments as $dept)
                                 <option value="{{ $dept->id }}" @selected(($timesheetFilters['filter_department_id'] ?? '') === (string) $dept->id)>
                                     {{ $dept->name }}
@@ -1040,17 +1047,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         tr.setAttribute('data-timesheet-id', ts.id);
                         const statusClass = (ts.status === 'completed') ? 'completed' : ((ts.status === 'ongoing') ? 'ongoing' : 'pending');
 
-                        let designStatsHtml = '';
-                        if (ts.is_design_dm) {
-                            designStatsHtml = `
-                                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
-                                    <span class="pts-badge count" style="font-size:10px; padding:2px 6px;">Done P: ${ts.poster_count} / V: ${ts.video_count}</span>
-                                    ${ts.committed_posters > 0 || ts.committed_videos > 0 ? `<span class="pts-badge pending" style="font-size:10px; padding:2px 6px;">Commit P: ${ts.committed_posters} / V: ${ts.committed_videos}</span>` : ''}
-                                    ${ts.waiting_posters > 0 || ts.waiting_videos > 0 ? `<span class="pts-badge count" style="font-size:10px; padding:2px 6px; color:#ea580c; border-color:#fed7aa;">Wait P: ${ts.waiting_posters} / V: ${ts.waiting_videos}</span>` : ''}
-                                </div>
-                            `;
-                        }
-
                         let closingActionHtml = '';
                         if (ts.day_closing_update && ts.day_closing_update.trim() !== '') {
                             closingActionHtml = `
@@ -1106,7 +1102,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             <td>
                                 <div class="pts-project">${escapeHtml(ts.product_name)}</div>
                                 <div class="pts-meta">Delivery: ${escapeHtml(ts.delivery_date)}</div>
-                                ${designStatsHtml}
                             </td>
                             <td>
                                 <div style="font-size:12px; color:#334155; line-height:1.55; white-space:pre-wrap; background:#f8fafc; padding:8px 10px; border-radius:8px; border:1px solid #e2e8f0; max-height:140px; overflow-y:auto;">${escapeHtml(ts.assigned_task || '—')}</div>

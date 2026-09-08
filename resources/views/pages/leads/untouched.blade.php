@@ -1,18 +1,18 @@
 @extends('layouts.app')
 
-@section('title', 'Leads')
+@section('title', 'Untouched Leads')
 
 @push('styles')
 <style>
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   LEAD INDEX â€” Full filter + table
+/* ─────────────────────────────────────────
+   UNTOUCHED LEADS INDEX
    Theme: Clean white, orange accent, data-rich
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+───────────────────────────────────────── */
 .ld-page { display:flex; flex-direction:column; height:100%; overflow:hidden; background:#f4f5f7; font-family:'Inter',sans-serif; }
 
-/* â”€â”€ Topbar â”€â”€ */
+/* ── Topbar ── */
 .ld-topbar { display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:60px; flex-shrink:0; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
-.ld-page-title { font-size:18px; font-weight:800; color:#121212; }
+.ld-page-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; }
 .ld-breadcrumb { font-size:12px; color:#9e9e9e; margin-top:2px; }
 .ld-topbar-right { display:flex; align-items:center; gap:10px; }
 .ld-btn { display:flex; align-items:center; gap:6px; padding:8px 18px; border-radius:9px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; text-decoration:none; transition:all .15s; border:none; }
@@ -21,40 +21,7 @@
 .ld-btn-outline { background:#fff; color:#121212; border:1px solid #e1dee3; }
 .ld-btn-outline:hover { border-color:#fe5f04; color:#fe5f04; }
 
-/* â”€â”€ Filter Bar â”€â”€ */
-.ld-filter-wrap-outer { background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:60px; z-index:25; }
-.ld-filter-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 28px; }
-.ld-filter-label { font-size:11px; font-weight:800; color:#9e9e9e; text-transform:uppercase; letter-spacing:.8px; white-space:nowrap; display:flex; align-items:center; gap:5px; margin-right:4px; }
-.ld-filter-count { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:50%; background:#fe5f04; color:#fff; font-size:9px; font-weight:800; }
-.ld-filter-group { display:flex; align-items:center; gap:7px; flex-wrap:wrap; flex:1; }
-.ld-fw { position:relative; }
-.ld-fi { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#9e9e9e; pointer-events:none; width:12px; height:12px; }
-.ld-fs, .ld-fi-input {
-    appearance:none; -webkit-appearance:none;
-    padding:7px 26px 7px 27px;
-    background:#f8f8f8; border:1px solid #e1dee3;
-    border-radius:8px; font-size:12px; font-weight:600;
-    color:#2e2e2e; cursor:pointer; outline:none;
-    transition:all .15s; font-family:inherit; min-width:120px;
-}
-.ld-fs:focus, .ld-fi-input:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
-.ld-fc { position:absolute; right:7px; top:50%; transform:translateY(-50%); pointer-events:none; color:#9e9e9e; width:11px; height:11px; }
-.ld-fi-input { padding:7px 10px 7px 27px; min-width:110px; }
-.ld-date-range { display:flex; align-items:center; gap:5px; }
-.ld-date-sep { font-size:11px; color:#9e9e9e; font-weight:600; }
-.ld-qb { padding:5px 10px; border-radius:7px; background:#f8f8f8; border:1px solid #e1dee3; font-size:11px; font-weight:600; color:#7c7c7c; cursor:pointer; font-family:inherit; transition:all .15s; }
-.ld-qb:hover, .ld-qb.active { background:#fff0e6; border-color:#fe5f04; color:#fe5f04; }
-.ld-reset-btn { display:flex; align-items:center; gap:5px; padding:7px 12px; border-radius:8px; background:none; border:1px solid #e1dee3; font-size:12px; font-weight:600; color:#9e9e9e; cursor:pointer; font-family:inherit; transition:all .15s; }
-.ld-reset-btn:hover { border-color:#dc2626; color:#dc2626; }
-.ld-chips-bar { display:none; align-items:center; gap:6px; flex-wrap:wrap; padding:7px 28px; border-top:1px solid #f0eef2; }
-.ld-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; background:rgba(254,95,4,.09); border:1px solid rgba(254,95,4,.22); font-size:11px; font-weight:700; color:#fe5f04; cursor:pointer; }
-.ld-chip:hover { background:rgba(254,95,4,.15); }
-.ld-search-box { position:relative; flex:0 0 auto; }
-.ld-search-ico { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9e9e9e; width:13px; height:13px; pointer-events:none; }
-.ld-search-input { padding:7px 12px 7px 32px; border:1px solid #e1dee3; border-radius:8px; font-size:12px; font-family:inherit; outline:none; background:#f8f8f8; color:#121212; transition:all .15s; min-width:200px; }
-.ld-search-input:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
-
-/* Filter accordion overrides */
+/* Filter Bar */
 .ld-filter-wrap-outer { background:#f4f5f7; padding:10px 28px; }
 .ld-filter-accordion { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow:hidden; box-shadow:0 8px 20px rgba(18,18,18,.035); }
 .ld-filter-toggle { list-style:none; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; cursor:pointer; user-select:none; }
@@ -78,8 +45,6 @@
 .ld-fc { right:9px; font-size:11px; line-height:1; width:auto; height:auto; }
 .ld-date-range { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:8px; align-items:end; grid-column:span 2; }
 .ld-date-sep { height:38px; display:flex; align-items:center; color:#9e9e9e; font-size:11px; font-weight:800; text-transform:uppercase; }
-.ld-quick-dates { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-.ld-qb { height:34px; padding:0 11px; border-radius:8px; font-weight:700; }
 .ld-reset-btn { display:inline-flex; align-items:center; justify-content:center; height:38px; padding:0 13px; border-radius:9px; background:#fff; color:#7c7c7c; text-decoration:none; font-weight:700; }
 .ld-reset-btn:hover { background:#fff5f5; }
 .ld-chips-bar { padding:0 16px 14px; border-top:0; }
@@ -100,15 +65,15 @@
     .ld-filter-actions { justify-content:flex-start; }
 }
 
-/* â”€â”€ Body â”€â”€ */
+/* ── Body ── */
 .ld-body { flex:1; overflow-y:auto; padding:18px 28px 32px; display:flex; flex-direction:column; gap:14px; }
 .ld-body::-webkit-scrollbar { width:5px; }
 .ld-body::-webkit-scrollbar-thumb { background:#e1dee3; border-radius:3px; }
 
 @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
-/* â”€â”€ Stats â”€â”€ */
-.ld-stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; animation:fadeUp .35s ease both; }
+/* ── Stats ── */
+.ld-stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; animation:fadeUp .35s ease both; }
 .ld-stat {
     position:relative;
     overflow:hidden;
@@ -124,7 +89,7 @@
     position:absolute;
     inset:0 0 auto 0;
     height:4px;
-    background:var(--stat-color, #fe5f04);
+    background:var(--stat-color, #16a34a);
 }
 .ld-stat:hover {
     transform:translateY(-2px);
@@ -154,9 +119,9 @@
     gap:5px;
     padding:5px 9px;
     border-radius:999px;
-    background:#fff7f1;
-    border:1px solid #fde2cf;
-    color:var(--stat-color, #fe5f04);
+    background:#f0fdf4;
+    border:1px solid #bbf7d0;
+    color:var(--stat-color, #16a34a);
     font-size:10px;
     font-weight:800;
     text-transform:uppercase;
@@ -174,7 +139,7 @@
     line-height:1.4;
 }
 
-/* â”€â”€ Table Card â”€â”€ */
+/* ── Table Card ── */
 .ld-table-card { background:#fff; border:1px solid #e1dee3; border-radius:13px; overflow:hidden; animation:fadeUp .35s .1s ease both; }
 .ld-table-top { display:flex; justify-content:space-between; align-items:center; padding:13px 18px; border-bottom:1px solid #f0eef2; }
 .ld-table-title { font-size:14px; font-weight:700; color:#121212; }
@@ -251,11 +216,6 @@
 .ld-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; border:1px solid transparent; }
 .ld-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
 
-/* Priority badges */
-.ld-pri-low    { background:#f0fdf4; color:#16a34a; border-color:#bbf7d0; }
-.ld-pri-medium { background:#fffbeb; color:#b45309; border-color:#fde68a; }
-.ld-pri-high   { background:#fef2f2; color:#dc2626; border-color:#fecaca; }
-
 /* Owner */
 .ld-owner { display:flex; align-items:center; gap:6px; }
 .ld-owner-av { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:#fff; flex-shrink:0; }
@@ -314,14 +274,6 @@
 .ld-modal-btn { flex:1; padding:10px; border-radius:9px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; border:none; transition:all .15s; }
 .ld-modal-cancel { background:#f5f4f6; color:#7c7c7c; border:1px solid #e1dee3; }
 .ld-modal-delete { background:linear-gradient(135deg,#dc2626,#ef4444); color:#fff; box-shadow:0 4px 12px rgba(220,38,38,.3); }
-
-@media (max-width: 1200px) {
-    .ld-stats-row { grid-template-columns:repeat(2,1fr); }
-}
-
-@media (max-width: 700px) {
-    .ld-stats-row { grid-template-columns:1fr; }
-}
 </style>
 @endpush
 
@@ -332,10 +284,16 @@
     {{-- Topbar --}}
     <div class="ld-topbar">
         <div>
-            <div class="ld-page-title">Leads</div>
-            <div class="ld-breadcrumb">Sales > Leads</div>
+            <div class="ld-page-title">
+                <i class="bi bi-telephone-x-fill text-success"></i> Untouched Leads (Overall)
+            </div>
+            <div class="ld-breadcrumb">Sales > <a href="{{ route('leads.index') }}" style="color:inherit; text-decoration:none;">Leads</a> > Untouched</div>
         </div>
         <div class="ld-topbar-right">
+            <a href="{{ route('leads.index') }}" class="ld-btn ld-btn-outline">
+                <i class="bi bi-arrow-left"></i>
+                All Leads Sheet
+            </a>
             <a href="{{ route('leads.create') }}" class="ld-btn ld-btn-primary">
                 <i class="bi bi-plus-lg"></i>
                 New Lead
@@ -343,7 +301,7 @@
         </div>
     </div>
 
-    {{-- â•â• FILTER BAR â•â• --}}
+    {{-- FILTER BAR --}}
     <div class="ld-filter-wrap-outer">
         <details class="ld-filter-accordion" id="leadFilters" @if($filterPanelOpen) open @endif>
             <summary class="ld-filter-toggle">
@@ -351,7 +309,7 @@
                     <span class="ld-filter-icon"><i class="bi bi-funnel"></i></span>
                     <div>
                         <div class="ld-filter-title">Filters</div>
-                        <div class="ld-filter-sub">Open this panel to search or filter by date range, branch, etc.</div>
+                        <div class="ld-filter-sub">Filter untouched leads by keyword, branch, owner, source, or custom dates</div>
                     </div>
                 </div>
                 <div class="ld-filter-toggle-right">
@@ -361,8 +319,7 @@
             </summary>
 
             <div class="ld-filter-body">
-                <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
-                    <input type="hidden" name="quick_date" id="f_quick_date" value="{{ request('quick_date') }}">
+                <form method="GET" action="{{ route('leads.untouched') }}" id="filterForm">
                     <div class="ld-filter-bar">
                         <div class="ld-fw">
                             <label class="ld-field-label" for="f_search">Search</label>
@@ -378,7 +335,9 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-building ld-fi"></i>
                                 <select name="branch_id" class="ld-fs" id="f_branch" onchange="updateFilters()">
-                                    <option value="">All Branches</option>
+                                    @if(auth()->user() && app(\App\Services\DataVisibilityService::class)->isCompanyWideUser(auth()->user()))
+                                        <option value="">All Branches</option>
+                                    @endif
                                     @foreach($branches as $b)
                                         <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
                                     @endforeach
@@ -438,7 +397,6 @@
                             </div>
                         </div>
 
-
                         <div class="ld-date-range">
                             <div class="ld-fw">
                                 <label class="ld-field-label" for="f_date_from">From Date</label>
@@ -459,24 +417,12 @@
                             </div>
                         </div>
 
-                        <div class="ld-fw">
-                            <label class="ld-field-label">Quick Dates</label>
-                            <div class="ld-quick-dates">
-                                <button type="button" class="ld-qb" id="quickToday" onclick="setQ('today')">Today</button>
-                                <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
-                                <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
-                                <button type="button" class="ld-qb" id="quickQuarter" onclick="setQ('quarter')">Quarter</button>
-                                <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
-                                <button type="button" class="ld-qb" id="quickAll" onclick="setQ('all')">Show All</button>
-                            </div>
-                        </div>
-
                         <div class="ld-filter-actions">
                             <button type="submit" class="ld-btn ld-btn-primary">
                                 <i class="bi bi-check2-circle"></i>
                                 Apply Filter
                             </button>
-                            <a href="{{ route('leads.index', ['reset' => 1]) }}" class="ld-reset-btn">
+                            <a href="{{ route('leads.untouched', ['reset' => 1]) }}" class="ld-reset-btn">
                                 <i class="bi bi-arrow-counterclockwise"></i>
                                 Reset
                             </a>
@@ -488,120 +434,6 @@
             </div>
         </details>
     </div>
-
-    @if(false)
-    <div class="ld-filter-wrap-outer">
-    <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
-        <div class="ld-filter-bar">
-
-            {{-- Search --}}
-            <div class="ld-search-box">
-                <svg class="ld-search-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" name="search" class="ld-search-input" placeholder="Company, contact, emailâ€¦"
-                       value="{{ request('search') }}" oninput="delaySubmit()">
-            </div>
-
-            <span class="ld-filter-label">
-                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-
-                <span class="ld-filter-count" id="fCount" style="display:none">0</span>
-            </span>
-
-            <div class="ld-filter-group">
-
-                {{-- Branch --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                    <select name="branch_id" class="ld-fs" id="f_branch" onchange="autoSubmit()">
-                        <option value="">All Branches</option>
-                        @foreach($branches as $b)
-                        <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Mobile --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6"/></svg>
-                    <input type="text" name="mobile_number" class="ld-fi-input" id="f_mobile"
-                           placeholder="Mobile no." value="{{ request('mobile_number') }}" oninput="delaySubmit()" style="min-width:130px;">
-                </div>
-
-                {{-- Lead Source --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                    <select name="lead_source" class="ld-fs" id="f_source" onchange="autoSubmit()">
-                        <option value="">All Sources</option>
-                        @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
-                        <option value="{{ $key }}" {{ request('lead_source') == $key ? 'selected':'' }}>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- User (Assigned To) --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <select name="assigned_to" class="ld-fs" id="f_user" onchange="autoSubmit()">
-                        <option value="">All Users</option>
-                        @foreach($users as $u)
-                        <option value="{{ $u->id }}" {{ request('assigned_to') == $u->id ? 'selected':'' }}>{{ $u->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Pre Sales Exec Filter --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                    <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales_inline" onchange="autoSubmit()">
-                        <option value="">All Pre Sales</option>
-                        @foreach($preSaleExecutives as $pse)
-                        <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Date Range --}}
-                <div class="ld-date-range">
-                    <div class="ld-fw">
-                        <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                               value="{{ request('date_from') }}" onchange="updateFilters()" style="min-width:130px;">
-                    </div>
-                    <span class="ld-date-sep">→</span>
-                    <div class="ld-fw">
-                        <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                               value="{{ request('date_to') }}" onchange="updateFilters()" style="min-width:130px;">
-                    </div>
-                </div>
-
-                {{-- Quick date buttons --}}
-                <div style="display:flex;gap:4px;">
-                    <button type="button" class="ld-qb" onclick="setQ('today')">Today</button>
-                    <button type="button" class="ld-qb" onclick="setQ('week')">Week</button>
-                    <button type="button" class="ld-qb" onclick="setQ('month')">Month</button>
-                </div>
-            </div>
-
-            {{-- Reset --}}
-            @if(request()->hasAny(['search','branch_id','mobile_number','lead_source','assigned_to','pre_sale_executive_id','date_from','date_to']))
-            <a href="{{ route('leads.index') }}" class="ld-reset-btn">
-                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
-                Reset
-            </a>
-            @endif
-        </div>
-
-        {{-- Active filter chips --}}
-        <div id="chipsBar" class="ld-chips-bar"></div>
-    </form>
-    </div>
-
-    @endif
 
     {{-- Body --}}
     <div class="ld-body">
@@ -622,31 +454,14 @@
 
         {{-- Stats Row --}}
         <div class="ld-stats-row">
-
             @php
                 $statItems = [
-                    ['label'=>'Total Leads',         'value'=> $stats['total'],          'sub'=>'Matching current filters', 'color'=>'#fe5f04','bg'=>'#fff0e6','icon'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'],
-                    ['label'=>'Total Product Count', 'value'=> $stats['total_products'], 'sub'=>'Products linked to leads', 'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'],
-                    ['label'=>'Pipeline Value',      'value'=> '₹'.number_format($stats['pipeline'], 2), 'sub'=>'Value across selected leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
-                    ['label'=>'Untouched Leads Count',     'value'=> $stats['new'],            'sub'=>'No call updates yet (All)', 'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 'url'=>route('leads.untouched')],
+                    ['label'=>'Total Untouched Leads', 'value'=> $stats['total'],          'sub'=>'Overall leads without call updates', 'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'],
+                    ['label'=>'Linked Products',       'value'=> $stats['total_products'], 'sub'=>'Products in untouched leads',       'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'],
+                    ['label'=>'Pipeline Value',        'value'=> '₹'.number_format($stats['pipeline'], 2), 'sub'=>'Value across untouched leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
                 ];
             @endphp
             @foreach($statItems as $s)
-            @if(isset($s['url']))
-            <a href="{{ $s['url'] }}" class="ld-stat" style="--stat-color: {{ $s['color'] }}; text-decoration:none; color:inherit; display:block; cursor:pointer;">
-                <div class="ld-stat-top">
-                    <div class="ld-stat-icon" style="background:{{ $s['bg'] }}">
-                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="{{ $s['color'] }}" stroke-width="2">{!! $s['icon'] !!}</svg>
-                    </div>
-                    <div class="ld-stat-trend" style="background:#f0fdf4; border-color:#bbf7d0; color:#16a34a; display:inline-flex; align-items:center; gap:4px;">
-                        View All &rarr;
-                    </div>
-                </div>
-                <div class="ld-stat-label">{{ $s['label'] }}</div>
-                <div class="ld-stat-value">{{ $s['value'] }}</div>
-                <div class="ld-stat-sub">{{ $s['sub'] }}</div>
-            </a>
-            @else
             <div class="ld-stat" style="--stat-color: {{ $s['color'] }}">
                 <div class="ld-stat-top">
                     <div class="ld-stat-icon" style="background:{{ $s['bg'] }}">
@@ -658,7 +473,6 @@
                 <div class="ld-stat-value">{{ $s['value'] }}</div>
                 <div class="ld-stat-sub">{{ $s['sub'] }}</div>
             </div>
-            @endif
             @endforeach
         </div>
 
@@ -666,8 +480,10 @@
         <div class="ld-table-card">
             <div class="ld-table-top">
                 <div>
-                    <div class="ld-table-title">Lead Sheet</div>
-                    <div class="ld-table-sub">Recent automation runs across workflows</div>
+                    <div class="ld-table-title" style="display:flex; align-items:center; gap:8px;">
+                        <span style="color:#16a34a;"><i class="bi bi-telephone-x-fill"></i> Untouched Leads Sheet</span>
+                    </div>
+                    <div class="ld-table-sub">Showing overall leads that have no call updates recorded yet</div>
                 </div>
                 <div class="ld-results">
                     Showing <strong>{{ $leads->firstItem() ?? 0 }}-{{ $leads->lastItem() ?? 0 }}</strong>
@@ -677,15 +493,13 @@
 
             @if($leads->isEmpty())
             <div class="ld-empty">
-                <div class="ld-empty-icon"><i class="bi bi-clipboard2-data"></i></div>
-                <div class="ld-empty-title">No leads found</div>
-                <p style="font-size:13px">Try adjusting your filters or <a href="{{ route('leads.create') }}" style="color:#fe5f04;font-weight:700">add a new lead</a>.</p>
+                <div class="ld-empty-icon"><i class="bi bi-check2-circle text-success"></i></div>
+                <div class="ld-empty-title">No untouched leads found</div>
+                <p style="font-size:13px">All leads have received call updates, or no leads match your search criteria. <a href="{{ route('leads.index') }}" style="color:#fe5f04;font-weight:700">Go to All Leads</a>.</p>
             </div>
             @else
             <div style="overflow-x:auto;">
                 <div class="table-responsive">
-
-
                 <table class="ld-tbl">
                     <thead>
                         <tr>
@@ -704,7 +518,6 @@
                         @php $colors = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b45309','#0f766e']; @endphp
                         @foreach($leads as $lead)
                         @php
-                            $sc = $lead->status_color;
                             $avatarColor = $colors[$lead->id % count($colors)];
                         @endphp
                         <tr onclick="window.location='{{ route('leads.show', $lead) }}'">
@@ -755,48 +568,37 @@
                                     <div class="ld-owner-av" style="background:{{ $colors[$lead->assigned_to % count($colors)] }}">
                                         {{ strtoupper(substr($lead->assignedTo->name, 0, 1)) }}
                                     </div>
-                                    <span style="font-size:12px">{{ $lead->assignedTo->name }}</span>
+                                    <span style="font-size:12px;font-weight:600">{{ $lead->assignedTo->name }}</span>
                                 </div>
                                 @else
-                                <span style="color:#9e9e9e;font-size:12px">Unassigned</span>
-                                @endif
-                                @if($lead->preSaleExecutive)
-                                <div style="font-size:10px; color:#475569; font-weight:700; margin-top:4px; display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;">
-                                    <i class="bi bi-headset" style="font-size:10px; color:#ea580c;"></i> Pre-Sales: {{ $lead->preSaleExecutive->name }}
-                                </div>
+                                <span style="font-size:12px;color:#cbd5e1;font-weight:600">Unassigned</span>
                                 @endif
                             </td>
-                            <td><span class="ld-branch">{{ $lead->branch?->name ?? '-' }}</span></td>
-                            <td><span class="ld-date">{{ $lead->lead_date->format('d M Y') }}</span></td>
+                            <td>
+                                <span class="ld-branch">{{ $lead->branch?->name ?? '—' }}</span>
+                            </td>
+                            <td>
+                                <span class="ld-date">{{ $lead->lead_date ? \Carbon\Carbon::parse($lead->lead_date)->format('d M Y') : '—' }}</span>
+                            </td>
                             <td onclick="event.stopPropagation()">
                                 <div class="ld-actions" data-action-menu>
-                                    <button type="button" class="ld-action-trigger" title="Actions" aria-label="Lead actions" onclick="toggleActionMenu(event, this)">
-                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <circle cx="12" cy="5" r="1.5"/>
-                                            <circle cx="12" cy="12" r="1.5"/>
-                                            <circle cx="12" cy="19" r="1.5"/>
-                                        </svg>
+                                    <button type="button" class="ld-action-trigger" onclick="toggleActionMenu(event, this)">
+                                        <i class="bi bi-three-dots-vertical"></i>
                                     </button>
                                     <div class="ld-action-menu">
-                                    @can('leads.view')
-                                    <a href="{{ route('leads.show', $lead) }}" class="ld-action-item" title="View">
-                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                        <span>View</span>
-                                    </a>
-                                    @endcan
-                                    @can('leads.edit')
-                                    <a href="{{ route('leads.edit', $lead) }}" class="ld-action-item edit" title="Edit">
-                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                        <span>Edit</span>
-                                    </a>
-                                    @endcan
-                                    @can('leads.delete')
-                                    <button class="ld-action-item delete" title="Delete"
-                                        onclick="confirmDelete({{ $lead->id }}, '{{ addslashes($lead->company_name) }}')">
-                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
-                                        <span>Delete</span>
-                                    </button>
-                                    @endcan
+                                        <a href="{{ route('leads.show', $lead) }}" class="ld-action-item">
+                                            <i class="bi bi-eye"></i> View Lead
+                                        </a>
+                                        @can('leads.edit')
+                                        <a href="{{ route('leads.edit', $lead) }}" class="ld-action-item edit">
+                                            <i class="bi bi-pencil"></i> Edit Lead
+                                        </a>
+                                        @endcan
+                                        @can('leads.delete')
+                                        <button type="button" class="ld-action-item delete" onclick="confirmDelete({{ $lead->id }}, '{{ addslashes($lead->company_name) }}')">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                        @endcan
                                     </div>
                                 </div>
                             </td>
@@ -809,17 +611,14 @@
 
             {{-- Pagination --}}
             @if($leads->hasPages())
-                @include('partials.table-pagination', ['paginator' => $leads])
-            @endif
-            @if(false && $leads->hasPages())
             <div class="ld-pag">
                 <div class="ld-pag-info">Page {{ $leads->currentPage() }} of {{ $leads->lastPage() }}</div>
                 <div class="ld-pag-links">
-                    <a href="{{ $leads->previousPageUrl() ?? '#' }}" class="ld-pag-link {{ !$leads->onFirstPage() ? '' : 'disabled' }}">â€¹</a>
+                    <a href="{{ $leads->previousPageUrl() ?? '#' }}" class="ld-pag-link {{ !$leads->onFirstPage() ? '' : 'disabled' }}">‹</a>
                     @foreach($leads->getUrlRange(max(1,$leads->currentPage()-2), min($leads->lastPage(),$leads->currentPage()+2)) as $page => $url)
                     <a href="{{ $url }}" class="ld-pag-link {{ $page == $leads->currentPage() ? 'active':'' }}">{{ $page }}</a>
                     @endforeach
-                    <a href="{{ $leads->nextPageUrl() ?? '#' }}" class="ld-pag-link {{ $leads->hasMorePages() ? '':'disabled' }}">â€º</a>
+                    <a href="{{ $leads->nextPageUrl() ?? '#' }}" class="ld-pag-link {{ $leads->hasMorePages() ? '':'disabled' }}">›</a>
                 </div>
             </div>
             @endif
@@ -850,34 +649,23 @@
 
 @push('scripts')
 <script>
-// Filter logic
-const todayDate = @json(now()->toDateString());
-const defaultFromDate = @json($defaultFromDate);
-const defaultToDate = @json($defaultToDate);
 const ff = {
     f_search:    { label:'Search',   sel:'#f_search' },
     f_branch:    { label:'Branch',   sel:'#f_branch' },
     f_mobile:    { label:'Mobile',   sel:'#f_mobile' },
     f_source:    { label:'Source',   sel:'#f_source' },
     f_user:      { label:'User',     sel:'#f_user' },
+    f_pre_sales: { label:'Pre Sales',sel:'#f_pre_sales' },
     f_date_from: { label:'From',     sel:'#f_date_from' },
     f_date_to:   { label:'To',       sel:'#f_date_to' },
 };
 
 function isActiveFilter(id, value) {
     if (!value || !value.trim()) return false;
-    const qVal = document.getElementById('f_quick_date')?.value;
-    const from = document.getElementById('f_date_from')?.value;
-    const to = document.getElementById('f_date_to')?.value;
-    if (from === defaultFromDate && to === defaultToDate && (!qVal || qVal === 'month')) {
-        if (id === 'f_date_from' || id === 'f_date_to') return false;
-    }
     return true;
 }
 
 function onDateChange() {
-    const qEl = document.getElementById('f_quick_date');
-    if (qEl) qEl.value = '';
     updateFilters();
 }
 
@@ -905,44 +693,6 @@ function updateFilters() {
         bar.style.display = count > 0 ? 'flex' : 'none';
         bar.innerHTML = chips.join('');
     }
-
-    const qVal = document.getElementById('f_quick_date')?.value;
-    const from = document.getElementById('f_date_from')?.value;
-    const to = document.getElementById('f_date_to')?.value;
-
-    // Toggle active state for quick buttons
-    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (Boolean(from) && Boolean(to) && from === todayDate && to === todayDate));
-    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (Boolean(from) && Boolean(to) && from === defaultFromDate && to === defaultToDate));
-    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && !qVal));
-
-    // Calculate dynamic values for Week and Year active states
-    const parts = defaultToDate.split('-').map(Number);
-    const today = new Date(parts[0], parts[1] - 1, parts[2]);
-    const fmt = d => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    };
-
-    const mon = new Date(today);
-    mon.setDate(today.getDate() - today.getDay() + 1);
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-    const weekStart = fmt(mon);
-    const weekEnd = fmt(sun);
-    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (Boolean(from) && Boolean(to) && from === weekStart && to === weekEnd));
-
-    const yearStart = `${parts[0]}-01-01`;
-    const yearEnd = `${parts[0]}-12-31`;
-    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (Boolean(from) && Boolean(to) && from === yearStart && to === yearEnd));
-
-    const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
-    const firstQ = new Date(parts[0], qStartMonth, 1);
-    const lastQ = new Date(parts[0], qStartMonth + 3, 0);
-    const qStart = fmt(firstQ);
-    const qEnd = fmt(lastQ);
-    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (Boolean(from) && Boolean(to) && from === qStart && to === qEnd));
 }
 
 function clearF(id) {
@@ -950,77 +700,8 @@ function clearF(id) {
     if (el) {
         el.value = '';
     }
-    if (id === 'f_date_from' || id === 'f_date_to') {
-        const qEl = document.getElementById('f_quick_date');
-        if (qEl) qEl.value = '';
-    }
     updateFilters();
     document.getElementById('filterForm').submit();
-}
-
-function autoSubmit() {
-    updateFilters();
-}
-
-function delaySubmit() {
-    clearTimeout(st);
-    updateFilters();
-}
-
-function setQ(p) {
-    const qEl = document.getElementById('f_quick_date');
-    if (qEl) qEl.value = p;
-
-    const parts = defaultToDate.split('-').map(Number);
-    const today = new Date(parts[0], parts[1] - 1, parts[2]);
-    const fmt = d => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    };
-    const f = document.getElementById('f_date_from');
-    const t = document.getElementById('f_date_to');
-    if (!f || !t) return;
-
-    if (p === 'all') {
-        f.value = '';
-        t.value = '';
-        updateFilters();
-        return;
-    }
-
-    let targetFrom = '';
-    let targetTo = '';
-
-    if (p === 'today') {
-        targetFrom = todayDate;
-        targetTo = todayDate;
-    } else if (p === 'week') {
-        const mon = new Date(today);
-        mon.setDate(today.getDate() - today.getDay() + 1);
-        const sun = new Date(mon);
-        sun.setDate(mon.getDate() + 6);
-        targetFrom = fmt(mon);
-        targetTo = fmt(sun);
-    } else if (p === 'month') {
-        targetFrom = defaultFromDate;
-        targetTo = defaultToDate;
-    } else if (p === 'quarter') {
-        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
-        const firstQ = new Date(parts[0], qStartMonth, 1);
-        const lastQ = new Date(parts[0], qStartMonth + 3, 0);
-        targetFrom = fmt(firstQ);
-        targetTo = fmt(lastQ);
-    } else if (p === 'year') {
-        targetFrom = `${parts[0]}-01-01`;
-        targetTo = `${parts[0]}-12-31`;
-    }
-
-    f.value = targetFrom;
-    t.value = targetTo;
-
-    updateFilters();
 }
 
 function closeActionMenus() {
@@ -1048,5 +729,7 @@ function closeModal() { document.getElementById('deleteModal').style.display = '
 document.getElementById('deleteModal').addEventListener('click', e => { if(e.target===document.getElementById('deleteModal')) closeModal(); });
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
 document.addEventListener('click', closeActionMenus);
+
+document.addEventListener('DOMContentLoaded', updateFilters);
 </script>
 @endpush

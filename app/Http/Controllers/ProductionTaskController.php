@@ -87,9 +87,13 @@ class ProductionTaskController extends Controller
         $assignedProjects = $this->getAccessibleProjects($user);
         $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
             $firstProj = $projects->first();
+            $companyName = trim($firstProj->company_name ?: ($firstProj->lead?->company_name ?: ''));
+            if (!$companyName) {
+                $companyName = trim($firstProj->client_name ?: ($firstProj->lead?->contact_name ?: 'No Company'));
+            }
             return [
                 'lead_id' => $firstProj->lead_id,
-                'company_name' => $firstProj->company_name ?: ($firstProj->lead?->company_name ?: 'No Company')
+                'company_name' => $companyName ?: 'No Company'
             ];
         })->values();
 
@@ -118,9 +122,13 @@ class ProductionTaskController extends Controller
 
         $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
             $firstProj = $projects->first();
+            $companyName = trim($firstProj->company_name ?: ($firstProj->lead?->company_name ?: ''));
+            if (!$companyName) {
+                $companyName = trim($firstProj->client_name ?: ($firstProj->lead?->contact_name ?: 'No Company'));
+            }
             return [
                 'lead_id' => $firstProj->lead_id,
-                'company_name' => $firstProj->company_name ?: ($firstProj->lead?->company_name ?: 'No Company')
+                'company_name' => $companyName ?: 'No Company'
             ];
         })->values();
 
@@ -273,47 +281,65 @@ class ProductionTaskController extends Controller
         $isAdminLike = $user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator() || $user->hasTlLikeRole();
 
         if ($isAdminLike) {
-            return ProductionInitiation::query()
-                ->with(['lead.branch', 'leadProduct', 'department'])
-                ->whereIn('production_approval_status', ['approval', 'approved'])
-                ->latest('id')
-                ->get()
-                ->map(function (ProductionInitiation $project) {
-                    $project->timesheet_delivery_date = $project->project_delivery_date?->toDateString();
-                    return $project;
-                });
-        }
-
-        $managedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-
-        $projects = ProductionInitiation::query()
-            ->with(['lead.branch', 'leadProduct', 'department'])
-            ->whereIn('production_approval_status', ['approval', 'approved'])
-            ->where(function ($q) use ($user, $managedUserIds) {
-                $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
-                  ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
-                  ->orWhere(function ($sub) use ($managedUserIds) {
-                      foreach ($managedUserIds as $mId) {
-                          $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId);
-                      }
-                  })
-                  ->orWhereHas('testingDetails', function ($tq) use ($user) {
-                      $tq->where('testing_tl_id', $user->id)
-                         ->orWhere('moved_by_user_id', $user->id);
-                  });
-            })
-            ->latest('id')
-            ->get();
-
-        if ($projects->isEmpty()) {
             $projects = ProductionInitiation::query()
                 ->with(['lead.branch', 'leadProduct', 'department'])
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->latest('id')
                 ->get();
+        } else {
+            $managedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
+
+            $projects = ProductionInitiation::query()
+                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->where(function ($q) use ($user, $managedUserIds) {
+                    $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                      ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
+                      ->orWhere(function ($sub) use ($managedUserIds) {
+                          foreach ($managedUserIds as $mId) {
+                              $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId);
+                          }
+                      })
+                      ->orWhereHas('testingDetails', function ($tq) use ($user) {
+                          $tq->where('testing_tl_id', $user->id)
+                             ->orWhere('moved_by_user_id', $user->id);
+                      });
+                })
+                ->latest('id')
+                ->get();
+
+            if ($projects->isEmpty()) {
+                $projects = ProductionInitiation::query()
+                    ->with(['lead.branch', 'leadProduct', 'department'])
+                    ->whereIn('production_approval_status', ['approval', 'approved'])
+                    ->latest('id')
+                    ->get();
+            }
         }
 
         return $projects->map(function (ProductionInitiation $project) {
+            $empIds = is_array($project->project_allocated_employee_user_ids)
+                ? $project->project_allocated_employee_user_ids
+                : (json_decode($project->project_allocated_employee_user_ids ?? '[]', true) ?? []);
+            $tlIds = is_array($project->project_allocated_tl_user_ids)
+                ? $project->project_allocated_tl_user_ids
+                : (json_decode($project->project_allocated_tl_user_ids ?? '[]', true) ?? []);
+            $tlAlloc = is_array($project->tl_employee_allocations)
+                ? $project->tl_employee_allocations
+                : (json_decode($project->tl_employee_allocations ?? '[]', true) ?? []);
+
+            $allocUserIds = collect($empIds)
+                ->concat($tlIds)
+                ->concat(collect($tlAlloc)->flatMap(fn($a) => array_merge([$a['tl_user_id'] ?? null], $a['employee_user_ids'] ?? [])))
+                ->filter()
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            $project->allocated_user_ids = $allocUserIds;
+            $project->resolved_product_name = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Product');
+            $project->resolved_company_name = trim($project->company_name ?: ($project->lead?->company_name ?: ($project->client_name ?: ($project->lead?->contact_name ?: 'No Company'))));
             $project->timesheet_delivery_date = $project->project_delivery_date?->toDateString();
             return $project;
         });

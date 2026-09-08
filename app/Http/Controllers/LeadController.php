@@ -168,12 +168,17 @@ class LeadController extends Controller
         $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
 
+        // Overall untouched leads count (unrestricted by date filter)
+        $untouchedCountQuery = Lead::query();
+        $this->visibility->applyLeadVisibility($untouchedCountQuery);
+        $untouchedCount = $untouchedCountQuery->whereDoesntHave('callUpdates')->count();
+
         // Stats for top cards
         $stats = [
             'total'         => $activeLeadIds->count(),
             'total_products'=> LeadProduct::whereIn('lead_id', $activeLeadIds)->count(),
             'pipeline'      => LeadProduct::whereIn('lead_id', $activeLeadIds)->sum('total_price'),
-            'new'           => Lead::whereIn('id', $activeLeadIds)->whereDoesntHave('callUpdates')->count(),
+            'new'           => $untouchedCount,
         ];
 
         $filterPanelOpen = !$request->has('reset') && (
@@ -191,6 +196,127 @@ class LeadController extends Controller
         );
 
         return view('pages.leads.index', compact('leads', 'branches', 'users', 'preSaleExecutives', 'products', 'stats', 'defaultFromDate', 'defaultToDate', 'filterPanelOpen', 'sourceOptions', 'statusOptions'));
+    }
+
+    /**
+     * Dedicated page for Untouched Leads (overall, without date limits by default).
+     */
+    public function untouchedIndex(Request $request)
+    {
+        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
+            ->whereDoesntHave('callUpdates')
+            ->latest('lead_date');
+
+        $this->visibility->applyLeadVisibility($query);
+
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('company_name',  'like', "%{$s}%")
+                  ->orWhere('contact_name','like', "%{$s}%")
+                  ->orWhere('mobile_number','like',"%{$s}%")
+                  ->orWhere('email',        'like', "%{$s}%")
+                  ->orWhere('product_name', 'like', "%{$s}%");
+            });
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('mobile_number')) {
+            $query->where('mobile_number', 'like', '%' . $request->mobile_number . '%');
+        }
+
+        if ($request->filled('lead_source')) {
+            $sourceInput = $request->lead_source;
+            $sourceObj = is_numeric($sourceInput)
+                ? LeadSource::find($sourceInput)
+                : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
+
+            if ($sourceObj) {
+                $query->where('lead_source_id', $sourceObj->id);
+            } else {
+                $query->where(function ($q) use ($sourceInput) {
+                    $q->whereHas('leadSource', fn ($lsq) => $lsq->where('name', 'like', "%{$sourceInput}%"))
+                      ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+                });
+            }
+        }
+
+        if ($request->filled('assigned_to')) {
+            $query->where('assigned_to', $request->assigned_to);
+        }
+
+        if ($request->filled('pre_sale_executive_id')) {
+            $query->where('pre_sale_executive_id', $request->pre_sale_executive_id);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('lead_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('lead_date', '<=', $request->date_to);
+        }
+
+        $activeLeadIds = (clone $query)->pluck('leads.id');
+        $leads    = $query->paginate(15)->withQueryString();
+        $branches = $this->visibility->visibleBranches();
+        $users    = $this->visibility->visibleAssignableUsers()
+            ->reject(fn ($u) => $u->hasPreSalesLikeRole())
+            ->values();
+
+        $preSaleExecutives = User::query()
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%pre_sale%')->orWhere('display_name', 'like', '%pre%sale%'))
+                  ->orWhereIn('id', Lead::query()->whereNotNull('pre_sale_executive_id')->distinct()->pluck('pre_sale_executive_id'));
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $productQuery = Lead::select('product_name')->whereNotNull('product_name')->distinct();
+        $this->visibility->applyLeadVisibility($productQuery);
+        $products = $productQuery->pluck('product_name');
+
+        $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
+        $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
+
+        $stats = [
+            'total'         => $activeLeadIds->count(),
+            'total_products'=> LeadProduct::whereIn('lead_id', $activeLeadIds)->count(),
+            'pipeline'      => LeadProduct::whereIn('lead_id', $activeLeadIds)->sum('total_price'),
+            'new'           => $activeLeadIds->count(),
+        ];
+
+        $filterPanelOpen = !$request->has('reset') && (
+            $request->filled('search')
+            || $request->filled('branch_id')
+            || $request->filled('mobile_number')
+            || $request->filled('lead_source')
+            || $request->filled('assigned_to')
+            || $request->filled('pre_sale_executive_id')
+            || $request->filled('date_from')
+            || $request->filled('date_to')
+        );
+
+        $defaultFromDate = null;
+        $defaultToDate = null;
+
+        return view('pages.leads.untouched', compact(
+            'leads',
+            'branches',
+            'users',
+            'preSaleExecutives',
+            'products',
+            'stats',
+            'defaultFromDate',
+            'defaultToDate',
+            'filterPanelOpen',
+            'sourceOptions',
+            'statusOptions'
+        ));
     }
 
     /**

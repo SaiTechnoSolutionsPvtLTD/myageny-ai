@@ -208,7 +208,6 @@
                                     <th>Allocated Lead (Client)</th>
                                     <th>Task Description</th>
                                     <th>Assigned By</th>
-                                    <th>Status Overview</th>
                                     <th style="text-align:right;">Action</th>
                                 </tr>
                             </thead>
@@ -220,10 +219,6 @@
                                         $taskDate = $firstTask->task_date;
                                         $creator = $firstTask->creator;
                                         $totalTasks = $group->count();
-                                        
-                                        $pendingCount = $group->where('status', 'pending')->count();
-                                        $inProgressCount = $group->where('status', 'in_progress')->count();
-                                        $completedCount = $group->where('status', 'completed')->count();
 
                                         // Prepare clean JSON representation for modal
                                         $tasksData = $group->map(function($t, $idx) {
@@ -302,21 +297,6 @@
                                                 {{ $creator?->name ?: 'System' }}
                                             </div>
                                             <div class="pts-meta">{{ optional($firstTask->created_at)->format('d M, h:i A') }}</div>
-                                        </td>
-
-                                        <!-- Status Overview -->
-                                        <td>
-                                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                                @if($pendingCount > 0)
-                                                    <span class="pts-badge pending">{{ $pendingCount }} Pending</span>
-                                                @endif
-                                                @if($inProgressCount > 0)
-                                                    <span class="pts-badge in_progress">{{ $inProgressCount }} In Progress</span>
-                                                @endif
-                                                @if($completedCount > 0)
-                                                    <span class="pts-badge completed">{{ $completedCount }} Completed</span>
-                                                @endif
-                                            </div>
                                         </td>
 
                                         <!-- Actions -->

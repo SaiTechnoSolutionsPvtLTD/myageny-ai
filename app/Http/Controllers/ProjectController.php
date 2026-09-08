@@ -572,36 +572,65 @@ class ProjectController extends Controller
             ? ($user->isDevelopmentProjectCoordinator()
                 ? \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orderBy('name')->get(['id', 'name'])
                 : \App\Models\Department::orderBy('name')->get(['id', 'name']))
-            : collect();
+            : $user->roles()->with('department')->get()->pluck('department')->filter()->unique('id')->values();
+
+        if (!$isAdminLike && $departments->isEmpty()) {
+            if ($user->belongsToDesigningDepartment()) {
+                $departments = \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->orderBy('name')->get(['id', 'name']);
+            } elseif ($user->belongsToDigitalMarketingDepartment()) {
+                $departments = \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])->orderBy('name')->get(['id', 'name']);
+            } elseif ($user->belongsToSalesDepartment()) {
+                $departments = \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%sales%'])->orderBy('name')->get(['id', 'name']);
+            }
+        }
+
+        $userDepartmentIds = $departments->pluck('id')->filter()->unique()->values();
+        $selectedDepartmentId = trim((string) $request->query('filter_department_id', ''));
 
         if ($isAdminLike) {
-            $assignedProjects = ProductionInitiation::query()
+            $assignedProjectsQuery = ProductionInitiation::query()
                 ->with($this->projectRelations())
                 ->whereIn('production_approval_status', ['approval', 'approved'])
-                ->latest('production_approval_reviewed_at')
-                ->get()
-                ->map(function (ProductionInitiation $project) {
-                    $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
-
-                    return $project;
-                });
+                ->latest('production_approval_reviewed_at');
         } else {
-            $assignedProjects = $this->timesheetProjectsQuery($user)
-                ->get()
-                ->map(function (ProductionInitiation $project) {
-                    $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
-
-                    return $project;
-                });
+            $assignedProjectsQuery = $this->timesheetProjectsQuery($user);
+            if ($userDepartmentIds->isNotEmpty()) {
+                $assignedProjectsQuery->whereIn('department_id', $userDepartmentIds);
+            }
         }
+
+        if ($selectedDepartmentId !== '') {
+            $assignedProjectsQuery->where('department_id', (int) $selectedDepartmentId);
+        }
+
+        $assignedProjects = $assignedProjectsQuery
+            ->get()
+            ->map(function (ProductionInitiation $project) {
+                $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
+                $project->resolved_product_name = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Product');
+                $project->resolved_company_name = trim($project->company_name ?: ($project->lead?->company_name ?: ($project->client_name ?: ($project->lead?->contact_name ?: 'No Company'))));
+
+                return $project;
+            });
+
+        $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
+            $firstProj = $projects->first();
+            return [
+                'lead_id' => $firstProj->lead_id,
+                'company_name' => $firstProj->resolved_company_name ?: 'No Company',
+                'department_id' => $firstProj->department_id,
+            ];
+        })->values();
 
         $timesheetFilters = [
             'filter_date' => trim((string) $request->query('filter_date', '')),
+            'filter_date_from' => trim((string) $request->query('filter_date_from', $request->query('filter_date', ''))),
+            'filter_date_to' => trim((string) $request->query('filter_date_to', '')),
             'filter_lead_id' => trim((string) $request->query('filter_lead_id', '')),
             'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
             'filter_status' => trim((string) $request->query('filter_status', '')),
             'filter_user_id' => trim((string) $request->query('filter_user_id', '')),
-            'filter_department_id' => trim((string) $request->query('filter_department_id', '')),
+            'filter_department_id' => $selectedDepartmentId,
         ];
 
         $accessibleUserIds = $isAdminLike
@@ -615,9 +644,16 @@ class ProjectController extends Controller
             ->when(!$isAdminLike, function ($query) use ($accessibleUserIds) {
                 $query->whereIn('user_id', $accessibleUserIds);
             })
-            ->when($timesheetFilters['filter_date'] !== '', function ($query) use ($timesheetFilters) {
+            ->when($timesheetFilters['filter_date_from'] !== '', function ($query) use ($timesheetFilters) {
                 try {
-                    $query->whereDate('timesheet_date', Carbon::parse($timesheetFilters['filter_date'])->toDateString());
+                    $query->whereDate('timesheet_date', '>=', Carbon::parse($timesheetFilters['filter_date_from'])->toDateString());
+                } catch (\Throwable) {
+                    // Ignore invalid filter dates from query string.
+                }
+            })
+            ->when($timesheetFilters['filter_date_to'] !== '', function ($query) use ($timesheetFilters) {
+                try {
+                    $query->whereDate('timesheet_date', '<=', Carbon::parse($timesheetFilters['filter_date_to'])->toDateString());
                 } catch (\Throwable) {
                     // Ignore invalid filter dates from query string.
                 }
@@ -639,9 +675,14 @@ class ProjectController extends Controller
                     $query->where('user_id', $targetUserId);
                 }
             })
-            ->when($isAdminLike && $timesheetFilters['filter_department_id'] !== '', function ($query) use ($timesheetFilters) {
+            ->when($timesheetFilters['filter_department_id'] !== '', function ($query) use ($timesheetFilters) {
                 $query->whereHas('project', function ($q) use ($timesheetFilters) {
                     $q->where('department_id', (int) $timesheetFilters['filter_department_id']);
+                });
+            })
+            ->when(!$isAdminLike && $timesheetFilters['filter_department_id'] === '' && $userDepartmentIds->isNotEmpty(), function ($query) use ($userDepartmentIds) {
+                $query->whereHas('project', function ($q) use ($userDepartmentIds) {
+                    $q->whereIn('department_id', $userDepartmentIds);
                 });
             })
             ->latest('created_at')
@@ -703,6 +744,7 @@ class ProjectController extends Controller
 
         return view('pages.projects.timesheets', [
             'assignedProjects' => $assignedProjects,
+            'uniqueLeads' => $uniqueLeads,
             'timesheets' => $timesheets,
             'groupedTimesheets' => $paginatedGroups,
             'timesheetFilters' => $timesheetFilters,

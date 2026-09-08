@@ -486,6 +486,7 @@ Route::middleware(['auth'])->group(function () {
 
         // ── Core CRUD ─────────────────────────────────────────
         Route::get('/',            [LeadController::class, 'index'])->middleware('can:leads.view')->name('index');
+        Route::get('/untouched',   [LeadController::class, 'untouchedIndex'])->middleware('can:leads.view')->name('untouched');
         Route::get('/products',    [LeadController::class, 'productsIndex'])->middleware('can:leads.view')->name('products.index');
         Route::get('/create',      [LeadController::class, 'create'])->middleware('can:leads.create')->name('create');
         Route::get('/call-updates',[LeadCallUpdateController::class, 'index'])->middleware('can:call_updates.view')->name('calls.index');
