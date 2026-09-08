@@ -198,7 +198,10 @@ class DashboardController extends Controller
             ];
         }
 
-        // ── 5. Recent call updates (last 20) ───────────────────────────
+        // ── 5. Recent call updates (last 15) ───────────────────────────
+        // Dashboard card shows a bounded, most-recent-first slice — "Show
+        // All" (mobile) / "Show all →" (web) is what opens the full,
+        // unbounded, paginated Call Updates list.
         $todayFollowups = LeadCallUpdate::query()
             ->whereHas('lead', function ($q) use ($request, $branchId, $userId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
@@ -218,7 +221,7 @@ class DashboardController extends Controller
             ])
             ->latest('called_at')
             ->latest('id')
-            ->take(20)
+            ->take(15)
             ->get()
             ->map(fn($fu) => [
                 'id'               => $fu->id,
