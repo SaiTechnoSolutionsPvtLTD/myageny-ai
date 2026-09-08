@@ -136,15 +136,28 @@ class LeadController extends Controller
             $query->where('product_name', 'like', '%' . $request->product_name . '%');
         }
 
+        if ($request->boolean('untouched') || $request->input('is_untouched') === '1' || $request->input('untouched') === '1') {
+            $query->whereDoesntHave('callUpdates');
+        }
+
         if ($request->filled('date_from')) {
-            $query->whereDate('lead_date', '>=', $request->date_from);
+            $dateFrom = $request->date_from;
+            $query->where(function ($dq) use ($dateFrom) {
+                $dq->whereDate('lead_date', '>=', $dateFrom)
+                   ->orWhereDate('created_at', '>=', $dateFrom);
+            });
         }
 
         if ($request->filled('date_to')) {
-            $query->whereDate('lead_date', '<=', $request->date_to);
+            $dateTo = $request->date_to;
+            $query->where(function ($dq) use ($dateTo) {
+                $dq->whereDate('lead_date', '<=', $dateTo)
+                   ->orWhereDate('created_at', '<=', $dateTo);
+            });
         }
 
         $activeLeadIds = (clone $query)->pluck('leads.id');
+        $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
 
         $leads    = $query->paginate(15)->withQueryString();
         $branches = $this->visibility->visibleBranches();
@@ -168,17 +181,80 @@ class LeadController extends Controller
         $sourceOptions = LeadSource::orderBy('name')->get(['id', 'name']);
         $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
 
-        // Overall untouched leads count (unrestricted by date filter)
+        // Untouched leads count (filtered user-wise and by active filters)
         $untouchedCountQuery = Lead::query();
         $this->visibility->applyLeadVisibility($untouchedCountQuery);
+        $untouchedCountQuery
+            ->when($request->filled('assigned_to'), fn($q) => $q->where('assigned_to', $request->assigned_to))
+            ->when($request->filled('branch_id'), fn($q) => $q->where('branch_id', $request->branch_id))
+            ->when($request->filled('pre_sale_executive_id'), fn($q) => $q->where('pre_sale_executive_id', $request->pre_sale_executive_id))
+            ->when($request->filled('lead_source'), function($q) use ($request) {
+                $sourceInput = $request->lead_source;
+                $sourceObj = is_numeric($sourceInput)
+                    ? LeadSource::find($sourceInput)
+                    : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
+                if ($sourceObj) {
+                    $q->where('lead_source_id', $sourceObj->id);
+                } else {
+                    $q->where(function ($sq) use ($sourceInput) {
+                        $sq->whereHas('leadSource', fn ($lsq) => $lsq->where('name', 'like', "%{$sourceInput}%"))
+                           ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+                    });
+                }
+            })
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $s = $request->search;
+                $q->where(function ($sq) use ($s) {
+                    $sq->where('company_name',  'like', "%{$s}%")
+                      ->orWhere('contact_name','like', "%{$s}%")
+                      ->orWhere('mobile_number','like',"%{$s}%")
+                      ->orWhere('email',        'like', "%{$s}%")
+                      ->orWhere('product_name', 'like', "%{$s}%");
+                });
+            })
+            ->when($request->filled('date_from'), fn($q) => $q->where(function($dq) use ($request) {
+                $dq->whereDate('lead_date', '>=', $request->date_from)->orWhereDate('created_at', '>=', $request->date_from);
+            }))
+            ->when($request->filled('date_to'), fn($q) => $q->where(function($dq) use ($request) {
+                $dq->whereDate('lead_date', '<=', $request->date_to)->orWhereDate('created_at', '<=', $request->date_to);
+            }));
+
         $untouchedCount = $untouchedCountQuery->whereDoesntHave('callUpdates')->count();
+
+        $convertedStatusIds = LeadStatus::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('name', 'like', '%convert%');
+            })
+            ->pluck('id')
+            ->toArray();
+
+        $isConvertedProduct = function (LeadProduct $lp) use ($convertedStatusIds) {
+            $status = strtolower(trim((string) $lp->product_status));
+            return in_array($status, ['converted', 'won'])
+                || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+        };
+
+        $convertedProducts = $lpProducts->filter($isConvertedProduct);
+        $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
+
+        $convertedProductsCount = $convertedProducts->count();
+        $upcomingAmount = (float) $nonConvertedProducts->sum('total_price');
+        $convertedValue = (float) $convertedProducts->sum('total_price');
+        $totalProductsCount = $lpProducts->count();
+        $totalPipeline = (float) $lpProducts->sum('total_price');
+        $wonLeadsCount = (clone $query)->converted()->count();
 
         // Stats for top cards
         $stats = [
-            'total'         => $activeLeadIds->count(),
-            'total_products'=> LeadProduct::whereIn('lead_id', $activeLeadIds)->count(),
-            'pipeline'      => LeadProduct::whereIn('lead_id', $activeLeadIds)->sum('total_price'),
-            'new'           => $untouchedCount,
+            'total'              => $activeLeadIds->count(),
+            'active_customers'   => $wonLeadsCount,
+            'total_products'     => $totalProductsCount,
+            'converted_products' => $convertedProductsCount,
+            'upcoming_amount'    => $upcomingAmount,
+            'converted_value'    => $convertedValue,
+            'pipeline'           => $totalPipeline,
+            'new'                => $untouchedCount,
         ];
 
         $filterPanelOpen = !$request->has('reset') && (
@@ -203,6 +279,50 @@ class LeadController extends Controller
      */
     public function untouchedIndex(Request $request)
     {
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate   = now()->endOfMonth()->toDateString();
+
+        if ($request->has('reset')) {
+            $request->merge([
+                'date_from'  => null,
+                'date_to'    => null,
+                'quick_date' => 'all',
+            ]);
+        } else {
+            $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
+            if ($quickDate && $quickDate !== 'all' && $quickDate !== 'custom') {
+                $dates = match ($quickDate) {
+                    'today'               => [now()->toDateString(), now()->toDateString()],
+                    'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                    'month', 'this_month' => [$defaultFromDate, $defaultToDate],
+                    'quarter'             => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
+                    'year', 'this_year'   => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                    default               => null,
+                };
+                if ($dates) {
+                    $request->merge([
+                        'date_from'  => $dates[0],
+                        'date_to'    => $dates[1],
+                        'quick_date' => $quickDate,
+                    ]);
+                }
+            } elseif ($quickDate === 'all') {
+                $request->merge([
+                    'date_from'  => null,
+                    'date_to'    => null,
+                    'quick_date' => 'all',
+                ]);
+            } elseif ($request->filled('date_from') || $request->filled('date_to')) {
+                $parsedFrom = $this->parseDateInput($request->input('date_from'));
+                $parsedTo   = $this->parseDateInput($request->input('date_to'));
+                $request->merge([
+                    'date_from'  => $parsedFrom,
+                    'date_to'    => $parsedTo,
+                    'quick_date' => 'custom',
+                ]);
+            }
+        }
+
         $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
             ->whereDoesntHave('callUpdates')
             ->latest('lead_date');
@@ -297,12 +417,10 @@ class LeadController extends Controller
             || $request->filled('lead_source')
             || $request->filled('assigned_to')
             || $request->filled('pre_sale_executive_id')
+            || ($request->filled('quick_date') && $request->input('quick_date') !== 'all')
             || $request->filled('date_from')
             || $request->filled('date_to')
         );
-
-        $defaultFromDate = null;
-        $defaultToDate = null;
 
         return view('pages.leads.untouched', compact(
             'leads',
@@ -390,11 +508,6 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
-        if ($request->filled('product_active')) {
-            $status = $request->product_active;
-            $query->whereHas('product', fn ($q) => $q->where('status', $status));
-        }
-
         if ($request->filled('mobile_number')) {
             $mobileNumber = $request->mobile_number;
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('mobile_number', 'like', '%' . $mobileNumber . '%'));
@@ -406,17 +519,17 @@ class LeadController extends Controller
 
         if ($request->filled('date_from')) {
             $dateFrom = $request->date_from;
-            $query->where(function ($q) use ($dateFrom) {
-                $q->whereDate('created_at', '>=', $dateFrom)
-                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+            $query->whereHas('lead', function ($lq) use ($dateFrom) {
+                $lq->whereDate('lead_date', '>=', $dateFrom)
+                   ->orWhereDate('created_at', '>=', $dateFrom);
             });
         }
 
         if ($request->filled('date_to')) {
             $dateTo = $request->date_to;
-            $query->where(function ($q) use ($dateTo) {
-                $q->whereDate('created_at', '<=', $dateTo)
-                  ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+            $query->whereHas('lead', function ($lq) use ($dateTo) {
+                $lq->whereDate('lead_date', '<=', $dateTo)
+                   ->orWhereDate('created_at', '<=', $dateTo);
             });
         }
 
@@ -443,7 +556,6 @@ class LeadController extends Controller
             || $request->filled('mobile_number')
             || $request->filled('product_id')
             || $request->filled('product_status')
-            || $request->filled('product_active')
             || $request->filled('branch_id')
             || $request->filled('assigned_to')
             || ($request->has('date_from') && $request->input('date_from') !== $defaultFromDate)
@@ -488,9 +600,24 @@ class LeadController extends Controller
 
         abort_unless($this->visibility->canAssignTo($assignedUser->id), 403);
 
-        $lead = Lead::create(array_merge($request->validated(), [
+        $leadData = array_merge($request->validated(), [
             'company_id' => auth()->user()?->company_id,
-        ]));
+        ]);
+
+        if ($assignedUser->belongsToCustomerSupportDepartment() || $assignedUser->hasCustomerSupportLikeRole()) {
+            $mappedTl = $assignedUser->mappedManagers()
+                ->where(function ($q) {
+                    $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%tl%')->orWhere('name', 'like', '%lead%'))
+                      ->orWhereHas('roles.department', fn ($dq) => $dq->where('name', 'like', '%support%')->orWhere('name', 'like', '%cst%'));
+                })
+                ->first();
+
+            $leadData['customer_support_tl_id'] = $mappedTl?->id ?: $assignedUser->id;
+            $leadData['customer_support_executive_id'] = $assignedUser->id;
+            $leadData['customer_support_allocated_at'] = now();
+        }
+
+        $lead = Lead::create($leadData);
         $this->syncCustomFieldValues($lead, $request->input('custom_fields', []));
 
         return redirect()
@@ -645,6 +772,21 @@ class LeadController extends Controller
             $updateData['pre_sale_executive_id'] = auth()->id();
         }
 
+        if ($assignedUser->belongsToCustomerSupportDepartment() || $assignedUser->hasCustomerSupportLikeRole()) {
+            $mappedTl = $assignedUser->mappedManagers()
+                ->where(function ($q) {
+                    $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%tl%')->orWhere('name', 'like', '%lead%'))
+                      ->orWhereHas('roles.department', fn ($dq) => $dq->where('name', 'like', '%support%')->orWhere('name', 'like', '%cst%'));
+                })
+                ->first();
+
+            $updateData['customer_support_tl_id'] = $mappedTl?->id ?: $assignedUser->id;
+            $updateData['customer_support_executive_id'] = $assignedUser->id;
+            if (empty($lead->customer_support_allocated_at)) {
+                $updateData['customer_support_allocated_at'] = now();
+            }
+        }
+
         $lead->update($updateData);
         $this->syncCustomFieldValues($lead, $request->input('custom_fields', []));
 
@@ -792,7 +934,7 @@ class LeadController extends Controller
 
         $quickDate = $request->input('quick_date') ?? $request->input('quick_select');
 
-        // If user explicitly clicked 'Show All'
+        // If user explicitly selected 'Show All'
         if ($quickDate === 'all') {
             $request->merge([
                 'date_from'  => null,
@@ -802,31 +944,20 @@ class LeadController extends Controller
             return;
         }
 
-        $hasFrom = $request->filled('date_from');
-        $hasTo   = $request->filled('date_to');
-
-        // 1. If user provided custom date_from or date_to, ALWAYS prioritize user's dates!
-        if ($hasFrom || $hasTo) {
+        // If user selected 'custom'
+        if ($quickDate === 'custom') {
             $parsedFrom = $this->parseDateInput($request->input('date_from'));
             $parsedTo   = $this->parseDateInput($request->input('date_to'));
-
-            $matchedQuick = null;
-            if ($parsedFrom === $defaultFromDate && $parsedTo === $defaultToDate) {
-                $matchedQuick = 'month';
-            } elseif ($parsedFrom === now()->toDateString() && $parsedTo === now()->toDateString()) {
-                $matchedQuick = 'today';
-            }
-
             $request->merge([
                 'date_from'  => $parsedFrom,
                 'date_to'    => $parsedTo,
-                'quick_date' => $matchedQuick,
+                'quick_date' => 'custom',
             ]);
             return;
         }
 
-        // 2. If quick_date was explicitly requested (and not 'custom')
-        if ($quickDate && $quickDate !== 'custom') {
+        // If quick_date was requested for standard presets
+        if ($quickDate) {
             $dates = match ($quickDate) {
                 'today'               => [now()->toDateString(), now()->toDateString()],
                 'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
@@ -846,7 +977,21 @@ class LeadController extends Controller
             }
         }
 
-        // 3. DEFAULT (Initial page load): apply default current month
+        // If user provided custom date_from or date_to without explicit quick_date
+        $hasFrom = $request->filled('date_from');
+        $hasTo   = $request->filled('date_to');
+        if ($hasFrom || $hasTo) {
+            $parsedFrom = $this->parseDateInput($request->input('date_from'));
+            $parsedTo   = $this->parseDateInput($request->input('date_to'));
+            $request->merge([
+                'date_from'  => $parsedFrom,
+                'date_to'    => $parsedTo,
+                'quick_date' => 'custom',
+            ]);
+            return;
+        }
+
+        // DEFAULT (Initial page load): apply default current month
         $request->merge([
             'date_from'  => $defaultFromDate,
             'date_to'    => $defaultToDate,

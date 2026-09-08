@@ -72,7 +72,7 @@ class DashboardController extends Controller
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year'],
+            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year,custom'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -125,8 +125,15 @@ class DashboardController extends Controller
         // ── 3. Source distribution ─────────────────────────────────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        foreach ($this->companyScopedLeadSourceOptions($request->user()) as $key => $label) {
-            $count = (clone $base())->where('lead_source', $key)->count();
+        foreach (Lead::sourceOptions() as $key => $label) {
+            $count = (clone $base())
+                ->where(function ($q) use ($key, $label) {
+                    $q->where('lead_source_id', $key)
+                        ->orWhere(function ($q2) use ($label) {
+                            $q2->whereNull('lead_source_id')->where('lead_source', $label);
+                        });
+                })
+                ->count();
             $sourceTotal += $count;
             $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
         }
@@ -139,11 +146,23 @@ class DashboardController extends Controller
         $lpBase = $this->getLeadProductBaseQuery($request);
         $lpProducts = (clone $lpBase)->with('payments')->get();
 
-        $totalProductValue = (float) $lpProducts->sum('total_price');
-        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
-        $totalPending      = max(0, $totalProductValue - $totalPaid);
-        $convertedValue    = (float) $lpProducts->where('product_status', 'converted')->sum('total_price');
-        $convertedCount    = $lpProducts->where('product_status', 'converted')->count();
+        $convertedStatusIds = LeadStatus::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('name', 'like', '%convert%');
+            })
+            ->pluck('id')
+            ->toArray();
+
+        $isConvertedProduct = function (LeadProduct $lp) use ($convertedStatusIds) {
+            $status = strtolower(trim((string) $lp->product_status));
+            return in_array($status, ['converted', 'won'])
+                || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+        };
+
+        $convertedProducts = $lpProducts->filter($isConvertedProduct);
+        $convertedValue    = (float) $convertedProducts->sum('total_price');
+        $convertedCount    = $convertedProducts->count();
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
         // Mirrors SuperAdminDashboardController's KPI block — these were
@@ -179,8 +198,8 @@ class DashboardController extends Controller
             ];
         }
 
-        // ── 5. Today's follow-ups ─────────────────────────────────
-        $todayFollowups = LeadCallUpdate::whereDate('next_follow_up', today())
+        // ── 5. Recent call updates (last 20) ───────────────────────────
+        $todayFollowups = LeadCallUpdate::query()
             ->whereHas('lead', function ($q) use ($request, $branchId, $userId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
@@ -194,17 +213,23 @@ class DashboardController extends Controller
                 'lead.branch:id,name',
                 'lead.assignedTo:id,name',
                 'user:id,name',
+                'outCome:id,name',
+                'outComeSubCategory:id,name',
             ])
-            ->latest()
-            ->take(10)
+            ->latest('called_at')
+            ->latest('id')
+            ->take(20)
             ->get()
             ->map(fn($fu) => [
                 'id'               => $fu->id,
-                'called_at'        => $fu->called_at->toISOString(),
+                'called_at'        => $fu->called_at?->toISOString(),
+                'called_at_formatted' => $fu->called_at?->format('d M, h:i A'),
                 'call_type'        => $fu->call_type,
                 'call_type_label'  => $fu->call_type_label,
                 'outcome'          => $fu->outcome,
-                'outcome_label'    => $fu->outcome_label,
+                'outcome_label'    => $fu->outCome?->name ?? ($fu->outcome_label ?: 'Call Update'),
+                'outcome_subcategory' => $fu->outcome_subcategory,
+                'outcome_subcategory_label' => $fu->outComeSubCategory?->name ?? $fu->outcome_subcategory_label,
                 'outcome_color'    => $fu->outcome_color,
                 'duration_minutes' => $fu->duration_minutes,
                 'notes'            => $fu->notes,
@@ -720,6 +745,7 @@ class DashboardController extends Controller
                 'month'   => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
                 'quarter' => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
                 'year'    => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                'custom'  => [$request->date_from ?: null, $request->date_to ?: null],
                 default   => [null, null],
             };
         }

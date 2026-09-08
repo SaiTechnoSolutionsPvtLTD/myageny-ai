@@ -68,20 +68,16 @@
 .ld-filter-chevron { width:30px; height:30px; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #e1dee3; color:#8e8e8e; transition:all .15s; }
 .ld-filter-accordion[open] .ld-filter-chevron { transform:rotate(180deg); color:#fe5f04; border-color:#fed7aa; background:#fff7ed; }
 .ld-filter-body { border-top:1px solid #f0eef2; }
-.ld-filter-bar { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; padding:14px 16px; align-items:end; }
-.ld-filter-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+.ld-filter-bar { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; padding:18px 20px; align-items:end; }
+.ld-filter-actions { grid-column:1 / -1; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:flex-end; padding-top:14px; border-top:1px solid #f0eef2; margin-top:4px; }
 .ld-fw { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .ld-field-label { font-size:11px; font-weight:800; color:#7c7c7c; text-transform:uppercase; letter-spacing:.04em; }
 .ld-input-wrap { position:relative; }
 .ld-fi { left:10px; font-size:13px; line-height:1; width:auto; height:auto; }
 .ld-fs, .ld-fi-input { width:100%; height:38px; padding:8px 30px 8px 31px; border-radius:9px; min-width:0; }
 .ld-fc { right:9px; font-size:11px; line-height:1; width:auto; height:auto; }
-.ld-date-range { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:8px; align-items:end; grid-column:span 2; }
-.ld-date-sep { height:38px; display:flex; align-items:center; color:#9e9e9e; font-size:11px; font-weight:800; text-transform:uppercase; }
-.ld-quick-dates { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-.ld-qb { height:34px; padding:0 11px; border-radius:8px; font-weight:700; }
-.ld-reset-btn { display:inline-flex; align-items:center; justify-content:center; height:38px; padding:0 13px; border-radius:9px; background:#fff; color:#7c7c7c; text-decoration:none; font-weight:700; }
-.ld-reset-btn:hover { background:#fff5f5; }
+.ld-reset-btn { display:inline-flex; align-items:center; justify-content:center; height:38px; padding:0 16px; border-radius:9px; background:#fff; color:#7c7c7c; text-decoration:none; font-weight:700; border:1px solid #e1dee3; }
+.ld-reset-btn:hover { background:#fff5f5; border-color:#dc2626; color:#dc2626; }
 .ld-chips-bar { padding:0 16px 14px; border-top:0; }
 .ld-search-box { position:relative; flex:auto; }
 .ld-search-ico { font-size:13px; width:auto; height:auto; }
@@ -94,9 +90,7 @@
 @media (max-width: 700px) {
     .ld-filter-wrap-outer { padding:10px 18px; }
     .ld-filter-toggle { align-items:flex-start; }
-    .ld-filter-bar, .ld-date-range { grid-template-columns:1fr; }
-    .ld-date-range { grid-column:span 1; }
-    .ld-date-sep { height:auto; }
+    .ld-filter-bar { grid-template-columns:1fr; }
     .ld-filter-actions { justify-content:flex-start; }
 }
 
@@ -362,14 +356,13 @@
 
             <div class="ld-filter-body">
                 <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
-                    <input type="hidden" name="quick_date" id="f_quick_date" value="{{ request('quick_date') }}">
                     <div class="ld-filter-bar">
                         <div class="ld-fw">
                             <label class="ld-field-label" for="f_search">Search</label>
                             <div class="ld-search-box">
                                 <i class="bi bi-search ld-search-ico"></i>
                                 <input type="text" name="search" class="ld-search-input" id="f_search" placeholder="Company, contact, email..."
-                                       value="{{ request('search') }}" oninput="updateFilters()">
+                                       value="{{ request('search') }}">
                             </div>
                         </div>
 
@@ -377,7 +370,7 @@
                             <label class="ld-field-label" for="f_branch">Branch</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-building ld-fi"></i>
-                                <select name="branch_id" class="ld-fs" id="f_branch" onchange="updateFilters()">
+                                <select name="branch_id" class="ld-fs" id="f_branch">
                                     <option value="">All Branches</option>
                                     @foreach($branches as $b)
                                         <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
@@ -392,7 +385,7 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-telephone ld-fi"></i>
                                 <input type="text" name="mobile_number" class="ld-fi-input" id="f_mobile"
-                                       placeholder="Mobile no." value="{{ request('mobile_number') }}" oninput="updateFilters()">
+                                       placeholder="Mobile no." value="{{ request('mobile_number') }}">
                             </div>
                         </div>
 
@@ -400,7 +393,7 @@
                             <label class="ld-field-label" for="f_source">Lead Source</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-broadcast ld-fi"></i>
-                                <select name="lead_source" class="ld-fs" id="f_source" onchange="updateFilters()">
+                                <select name="lead_source" class="ld-fs" id="f_source">
                                     <option value="">All Sources</option>
                                     @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
                                         <option value="{{ $key }}" {{ request('lead_source') == $key ? 'selected':'' }}>{{ $label }}</option>
@@ -414,7 +407,7 @@
                             <label class="ld-field-label" for="f_user">Assigned To</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-person ld-fi"></i>
-                                <select name="assigned_to" class="ld-fs" id="f_user" onchange="updateFilters()">
+                                <select name="assigned_to" class="ld-fs" id="f_user">
                                     <option value="">All Users</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ request('assigned_to') == $u->id ? 'selected':'' }}>{{ $u->name }}</option>
@@ -428,7 +421,7 @@
                             <label class="ld-field-label" for="f_pre_sales">Pre Sales Exec</label>
                             <div class="ld-input-wrap">
                                 <i class="bi bi-person-badge ld-fi"></i>
-                                <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales" onchange="updateFilters()">
+                                <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales">
                                     <option value="">All Pre Sales</option>
                                     @foreach($preSaleExecutives as $pse)
                                         <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
@@ -438,42 +431,45 @@
                             </div>
                         </div>
 
-
-                        <div class="ld-date-range">
-                            <div class="ld-fw">
-                                <label class="ld-field-label" for="f_date_from">From Date</label>
-                                <div class="ld-input-wrap">
-                                    <i class="bi bi-calendar-event ld-fi"></i>
-                                    <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                                           value="{{ request('date_from') }}" onchange="onDateChange()">
-                                </div>
+                        <div class="ld-fw">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <label class="ld-field-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
+                                <span id="leadQuickDateRange" style="font-size:11px;font-weight:700;color:var(--primary,#fe5f04);"></span>
                             </div>
-                            <span class="ld-date-sep">to</span>
-                            <div class="ld-fw">
-                                <label class="ld-field-label" for="f_date_to">To Date</label>
-                                <div class="ld-input-wrap">
-                                    <i class="bi bi-calendar-check ld-fi"></i>
-                                    <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                                           value="{{ request('date_to') }}" onchange="onDateChange()">
-                                </div>
+                            <div class="ld-input-wrap">
+                                <i class="bi bi-calendar-range ld-fi"></i>
+                                <select id="quick_date_select" name="quick_date" class="ld-fs" onchange="onLeadQuickDateChange(this.value)">
+                                    <option value="today" {{ request('quick_date') == 'today' ? 'selected' : '' }}>Today</option>
+                                    <option value="week" {{ request('quick_date') == 'week' ? 'selected' : '' }}>This Week</option>
+                                    <option value="month" {{ request('quick_date', 'month') == 'month' ? 'selected' : '' }}>This Month</option>
+                                    <option value="quarter" {{ request('quick_date') == 'quarter' ? 'selected' : '' }}>This Quarter</option>
+                                    <option value="year" {{ request('quick_date') == 'year' ? 'selected' : '' }}>This Year</option>
+                                    <option value="all" {{ request('quick_date') == 'all' ? 'selected' : '' }}>Show All</option>
+                                    <option value="custom" {{ request('quick_date') == 'custom' ? 'selected' : '' }}>Custom Dates</option>
+                                </select>
+                                <i class="bi bi-chevron-down ld-fc"></i>
                             </div>
                         </div>
 
-                        <div class="ld-fw">
-                            <label class="ld-field-label">Quick Dates</label>
-                            <div class="ld-quick-dates">
-                                <button type="button" class="ld-qb" id="quickToday" onclick="setQ('today')">Today</button>
-                                <button type="button" class="ld-qb" id="quickWeek" onclick="setQ('week')">Week</button>
-                                <button type="button" class="ld-qb" id="quickMonth" onclick="setQ('month')">Month</button>
-                                <button type="button" class="ld-qb" id="quickQuarter" onclick="setQ('quarter')">Quarter</button>
-                                <button type="button" class="ld-qb" id="quickYear" onclick="setQ('year')">Year</button>
-                                <button type="button" class="ld-qb" id="quickAll" onclick="setQ('all')">Show All</button>
+                        <div class="ld-fw" id="leadFromField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
+                            <label class="ld-field-label" for="f_date_from">From Date</label>
+                            <div class="ld-input-wrap">
+                                <i class="bi bi-calendar-event ld-fi"></i>
+                                <input type="date" name="date_from" class="ld-fi-input" id="f_date_from" value="{{ request('date_from', $defaultFromDate) }}">
+                            </div>
+                        </div>
+
+                        <div class="ld-fw" id="leadToField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
+                            <label class="ld-field-label" for="f_date_to">To Date</label>
+                            <div class="ld-input-wrap">
+                                <i class="bi bi-calendar-check ld-fi"></i>
+                                <input type="date" name="date_to" class="ld-fi-input" id="f_date_to" value="{{ request('date_to', $defaultToDate) }}">
                             </div>
                         </div>
 
                         <div class="ld-filter-actions">
                             <button type="submit" class="ld-btn ld-btn-primary">
-                                <i class="bi bi-check2-circle"></i>
+                                <i class="bi bi-funnel"></i>
                                 Apply Filter
                             </button>
                             <a href="{{ route('leads.index', ['reset' => 1]) }}" class="ld-reset-btn">
@@ -488,120 +484,6 @@
             </div>
         </details>
     </div>
-
-    @if(false)
-    <div class="ld-filter-wrap-outer">
-    <form method="GET" action="{{ route('leads.index') }}" id="filterForm">
-        <div class="ld-filter-bar">
-
-            {{-- Search --}}
-            <div class="ld-search-box">
-                <svg class="ld-search-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" name="search" class="ld-search-input" placeholder="Company, contact, emailâ€¦"
-                       value="{{ request('search') }}" oninput="delaySubmit()">
-            </div>
-
-            <span class="ld-filter-label">
-                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-
-                <span class="ld-filter-count" id="fCount" style="display:none">0</span>
-            </span>
-
-            <div class="ld-filter-group">
-
-                {{-- Branch --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                    <select name="branch_id" class="ld-fs" id="f_branch" onchange="autoSubmit()">
-                        <option value="">All Branches</option>
-                        @foreach($branches as $b)
-                        <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Mobile --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6"/></svg>
-                    <input type="text" name="mobile_number" class="ld-fi-input" id="f_mobile"
-                           placeholder="Mobile no." value="{{ request('mobile_number') }}" oninput="delaySubmit()" style="min-width:130px;">
-                </div>
-
-                {{-- Lead Source --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                    <select name="lead_source" class="ld-fs" id="f_source" onchange="autoSubmit()">
-                        <option value="">All Sources</option>
-                        @foreach(\App\Models\Lead::sourceOptions() as $key => $label)
-                        <option value="{{ $key }}" {{ request('lead_source') == $key ? 'selected':'' }}>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- User (Assigned To) --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <select name="assigned_to" class="ld-fs" id="f_user" onchange="autoSubmit()">
-                        <option value="">All Users</option>
-                        @foreach($users as $u)
-                        <option value="{{ $u->id }}" {{ request('assigned_to') == $u->id ? 'selected':'' }}>{{ $u->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Pre Sales Exec Filter --}}
-                <div class="ld-fw">
-                    <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                    <select name="pre_sale_executive_id" class="ld-fs" id="f_pre_sales_inline" onchange="autoSubmit()">
-                        <option value="">All Pre Sales</option>
-                        @foreach($preSaleExecutives as $pse)
-                        <option value="{{ $pse->id }}" {{ request('pre_sale_executive_id') == $pse->id ? 'selected':'' }}>{{ $pse->name }}</option>
-                        @endforeach
-                    </select>
-                    <svg class="ld-fc" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-
-                {{-- Date Range --}}
-                <div class="ld-date-range">
-                    <div class="ld-fw">
-                        <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <input type="date" name="date_from" class="ld-fi-input" id="f_date_from"
-                               value="{{ request('date_from') }}" onchange="updateFilters()" style="min-width:130px;">
-                    </div>
-                    <span class="ld-date-sep">→</span>
-                    <div class="ld-fw">
-                        <svg class="ld-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <input type="date" name="date_to" class="ld-fi-input" id="f_date_to"
-                               value="{{ request('date_to') }}" onchange="updateFilters()" style="min-width:130px;">
-                    </div>
-                </div>
-
-                {{-- Quick date buttons --}}
-                <div style="display:flex;gap:4px;">
-                    <button type="button" class="ld-qb" onclick="setQ('today')">Today</button>
-                    <button type="button" class="ld-qb" onclick="setQ('week')">Week</button>
-                    <button type="button" class="ld-qb" onclick="setQ('month')">Month</button>
-                </div>
-            </div>
-
-            {{-- Reset --}}
-            @if(request()->hasAny(['search','branch_id','mobile_number','lead_source','assigned_to','pre_sale_executive_id','date_from','date_to']))
-            <a href="{{ route('leads.index') }}" class="ld-reset-btn">
-                <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
-                Reset
-            </a>
-            @endif
-        </div>
-
-        {{-- Active filter chips --}}
-        <div id="chipsBar" class="ld-chips-bar"></div>
-    </form>
-    </div>
-
-    @endif
 
     {{-- Body --}}
     <div class="ld-body">
@@ -625,10 +507,10 @@
 
             @php
                 $statItems = [
-                    ['label'=>'Total Leads',         'value'=> $stats['total'],          'sub'=>'Matching current filters', 'color'=>'#fe5f04','bg'=>'#fff0e6','icon'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'],
-                    ['label'=>'Total Product Count', 'value'=> $stats['total_products'], 'sub'=>'Products linked to leads', 'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'],
-                    ['label'=>'Pipeline Value',      'value'=> '₹'.number_format($stats['pipeline'], 2), 'sub'=>'Value across selected leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
-                    ['label'=>'Untouched Leads Count',     'value'=> $stats['new'],            'sub'=>'No call updates yet (All)', 'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 'url'=>route('leads.untouched')],
+                    ['label'=>'Total Leads',          'value'=> $stats['total'],                                  'sub'=>'Matching current filters',    'color'=>'#fe5f04','bg'=>'#fff0e6','icon'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'],
+                    ['label'=>'Total Product Count',  'value'=> $stats['total_products'],                         'sub'=>'Products linked to leads',    'color'=>'#2563eb','bg'=>'#eff6ff','icon'=>'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'],
+                    ['label'=>'Pipeline Value',       'value'=> '₹'.number_format($stats['pipeline'], 2),         'sub'=>'Value across selected leads', 'color'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
+                    ['label'=>'Untouched Lead Count', 'value'=> $stats['new'],                                    'sub'=> request()->filled('assigned_to') ? 'No call updates (Selected User)' : 'No call updates yet',  'color'=>'#16a34a','bg'=>'#f0fdf4','icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 'url'=>route('leads.untouched', array_filter(request()->except('page')))],
                 ];
             @endphp
             @foreach($statItems as $s)
@@ -860,25 +742,22 @@ const ff = {
     f_mobile:    { label:'Mobile',   sel:'#f_mobile' },
     f_source:    { label:'Source',   sel:'#f_source' },
     f_user:      { label:'User',     sel:'#f_user' },
+    f_pre_sales: { label:'Pre Sales', sel:'#f_pre_sales' },
+    quick_date:  { label:'Period',   sel:'#quick_date_select' },
     f_date_from: { label:'From',     sel:'#f_date_from' },
     f_date_to:   { label:'To',       sel:'#f_date_to' },
 };
 
 function isActiveFilter(id, value) {
     if (!value || !value.trim()) return false;
-    const qVal = document.getElementById('f_quick_date')?.value;
-    const from = document.getElementById('f_date_from')?.value;
-    const to = document.getElementById('f_date_to')?.value;
-    if (from === defaultFromDate && to === defaultToDate && (!qVal || qVal === 'month')) {
-        if (id === 'f_date_from' || id === 'f_date_to') return false;
+    const qVal = document.getElementById('quick_date_select')?.value;
+    if (id === 'quick_date') {
+        return qVal && qVal !== 'month';
+    }
+    if (id === 'f_date_from' || id === 'f_date_to') {
+        return qVal === 'custom' && Boolean(value);
     }
     return true;
-}
-
-function onDateChange() {
-    const qEl = document.getElementById('f_quick_date');
-    if (qEl) qEl.value = '';
-    updateFilters();
 }
 
 function updateFilters() {
@@ -905,123 +784,147 @@ function updateFilters() {
         bar.style.display = count > 0 ? 'flex' : 'none';
         bar.innerHTML = chips.join('');
     }
-
-    const qVal = document.getElementById('f_quick_date')?.value;
-    const from = document.getElementById('f_date_from')?.value;
-    const to = document.getElementById('f_date_to')?.value;
-
-    // Toggle active state for quick buttons
-    document.getElementById('quickToday')?.classList.toggle('active', qVal === 'today' || (Boolean(from) && Boolean(to) && from === todayDate && to === todayDate));
-    document.getElementById('quickMonth')?.classList.toggle('active', qVal === 'month' || (Boolean(from) && Boolean(to) && from === defaultFromDate && to === defaultToDate));
-    document.getElementById('quickAll')?.classList.toggle('active', qVal === 'all' || (!from && !to && !qVal));
-
-    // Calculate dynamic values for Week and Year active states
-    const parts = defaultToDate.split('-').map(Number);
-    const today = new Date(parts[0], parts[1] - 1, parts[2]);
-    const fmt = d => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    };
-
-    const mon = new Date(today);
-    mon.setDate(today.getDate() - today.getDay() + 1);
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-    const weekStart = fmt(mon);
-    const weekEnd = fmt(sun);
-    document.getElementById('quickWeek')?.classList.toggle('active', qVal === 'week' || (Boolean(from) && Boolean(to) && from === weekStart && to === weekEnd));
-
-    const yearStart = `${parts[0]}-01-01`;
-    const yearEnd = `${parts[0]}-12-31`;
-    document.getElementById('quickYear')?.classList.toggle('active', qVal === 'year' || (Boolean(from) && Boolean(to) && from === yearStart && to === yearEnd));
-
-    const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
-    const firstQ = new Date(parts[0], qStartMonth, 1);
-    const lastQ = new Date(parts[0], qStartMonth + 3, 0);
-    const qStart = fmt(firstQ);
-    const qEnd = fmt(lastQ);
-    document.getElementById('quickQuarter')?.classList.toggle('active', qVal === 'quarter' || (Boolean(from) && Boolean(to) && from === qStart && to === qEnd));
 }
 
 function clearF(id) {
     const el = document.querySelector(ff[id].sel);
     if (el) {
-        el.value = '';
+        if (id === 'quick_date') {
+            el.value = 'month';
+        } else {
+            el.value = '';
+        }
     }
     if (id === 'f_date_from' || id === 'f_date_to') {
-        const qEl = document.getElementById('f_quick_date');
-        if (qEl) qEl.value = '';
+        const qEl = document.getElementById('quick_date_select');
+        if (qEl) qEl.value = 'month';
     }
-    updateFilters();
     document.getElementById('filterForm').submit();
 }
 
-function autoSubmit() {
-    updateFilters();
-}
-
-function delaySubmit() {
-    clearTimeout(st);
-    updateFilters();
-}
-
-function setQ(p) {
-    const qEl = document.getElementById('f_quick_date');
-    if (qEl) qEl.value = p;
-
-    const parts = defaultToDate.split('-').map(Number);
-    const today = new Date(parts[0], parts[1] - 1, parts[2]);
+function calcPresetDates(val) {
+    const today = new Date();
     const fmt = d => {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
     };
-    const f = document.getElementById('f_date_from');
-    const t = document.getElementById('f_date_to');
-    if (!f || !t) return;
 
-    if (p === 'all') {
-        f.value = '';
-        t.value = '';
-        updateFilters();
-        return;
+    if (val === 'today') {
+        const d = fmt(today);
+        return { from: d, to: d };
     }
-
-    let targetFrom = '';
-    let targetTo = '';
-
-    if (p === 'today') {
-        targetFrom = todayDate;
-        targetTo = todayDate;
-    } else if (p === 'week') {
+    if (val === 'week') {
         const mon = new Date(today);
-        mon.setDate(today.getDate() - today.getDay() + 1);
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        mon.setDate(today.getDate() + diff);
         const sun = new Date(mon);
         sun.setDate(mon.getDate() + 6);
-        targetFrom = fmt(mon);
-        targetTo = fmt(sun);
-    } else if (p === 'month') {
-        targetFrom = defaultFromDate;
-        targetTo = defaultToDate;
-    } else if (p === 'quarter') {
-        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
-        const firstQ = new Date(parts[0], qStartMonth, 1);
-        const lastQ = new Date(parts[0], qStartMonth + 3, 0);
-        targetFrom = fmt(firstQ);
-        targetTo = fmt(lastQ);
-    } else if (p === 'year') {
-        targetFrom = `${parts[0]}-01-01`;
-        targetTo = `${parts[0]}-12-31`;
+        return { from: fmt(mon), to: fmt(sun) };
     }
-
-    f.value = targetFrom;
-    t.value = targetTo;
-
-    updateFilters();
+    if (val === 'month') {
+        const first = new Date(today.getFullYear(), today.getMonth(), 1);
+        const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { from: fmt(first), to: fmt(last) };
+    }
+    if (val === 'quarter') {
+        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(today.getFullYear(), qStartMonth, 1);
+        const lastQ = new Date(today.getFullYear(), qStartMonth + 3, 0);
+        return { from: fmt(firstQ), to: fmt(lastQ) };
+    }
+    if (val === 'year') {
+        return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+    }
+    return { from: '', to: '' };
 }
+
+function formatDisplayDate(dStr) {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+}
+
+function updateLeadQuickDateRangeSpan(val) {
+    const span = document.getElementById('leadQuickDateRange');
+    if (!span) return;
+    if (val === 'all') {
+        span.textContent = '';
+        return;
+    }
+    if (val === 'custom') {
+        const f = document.getElementById('f_date_from')?.value;
+        const t = document.getElementById('f_date_to')?.value;
+        span.textContent = (f && t) ? `${formatDisplayDate(f)} - ${formatDisplayDate(t)}` : '';
+        return;
+    }
+    const dates = calcPresetDates(val);
+    if (dates.from && dates.to) {
+        span.textContent = `${formatDisplayDate(dates.from)} - ${formatDisplayDate(dates.to)}`;
+    } else {
+        span.textContent = '';
+    }
+}
+
+function onLeadQuickDateChange(val) {
+    const fromField = document.getElementById('leadFromField');
+    const toField = document.getElementById('leadToField');
+    const f = document.getElementById('f_date_from');
+    const t = document.getElementById('f_date_to');
+
+    if (val === 'custom') {
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+    } else {
+        if (fromField) fromField.style.display = 'none';
+        if (toField) toField.style.display = 'none';
+        if (val === 'all') {
+            if (f) f.value = '';
+            if (t) t.value = '';
+        } else {
+            const dates = calcPresetDates(val);
+            if (f) f.value = dates.from;
+            if (t) t.value = dates.to;
+        }
+    }
+    updateLeadQuickDateRangeSpan(val);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const f = document.getElementById('f_date_from');
+    const t = document.getElementById('f_date_to');
+    const q = document.getElementById('quick_date_select');
+
+    if (f) f.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('leadFromField');
+        const toField = document.getElementById('leadToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateLeadQuickDateRangeSpan('custom');
+    });
+    if (t) t.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('leadFromField');
+        const toField = document.getElementById('leadToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateLeadQuickDateRangeSpan('custom');
+    });
+
+    if (q && q.value !== 'all' && (!f?.value || !t?.value)) {
+        const dates = calcPresetDates(q.value || 'month');
+        if (f && !f.value) f.value = dates.from;
+        if (t && !t.value) t.value = dates.to;
+    }
+    updateLeadQuickDateRangeSpan(q?.value || 'month');
+    updateFilters();
+});
 
 function closeActionMenus() {
     document.querySelectorAll('[data-action-menu].open').forEach(menu => menu.classList.remove('open'));

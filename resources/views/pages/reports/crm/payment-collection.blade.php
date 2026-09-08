@@ -127,11 +127,13 @@
 @php
     $hasCustomFilters =
         request()->filled('customer_id')
+        || request()->filled('company_name')
         || request()->filled('sales_executive_id')
         || request()->filled('payment_mode')
         || request()->filled('branch_id')
-        || request()->filled('date_from')
-        || request()->filled('date_to');
+        || (request()->has('quick_date') && request('quick_date') !== 'month')
+        || (request()->has('date_from') && request('date_from') !== $defaultFromDate)
+        || (request()->has('date_to') && request('date_to') !== $defaultToDate);
 @endphp
 <div class="crm-pay-page">
     <div class="crm-pay-shell">
@@ -201,34 +203,45 @@
                 <div class="crm-pay-chip">{{ $reportRows->total() }} results</div>
             </div>
             <div class="crm-pay-body">
-                <div class="crm-pay-quick-filters">
-                    <span class="crm-pay-quick-label">Quick:</span>
-                    <button type="button" class="crm-qbtn-pay" data-preset="today">
-                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-                        Today
-                    </button>
-                    <button type="button" class="crm-qbtn-pay" data-preset="month">
-                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                        This Month
-                    </button>
-                    <button type="button" class="crm-qbtn-pay" data-preset="quarter">
-                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/><path d="M14 14h7v7h-7z" stroke-opacity=".35"/></svg>
-                        This Quarter
-                    </button>
-                    <button type="button" class="crm-qbtn-pay" data-preset="year">
-                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                        This Year
-                    </button>
-                </div>
                 <form method="GET" action="{{ route('reports.crm.payment-collection') }}" class="crm-pay-form" id="paymentCollectionForm">
                     <div class="crm-pay-field">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                            <label class="crm-pay-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
+                            <span id="crmQuickDateRange" style="font-size:11px;font-weight:700;color:#16a34a;"></span>
+                        </div>
+                        <select id="quick_date_select" name="quick_date" class="crm-pay-select" onchange="onCrmQuickDateChange(this.value)">
+                            <option value="today" {{ request('quick_date') == 'today' ? 'selected' : '' }}>Today</option>
+                            <option value="week" {{ request('quick_date') == 'week' ? 'selected' : '' }}>This Week</option>
+                            <option value="month" {{ request('quick_date', 'month') == 'month' ? 'selected' : '' }}>This Month</option>
+                            <option value="quarter" {{ request('quick_date') == 'quarter' ? 'selected' : '' }}>This Quarter</option>
+                            <option value="year" {{ request('quick_date') == 'year' ? 'selected' : '' }}>This Year</option>
+                            <option value="all" {{ request('quick_date') == 'all' ? 'selected' : '' }}>Show All</option>
+                            <option value="custom" {{ request('quick_date') == 'custom' ? 'selected' : '' }}>Custom Dates</option>
+                        </select>
+                    </div>
+
+                    <div class="crm-pay-field" id="crmFromField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
                         <label class="crm-pay-label" for="date_from">Date From</label>
-                        <input id="date_from" type="date" name="date_from" class="crm-pay-input" value="{{ request('date_from') }}">
+                        <input id="date_from" type="date" name="date_from" class="crm-pay-input" value="{{ request('date_from', $defaultFromDate) }}">
                     </div>
-                    <div class="crm-pay-field">
+
+                    <div class="crm-pay-field" id="crmToField" style="display: {{ request('quick_date') == 'custom' ? 'flex' : 'none' }};">
                         <label class="crm-pay-label" for="date_to">Date To</label>
-                        <input id="date_to" type="date" name="date_to" class="crm-pay-input" value="{{ request('date_to') }}">
+                        <input id="date_to" type="date" name="date_to" class="crm-pay-input" value="{{ request('date_to', $defaultToDate) }}">
                     </div>
+
+                    <div class="crm-pay-field">
+                        <label class="crm-pay-label" for="company_name">Company</label>
+                        <select id="company_name" name="company_name" class="crm-pay-select select2">
+                            <option value="">All Companies</option>
+                            @foreach($companyOptions as $company)
+                                <option value="{{ $company }}" @selected((string) request('company_name') === (string) $company)>
+                                    {{ $company }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
                     <div class="crm-pay-field">
                         <label class="crm-pay-label" for="customer_id">Customer</label>
                         <select id="customer_id" name="customer_id" class="crm-pay-select select2">
@@ -276,7 +289,7 @@
                     <div class="crm-pay-form-actions">
                         <button type="submit" class="crm-pay-btn crm-pay-btn-primary">Apply</button>
                         @if($hasCustomFilters)
-                            <a href="{{ route('reports.crm.payment-collection') }}" class="crm-pay-btn">Reset</a>
+                            <a href="{{ route('reports.crm.payment-collection', ['reset' => 1]) }}" class="crm-pay-btn">Reset</a>
                         @endif
                     </div>
                 </form>
@@ -330,6 +343,11 @@
                             </thead>
                             <tbody>
                                 @foreach($reportRows as $row)
+                                    @php
+                                        $rowTotalAmount = (float) ($row->total_amount ?? 0);
+                                        $rowReceivedAmount = (float) ($row->received_amount ?? 0);
+                                        $rowOutstandingAmount = max(0, $rowTotalAmount - $rowReceivedAmount);
+                                    @endphp
                                     <tr style="cursor:pointer;" onclick="window.location='{{ route('leads.show', $row->customer_id) }}'" title="Click to view lead details for {{ $row->company_name ?: $row->customer_name }}">
                                         <td><span class="crm-pay-code">PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
                                         <td>{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('d M Y') : '-' }}</td>
@@ -349,9 +367,9 @@
                                                 {{ $row->customer_name ?: '-' }}
                                             </a>
                                         </td>
-                                        <td class="crm-pay-money">Rs {{ number_format((float) ($row->total_amount ?? 0), 2) }}</td>
-                                        <td class="crm-pay-money" style="color:#047857;">Rs {{ number_format((float) ($row->received_amount ?? 0), 2) }}</td>
-                                        <td class="crm-pay-money" style="color:#dc2626;">Rs {{ number_format((float) ($row->outstanding_amount ?? 0), 2) }}</td>
+                                        <td class="crm-pay-money">Rs {{ number_format($rowTotalAmount, 2) }}</td>
+                                        <td class="crm-pay-money" style="color:#047857;">Rs {{ number_format($rowReceivedAmount, 2) }}</td>
+                                        <td class="crm-pay-money" style="color:#dc2626;">Rs {{ number_format($rowOutstandingAmount, 2) }}</td>
                                         <td><span class="crm-pay-mode">{{ $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)) }}</span></td>
                                         <td class="crm-pay-muted">{{ $row->transaction_reference ?: '-' }}</td>
                                         <td>{{ $row->received_by ?: '-' }}</td>
@@ -564,36 +582,129 @@
             $el.next('.select2-container').find('.select2-selection--single').addClass('pay-select2-selection');
         });
     }
-
-    // ── Quick Date Preset Buttons ──────────────────────────────────────────
-    (() => {
-        const fmtDate = (d) => d.toISOString().slice(0, 10);
-        const today = new Date();
-        const y = today.getFullYear(), m = today.getMonth(), q = Math.floor(m / 3);
-        const presets = {
-            today:   { from: fmtDate(today), to: fmtDate(today) },
-            month:   { from: fmtDate(new Date(y, m, 1)), to: fmtDate(new Date(y, m + 1, 0)) },
-            quarter: { from: fmtDate(new Date(y, q * 3, 1)), to: fmtDate(new Date(y, q * 3 + 3, 0)) },
-            year:    { from: fmtDate(new Date(y, 0, 1)), to: fmtDate(new Date(y, 11, 31)) },
-        };
-        const urlParams = new URLSearchParams(window.location.search);
-        const currentFrom = urlParams.get('date_from') || '';
-        const currentTo   = urlParams.get('date_to')   || '';
-        const fromInput = document.getElementById('date_from');
-        const toInput   = document.getElementById('date_to');
-        const form      = document.getElementById('paymentCollectionForm');
-        document.querySelectorAll('.crm-qbtn-pay').forEach(btn => {
-            const preset = presets[btn.dataset.preset];
-            if (preset && currentFrom === preset.from && currentTo === preset.to) btn.classList.add('is-active');
-            btn.addEventListener('click', () => {
-                const p = presets[btn.dataset.preset];
-                if (!p) return;
-                fromInput.value = p.from;
-                toInput.value   = p.to;
-                form.submit();
-            });
-        });
-    })();
 })();
+
+function calcPresetDates(val) {
+    const today = new Date();
+    const fmt = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
+    if (val === 'today') {
+        const d = fmt(today);
+        return { from: d, to: d };
+    }
+    if (val === 'week') {
+        const mon = new Date(today);
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        mon.setDate(today.getDate() + diff);
+        const sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        return { from: fmt(mon), to: fmt(sun) };
+    }
+    if (val === 'month') {
+        const first = new Date(today.getFullYear(), today.getMonth(), 1);
+        const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { from: fmt(first), to: fmt(last) };
+    }
+    if (val === 'quarter') {
+        const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(today.getFullYear(), qStartMonth, 1);
+        const lastQ = new Date(today.getFullYear(), qStartMonth + 3, 0);
+        return { from: fmt(firstQ), to: fmt(lastQ) };
+    }
+    if (val === 'year') {
+        return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+    }
+    return { from: '', to: '' };
+}
+
+function formatDisplayDate(dStr) {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+}
+
+function updateCrmQuickDateRangeSpan(val) {
+    const span = document.getElementById('crmQuickDateRange');
+    if (!span) return;
+    if (val === 'all') {
+        span.textContent = '';
+        return;
+    }
+    if (val === 'custom') {
+        const f = document.getElementById('date_from')?.value;
+        const t = document.getElementById('date_to')?.value;
+        span.textContent = (f && t) ? `${formatDisplayDate(f)} - ${formatDisplayDate(t)}` : '';
+        return;
+    }
+    const dates = calcPresetDates(val);
+    if (dates.from && dates.to) {
+        span.textContent = `${formatDisplayDate(dates.from)} - ${formatDisplayDate(dates.to)}`;
+    } else {
+        span.textContent = '';
+    }
+}
+
+function onCrmQuickDateChange(val) {
+    const fromField = document.getElementById('crmFromField');
+    const toField = document.getElementById('crmToField');
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+
+    if (val === 'custom') {
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+    } else {
+        if (fromField) fromField.style.display = 'none';
+        if (toField) toField.style.display = 'none';
+        if (val === 'all') {
+            if (f) f.value = '';
+            if (t) t.value = '';
+        } else {
+            const dates = calcPresetDates(val);
+            if (f) f.value = dates.from;
+            if (t) t.value = dates.to;
+        }
+    }
+    updateCrmQuickDateRangeSpan(val);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+    const q = document.getElementById('quick_date_select');
+
+    if (f) f.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('crmFromField');
+        const toField = document.getElementById('crmToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateCrmQuickDateRangeSpan('custom');
+    });
+    if (t) t.addEventListener('change', () => {
+        if (q) q.value = 'custom';
+        const fromField = document.getElementById('crmFromField');
+        const toField = document.getElementById('crmToField');
+        if (fromField) fromField.style.display = 'flex';
+        if (toField) toField.style.display = 'flex';
+        updateCrmQuickDateRangeSpan('custom');
+    });
+
+    if (q && q.value !== 'all' && (!f?.value || !t?.value)) {
+        const dates = calcPresetDates(q.value || 'month');
+        if (f && !f.value) f.value = dates.from;
+        if (t && !t.value) t.value = dates.to;
+    }
+    updateCrmQuickDateRangeSpan(q?.value || 'month');
+});
 </script>
 @endpush

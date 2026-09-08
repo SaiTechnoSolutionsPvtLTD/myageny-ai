@@ -50,7 +50,7 @@ return [
         'items' => [
             ['key' => 'projects.dashboard', 'label' => 'Dashboard',          'section' => 'PROJECTS', 'order' => 10],
             ['key' => 'projects.list',      'label' => 'Projects Details',   'section' => 'PROJECTS', 'order' => 20],
-            ['key' => 'projects.timesheets', 'label' => 'Timesheets',         'section' => 'PROJECTS', 'order' => 30],
+            ['key' => 'projects.timesheets', 'label' => 'Timesheets',         'section' => 'PROJECTS', 'order' => 30, 'permission' => 'timesheets.menuview'],
             [
                 'key' => 'projects.my_accounts',
                 'label' => 'My Accounts',

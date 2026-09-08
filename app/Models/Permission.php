@@ -19,6 +19,8 @@ class Permission extends SpatiePermission
         'quotations' => ['menuview', 'view', 'create', 'delete', 'approve'],
         'price_requests' => ['menuview', 'view', 'create', 'approve', 'reject'],
         'projects' => ['menuview'],
+        'tasks' => ['menuview', 'view', 'create', 'edit', 'delete'],
+        'timesheets' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'ovp_module' => ['menuview'],
         'production_approval_module' => ['menuview'],
         'settings' => ['menuview', 'view', 'manage'],

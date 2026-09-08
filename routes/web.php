@@ -214,21 +214,29 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.dashboard.allocate-task');
 
         Route::get('/projects/tasks', [ProductionTaskController::class, 'index'])
+            ->middleware('can:tasks.view')
             ->name('projects.tasks.index');
         Route::get('/projects/tasks/create', [ProductionTaskController::class, 'create'])
+            ->middleware('can:tasks.create')
             ->name('projects.tasks.create');
         Route::post('/projects/tasks', [ProductionTaskController::class, 'store'])
+            ->middleware('can:tasks.create')
             ->name('projects.tasks.store');
         Route::patch('/projects/tasks/{task}/status', [ProductionTaskController::class, 'updateStatus'])
+            ->middleware('can:tasks.edit')
             ->name('projects.tasks.update-status');
         Route::delete('/projects/tasks/{task}', [ProductionTaskController::class, 'destroy'])
+            ->middleware('can:tasks.delete')
             ->name('projects.tasks.destroy');
 
         Route::get('/projects/timesheets', [ProjectController::class, 'timesheets'])
+            ->middleware('can:timesheets.view')
             ->name('projects.timesheets');
         Route::post('/projects/timesheets', [ProjectController::class, 'storeTimesheet'])
+            ->middleware('can:timesheets.create')
             ->name('projects.timesheets.store');
         Route::patch('/projects/timesheets/{timesheet}/status', [ProjectController::class, 'updateTimesheetStatus'])
+            ->middleware('can:timesheets.edit')
             ->name('projects.timesheets.update-status');
         Route::get('/projects-details', [ProjectController::class, 'index'])
             ->name('projects.index');
