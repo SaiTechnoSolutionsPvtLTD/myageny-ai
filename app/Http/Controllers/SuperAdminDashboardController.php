@@ -73,24 +73,8 @@ class SuperAdminDashboardController extends ApiController
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
         $wonQuery      = (clone $base())->converted();
-        $wonLeads      = (clone $wonQuery)->count();
         $lostQuery     = (clone $base())->lost();
         $lostLeads     = (clone $lostQuery)->count();
-        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
-
-        $wonLeadIds    = (clone $wonQuery)->pluck('id');
-        $productWonVal = (float) LeadProduct::whereIn('lead_id', $wonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
-        $dealWonVal    = (float) (clone $wonQuery)->sum('deal_value');
-        $wonValue      = $productWonVal > 0 ? $productWonVal : $dealWonVal;
-
-        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
-        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
-        $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
-
-        // ── 2. Pipeline funnel from lead_products.lead_status_id ───
-        $leadIds = (clone $base())->pluck('id');
-        $lpProducts = LeadProduct::whereIn('lead_id', $leadIds)->with('payments')->get();
 
         $convertedStatusIds = LeadStatus::query()
             ->where(function ($q) {
@@ -106,20 +90,80 @@ class SuperAdminDashboardController extends ApiController
                 || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
         };
 
-        $convertedProducts = $lpProducts->filter($isConvertedProduct);
+        // Query converted products in the selected date range using converted_at
+        $convertedProductsQuery = LeadProduct::query()
+            ->where(function ($q) use ($convertedStatusIds) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($dateFrom) {
+            $convertedProductsQuery->where(function ($q) use ($dateFrom) {
+                $q->whereDate('converted_at', '>=', $dateFrom)
+                  ->orWhere(function ($sub) use ($dateFrom) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($dateFrom) {
+                              $sub2->whereDate('created_at', '>=', $dateFrom)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                          });
+                  });
+            });
+        }
+
+        if ($dateTo) {
+            $convertedProductsQuery->where(function ($q) use ($dateTo) {
+                $q->whereDate('converted_at', '<=', $dateTo)
+                  ->orWhere(function ($sub) use ($dateTo) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($dateTo) {
+                              $sub2->whereDate('created_at', '<=', $dateTo)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                          });
+                  });
+            });
+        }
+
+        $convertedProducts = $convertedProductsQuery->with('payments')->get();
+        $convertedProductsCount = $convertedProducts->count();
+        $convertedValue = (float) $convertedProducts->sum('total_price');
+
+        $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
+        $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
+        $wonLeads      = $wonLeadIds->count();
+        $wonValue      = $convertedValue > 0 ? $convertedValue : (float) (clone $wonQuery)->sum('deal_value');
+        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
+
+        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
+        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
+        $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
+
+        // ── 2. Pipeline funnel from lead_products.lead_status_id ───
+        $leadIds = (clone $base())->pluck('id');
+        $lpProducts = LeadProduct::whereIn('lead_id', $leadIds)->with('payments')->get();
+
         $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
 
-        $convertedProductsCount = $convertedProducts->count();
         $upcomingAmount = (float) $nonConvertedProducts->sum('total_price');
-        $convertedValue = (float) $convertedProducts->sum('total_price');
-        $totalProductsCount = $lpProducts->count();
+        $totalProductsCount = $convertedProductsCount + $nonConvertedProducts->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
+
+        $allLpProducts = $nonConvertedProducts->merge($convertedProducts)->unique('id');
 
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
             ->whereIn('lead_id', $leadIds)
             ->whereDate('remind_at', today())
             ->count();
-        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
+        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request, $allLpProducts, $convertedProductsCount, $convertedStatusIds);
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
 
@@ -144,13 +188,13 @@ class SuperAdminDashboardController extends ApiController
         unset($src);
 
         // ── 4. Financials (from lead_products + payments) ─────────
-        $totalProductValue = (float) $lpProducts->sum('total_price');
-        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalProductValue = (float) $allLpProducts->sum('total_price');
+        $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
         $totalPending      = max(0, $totalProductValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $leadProductIds = $lpProducts->pluck('id');
+        $leadProductIds = $allLpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
@@ -166,7 +210,7 @@ class SuperAdminDashboardController extends ApiController
         // Product status distribution
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = $lpProducts->where('product_status', $pkey)->count();
+            $cnt = $allLpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status'  => $pkey,
                 'label'   => $plabel,
@@ -333,25 +377,65 @@ class SuperAdminDashboardController extends ApiController
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
             ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
-            ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
+            ->map(function ($branch) use ($request, $dateFrom, $dateTo, $convertedStatusIds) {
                 $q = Lead::where('branch_id', $branch->id)
                     ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total          = (clone $q)->count();
-                $leadIds        = (clone $q)->pluck('id');
+
+                // Converted products for this branch within converted date range
+                $branchConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
+                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                            ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    })
+                    ->whereHas('lead', function ($lq) use ($branch, $request) {
+                        $this->visibility->applyLeadVisibility($lq, $request->user());
+                        $lq->where('branch_id', $branch->id);
+                    });
+
+                if ($dateFrom) {
+                    $branchConvProductQuery->where(function ($sq) use ($dateFrom) {
+                        $sq->whereDate('converted_at', '>=', $dateFrom)
+                           ->orWhere(function ($sub) use ($dateFrom) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateFrom) {
+                                       $sub2->whereDate('created_at', '>=', $dateFrom)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                                   });
+                           });
+                    });
+                }
+
+                if ($dateTo) {
+                    $branchConvProductQuery->where(function ($sq) use ($dateTo) {
+                        $sq->whereDate('converted_at', '<=', $dateTo)
+                           ->orWhere(function ($sub) use ($dateTo) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateTo) {
+                                       $sub2->whereDate('created_at', '<=', $dateTo)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                                   });
+                           });
+                    });
+                }
+
+                $branchConvProducts = $branchConvProductQuery->get();
+                $productConvCnt = $branchConvProducts->count();
+                $productConvVal = (float) $branchConvProducts->sum('total_price');
+
                 $branchWonQuery = (clone $q)->converted();
-                $wonLeads       = (clone $branchWonQuery)->count();
-                $branchWonIds   = (clone $branchWonQuery)->pluck('id');
-                $productConvCnt = LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->count();
-                $productConvVal = (float) LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+                $branchWonIds   = (clone $branchWonQuery)->pluck('id')->merge($branchConvProducts->pluck('lead_id'))->unique();
+                $wonLeads       = $branchWonIds->count();
                 $dealWonVal     = (float) (clone $branchWonQuery)->sum('deal_value');
                 $wonVal         = $productConvVal > 0 ? $productConvVal : $dealWonVal;
 
-                $convertedCount = $wonLeads;
+                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
                 $convertedVal   = $wonVal;
-                $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
+                $convRate       = $total > 0 ? round($wonLeads / $total * 100, 1) : 0;
                 $branchLostQuery = (clone $q)->lost();
                 $lostLeads      = (clone $branchLostQuery)->count();
                 $branchExcludedIds = $branchWonIds->merge((clone $branchLostQuery)->pluck('id'))->unique();
@@ -378,7 +462,7 @@ class SuperAdminDashboardController extends ApiController
         // ── 9. Team performance ───────────────────────────────────
         $teamPerformance = $this->visibility->visibleAssignableUsers($request->user())
             ->when($branchId, fn($users) => $users->where('branch_id', $branchId))
-            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId) {
+            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId, $convertedStatusIds) {
                 $q = Lead::where('assigned_to', $user->id)
                     ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
                     ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
@@ -386,10 +470,50 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total  = (clone $q)->count();
-                $leadIds = (clone $q)->pluck('id');
-                $convertCount = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+
+                // Converted products for this user within converted date range
+                $userConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
+                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                            ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    })
+                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId) {
+                        $this->visibility->applyLeadVisibility($lq, $request->user());
+                        $lq->where('assigned_to', $user->id);
+                        if ($branchId) $lq->where('branch_id', $branchId);
+                    });
+
+                if ($dateFrom) {
+                    $userConvProductQuery->where(function ($sq) use ($dateFrom) {
+                        $sq->whereDate('converted_at', '>=', $dateFrom)
+                           ->orWhere(function ($sub) use ($dateFrom) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateFrom) {
+                                       $sub2->whereDate('created_at', '>=', $dateFrom)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                                   });
+                           });
+                    });
+                }
+
+                if ($dateTo) {
+                    $userConvProductQuery->where(function ($sq) use ($dateTo) {
+                        $sq->whereDate('converted_at', '<=', $dateTo)
+                           ->orWhere(function ($sub) use ($dateTo) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateTo) {
+                                       $sub2->whereDate('created_at', '<=', $dateTo)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                                   });
+                           });
+                    });
+                }
+
+                $userConvProducts = $userConvProductQuery->get();
+                $convertCount = $userConvProducts->count();
+                $convertVal = (float) $userConvProducts->sum('total_price');
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
-                $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
 
                 return [
                     'user_id'         => $user->id,
@@ -400,12 +524,12 @@ class SuperAdminDashboardController extends ApiController
                     'total_leads'     => $total,
                     'convert_leads'   => $convertCount,
                     'lost_leads'      => $lost,
-                    'active_leads'    => $total - $convertCount - $lost,
+                    'active_leads'    => max(0, $total - $convertCount - $lost),
                     'convert_value'   => $convertVal,
                     'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
             })
-            ->filter(fn($u) => $u['total_leads'] > 0)
+            ->filter(fn($u) => $u['total_leads'] > 0 || $u['convert_leads'] > 0)
             ->sortByDesc('convert_value')
             ->values()
             ->take(10);
@@ -703,7 +827,7 @@ class SuperAdminDashboardController extends ApiController
         return $query;
     }
 
-    private function buildProductStatusFunnel($leadIds, Request $request): array
+    private function buildProductStatusFunnel($leadIds, Request $request, $allLpProducts = null, $convertedProductsCount = 0, array $convertedStatusIds = []): array
     {
         $companyId = $request->user()?->company_id;
 
@@ -720,7 +844,7 @@ class SuperAdminDashboardController extends ApiController
             ->unique(fn($s) => strtolower(trim($s->name)))
             ->values();
 
-        $leadProducts = LeadProduct::whereIn('lead_id', $leadIds)->get(['id', 'lead_status_id', 'product_status']);
+        $leadProducts = $allLpProducts ?? LeadProduct::whereIn('lead_id', $leadIds)->get(['id', 'lead_status_id', 'product_status']);
 
         if ($statuses->isNotEmpty() && $leadProducts->isNotEmpty()) {
             $statusByName = [];
@@ -736,6 +860,25 @@ class SuperAdminDashboardController extends ApiController
             }
 
             foreach ($leadProducts as $lp) {
+                $pStatus = strtolower(trim((string)$lp->product_status));
+                $isConv = in_array($pStatus, ['converted', 'won'])
+                    || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+
+                if ($isConv) {
+                    $convStatusId = null;
+                    foreach ($statuses as $s) {
+                        $sLower = strtolower(trim($s->name));
+                        if (in_array($sLower, ['converted', 'won']) || str_contains($sLower, 'convert')) {
+                            $convStatusId = $s->id;
+                            break;
+                        }
+                    }
+                    if ($convStatusId && isset($counts[$convStatusId])) {
+                        $counts[$convStatusId]++;
+                        continue;
+                    }
+                }
+
                 if (!empty($lp->lead_status_id) && isset($counts[$lp->lead_status_id])) {
                     $counts[$lp->lead_status_id]++;
                 } elseif (!empty($lp->lead_status_id) && isset($allStatusNames[$lp->lead_status_id])) {
@@ -874,37 +1017,8 @@ class SuperAdminDashboardController extends ApiController
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
         $wonQuery      = (clone $base())->converted();
-        $wonLeads      = (clone $wonQuery)->count();
         $lostQuery     = (clone $base())->lost();
         $lostLeads     = (clone $lostQuery)->count();
-        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
-
-        $wonLeadIds    = (clone $wonQuery)->pluck('id');
-        $productWonVal = (float) LeadProduct::whereIn('lead_id', $wonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
-        $dealWonVal    = (float) (clone $wonQuery)->sum('deal_value');
-        $wonValue      = $productWonVal > 0 ? $productWonVal : $dealWonVal;
-
-        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
-        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
-        $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
-
-        $prevTotalLeads    = (clone $prevBase())->count();
-        $prevWonQuery      = (clone $prevBase())->converted();
-        $prevWonLeads      = (clone $prevWonQuery)->count();
-        $prevLostQuery     = (clone $prevBase())->lost();
-        $prevLostLeads     = (clone $prevLostQuery)->count();
-        $prevActiveLeads   = max(0, $prevTotalLeads - $prevWonLeads - $prevLostLeads);
-
-        $prevWonLeadIds    = (clone $prevWonQuery)->pluck('id');
-        $prevProductWonVal = (float) LeadProduct::whereIn('lead_id', $prevWonLeadIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
-        $prevDealWonVal    = (float) (clone $prevWonQuery)->sum('deal_value');
-        $prevWonValue      = $prevProductWonVal > 0 ? $prevProductWonVal : $prevDealWonVal;
-
-        $prevExcludedIds   = $prevWonLeadIds->merge((clone $prevLostQuery)->pluck('id'))->unique();
-        $prevPipelineValue = (float)(clone $prevBase())->whereNotIn('id', $prevExcludedIds)->sum('deal_value');
-        $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('id', $prevExcludedIds)->count();
-        $prevConvRate      = $prevTotalLeads > 0 ? round($prevWonLeads / $prevTotalLeads * 100, 1) : 0.0;
 
         $convertedStatusIds = LeadStatus::query()
             ->where(function ($q) {
@@ -920,32 +1034,151 @@ class SuperAdminDashboardController extends ApiController
                 || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
         };
 
+        // Query converted products in the selected date range using converted_at
+        $convertedProductsQuery = LeadProduct::query()
+            ->where(function ($q) use ($convertedStatusIds) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($dateFrom) {
+            $convertedProductsQuery->where(function ($q) use ($dateFrom) {
+                $q->whereDate('converted_at', '>=', $dateFrom)
+                  ->orWhere(function ($sub) use ($dateFrom) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($dateFrom) {
+                              $sub2->whereDate('created_at', '>=', $dateFrom)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                          });
+                  });
+            });
+        }
+
+        if ($dateTo) {
+            $convertedProductsQuery->where(function ($q) use ($dateTo) {
+                $q->whereDate('converted_at', '<=', $dateTo)
+                  ->orWhere(function ($sub) use ($dateTo) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($dateTo) {
+                              $sub2->whereDate('created_at', '<=', $dateTo)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                          });
+                  });
+            });
+        }
+
+        $convertedProducts = $convertedProductsQuery->with('payments')->get();
+        $convertedProductsCount = $convertedProducts->count();
+        $convertedValue = (float) $convertedProducts->sum('total_price');
+
+        $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
+        $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
+        $wonLeads      = $wonLeadIds->count();
+        $wonValue      = $convertedValue > 0 ? $convertedValue : (float) (clone $wonQuery)->sum('deal_value');
+        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
+
+        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
+        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
+        $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
+
+        // Previous period converted products
+        $prevConvertedProductsQuery = LeadProduct::query()
+            ->where(function ($q) use ($convertedStatusIds) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($prevFrom) {
+            $prevConvertedProductsQuery->where(function ($q) use ($prevFrom) {
+                $q->whereDate('converted_at', '>=', $prevFrom)
+                  ->orWhere(function ($sub) use ($prevFrom) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($prevFrom) {
+                              $sub2->whereDate('created_at', '>=', $prevFrom)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $prevFrom))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $prevFrom)->orWhereDate('created_at', '>=', $prevFrom));
+                          });
+                  });
+            });
+        }
+
+        if ($prevTo) {
+            $prevConvertedProductsQuery->where(function ($q) use ($prevTo) {
+                $q->whereDate('converted_at', '<=', $prevTo)
+                  ->orWhere(function ($sub) use ($prevTo) {
+                      $sub->whereNull('converted_at')
+                          ->where(function ($sub2) use ($prevTo) {
+                              $sub2->whereDate('created_at', '<=', $prevTo)
+                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $prevTo))
+                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $prevTo)->orWhereDate('created_at', '<=', $prevTo));
+                          });
+                  });
+            });
+        }
+
+        $prevConvertedProducts = $prevConvertedProductsQuery->get();
+        $prevConvertedLeadIdsInPeriod = $prevConvertedProducts->pluck('lead_id')->unique();
+
+        $prevTotalLeads    = (clone $prevBase())->count();
+        $prevWonQuery      = (clone $prevBase())->converted();
+        $prevLostQuery     = (clone $prevBase())->lost();
+        $prevLostLeads     = (clone $prevLostQuery)->count();
+
+        $prevWonLeadIds    = (clone $prevWonQuery)->pluck('id')->merge($prevConvertedLeadIdsInPeriod)->unique();
+        $prevWonLeads      = $prevWonLeadIds->count();
+        $prevActiveLeads   = max(0, $prevTotalLeads - $prevWonLeads - $prevLostLeads);
+
+        $prevConvertedValue = (float) $prevConvertedProducts->sum('total_price');
+        $prevDealWonVal    = (float) (clone $prevWonQuery)->sum('deal_value');
+        $prevWonValue      = $prevConvertedValue > 0 ? $prevConvertedValue : $prevDealWonVal;
+
+        $prevExcludedIds   = $prevWonLeadIds->merge((clone $prevLostQuery)->pluck('id'))->unique();
+        $prevPipelineValue = (float)(clone $prevBase())->whereNotIn('id', $prevExcludedIds)->sum('deal_value');
+        $prevHighPriority  = (clone $prevBase())->where('priority', 'high')->whereNotIn('id', $prevExcludedIds)->count();
+        $prevConvRate      = $prevTotalLeads > 0 ? round($prevWonLeads / $prevTotalLeads * 100, 1) : 0.0;
+
         $prevLeadIds = (clone $prevBase())->pluck('id');
         $prevLpProducts = LeadProduct::whereIn('lead_id', $prevLeadIds)->with('payments')->get();
-        $prevConvertedProducts = $prevLpProducts->filter($isConvertedProduct);
-        $prevTotalProductValue = (float) $prevLpProducts->sum('total_price');
-        $prevTotalPaid         = (float) $prevLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $prevNonConverted = $prevLpProducts->reject($isConvertedProduct);
+        $prevAllLpProducts = $prevNonConverted->merge($prevConvertedProducts)->unique('id');
+        $prevTotalProductValue = (float) $prevAllLpProducts->sum('total_price');
+        $prevTotalPaid         = (float) $prevAllLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
         $prevTotalPending      = max(0, $prevTotalProductValue - $prevTotalPaid);
-        $prevConvertedValue    = (float) $prevConvertedProducts->sum('total_price');
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
         $lpProducts = LeadProduct::whereIn('lead_id', $leadIds)->with('payments')->get();
 
-        $convertedProducts = $lpProducts->filter($isConvertedProduct);
         $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
 
-        $convertedProductsCount = $convertedProducts->count();
         $upcomingAmount = (float) $nonConvertedProducts->sum('total_price');
-        $convertedValue = (float) $convertedProducts->sum('total_price');
-        $totalProductsCount = $lpProducts->count();
+        $totalProductsCount = $convertedProductsCount + $nonConvertedProducts->count();
         $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
+
+        $allLpProducts = $nonConvertedProducts->merge($convertedProducts)->unique('id');
 
         $followupsCount = \App\Models\LeadReminder::where('is_completed', false)
             ->whereIn('lead_id', $leadIds)
             ->whereDate('remind_at', today())
             ->count();
-        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
+        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request, $allLpProducts, $convertedProductsCount, $convertedStatusIds);
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
 
@@ -970,13 +1203,13 @@ class SuperAdminDashboardController extends ApiController
         unset($src);
 
         // ── 4. Financials (from lead_products + payments) ─────────
-        $totalProductValue = (float) $lpProducts->sum('total_price');
-        $totalPaid         = (float) $lpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalProductValue = (float) $allLpProducts->sum('total_price');
+        $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
         $totalPending      = max(0, $totalProductValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
-        $leadProductIds = $lpProducts->pluck('id');
+        $leadProductIds = $allLpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
@@ -992,7 +1225,7 @@ class SuperAdminDashboardController extends ApiController
         // Product status distribution
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = $lpProducts->where('product_status', $pkey)->count();
+            $cnt = $allLpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status'  => $pkey,
                 'label'   => $plabel,
@@ -1174,25 +1407,65 @@ class SuperAdminDashboardController extends ApiController
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
             ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
-            ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
+            ->map(function ($branch) use ($request, $dateFrom, $dateTo, $convertedStatusIds) {
                 $q = Lead::where('branch_id', $branch->id)
                     ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total          = (clone $q)->count();
-                $leadIds        = (clone $q)->pluck('id');
+
+                // Converted products for this branch within converted date range
+                $branchConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
+                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                            ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    })
+                    ->whereHas('lead', function ($lq) use ($branch, $request) {
+                        $this->visibility->applyLeadVisibility($lq, $request->user());
+                        $lq->where('branch_id', $branch->id);
+                    });
+
+                if ($dateFrom) {
+                    $branchConvProductQuery->where(function ($sq) use ($dateFrom) {
+                        $sq->whereDate('converted_at', '>=', $dateFrom)
+                           ->orWhere(function ($sub) use ($dateFrom) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateFrom) {
+                                       $sub2->whereDate('created_at', '>=', $dateFrom)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                                   });
+                           });
+                    });
+                }
+
+                if ($dateTo) {
+                    $branchConvProductQuery->where(function ($sq) use ($dateTo) {
+                        $sq->whereDate('converted_at', '<=', $dateTo)
+                           ->orWhere(function ($sub) use ($dateTo) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateTo) {
+                                       $sub2->whereDate('created_at', '<=', $dateTo)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                                   });
+                           });
+                    });
+                }
+
+                $branchConvProducts = $branchConvProductQuery->get();
+                $productConvCnt = $branchConvProducts->count();
+                $productConvVal = (float) $branchConvProducts->sum('total_price');
+
                 $branchWonQuery = (clone $q)->converted();
-                $wonLeads       = (clone $branchWonQuery)->count();
-                $branchWonIds   = (clone $branchWonQuery)->pluck('id');
-                $productConvCnt = LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->count();
-                $productConvVal = (float) LeadProduct::whereIn('lead_id', $branchWonIds)->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])->sum('total_price');
+                $branchWonIds   = (clone $branchWonQuery)->pluck('id')->merge($branchConvProducts->pluck('lead_id'))->unique();
+                $wonLeads       = $branchWonIds->count();
                 $dealWonVal     = (float) (clone $branchWonQuery)->sum('deal_value');
                 $wonVal         = $productConvVal > 0 ? $productConvVal : $dealWonVal;
 
-                $convertedCount = $wonLeads;
+                $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
                 $convertedVal   = $wonVal;
-                $convRate       = $total > 0 ? round($convertedCount / $total * 100, 1) : 0;
+                $convRate       = $total > 0 ? round($wonLeads / $total * 100, 1) : 0;
                 $branchLostQuery = (clone $q)->lost();
                 $lostLeads      = (clone $branchLostQuery)->count();
                 $branchExcludedIds = $branchWonIds->merge((clone $branchLostQuery)->pluck('id'))->unique();
@@ -1219,7 +1492,7 @@ class SuperAdminDashboardController extends ApiController
         // ── 9. Team performance ───────────────────────────────────
         $teamPerformance = $this->visibility->visibleAssignableUsers($request->user())
             ->when($branchId, fn($users) => $users->where('branch_id', $branchId))
-            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId) {
+            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId, $convertedStatusIds) {
                 $q = Lead::where('assigned_to', $user->id)
                     ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
                     ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
@@ -1227,26 +1500,66 @@ class SuperAdminDashboardController extends ApiController
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total  = (clone $q)->count();
-                $leadIds = (clone $q)->pluck('id');
-                $convertCount = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
+
+                // Converted products for this user within converted date range
+                $userConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
+                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                            ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    })
+                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId) {
+                        $this->visibility->applyLeadVisibility($lq, $request->user());
+                        $lq->where('assigned_to', $user->id);
+                        if ($branchId) $lq->where('branch_id', $branchId);
+                    });
+
+                if ($dateFrom) {
+                    $userConvProductQuery->where(function ($sq) use ($dateFrom) {
+                        $sq->whereDate('converted_at', '>=', $dateFrom)
+                           ->orWhere(function ($sub) use ($dateFrom) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateFrom) {
+                                       $sub2->whereDate('created_at', '>=', $dateFrom)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                                   });
+                           });
+                    });
+                }
+
+                if ($dateTo) {
+                    $userConvProductQuery->where(function ($sq) use ($dateTo) {
+                        $sq->whereDate('converted_at', '<=', $dateTo)
+                           ->orWhere(function ($sub) use ($dateTo) {
+                               $sub->whereNull('converted_at')
+                                   ->where(function ($sub2) use ($dateTo) {
+                                       $sub2->whereDate('created_at', '<=', $dateTo)
+                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                                   });
+                           });
+                    });
+                }
+
+                $userConvProducts = $userConvProductQuery->get();
+                $convertCount = $userConvProducts->count();
+                $convertVal = (float) $userConvProducts->sum('total_price');
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
-                $convertVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
 
                 return [
                     'user_id'         => $user->id,
                     'user_name'       => $user->name,
                     'user_email'      => $user->email,
-                    'role'            => $user->roles->first()?->name,
-                    'role_name'       => $user->roles->first()?->display_name,
+                    'role'            => $user->roles->first()?->display_name,
+                    'role_name'       => $user->roles->first()?->name,
                     'total_leads'     => $total,
                     'convert_leads'   => $convertCount,
                     'lost_leads'      => $lost,
-                    'active_leads'    => $total - $convertCount - $lost,
+                    'active_leads'    => max(0, $total - $convertCount - $lost),
                     'convert_value'   => $convertVal,
                     'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
             })
-            ->filter(fn($u) => $u['total_leads'] > 0)
+            ->filter(fn($u) => $u['total_leads'] > 0 || $u['convert_leads'] > 0)
             ->sortByDesc('convert_value')
             ->values()
             ->take(10);

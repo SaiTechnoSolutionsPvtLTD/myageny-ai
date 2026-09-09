@@ -409,6 +409,11 @@
                                             <span class="lpd-dot" style="background:{{ $productStatus['dot'] }};"></span>
                                             {{ $leadProduct->status_label }}
                                         </span>
+                                        @if($leadProduct->converted_at && strtolower($leadProduct->product_status_key) === 'converted')
+                                            <div style="font-size:10px; color:#15803d; margin-top:3px; font-weight:700;">
+                                                {{ $leadProduct->converted_at->format('d M Y') }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td><span class="lpd-money" style="color:#15803d;">Rs {{ number_format((float) $leadProduct->amount_paid, 2) }}</span></td>
                                     <td><span class="lpd-money" style="color:#dc2626;">Rs {{ number_format((float) $leadProduct->amount_pending, 2) }}</span></td>

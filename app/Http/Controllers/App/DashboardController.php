@@ -546,6 +546,7 @@ class DashboardController extends Controller
         if ($dateFrom) {
             $query->where(function ($q) use ($dateFrom) {
                 $q->whereDate('created_at', '>=', $dateFrom)
+                  ->orWhereDate('converted_at', '>=', $dateFrom)
                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
             });
         }
@@ -553,6 +554,7 @@ class DashboardController extends Controller
         if ($dateTo) {
             $query->where(function ($q) use ($dateTo) {
                 $q->whereDate('created_at', '<=', $dateTo)
+                  ->orWhereDate('converted_at', '<=', $dateTo)
                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
             });
         }

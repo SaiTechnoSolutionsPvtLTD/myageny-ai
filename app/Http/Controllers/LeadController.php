@@ -481,11 +481,13 @@ class LeadController extends Controller
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('assigned_to', $assignedTo));
         }
 
+        $isConvertedStatusFilter = false;
         if ($request->filled('product_status')) {
             $statusVal = $request->product_status;
             if (is_numeric($statusVal)) {
                 $statusRecord = LeadStatus::find($statusVal);
                 $statusName = $statusRecord ? strtolower($statusRecord->name) : null;
+                $isConvertedStatusFilter = ($statusName === 'converted');
                 $query->where(function ($q) use ($statusVal, $statusName) {
                     $q->where('lead_status_id', (int) $statusVal);
                     if ($statusName) {
@@ -495,6 +497,7 @@ class LeadController extends Controller
             } else {
                 $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
                 $statusId = $statusRecord?->id;
+                $isConvertedStatusFilter = (strtolower($statusVal) === 'converted' || strtolower($statusRecord?->name ?? '') === 'converted');
                 $query->where(function ($q) use ($statusVal, $statusId) {
                     $q->where('product_status', $statusVal);
                     if ($statusId) {
@@ -537,18 +540,50 @@ class LeadController extends Controller
 
         if ($request->filled('date_from')) {
             $dateFrom = $request->date_from;
-            $query->whereHas('lead', function ($lq) use ($dateFrom) {
-                $lq->whereDate('lead_date', '>=', $dateFrom)
-                   ->orWhereDate('created_at', '>=', $dateFrom);
-            });
+            if ($isConvertedStatusFilter) {
+                $query->where(function ($q) use ($dateFrom) {
+                    $q->whereDate('converted_at', '>=', $dateFrom)
+                      ->orWhere(function ($sub) use ($dateFrom) {
+                          $sub->whereNull('converted_at')
+                              ->where(function ($sub2) use ($dateFrom) {
+                                  $sub2->whereDate('created_at', '>=', $dateFrom)
+                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                              });
+                      });
+                });
+            } else {
+                $query->where(function ($q) use ($dateFrom) {
+                    $q->whereDate('created_at', '>=', $dateFrom)
+                      ->orWhereDate('converted_at', '>=', $dateFrom)
+                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
+                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                });
+            }
         }
 
         if ($request->filled('date_to')) {
             $dateTo = $request->date_to;
-            $query->whereHas('lead', function ($lq) use ($dateTo) {
-                $lq->whereDate('lead_date', '<=', $dateTo)
-                   ->orWhereDate('created_at', '<=', $dateTo);
-            });
+            if ($isConvertedStatusFilter) {
+                $query->where(function ($q) use ($dateTo) {
+                    $q->whereDate('converted_at', '<=', $dateTo)
+                      ->orWhere(function ($sub) use ($dateTo) {
+                          $sub->whereNull('converted_at')
+                              ->where(function ($sub2) use ($dateTo) {
+                                  $sub2->whereDate('created_at', '<=', $dateTo)
+                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                              });
+                      });
+                });
+            } else {
+                $query->where(function ($q) use ($dateTo) {
+                    $q->whereDate('created_at', '<=', $dateTo)
+                      ->orWhereDate('converted_at', '<=', $dateTo)
+                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
+                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                });
+            }
         }
 
         $statsBase = (clone $query)->with('payments');
