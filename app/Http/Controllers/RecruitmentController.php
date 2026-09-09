@@ -6,6 +6,7 @@ use App\Models\EmployeeOnboarding;
 use App\Models\RecruitmentCallUpdate;
 use App\Models\RecruitmentCandidate;
 use App\Models\RecruitmentInterview;
+use App\Models\RecruitmentReminder;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -96,6 +97,112 @@ class RecruitmentController extends Controller
             'candidates' => $candidates,
             'counts' => $counts,
             'statuses' => RecruitmentCandidate::STATUSES,
+        ]);
+    }
+
+    public function callUpdates(Request $request): View
+    {
+        $hasDateFilter = $request->has('date_from') || $request->has('date_to');
+
+        if ($hasDateFilter) {
+            $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
+            $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
+        } else {
+            $dateFrom = now()->startOfMonth()->toDateString();
+            $dateTo = now()->endOfMonth()->toDateString();
+        }
+
+        $query = RecruitmentCallUpdate::query()
+            ->with([
+                'candidate:id,candidate_no,name,mobile_number,email,job_title,location,candidate_type,status',
+                'user:id,name',
+            ])
+            ->latest('called_at');
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('notes', 'like', "%{$search}%")
+                    ->orWhereHas('candidate', function ($cq) use ($search) {
+                        $cq->where('id', $search)
+                            ->orWhere('candidate_no', 'like', "%{$search}%")
+                            ->orWhere('name', 'like', "%{$search}%")
+                            ->orWhere('mobile_number', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('job_title', 'like', "%{$search}%")
+                            ->orWhere('location', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        if ($request->filled('outcome')) {
+            $query->where('outcome', $request->outcome);
+        }
+
+        if ($request->filled('call_type')) {
+            $query->where('call_type', $request->call_type);
+        }
+
+        if ($request->filled('candidate_status')) {
+            $query->whereHas('candidate', function ($cq) use ($request) {
+                $cq->where('status', $request->candidate_status);
+            });
+        }
+
+        if ($dateFrom) {
+            $query->whereDate('called_at', '>=', $dateFrom);
+        }
+
+        if ($dateTo) {
+            $query->whereDate('called_at', '<=', $dateTo);
+        }
+
+        if ($request->filled('follow_up_date')) {
+            $query->whereDate('next_follow_up_at', $request->follow_up_date);
+        }
+
+        // Summary Counts
+        $baseCountQuery = RecruitmentCallUpdate::query();
+        if ($dateFrom) {
+            $baseCountQuery->whereDate('called_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $baseCountQuery->whereDate('called_at', '<=', $dateTo);
+        }
+
+        $counts = [
+            'total' => (clone $baseCountQuery)->count(),
+            'today' => RecruitmentCallUpdate::query()->whereDate('called_at', today())->count(),
+            'interested' => (clone $baseCountQuery)->whereIn('outcome', ['interested', 'screening', 'interview_planned'])->count(),
+            'follow_up' => (clone $baseCountQuery)->where('outcome', 'follow_up')->count(),
+            'selected' => (clone $baseCountQuery)->where('outcome', 'selected')->count(),
+        ];
+
+        $callUpdates = $query->paginate(15)->withQueryString();
+
+        // Distinct callers
+        $userIds = RecruitmentCallUpdate::query()->distinct()->pluck('user_id')->filter();
+        $users = User::whereIn('id', $userIds)->orderBy('name')->get(['id', 'name']);
+        if ($users->isEmpty()) {
+            $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        }
+
+        return view('pages.hrms.recruitment.call_updates.index', [
+            'callUpdates' => $callUpdates,
+            'users' => $users,
+            'outcomes' => RecruitmentCallUpdate::OUTCOMES,
+            'callTypes' => RecruitmentCallUpdate::CALL_TYPES,
+            'candidateStatuses' => RecruitmentCandidate::STATUSES,
+            'counts' => $counts,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
         ]);
     }
 
@@ -347,10 +454,25 @@ class RecruitmentController extends Controller
             'next_follow_up_at' => ['nullable', 'date'],
         ]);
 
-        $recruitment->callUpdates()->create(array_merge($validated, [
+        $callUpdate = $recruitment->callUpdates()->create(array_merge($validated, [
             'company_id' => auth()->user()?->company_id,
             'user_id' => auth()->id(),
         ]));
+
+        if (!empty($validated['next_follow_up_at'])) {
+            RecruitmentReminder::create([
+                'company_id' => auth()->user()?->company_id,
+                'recruitment_candidate_id' => $recruitment->id,
+                'recruitment_call_update_id' => $callUpdate->id,
+                'user_id' => auth()->id(),
+                'title' => 'Follow-up Call: ' . $recruitment->name . ($recruitment->job_title ? ' (' . $recruitment->job_title . ')' : ''),
+                'description' => $validated['notes'] ?? null,
+                'remind_at' => $validated['next_follow_up_at'],
+                'type' => 'follow_up',
+                'priority' => 'high',
+                'is_completed' => false,
+            ]);
+        }
 
         $this->syncCandidateStatusFromCallOutcome($recruitment, $validated['outcome']);
 
@@ -391,6 +513,21 @@ class RecruitmentController extends Controller
             'company_id' => auth()->user()?->company_id,
             'scheduled_by' => auth()->id(),
         ]));
+
+        if (!empty($validated['scheduled_at'])) {
+            $roundName = $validated['round'] ?: 'Interview Round';
+            RecruitmentReminder::create([
+                'company_id' => auth()->user()?->company_id,
+                'recruitment_candidate_id' => $recruitment->id,
+                'user_id' => !empty($validated['interviewer_id']) ? $validated['interviewer_id'] : auth()->id(),
+                'title' => 'Interview (' . $roundName . '): ' . $recruitment->name . ($recruitment->job_title ? ' (' . $recruitment->job_title . ')' : ''),
+                'description' => $validated['notes'] ?? null,
+                'remind_at' => $validated['scheduled_at'],
+                'type' => 'interview',
+                'priority' => 'high',
+                'is_completed' => false,
+            ]);
+        }
 
         if (! in_array($recruitment->status, [
             RecruitmentCandidate::STATUS_SELECTED,

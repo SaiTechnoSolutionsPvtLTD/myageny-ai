@@ -560,13 +560,21 @@ class ProjectController extends Controller
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
 
-        $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->orderBy('name')->get(['users.id', 'users.name']);
+        $visibility = app(\App\Services\DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+        $allMappedIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values();
+
+        $managedUsers = \App\Models\User::whereIn('id', $allMappedIds->reject(fn($id) => (int)$id === (int)$user->id))
+            ->where('users.user_status', 'active')
+            ->orderBy('name')
+            ->get(['users.id', 'users.name']);
         $hasMappedUsers = $managedUsers->isNotEmpty();
         $canViewTeamTimesheets = $isAdminLike || $hasMappedUsers || $user->hasTlLikeRole();
 
         $allUsers = $isAdminLike 
             ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) 
-            : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect());
+            : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect([$user]));
 
         $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
             ? ($user->isDevelopmentProjectCoordinator()
@@ -594,9 +602,6 @@ class ProjectController extends Controller
                 ->latest('production_approval_reviewed_at');
         } else {
             $assignedProjectsQuery = $this->timesheetProjectsQuery($user);
-            if ($userDepartmentIds->isNotEmpty()) {
-                $assignedProjectsQuery->whereIn('department_id', $userDepartmentIds);
-            }
         }
 
         if ($selectedDepartmentId !== '') {
@@ -635,9 +640,7 @@ class ProjectController extends Controller
 
         $accessibleUserIds = $isAdminLike
             ? null
-            : ($hasMappedUsers
-                ? array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all()))
-                : [$user->id]);
+            : $allMappedIds->all();
 
         $timesheets = ProjectTimesheet::query()
             ->with(['project' => fn ($query) => $query->with($this->projectRelations()), 'user'])
@@ -678,11 +681,6 @@ class ProjectController extends Controller
             ->when($timesheetFilters['filter_department_id'] !== '', function ($query) use ($timesheetFilters) {
                 $query->whereHas('project', function ($q) use ($timesheetFilters) {
                     $q->where('department_id', (int) $timesheetFilters['filter_department_id']);
-                });
-            })
-            ->when(!$isAdminLike && $timesheetFilters['filter_department_id'] === '' && $userDepartmentIds->isNotEmpty(), function ($query) use ($userDepartmentIds) {
-                $query->whereHas('project', function ($q) use ($userDepartmentIds) {
-                    $q->whereIn('department_id', $userDepartmentIds);
                 });
             })
             ->latest('created_at')
@@ -919,6 +917,19 @@ class ProjectController extends Controller
 
         $updateData = [];
         if (isset($validated['status'])) {
+            $closingUpdate = isset($validated['day_closing_update'])
+                ? trim((string) $validated['day_closing_update'])
+                : trim((string) $timesheet->day_closing_update);
+
+            if (empty($closingUpdate) || str_starts_with($closingUpdate, "Assigned Task:\n")) {
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please add a Day Closing Update before changing the status.'
+                    ], 422);
+                }
+                return back()->with('error', 'Please add a Day Closing Update before changing the status.');
+            }
             $updateData['status'] = $validated['status'];
         }
         if (isset($validated['day_closing_update'])) {
@@ -2005,26 +2016,37 @@ class ProjectController extends Controller
 
     private function timesheetProjectsQuery(User $user): Builder
     {
-        $isTestingUser = $user->belongsToTestingDepartment() || $user->hasTestingLikeRole();
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
+            return ProductionInitiation::query()
+                ->with($this->projectRelations())
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->latest('production_approval_reviewed_at');
+        }
+
+        $visibility = app(\App\Services\DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+        $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
 
         return ProductionInitiation::query()
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved'])
-            ->where(function ($q) use ($user, $isTestingUser) {
-                if ($isTestingUser) {
-                    $q->whereHas('testingDetails')
-                      ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
-                      ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
-                } else {
-                    $q->where(function ($sub) use ($user) {
-                        $sub->where('project_allocation_status', 'allocated')
-                            ->whereJsonContains('project_allocated_employee_user_ids', $user->id);
-                    })
-                    ->orWhereHas('testingDetails', function ($tq) use ($user) {
-                        $tq->where('testing_tl_id', $user->id)
-                           ->orWhere('moved_by_user_id', $user->id);
-                    });
+            ->where(function ($q) use ($user, $allAccessibleIds) {
+                foreach ($allAccessibleIds as $uId) {
+                    $q->orWhereJsonContains('project_allocated_employee_user_ids', $uId)
+                      ->orWhereJsonContains('project_allocated_tl_user_ids', $uId);
                 }
+
+                $q->orWhereHas('testingDetails', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('testing_tl_id', $allAccessibleIds)
+                       ->orWhereIn('moved_by_user_id', $allAccessibleIds);
+                })
+                ->orWhereHas('productionTasks', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('assigned_to', $allAccessibleIds);
+                })
+                ->orWhereHas('timesheets', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('user_id', $allAccessibleIds);
+                });
             })
             ->latest('production_approval_reviewed_at');
     }

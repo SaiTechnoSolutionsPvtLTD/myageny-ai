@@ -54,6 +54,7 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\QuotationSettingsController;
 use App\Http\Controllers\RecruitmentController;
+use App\Http\Controllers\RecruitmentReminderController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SalesTargetSettingController;
 use App\Http\Controllers\SuperAdminDashboardController;
@@ -430,6 +431,18 @@ Route::middleware(['auth'])->group(function () {
         ->name('notifications.mark-all-read');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
         ->name('notifications.read');
+    Route::get('/recruitment/call-updates', [RecruitmentController::class, 'callUpdates'])
+        ->name('recruitment.calls.index');
+    Route::get('/recruitment/reminders', [RecruitmentReminderController::class, 'index'])
+        ->name('recruitment.reminders.index');
+    Route::post('/recruitment/{recruitment}/reminders', [RecruitmentReminderController::class, 'store'])
+        ->name('recruitment.reminders.store');
+    Route::patch('/recruitment/reminders/{reminder}/complete', [RecruitmentReminderController::class, 'complete'])
+        ->name('recruitment.reminders.complete');
+    Route::patch('/recruitment/reminders/{reminder}/incomplete', [RecruitmentReminderController::class, 'incomplete'])
+        ->name('recruitment.reminders.incomplete');
+    Route::delete('/recruitment/reminders/{reminder}', [RecruitmentReminderController::class, 'destroy'])
+        ->name('recruitment.reminders.destroy');
     Route::resource('recruitment', RecruitmentController::class);
     Route::post('/recruitment/{recruitment}/call-updates', [RecruitmentController::class, 'storeCallUpdate'])
         ->name('recruitment.call-updates.store');

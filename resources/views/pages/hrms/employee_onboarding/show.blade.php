@@ -341,30 +341,6 @@
                         </div>
                     </div>
                 </div>
-                            <div class="eob-show-item"><div class="eob-show-label">Gross Salary</div><div class="eob-show-value">{{ $employee->gross_salary !== null ? number_format((float) $employee->gross_salary, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Basic Salary</div><div class="eob-show-value">{{ $employee->basic_salary !== null ? number_format((float) $employee->basic_salary, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">HRA</div><div class="eob-show-value">{{ $employee->hra !== null ? number_format((float) $employee->hra, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Special Allowance</div><div class="eob-show-value">{{ $employee->special_allowance !== null ? number_format((float) $employee->special_allowance, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Other Allowance</div><div class="eob-show-value">{{ $employee->other_allowance !== null ? number_format((float) $employee->other_allowance, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">PF Enabled</div><div class="eob-show-value">{{ $employee->pf_enabled ? 'Yes' : 'No' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">UAN No</div><div class="eob-show-value">{{ $employee->uan_no ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">PF Account No</div><div class="eob-show-value">{{ $employee->pf_account_no ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">PF Employee Contribution</div><div class="eob-show-value">{{ $employee->pf_employee_contribution !== null ? number_format((float) $employee->pf_employee_contribution, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">PF Employer Contribution</div><div class="eob-show-value">{{ $employee->pf_employer_contribution !== null ? number_format((float) $employee->pf_employer_contribution, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">ESI Enabled</div><div class="eob-show-value">{{ $employee->esi_enabled ? 'Yes' : 'No' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">ESI No</div><div class="eob-show-value">{{ $employee->esi_no ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">ESI Employee Contribution</div><div class="eob-show-value">{{ $employee->esi_employee_contribution !== null ? number_format((float) $employee->esi_employee_contribution, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">ESI Employer Contribution</div><div class="eob-show-value">{{ $employee->esi_employer_contribution !== null ? number_format((float) $employee->esi_employer_contribution, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Professional Tax</div><div class="eob-show-value">{{ $employee->professional_tax !== null ? number_format((float) $employee->professional_tax, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">TDS Amount</div><div class="eob-show-value">{{ $employee->tds_amount !== null ? number_format((float) $employee->tds_amount, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Loan Deduction</div><div class="eob-show-value">{{ $employee->loan_deduction !== null ? number_format((float) $employee->loan_deduction, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Other Deduction</div><div class="eob-show-value">{{ $employee->other_deduction !== null ? number_format((float) $employee->other_deduction, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Total Deduction</div><div class="eob-show-value">{{ $employee->total_deduction !== null ? number_format((float) $employee->total_deduction, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Net Salary</div><div class="eob-show-value">{{ $employee->net_salary !== null ? number_format((float) $employee->net_salary, 2) : 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Deduction Notes</div><div class="eob-show-value">{{ $employee->deduction_notes ?: 'N/A' }}</div></div>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="eob-show-card">
                     <div class="eob-card-head"><div><div class="eob-card-title">Bank Account Details</div></div></div>

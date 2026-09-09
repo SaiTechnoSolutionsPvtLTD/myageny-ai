@@ -7,6 +7,7 @@ use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\EmployeeOnboarding;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -205,6 +206,8 @@ class UserController extends Controller
         $user->update($data);
         $user->branches()->sync($selectedBranches);
 
+        $this->syncEmployeeOnboardingStatus($user);
+
         // Sync role
         if ($roleName) {
             $role = $this->resolveAssignableRole($roleName);
@@ -264,9 +267,25 @@ class UserController extends Controller
 
         $user->update(['is_active' => !$user->is_active]);
 
+        $this->syncEmployeeOnboardingStatus($user);
+
         $status = $user->is_active ? 'activated' : 'deactivated';
 
         return back()->with('success', "User <strong>{$user->name}</strong> has been {$status}.");
+    }
+
+    private function syncEmployeeOnboardingStatus(User $user): void
+    {
+        $employee = $user->employeeOnboarding ?? EmployeeOnboarding::where('email', $user->email)->first();
+        if (! $employee) {
+            return;
+        }
+
+        if (! $user->is_active) {
+            $employee->update(['status' => EmployeeOnboarding::STATUS_INACTIVE]);
+        } elseif ($user->is_active && $employee->status === EmployeeOnboarding::STATUS_INACTIVE) {
+            $employee->update(['status' => EmployeeOnboarding::STATUS_ACTIVE]);
+        }
     }
 
     /**

@@ -301,7 +301,9 @@
 
                 @if(! $hrmsSelfService)
                 @can('recruitment.menuview')
-                <a href="{{ route('recruitment.index') }}" class="nav-item {{ request()->routeIs('recruitment.*') ? 'active' : '' }}">
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('recruitment.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
                     @if(request()->routeIs('recruitment.*'))
                         <div class="active-indicator"></div>
                     @endif
@@ -314,8 +316,20 @@
                             <path d="M17 16h4"></path>
                         </svg>
                         <span>Recruitment</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
                     </div>
                 </a>
+                <div class="submenu {{ request()->routeIs('recruitment.*') ? 'show' : '' }}">
+                    <a href="{{ route('recruitment.index') }}" class="submenu-item {{ request()->routeIs('recruitment.index') || request()->routeIs('recruitment.create') || request()->routeIs('recruitment.show') || request()->routeIs('recruitment.edit') ? 'active' : '' }}">
+                        Candidates
+                    </a>
+                    <a href="{{ route('recruitment.calls.index') }}" class="submenu-item {{ request()->routeIs('recruitment.calls.*') ? 'active' : '' }}">
+                        Call Updates
+                    </a>
+                    <a href="{{ route('recruitment.reminders.index') }}" class="submenu-item {{ request()->routeIs('recruitment.reminders.*') ? 'active' : '' }}">
+                        Reminders
+                    </a>
+                </div>
                 @endcan
                 @endif
 

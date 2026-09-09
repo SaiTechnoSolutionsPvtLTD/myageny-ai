@@ -33,6 +33,7 @@ class EmployeeOnboarding extends Model
     }
 
     public const STATUS_ACTIVE = 'active';
+    public const STATUS_INACTIVE = 'inactive';
     public const STATUS_RESIGNED = 'resigned';
 
     public const DOCUMENT_FIELDS = [

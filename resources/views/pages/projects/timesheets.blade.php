@@ -62,6 +62,13 @@
 .pts-status-select.completed { color:#15803d; background-color:#f0fdf4; border-color:#bbf7d0; }
 .pts-status-select.ongoing { color:#1d4ed8; background-color:#eff6ff; border-color:#bfdbfe; }
 .pts-status-select.pending { color:#b45309; background-color:#fff7ed; border-color:#fed7aa; }
+.pts-status-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed !important;
+    background-color: #f1f5f9 !important;
+    color: #94a3b8 !important;
+    border-color: #e2e8f0 !important;
+}
 
 .pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; padding:16px; box-shadow:0 10px 28px rgba(15,23,42,.04); }
 .pts-filter-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; align-items:end; }
@@ -392,7 +399,7 @@
 
                                         <!-- Status Overview -->
                                         <td>
-                                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                            <div class="status-overview-badges" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                                 @if($pendingCount > 0)
                                                     <span class="pts-badge pending">{{ $pendingCount }} Pending</span>
                                                 @endif
@@ -401,6 +408,9 @@
                                                 @endif
                                                 @if($completedCount > 0)
                                                     <span class="pts-badge completed">{{ $completedCount }} Completed</span>
+                                                @endif
+                                                @if($pendingCount === 0 && $ongoingCount === 0 && $completedCount === 0)
+                                                    <span class="pts-meta">—</span>
                                                 @endif
                                             </div>
                                         </td>
@@ -1023,34 +1033,41 @@ document.addEventListener('DOMContentLoaded', function () {
         return p.innerHTML;
     }
 
+    let currentGroupBtn = null;
+    let currentGroupRow = null;
+    let currentGroupTimesheets = [];
+
     openTimesheetButtons.forEach(btn => {
         btn.addEventListener('click', function() {
+            currentGroupBtn = this;
+            currentGroupRow = this.closest('tr');
             const userName = this.getAttribute('data-user-name') || 'Team Member';
             const dateStr = this.getAttribute('data-timesheet-date') || 'N/A';
-            let timesheets = [];
+            currentGroupTimesheets = [];
 
             try {
-                timesheets = JSON.parse(this.getAttribute('data-timesheets') || '[]');
+                currentGroupTimesheets = JSON.parse(this.getAttribute('data-timesheets') || '[]');
             } catch (e) {
                 console.error('Failed to parse timesheets JSON', e);
             }
 
             if (modalMemberName) modalMemberName.textContent = 'Timesheets - ' + userName;
-            if (modalSubTitle) modalSubTitle.textContent = 'Date: ' + dateStr + ' | Total ' + timesheets.length + ' Timesheet(s)';
+            if (modalSubTitle) modalSubTitle.textContent = 'Date: ' + dateStr + ' | Total ' + currentGroupTimesheets.length + ' Timesheet(s)';
 
             if (modalTableBody) {
                 modalTableBody.innerHTML = '';
 
-                if (timesheets.length === 0) {
+                if (currentGroupTimesheets.length === 0) {
                     modalTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b;">No timesheets found for this date.</td></tr>';
                 } else {
-                    timesheets.forEach(ts => {
+                    currentGroupTimesheets.forEach(ts => {
                         const tr = document.createElement('tr');
                         tr.setAttribute('data-timesheet-id', ts.id);
                         const statusClass = (ts.status === 'completed') ? 'completed' : ((ts.status === 'ongoing') ? 'ongoing' : 'pending');
 
                         let closingActionHtml = '';
-                        if (ts.day_closing_update && ts.day_closing_update.trim() !== '') {
+                        const hasClosingUpdate = (ts.day_closing_update && ts.day_closing_update.trim() !== '');
+                        if (hasClosingUpdate) {
                             closingActionHtml = `
                                 <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                     <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn" 
@@ -1095,6 +1112,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             `;
                         }
 
+                        const isStatusDisabled = !hasClosingUpdate;
+                        const statusDisabledTooltip = isStatusDisabled ? 'Add Day Closing Update first to change status' : 'Change status';
+
                         tr.innerHTML = `
                             <td class="td-center" style="font-weight:800; color:#64748b;">${ts.sno}</td>
                             <td>
@@ -1114,7 +1134,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             <td class="td-center">
                                 <select class="pts-status-select ${statusClass} modal-timesheet-status-select" 
                                         data-timesheet-id="${ts.id}" 
-                                        data-update-url="${ts.update_status_url}">
+                                        data-update-url="${ts.update_status_url}"
+                                        ${isStatusDisabled ? 'disabled' : ''}
+                                        title="${statusDisabledTooltip}">
                                     <option value="pending" ${ts.status === 'pending' ? 'selected' : ''}>Pending</option>
                                     <option value="ongoing" ${ts.status === 'ongoing' ? 'selected' : ''}>Ongoing</option>
                                     <option value="completed" ${ts.status === 'completed' ? 'selected' : ''}>Completed</option>
@@ -1128,6 +1150,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     modalTableBody.querySelectorAll('.modal-timesheet-status-select').forEach(sel => {
                         sel.addEventListener('change', function() {
                             const newStatus = this.value;
+                            const timesheetId = this.getAttribute('data-timesheet-id');
                             const updateUrl = this.getAttribute('data-update-url');
                             const currentSelect = this;
                             
@@ -1149,6 +1172,41 @@ document.addEventListener('DOMContentLoaded', function () {
                                 if (data.success) {
                                     currentSelect.classList.remove('pending', 'ongoing', 'completed');
                                     currentSelect.classList.add(newStatus);
+
+                                    // Update item in currentGroupTimesheets
+                                    const tsItem = currentGroupTimesheets.find(t => String(t.id) === String(timesheetId));
+                                    if (tsItem) {
+                                        tsItem.status = newStatus;
+                                    }
+                                    if (currentGroupBtn) {
+                                        currentGroupBtn.setAttribute('data-timesheets', JSON.stringify(currentGroupTimesheets));
+                                    }
+
+                                    // Update Status Overview in the main table row
+                                    if (currentGroupRow) {
+                                        const pendingCount = currentGroupTimesheets.filter(t => t.status === 'pending').length;
+                                        const ongoingCount = currentGroupTimesheets.filter(t => t.status === 'ongoing').length;
+                                        const completedCount = currentGroupTimesheets.filter(t => t.status === 'completed').length;
+
+                                        let badgesHtml = '';
+                                        if (pendingCount > 0) {
+                                            badgesHtml += `<span class="pts-badge pending">${pendingCount} Pending</span>`;
+                                        }
+                                        if (ongoingCount > 0) {
+                                            badgesHtml += `<span class="pts-badge ongoing">${ongoingCount} Ongoing</span>`;
+                                        }
+                                        if (completedCount > 0) {
+                                            badgesHtml += `<span class="pts-badge completed">${completedCount} Completed</span>`;
+                                        }
+                                        if (badgesHtml === '') {
+                                            badgesHtml = '<span class="pts-meta">—</span>';
+                                        }
+
+                                        const overviewEl = currentGroupRow.querySelector('.status-overview-badges');
+                                        if (overviewEl) {
+                                            overviewEl.innerHTML = badgesHtml;
+                                        }
+                                    }
                                 } else {
                                     alert(data.message || 'Failed to update status.');
                                 }
@@ -1315,12 +1373,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.success) {
                     setEntryClosingModalState(false);
 
+                    const timesheetId = entryClosingTimesheetId ? entryClosingTimesheetId.value : '';
+                    if (currentGroupTimesheets && timesheetId) {
+                        const tsItem = currentGroupTimesheets.find(t => String(t.id) === String(timesheetId));
+                        if (tsItem) {
+                            tsItem.day_closing_update = newText;
+                        }
+                        if (currentGroupBtn) {
+                            currentGroupBtn.setAttribute('data-timesheets', JSON.stringify(currentGroupTimesheets));
+                        }
+                    }
+
                     // Update active row
                     if (currentActiveRow) {
                         const cell = currentActiveRow.querySelector('td:nth-child(5)');
                         const projectName = currentActiveRow.querySelector('.pts-project')?.textContent || '';
                         const leadName = currentActiveRow.querySelector('td:nth-child(2) > div:first-child')?.textContent || '';
-                        const timesheetId = entryClosingTimesheetId ? entryClosingTimesheetId.value : '';
 
                         if (cell) {
                             cell.innerHTML = `
@@ -1347,6 +1415,18 @@ document.addEventListener('DOMContentLoaded', function () {
                                     </button>
                                 </div>
                             `;
+                        }
+
+                        // Enable status dropdown on the active row
+                        const statusSelect = currentActiveRow.querySelector('.modal-timesheet-status-select');
+                        if (statusSelect) {
+                            if (newText.trim() !== '') {
+                                statusSelect.disabled = false;
+                                statusSelect.setAttribute('title', 'Change status');
+                            } else {
+                                statusSelect.disabled = true;
+                                statusSelect.setAttribute('title', 'Add Day Closing Update first to change status');
+                            }
                         }
                     }
                 } else {

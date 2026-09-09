@@ -56,6 +56,11 @@ class RecruitmentCallUpdate extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function reminder(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(RecruitmentReminder::class, 'recruitment_call_update_id');
+    }
+
     public function getOutcomeLabelAttribute(): string
     {
         return self::OUTCOMES[$this->outcome] ?? ucfirst(str_replace('_', ' ', (string) $this->outcome));

@@ -49,6 +49,7 @@
                     <select name="status" class="eob-select">
                         <option value="">All Status</option>
                         <option value="active" @selected(request('status') === 'active')>Active</option>
+                        <option value="inactive" @selected(request('status') === 'inactive')>Inactive</option>
                         <option value="resigned" @selected(request('status') === 'resigned')>Resigned</option>
                     </select>
                 </div>

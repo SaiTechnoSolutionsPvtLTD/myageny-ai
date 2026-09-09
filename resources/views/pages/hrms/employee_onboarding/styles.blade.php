@@ -48,6 +48,7 @@
 .eob-file-links { display:flex; gap:8px; flex-wrap:wrap; }
 .eob-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; }
 .eob-chip-active { background:#f0fdf4; color:#15803d; }
+.eob-chip-inactive { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
 .eob-chip-resigned { background:#fef2f2; color:#b91c1c; }
 .eob-chip-pending { background:#fff7ed; color:#c2410c; }
 .eob-chip-verified { background:#f0fdf4; color:#15803d; }

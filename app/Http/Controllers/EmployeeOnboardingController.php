@@ -337,9 +337,15 @@ class EmployeeOnboardingController extends Controller
             $attributes['branch_id'] = $validated['branch_id'] ?: null;
         }
 
+        if (array_key_exists('status', $validated)) {
+            $attributes['is_active'] = ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE);
+        }
+
         if (! $user) {
             $attributes['company_id'] = auth()->user()?->company_id;
-            $attributes['is_active'] = true;
+            $attributes['is_active'] = array_key_exists('status', $validated)
+                ? ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE)
+                : true;
             $attributes['password'] = Hash::make($password);
 
             $user = User::create($attributes);

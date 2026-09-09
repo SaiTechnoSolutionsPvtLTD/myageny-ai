@@ -8,7 +8,7 @@
     $portalAccountRequired = $portalPasswordRequired || (bool) $portalUser;
 
     $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    $statusOptions = ['active' => 'Active', 'resigned' => 'Resigned'];
+    $statusOptions = ['active' => 'Active', 'inactive' => 'Inactive', 'resigned' => 'Resigned'];
 
     $defaultEducations = [
         ['qualification' => 'PG', 'institution_name' => '', 'year_of_passing' => '', 'percentage' => '', 'specialization' => ''],

@@ -370,7 +370,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function getSelectedUserId() {
-        return assignedUserSelect ? (assignedUserSelect.value || '') : '';
+        if (!assignedUserSelect) return '';
+        if (window.jQuery && window.jQuery(assignedUserSelect).hasClass('select2-hidden-accessible')) {
+            return window.jQuery(assignedUserSelect).val() || '';
+        }
+        return assignedUserSelect.value || '';
     }
 
     // Populate Lead dropdown based on selected Mapped Team Member
@@ -395,28 +399,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // Filter member allocated projects if any, otherwise fallback to all assigned projects
+        // Filter member allocated projects strictly to the selected team member
         const memberAllocatedProjects = assignedProjects.filter(function (p) {
             const allocIds = (p.allocated_user_ids || []).map(Number);
             return allocIds.includes(Number(userId));
         });
 
-        // Use member projects if available, otherwise all assigned projects so any project can be assigned
-        const sourceProjects = memberAllocatedProjects.length > 0 ? memberAllocatedProjects : assignedProjects;
-
-        // Extract unique leads
+        // Extract unique leads mapped to this member
         const leadMap = new Map();
-        sourceProjects.forEach(function (p) {
-            if (p.lead_id && !leadMap.has(p.lead_id)) {
-                leadMap.set(p.lead_id, {
-                    lead_id: p.lead_id,
-                    company_name: p.resolved_company_name || 'No Company'
-                });
-            }
-        });
-
-        // Also ensure all other accessible leads are included
-        assignedProjects.forEach(function (p) {
+        memberAllocatedProjects.forEach(function (p) {
             if (p.lead_id && !leadMap.has(p.lead_id)) {
                 leadMap.set(p.lead_id, {
                     lead_id: p.lead_id,
@@ -430,12 +421,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (uniqueMemberLeads.length === 0) {
             const opt = document.createElement('option');
             opt.value = '';
-            opt.textContent = 'No leads available';
+            opt.textContent = 'No leads allocated for this team member';
             leadSelect.appendChild(opt);
             leadSelect.disabled = true;
             if ($lead) {
                 $lead.prop('disabled', true);
-                applySelect2($lead, 'No leads available');
+                applySelect2($lead, 'No leads allocated for this team member');
             }
             return;
         }
@@ -445,6 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
         defaultOpt.textContent = 'Select Lead';
         leadSelect.appendChild(defaultOpt);
 
+        let hasMatchingSelected = false;
         uniqueMemberLeads.forEach(function (lead) {
             const opt = document.createElement('option');
             opt.value = lead.lead_id;
@@ -452,6 +444,7 @@ document.addEventListener('DOMContentLoaded', function () {
             opt.textContent = `LD-${leadNum} | ${lead.company_name}`;
             if (selectedLeadId && String(lead.lead_id) === String(selectedLeadId)) {
                 opt.selected = true;
+                hasMatchingSelected = true;
             }
             leadSelect.appendChild(opt);
         });
@@ -459,7 +452,7 @@ document.addEventListener('DOMContentLoaded', function () {
         leadSelect.disabled = false;
         if ($lead) {
             $lead.prop('disabled', false);
-            if (selectedLeadId && uniqueMemberLeads.some(l => String(l.lead_id) === String(selectedLeadId))) {
+            if (hasMatchingSelected) {
                 $lead.val(selectedLeadId);
             } else {
                 $lead.val('');
@@ -491,15 +484,11 @@ document.addEventListener('DOMContentLoaded', function () {
             return String(p.lead_id) === String(leadId);
         });
 
-        if (userId && filtered.length > 0) {
-            const userSpecificProjects = filtered.filter(function (p) {
+        if (userId) {
+            filtered = filtered.filter(function (p) {
                 const allocIds = (p.allocated_user_ids || []).map(Number);
                 return allocIds.includes(Number(userId));
             });
-            // If user has specific allocation on this lead, prioritize those
-            if (userSpecificProjects.length > 0) {
-                filtered = userSpecificProjects;
-            }
         }
 
         if (filtered.length === 0) {
@@ -516,6 +505,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        let hasMatchingProj = false;
         filtered.forEach(function (p) {
             const opt = document.createElement('option');
             opt.value = p.id;
@@ -524,17 +514,22 @@ document.addEventListener('DOMContentLoaded', function () {
             opt.textContent = `${pName}${delDate}`;
             if (selectedProjId && String(p.id) === String(selectedProjId)) {
                 opt.selected = true;
+                hasMatchingProj = true;
             }
             projectSelect.appendChild(opt);
         });
 
+        // If only 1 project is mapped, auto-select it
+        if (!hasMatchingProj && filtered.length === 1) {
+            projectSelect.value = filtered[0].id;
+            hasMatchingProj = true;
+        }
+
         projectSelect.disabled = false;
         if ($proj) {
             $proj.prop('disabled', false);
-            if (selectedProjId && filtered.some(p => String(p.id) === String(selectedProjId))) {
-                $proj.val(selectedProjId);
-            } else if (filtered.length === 1) {
-                $proj.val(filtered[0].id);
+            if (hasMatchingProj) {
+                $proj.val(projectSelect.value);
             } else {
                 $proj.val('');
             }
@@ -551,6 +546,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if ($lead) {
             $lead.off('change select2:select').on('change select2:select', function () {
                 const selectedVal = window.jQuery(this).val();
+                const currentUserId = getSelectedUserId();
+                populateProjectsForLead(selectedVal, projectSelect, null, currentUserId);
+            });
+        } else if (leadSelect) {
+            leadSelect.addEventListener('change', function () {
+                const selectedVal = this.value;
                 const currentUserId = getSelectedUserId();
                 populateProjectsForLead(selectedVal, projectSelect, null, currentUserId);
             });
@@ -655,16 +656,21 @@ document.addEventListener('DOMContentLoaded', function () {
         updateRowNumbersAndIndices();
     }
 
-    if (assignedUserSelect) {
-        assignedUserSelect.addEventListener('change', function () {
-            const selectedUserId = this.value;
-            container.querySelectorAll('.task-item-row').forEach(row => {
-                const leadSelect = row.querySelector('.task-lead-select');
-                const projectSelect = row.querySelector('.task-project-select');
-                populateLeadsForUser(selectedUserId, leadSelect, null);
-                populateProjectsForLead('', projectSelect, null, selectedUserId);
-            });
+    function handleMemberChange() {
+        const selectedUserId = getSelectedUserId();
+        container.querySelectorAll('.task-item-row').forEach(row => {
+            const leadSelect = row.querySelector('.task-lead-select');
+            const projectSelect = row.querySelector('.task-project-select');
+            populateLeadsForUser(selectedUserId, leadSelect, null);
+            populateProjectsForLead('', projectSelect, null, selectedUserId);
         });
+    }
+
+    if (assignedUserSelect) {
+        assignedUserSelect.addEventListener('change', handleMemberChange);
+        if (window.jQuery) {
+            window.jQuery(assignedUserSelect).on('change select2:select', handleMemberChange);
+        }
     }
 
     // Init existing rows
