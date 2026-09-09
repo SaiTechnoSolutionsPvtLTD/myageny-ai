@@ -1251,8 +1251,8 @@ function renderKpis(k, filters) {
 /* ── Financials ── */
 function renderFinancials(f) {
     var cards = [
-        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + 'Total', bar:100 },
-        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + 'Collected',  bar:f.payment_percent },
+        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Total', bar:100 },
+        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% Collected',  bar:f.payment_percent },
         { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
         { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0, clickAction: "viewConvertedProducts()" },
     ];

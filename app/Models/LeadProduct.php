@@ -25,6 +25,18 @@ class LeadProduct extends Model
             if (!$model->company_id && auth()->check()) {
                 $model->company_id = auth()->user()->company_id;
             }
+
+            if (static::statusKey($model->product_status) === 'converted' && empty($model->converted_at)) {
+                $model->converted_at = now();
+            }
+        });
+
+        static::updating(function ($model) {
+            if (($model->isDirty('product_status') || $model->isDirty('lead_status_id')) && empty($model->converted_at)) {
+                if (static::statusKey($model->product_status) === 'converted' || static::statusKey($model->leadStatus?->name ?? '') === 'converted') {
+                    $model->converted_at = now();
+                }
+            }
         });
     }
     const PAYMENT_MODE_CONFIG = [
@@ -37,13 +49,13 @@ class LeadProduct extends Model
 
     // ── Fillable ──────────────────────────────────────────────────────
     protected $fillable = [
-    'lead_id', 'product_id', 'deal_name',
-    'product_name', 'description',
-    'unit_price', 'quantity', 'discount_percent',
-    'remarks', 'product_status', 'lead_status_id', 'lead_source_id',
-    'amount_paid', 'created_by', 'company_id',
-    'payment_status',
-];
+        'lead_id', 'product_id', 'deal_name',
+        'product_name', 'description',
+        'unit_price', 'quantity', 'discount_percent',
+        'remarks', 'product_status', 'lead_status_id', 'lead_source_id',
+        'amount_paid', 'created_by', 'company_id',
+        'payment_status', 'converted_at',
+    ];
 
     protected $casts = [
         'unit_price'       => 'float',
@@ -53,6 +65,7 @@ class LeadProduct extends Model
         'amount_paid'      => 'float',
         'lead_status_id'   => 'integer',
         'lead_source_id'   => 'integer',
+        'converted_at'     => 'datetime',
     ];
 
      // ── Product Status Constants ───────────────────────────────────

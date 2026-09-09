@@ -109,11 +109,27 @@ class AdminDashboardService
 
         // Date range filter
         if (!empty($filters['from_date'])) {
-            $query->whereDate('lead_products.created_at', '>=', Carbon::parse($filters['from_date'])->startOfDay());
+            $fromDate = Carbon::parse($filters['from_date'])->startOfDay();
+            if (!empty($filters['status']) && $filters['status'] === 'converted') {
+                $query->whereDate('lead_products.converted_at', '>=', $fromDate);
+            } else {
+                $query->where(function ($q) use ($fromDate) {
+                    $q->whereDate('lead_products.created_at', '>=', $fromDate)
+                      ->orWhereDate('lead_products.converted_at', '>=', $fromDate);
+                });
+            }
         }
 
         if (!empty($filters['to_date'])) {
-            $query->whereDate('lead_products.created_at', '<=', Carbon::parse($filters['to_date'])->endOfDay());
+            $toDate = Carbon::parse($filters['to_date'])->endOfDay();
+            if (!empty($filters['status']) && $filters['status'] === 'converted') {
+                $query->whereDate('lead_products.converted_at', '<=', $toDate);
+            } else {
+                $query->where(function ($q) use ($toDate) {
+                    $q->whereDate('lead_products.created_at', '<=', $toDate)
+                      ->orWhereDate('lead_products.converted_at', '<=', $toDate);
+                });
+            }
         }
 
         return $query;

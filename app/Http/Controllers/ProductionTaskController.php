@@ -291,36 +291,49 @@ class ProductionTaskController extends Controller
 
     private function getAccessibleProjects(User $user): Collection
     {
-        $isAdminLike = $user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator() || $user->hasTlLikeRole();
+        $isDevProjectCoordinator = $user->isDevelopmentProjectCoordinator();
+        $isSuperOrCompanyAdmin = $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isSystemAdmin();
 
-        if ($isAdminLike) {
+        if ($isSuperOrCompanyAdmin) {
             $projects = ProductionInitiation::query()
                 ->with(['lead.branch', 'leadProduct', 'department'])
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->latest('id')
                 ->get();
-        } else {
-            $managedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
+        } elseif ($isDevProjectCoordinator) {
+            // Project Coordinator: Show all development projects
+            $devDeptIds = \App\Models\Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                ->orWhereRaw('LOWER(name) LIKE ?', ['%software%'])
+                ->orWhereRaw('LOWER(name) LIKE ?', ['%web%'])
+                ->orWhereRaw('LOWER(name) LIKE ?', ['%app%'])
+                ->pluck('id')
+                ->toArray();
 
             $projects = ProductionInitiation::query()
                 ->with(['lead.branch', 'leadProduct', 'department'])
                 ->whereIn('production_approval_status', ['approval', 'approved'])
-                ->where(function ($q) use ($user, $managedUserIds) {
-                    $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
-                      ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
-                      ->orWhere(function ($sub) use ($managedUserIds) {
-                          foreach ($managedUserIds as $mId) {
-                              $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId);
-                          }
-                      })
-                      ->orWhereHas('testingDetails', function ($tq) use ($user) {
-                          $tq->where('testing_tl_id', $user->id)
-                             ->orWhere('moved_by_user_id', $user->id);
-                      });
+                ->where(function ($q) use ($devDeptIds) {
+                    if (!empty($devDeptIds)) {
+                        $q->whereIn('department_id', $devDeptIds)
+                          ->orWhereHas('department', function ($dq) {
+                              $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                                 ->orWhereRaw('LOWER(name) LIKE ?', ['%software%'])
+                                 ->orWhereRaw('LOWER(name) LIKE ?', ['%web%'])
+                                 ->orWhereRaw('LOWER(name) LIKE ?', ['%app%']);
+                          });
+                    } else {
+                        $q->whereHas('department', function ($dq) {
+                            $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                               ->orWhereRaw('LOWER(name) LIKE ?', ['%software%'])
+                               ->orWhereRaw('LOWER(name) LIKE ?', ['%web%'])
+                               ->orWhereRaw('LOWER(name) LIKE ?', ['%app%']);
+                        });
+                    }
                 })
                 ->latest('id')
                 ->get();
 
+            // Fallback: if no department tagged, get all approved production projects
             if ($projects->isEmpty()) {
                 $projects = ProductionInitiation::query()
                     ->with(['lead.branch', 'leadProduct', 'department'])
@@ -328,6 +341,36 @@ class ProductionTaskController extends Controller
                     ->latest('id')
                     ->get();
             }
+        } else {
+            // Testing TL and other TLs/Users: Only projects allocated to them or their managed team members
+            $visibility = app(DataVisibilityService::class);
+            $mappedIds = $visibility->descendantUserIds($user);
+            $directManagedIds = $user->managedUsers()->pluck('users.id');
+            $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
+
+            $projects = ProductionInitiation::query()
+                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->where(function ($q) use ($user, $allAccessibleIds) {
+                    foreach ($allAccessibleIds as $uId) {
+                        $q->orWhereJsonContains('project_allocated_employee_user_ids', $uId)
+                          ->orWhereJsonContains('project_allocated_tl_user_ids', $uId);
+                    }
+
+                    $q->orWhereHas('testingDetails', function ($tq) use ($allAccessibleIds) {
+                        $tq->whereIn('testing_tl_id', $allAccessibleIds)
+                           ->orWhereIn('moved_by_user_id', $allAccessibleIds);
+                    })
+                    ->orWhereHas('productionTasks', function ($tq) use ($allAccessibleIds) {
+                        $tq->whereIn('assigned_to', $allAccessibleIds)
+                           ->orWhereIn('created_by', $allAccessibleIds);
+                    })
+                    ->orWhereHas('timesheets', function ($tq) use ($allAccessibleIds) {
+                        $tq->whereIn('user_id', $allAccessibleIds);
+                    });
+                })
+                ->latest('id')
+                ->get();
         }
 
         return $projects->map(function (ProductionInitiation $project) {
@@ -368,7 +411,7 @@ class ProductionTaskController extends Controller
 
     private function getMappedTeamMembers(User $user): Collection
     {
-        if ($user->hasAdminLikeRole()) {
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
             return User::where('is_active', true)
                 ->where('user_status', 'active')
                 ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))

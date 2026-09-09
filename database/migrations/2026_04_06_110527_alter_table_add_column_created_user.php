@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quotations', function (Blueprint $table) {
-            $table->integer('created_by')->nullable();
+            if (! Schema::hasColumn('quotations', 'created_by')) {
+                $table->integer('created_by')->nullable();
+            }
         });
     }
 
