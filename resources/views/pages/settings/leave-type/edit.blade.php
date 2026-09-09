@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Update the leave type details without losing soft-delete history.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.leave-types.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.leave-types.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.leave-types.update', $leaveType) }}">
+        <form method="POST" action="{{ route('hrms.masters.leave-types.update', $leaveType) }}">
             @csrf
             @method('PUT')
             <div class="crm-form-wrap">
@@ -46,7 +46,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.leave-types.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.leave-types.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Update Leave Type</button>
                 </div>
             </div>

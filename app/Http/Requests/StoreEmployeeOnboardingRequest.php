@@ -136,7 +136,7 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             'document_salary_slips' => $fileRules,
             'document_bank_passbook' => $fileRules,
 
-            'status' => ['required', Rule::in([EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED])],
+            'status' => ['required', Rule::in([EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_INACTIVE, EmployeeOnboarding::STATUS_RESIGNED])],
             'employee_type' => ['nullable', Rule::in(['billable', 'non_billable'])],
         ];
     }
@@ -186,7 +186,8 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             }
 
             $branchId = $this->input('branch_id');
-            if ($branchId && $teamLead->branch_id && (int) $teamLead->branch_id !== (int) $branchId) {
+            $isCompanyOrSuperAdmin = $teamLead->isSuperAdmin() || $teamLead->isCompanyAdmin() || $teamLead->hasRole('company_admin') || $this->isBranchAdminOrManagerUser($teamLead);
+            if ($branchId && $teamLead->branch_id && (int) $teamLead->branch_id !== (int) $branchId && ! $isCompanyOrSuperAdmin) {
                 $fail('Selected TL does not belong to the selected branch.');
                 return;
             }
@@ -278,12 +279,10 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             ? optional(\App\Models\Company::find(auth()->user()->company_id))->super_admin_user_id
             : null;
 
-        if (($user->isSuperAdmin() || (int) $user->id === (int) $companySuperAdminId) && $parentRoleKeys->intersect(['super_admin', 'admin'])->isNotEmpty()) {
-            return true;
-        }
-
-        if ($user->isCompanyAdmin() && $parentRoleKeys->contains('company_admin')) {
-            return true;
+        if ($parentRoleKeys->intersect(['super_admin', 'admin', 'company_admin'])->isNotEmpty()) {
+            if ($user->isSuperAdmin() || (int) $user->id === (int) $companySuperAdminId || $user->isCompanyAdmin() || $this->isBranchAdminOrManagerUser($user)) {
+                return true;
+            }
         }
 
         return false;

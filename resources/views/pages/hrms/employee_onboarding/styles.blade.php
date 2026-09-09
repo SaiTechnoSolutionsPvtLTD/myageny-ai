@@ -48,12 +48,17 @@
 .eob-file-links { display:flex; gap:8px; flex-wrap:wrap; }
 .eob-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; }
 .eob-chip-active { background:#f0fdf4; color:#15803d; }
+.eob-chip-inactive { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
 .eob-chip-resigned { background:#fef2f2; color:#b91c1c; }
 .eob-chip-pending { background:#fff7ed; color:#c2410c; }
 .eob-chip-verified { background:#f0fdf4; color:#15803d; }
 .eob-chip-rejected { background:#fef2f2; color:#b91c1c; }
 .eob-chip-billable { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
 .eob-chip-non-billable { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.eob-status-trigger { cursor:pointer; border:1px solid transparent; transition:all .18s ease; outline:none; }
+.eob-status-trigger:hover { transform:translateY(-1px); box-shadow:0 3px 8px rgba(0,0,0,.08); filter:brightness(0.96); }
+.eob-status-trigger:active { transform:translateY(0); }
+.eob-badge-branch { font-weight:600; font-size:12px; color:#334155; display:inline-flex; align-items:center; gap:5px; padding:3px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; }
 .eob-filter-card, .eob-table-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:hidden; }
 .eob-filter-form { display:flex; gap:12px; flex-wrap:wrap; padding:16px; align-items:flex-end; }
 .eob-field { display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1; }
@@ -68,12 +73,14 @@
 .eob-icon-btn:hover { background:#fff7ed; color:#fe5f04; border-color:#fdba74; }
 .eob-icon-btn.danger:hover { background:#fef2f2; color:#dc2626; border-color:#fecaca; }
 .eob-table-dropdown { position:relative; display:inline-block; }
+.eob-table-dropdown[open] { z-index:60; }
 .eob-table-dropdown summary { list-style:none; }
 .eob-table-dropdown summary::-webkit-details-marker { display:none; }
 .eob-table-dropdown-trigger { min-width:42px; height:36px; padding:0 12px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; border:1px solid #e1dee3; background:#fff; color:#121212; cursor:pointer; font-size:12px; font-weight:800; }
 .eob-table-dropdown[open] .eob-table-dropdown-trigger,
 .eob-table-dropdown-trigger:hover { background:#fff7ed; color:#fe5f04; border-color:#fdba74; }
-.eob-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:170px; padding:8px; border-radius:14px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.12); z-index:20; display:flex; flex-direction:column; gap:6px; }
+.eob-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:170px; padding:8px; border-radius:14px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.15), 0 4px 12px rgba(0,0,0,.08); z-index:999; display:flex; flex-direction:column; gap:6px; }
+.eob-table-dropdown.dropup .eob-table-dropdown-menu { top:auto !important; bottom:calc(100% + 8px) !important; box-shadow:0 -16px 40px rgba(18,18,18,.15), 0 -4px 12px rgba(0,0,0,.08) !important; }
 .eob-table-dropdown-item { width:100%; display:flex; align-items:center; gap:8px; padding:9px 10px; border:1px solid transparent; border-radius:10px; background:#fff; color:#121212; text-decoration:none; font-size:13px; font-weight:700; cursor:pointer; text-align:left; }
 .eob-table-dropdown-item:hover { background:#fff7ed; color:#fe5f04; border-color:#fed7aa; }
 .eob-table-dropdown-item.danger:hover { background:#fef2f2; color:#dc2626; border-color:#fecaca; }

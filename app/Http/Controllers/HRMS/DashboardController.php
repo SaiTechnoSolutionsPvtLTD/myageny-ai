@@ -16,6 +16,7 @@ use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
 use App\Models\RecruitmentInterview;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -432,15 +433,47 @@ class DashboardController extends Controller
             ->first();
     }
 
+    private function restrictedBranchIdsForUser(?User $user = null): array
+    {
+        $user ??= auth()->user();
+
+        if (! $user) {
+            return [];
+        }
+
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            return [];
+        }
+
+        $branchIds = $user->getMyBranchIds();
+        if (!empty($branchIds)) {
+            return array_values(array_unique(array_filter($branchIds)));
+        }
+
+        if ($user->branch_id) {
+            return [(int) $user->branch_id];
+        }
+
+        return [];
+    }
+
     private function employeeQueryForDashboard(): Builder
     {
         $query = EmployeeOnboarding::withoutGlobalScopes()->active();
-        $companyId = auth()->user()?->company_id;
+        $user = auth()->user();
+        $companyId = $user?->company_id;
 
         if ($companyId) {
             $query->where(function ($companyQuery) use ($companyId) {
                 $companyQuery->where('company_id', $companyId)
                     ->orWhereNull('company_id');
+            });
+        }
+
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+        if (!empty($branchIds)) {
+            $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
+                $portalUserQuery->whereIn('branch_id', $branchIds);
             });
         }
 
@@ -455,12 +488,20 @@ class DashboardController extends Controller
     private function employeeStatusQuery(string $status): Builder
     {
         $query = EmployeeOnboarding::withoutGlobalScopes()->where('status', $status);
-        $companyId = auth()->user()?->company_id;
+        $user = auth()->user();
+        $companyId = $user?->company_id;
 
         if ($companyId) {
             $query->where(function ($companyQuery) use ($companyId) {
                 $companyQuery->where('company_id', $companyId)
                     ->orWhereNull('company_id');
+            });
+        }
+
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+        if (!empty($branchIds)) {
+            $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
+                $portalUserQuery->whereIn('branch_id', $branchIds);
             });
         }
 
@@ -470,12 +511,20 @@ class DashboardController extends Controller
     private function internQueryForDashboard(): Builder
     {
         $query = InternJoiningForm::withoutGlobalScopes()->active();
-        $companyId = auth()->user()?->company_id;
+        $user = auth()->user();
+        $companyId = $user?->company_id;
 
         if ($companyId) {
             $query->where(function ($companyQuery) use ($companyId) {
                 $companyQuery->where('company_id', $companyId)
                     ->orWhereNull('company_id');
+            });
+        }
+
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+        if (!empty($branchIds)) {
+            $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
+                $portalUserQuery->whereIn('branch_id', $branchIds);
             });
         }
 
@@ -490,12 +539,20 @@ class DashboardController extends Controller
     private function internStatusQuery(string $status): Builder
     {
         $query = InternJoiningForm::withoutGlobalScopes()->where('internship_status', $status);
-        $companyId = auth()->user()?->company_id;
+        $user = auth()->user();
+        $companyId = $user?->company_id;
 
         if ($companyId) {
             $query->where(function ($companyQuery) use ($companyId) {
                 $companyQuery->where('company_id', $companyId)
                     ->orWhereNull('company_id');
+            });
+        }
+
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+        if (!empty($branchIds)) {
+            $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
+                $portalUserQuery->whereIn('branch_id', $branchIds);
             });
         }
 
@@ -664,7 +721,17 @@ class DashboardController extends Controller
 
     private function todayLeaveEntries(Carbon $today): Collection
     {
-        $approvedLeaves = LeaveRequest::with(['employee.role', 'employee.department'])
+        $user = auth()->user();
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+
+        $approvedLeaves = LeaveRequest::with(['employee.role', 'employee.department', 'leaveType'])
+            ->when($user?->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->when(!empty($branchIds), function ($q) use ($branchIds) {
+                $q->where(function ($sub) use ($branchIds) {
+                    $sub->whereHas('user', fn ($u) => $u->whereIn('branch_id', $branchIds))
+                        ->orWhereHas('employee.portalUser', fn ($u) => $u->whereIn('branch_id', $branchIds));
+                });
+            })
             ->whereDate('start_date', '<=', $today->toDateString())
             ->whereDate('end_date', '>=', $today->toDateString())
             ->where('status', LeaveRequest::STATUS_APPROVED)
@@ -673,7 +740,7 @@ class DashboardController extends Controller
             ->map(function (LeaveRequest $leaveRequest) {
                 return [
                     'person_key' => 'employee:' . $leaveRequest->employee_id,
-                    'employee_name' => $leaveRequest->employee?->name ?: 'Employee',
+                    'employee_name' => $leaveRequest->employee?->name ?: ($leaveRequest->user?->name ?: 'Employee'),
                     'department_name' => $leaveRequest->employee?->department?->name ?: 'No department mapped',
                     'role_name' => $leaveRequest->employee?->role?->name ?: 'No role mapped',
                     'leave_label' => $leaveRequest->leaveType?->name ?: 'Approved Leave',
@@ -683,6 +750,13 @@ class DashboardController extends Controller
 
         $manualLeaves = DailyAttendance::query()
             ->with(['employee.role', 'employee.department', 'intern.department'])
+            ->when($user?->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->when(!empty($branchIds), function ($q) use ($branchIds) {
+                $q->where(function ($sub) use ($branchIds) {
+                    $sub->whereHas('employee.portalUser', fn ($u) => $u->whereIn('branch_id', $branchIds))
+                        ->orWhereHas('intern.portalUser', fn ($u) => $u->whereIn('branch_id', $branchIds));
+                });
+            })
             ->whereDate('attendance_date', $today->toDateString())
             ->where('attendance_status', 'leave')
             ->orderBy('created_at')
@@ -715,7 +789,17 @@ class DashboardController extends Controller
 
     private function todayPermissionApprovals(Carbon $today): Collection
     {
+        $user = auth()->user();
+        $branchIds = $this->restrictedBranchIdsForUser($user);
+
         return PermissionRequest::with(['employee.role', 'employee.department'])
+            ->when($user?->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->when(!empty($branchIds), function ($q) use ($branchIds) {
+                $q->where(function ($sub) use ($branchIds) {
+                    $sub->whereHas('user', fn ($u) => $u->whereIn('branch_id', $branchIds))
+                        ->orWhereHas('employee.portalUser', fn ($u) => $u->whereIn('branch_id', $branchIds));
+                });
+            })
             ->whereDate('permission_date', $today->toDateString())
             ->where('status', PermissionRequest::STATUS_APPROVED)
             ->orderBy('from_time')

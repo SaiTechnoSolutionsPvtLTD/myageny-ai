@@ -8,7 +8,7 @@ document.querySelectorAll('.crm-modal-overlay').forEach(el => {
     });
 });
 // Auto-open add modal if there are validation errors (page reloaded)
-@if($errors->any())
+@if(isset($errors) && $errors->any())
     document.addEventListener('DOMContentLoaded', () => openModal('addModal'));
 @endif
 </script>

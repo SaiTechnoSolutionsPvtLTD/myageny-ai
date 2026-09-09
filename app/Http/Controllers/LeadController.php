@@ -160,8 +160,8 @@ class LeadController extends Controller
         $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
 
         $leads    = $query->paginate(15)->withQueryString();
-        $branches = $this->visibility->visibleBranches();
-        $users    = $this->visibility->visibleAssignableUsers()
+        $branches = $this->visibility->visibleBranches($request->user());
+        $users    = $this->visibility->visibleAssignableUsers($request->user())
             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
             ->values();
         
@@ -382,8 +382,8 @@ class LeadController extends Controller
 
         $activeLeadIds = (clone $query)->pluck('leads.id');
         $leads    = $query->paginate(15)->withQueryString();
-        $branches = $this->visibility->visibleBranches();
-        $users    = $this->visibility->visibleAssignableUsers()
+        $branches = $this->visibility->visibleBranches($request->user());
+        $users    = $this->visibility->visibleAssignableUsers($request->user())
             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
             ->values();
 
@@ -563,8 +563,8 @@ class LeadController extends Controller
             'pending' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_pending),
         ];
 
-        $branches = $this->visibility->visibleBranches();
-        $users = $this->visibility->visibleAssignableUsers();
+        $branches = $this->visibility->visibleBranches($request->user());
+        $users = $this->visibility->visibleAssignableUsers($request->user());
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
         $products = $productOptions->get(['id', 'package_name', 'product_name']);

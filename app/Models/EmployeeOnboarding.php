@@ -33,6 +33,7 @@ class EmployeeOnboarding extends Model
     }
 
     public const STATUS_ACTIVE = 'active';
+    public const STATUS_INACTIVE = 'inactive';
     public const STATUS_RESIGNED = 'resigned';
 
     public const DOCUMENT_FIELDS = [
@@ -210,6 +211,31 @@ class EmployeeOnboarding extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    public function getBranchAttribute(): ?Branch
+    {
+        if ($this->relationLoaded('portalUser') && $this->portalUser?->relationLoaded('branch')) {
+            if ($this->portalUser->branch) {
+                return $this->portalUser->branch;
+            }
+        } elseif ($this->portalUser?->branch) {
+            return $this->portalUser->branch;
+        }
+
+        if ($this->employee_id) {
+            $code = preg_replace('/[0-9]+$/', '', $this->employee_id);
+            if ($code) {
+                return Branch::withoutGlobalScopes()->where('code', $code)->first();
+            }
+        }
+
+        return null;
+    }
+
+    public function getBranchNameAttribute(): string
+    {
+        return $this->branch?->name ?? '—';
     }
 
     public function getFileUrl(?string $field = 'photograph'): ?string

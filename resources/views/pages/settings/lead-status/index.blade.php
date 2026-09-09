@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Lead Status — Settings')
+@section('title', 'Lead Status — Masters')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -49,7 +49,7 @@
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
-                                    <form action="{{ route('settings.lead-statuses.destroy', $status) }}" method="POST"
+                                    <form action="{{ route('masters.lead-statuses.destroy', $status) }}" method="POST"
                                           onsubmit="return confirm('Delete this status?')">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="crm-table-dropdown-item danger">
@@ -80,7 +80,7 @@
                 <h3>Add Lead Status</h3>
                 <button onclick="closeModal('addModal')">✕</button>
             </div>
-            <form action="{{ route('settings.lead-statuses.store') }}" method="POST">
+            <form action="{{ route('masters.lead-statuses.store') }}" method="POST">
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Status Name <span class="req">*</span></label>
@@ -121,7 +121,7 @@
 <script>
 function openEdit(id, name) {
     document.getElementById('editName').value = name;
-    document.getElementById('editForm').action = `/settings/lead-statuses/${id}`;
+    document.getElementById('editForm').action = `/masters/lead-statuses/${id}`;
     openModal('editModal');
 }
 </script>

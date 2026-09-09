@@ -77,9 +77,11 @@ class EmployeeExitController extends Controller
                 'exit_actioned_at' => now(),
             ]);
 
-            $employeeExitRequest->employee()?->update([
+            $employee = $employeeExitRequest->employee();
+            $employee?->update([
                 'status' => EmployeeOnboarding::STATUS_RESIGNED,
             ]);
+            $employee?->portalUser?->update(['is_active' => false]);
         });
 
         return back()->with('success', 'Employee exit approved successfully.');
@@ -111,9 +113,11 @@ class EmployeeExitController extends Controller
                 'revoke_actioned_at' => now(),
             ]);
 
-            $employeeExitRequest->employee()?->update([
+            $employee = $employeeExitRequest->employee();
+            $employee?->update([
                 'status' => EmployeeOnboarding::STATUS_ACTIVE,
             ]);
+            $employee?->portalUser?->update(['is_active' => true]);
         });
 
         return back()->with('success', 'Employee revoke request approved successfully.');

@@ -57,7 +57,7 @@ class EmployeeOnboardingController extends Controller
         abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
         $employees = EmployeeOnboarding::query()
-            ->with(['role', 'department', 'sourceIntern', 'educations', 'familyDetails'])
+            ->with(['role', 'department', 'sourceIntern', 'educations', 'familyDetails', 'portalUser.branch'])
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -69,17 +69,69 @@ class EmployeeOnboardingController extends Controller
                         ->orWhere('aadhaar_card_no', 'like', '%' . $search . '%');
                 });
             })
+            ->when($request->filled('branch_id'), function ($query) use ($request) {
+                $branchId = $request->integer('branch_id');
+                $branch = Branch::withoutGlobalScopes()->find($branchId);
+                $query->where(function ($sub) use ($branchId, $branch) {
+                    $sub->whereHas('portalUser', fn ($q) => $q->where('branch_id', $branchId));
+                    if ($branch && $branch->code) {
+                        $sub->orWhere(function ($q2) use ($branch) {
+                            $q2->whereNull('portal_user_id')
+                               ->where('employee_id', 'like', $branch->code . '%');
+                        });
+                    }
+                });
+            })
             ->when($request->filled('department_id'), function ($query) use ($request) {
                 $query->where('department_id', $request->integer('department_id'));
             })
-            ->when($request->status, fn ($query) => $query->where('status', $request->status))
+            ->when($request->filled('role_id'), function ($query) use ($request) {
+                $query->where('role_id', $request->integer('role_id'));
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->status))
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
         $departments = Department::orderBy('name')->get(['id', 'name']);
+        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get();
 
-        return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments'));
+        return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments', 'branches', 'roles'));
+    }
+
+    public function updateStatus(Request $request, EmployeeOnboarding $employee_onboarding): RedirectResponse|\Illuminate\Http\JsonResponse
+    {
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,inactive,resigned'],
+        ]);
+
+        $newStatus = $validated['status'];
+
+        DB::transaction(function () use ($employee_onboarding, $newStatus) {
+            $employee_onboarding->status = $newStatus;
+            $employee_onboarding->updated_by = auth()->id();
+            $employee_onboarding->save();
+
+            if ($employee_onboarding->portalUser) {
+                $employee_onboarding->portalUser->is_active = ($newStatus === EmployeeOnboarding::STATUS_ACTIVE);
+                $employee_onboarding->portalUser->save();
+            }
+        });
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Status for {$employee_onboarding->name} updated to " . ucfirst($newStatus) . ".",
+                'status' => $newStatus,
+                'status_label' => ucfirst($newStatus),
+                'portal_user_active' => $employee_onboarding->portalUser?->is_active,
+            ]);
+        }
+
+        return back()->with('success', "Status for <strong>{$employee_onboarding->name}</strong> updated to <strong>" . ucfirst($newStatus) . "</strong>.");
     }
 
     public function create(): View
@@ -205,7 +257,7 @@ class EmployeeOnboardingController extends Controller
 
         return redirect()
             ->route('employee-onboarding.show', $employee_onboarding)
-            ->with('success', "Employee onboarding for <strong>{$employee_onboarding->name}</strong> updated successfully.");
+            ->with('success', 'Employee updated successfully.');
     }
 
     public function destroy(EmployeeOnboarding $employee_onboarding): RedirectResponse
@@ -337,9 +389,15 @@ class EmployeeOnboardingController extends Controller
             $attributes['branch_id'] = $validated['branch_id'] ?: null;
         }
 
+        if (array_key_exists('status', $validated)) {
+            $attributes['is_active'] = ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE);
+        }
+
         if (! $user) {
             $attributes['company_id'] = auth()->user()?->company_id;
-            $attributes['is_active'] = true;
+            $attributes['is_active'] = array_key_exists('status', $validated)
+                ? ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE)
+                : true;
             $attributes['password'] = Hash::make($password);
 
             $user = User::create($attributes);
@@ -500,22 +558,26 @@ class EmployeeOnboardingController extends Controller
 
     private function teamLeadUsers(): Collection
     {
+        $companyId = auth()->user()?->company_id;
         $companySuperAdminId = null;
 
-        if ($companyId = auth()->user()?->company_id) {
+        if ($companyId) {
             $companySuperAdminId = optional(\App\Models\Company::find($companyId))->super_admin_user_id;
         }
 
-        return User::with(['roles.roleMapping', 'branch'])
+        return User::withoutGlobalScopes()
+            ->with(['roles.roleMapping', 'branch'])
             ->where('is_active', true)
-            ->when(auth()->user()?->company_id, fn ($query) => $query->where('company_id', auth()->user()->company_id))
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
             ->get()
-            ->filter(fn (User $user) => $user->roles->isNotEmpty() || (int) $user->id === (int) $companySuperAdminId || $user->isSuperAdmin())
+            ->filter(fn (User $user) => $user->roles->isNotEmpty() || (int) $user->id === (int) $companySuperAdminId || $user->isSuperAdmin() || $user->isCompanyAdmin())
             ->map(function (User $user) use ($companySuperAdminId) {
                 $teamLeadRoles = $user->roles->filter(fn (Role $role) => $this->roleLooksLikeTeamLead($role));
                 $displayRoles = $teamLeadRoles->isNotEmpty() ? $teamLeadRoles : $user->roles;
                 $isSuperAdmin = $user->isSuperAdmin() || (int) $user->id === (int) $companySuperAdminId;
+                $isCompanyAdmin = $user->isCompanyAdmin() || $isSuperAdmin || $user->hasRole('company_admin') || Str::contains($user->roles->pluck('name')->implode(','), 'company_admin');
+                $isExecutive = $isCompanyAdmin || $isSuperAdmin || $this->isExecutiveUser($user);
 
                 return [
                     'id' => (string) $user->id,
@@ -537,12 +599,50 @@ class EmployeeOnboardingController extends Controller
                         ->map(fn (Role $role) => $this->roleLabel($role))
                         ->filter()
                         ->unique()
-                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : 'Team Lead'),
+                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : ($isCompanyAdmin ? 'Company Admin' : 'Team Lead')),
                     'is_super_admin' => $isSuperAdmin,
+                    'is_company_admin' => $isCompanyAdmin,
+                    'is_executive' => $isExecutive,
                     'is_branch_admin_or_manager' => $this->isBranchAdminOrManager($user),
                 ];
             })
             ->values();
+    }
+
+    private function isExecutiveUser(User $user): bool
+    {
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin() || $user->hasRole('company_admin')) {
+            return true;
+        }
+
+        $executiveKeys = [
+            'company_admin',
+            'super_admin',
+            'admin',
+            'chief_business_officer',
+            'cheif_business_officer',
+            'cbo',
+            'chief_operating_officer',
+            'cheif_operating_officer',
+            'coo',
+            'managing_director',
+            'director',
+            'president',
+            'vice_president',
+            'vp',
+        ];
+
+        return $user->roles->contains(function (Role $role) use ($executiveKeys) {
+            $roleKeys = collect([$role->name, $role->display_name])
+                ->filter()
+                ->flatMap(function (string $roleName) {
+                    $normalized = $this->normalizeRoleKey($roleName);
+                    return [$normalized, Str::afterLast($normalized, '__')];
+                })
+                ->unique();
+
+            return $roleKeys->intersect($executiveKeys)->isNotEmpty();
+        });
     }
 
     private function isBranchAdminOrManager(User $user): bool

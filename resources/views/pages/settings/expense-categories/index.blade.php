@@ -254,7 +254,8 @@
             <h2 class="exp-cat-title">Expense Category Master</h2>
             <p class="exp-cat-subtitle">Define and manage expense category masters used across petty cash claims, employee expenses, and finance accounting.</p>
         </div>
-        <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <a href="{{ route('hrms.masters.index') }}" class="exp-cat-btn" style="background:#fff; border:1px solid #d1d5db; color:#374151;">Back</a>
             <button class="exp-cat-btn exp-cat-btn-primary" onclick="openCreateModal()">
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Expense Category
@@ -272,7 +273,7 @@
 
     {{-- Main Table Card --}}
     <div class="exp-cat-card">
-        <form method="GET" action="{{ route('settings.expense-categories.index') }}">
+        <form method="GET" action="{{ route('hrms.masters.expense-categories.index') }}">
             <div class="exp-cat-filter-bar">
                 <div style="display:flex; align-items:center; gap:12px;">
                     <input type="text" name="search" class="exp-search-input" placeholder="Search category name, code…" value="{{ request('search') }}">
@@ -286,7 +287,7 @@
                     <button type="submit" class="exp-cat-btn exp-cat-btn-primary" style="padding:7px 16px; font-size:12px; height:34px; border-radius:9px;">Search</button>
 
                     @if(request()->hasAny(['search', 'status']))
-                    <a href="{{ route('settings.expense-categories.index') }}" style="font-size:12px; color:#6b7280; text-decoration:none; font-weight:600;">Reset</a>
+                    <a href="{{ route('hrms.masters.expense-categories.index') }}" style="font-size:12px; color:#6b7280; text-decoration:none; font-weight:600;">Reset</a>
                     @endif
                 </div>
 
@@ -330,7 +331,7 @@
                         {{ $category->description ?? '-' }}
                     </td>
                     <td>
-                        <form method="POST" action="{{ route('settings.expense-categories.toggle-status', $category) }}">
+                        <form method="POST" action="{{ route('hrms.masters.expense-categories.toggle-status', $category) }}">
                             @csrf @method('PATCH')
                             <button type="submit" style="background:none; border:none; cursor:pointer;" title="Click to toggle status">
                                 <span class="usr-badge {{ $category->is_active ? 'ub-active' : 'ub-inactive' }}">
@@ -349,7 +350,7 @@
                                 Edit
                             </button>
 
-                            <form method="POST" action="{{ route('settings.expense-categories.destroy', $category) }}" onsubmit="return confirm('Delete this expense category?')">
+                            <form method="POST" action="{{ route('hrms.masters.expense-categories.destroy', $category) }}" onsubmit="return confirm('Delete this expense category?')">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="exp-cat-btn exp-cat-btn-outline" style="padding:5px 10px; font-size:12px; color:#dc2626; border-color:#fecaca;">
                                     Delete
@@ -387,7 +388,7 @@
             <button class="exp-modal-close" onclick="closeModal()">✕</button>
         </div>
 
-        <form id="categoryForm" method="POST" action="{{ route('settings.expense-categories.store') }}">
+        <form id="categoryForm" method="POST" action="{{ route('hrms.masters.expense-categories.store') }}">
             @csrf
             <input type="hidden" name="_method" id="formMethod" value="POST">
 
@@ -428,7 +429,7 @@
 function openCreateModal() {
     document.getElementById('modalTitle').textContent = 'Add Expense Category';
     document.getElementById('formMethod').value = 'POST';
-    document.getElementById('categoryForm').action = "{{ route('settings.expense-categories.store') }}";
+    document.getElementById('categoryForm').action = "{{ route('hrms.masters.expense-categories.store') }}";
     document.getElementById('catNameInput').value = '';
     document.getElementById('catCodeInput').value = '';
     document.getElementById('catDescInput').value = '';
@@ -439,7 +440,7 @@ function openCreateModal() {
 function openEditModal(category) {
     document.getElementById('modalTitle').textContent = 'Edit Expense Category';
     document.getElementById('formMethod').value = 'PUT';
-    document.getElementById('categoryForm').action = `/settings/expense-categories/${category.id}`;
+    document.getElementById('categoryForm').action = "{{ url('hrms/masters/expense-categories') }}/" + category.id;
     document.getElementById('catNameInput').value = category.name || '';
     document.getElementById('catCodeInput').value = category.code || '';
     document.getElementById('catDescInput').value = category.description || '';

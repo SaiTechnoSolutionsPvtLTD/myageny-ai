@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Product Category Attributes — Settings')
+@section('title', 'Product Sub Category — Masters')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -11,11 +11,11 @@
     <div class="crm-page-body">
         <div class="crm-page-header">
             <div>
-                <h2 class="crm-title">Product Category Attributes</h2>
-                <p class="crm-subtitle">Define detailed outcomes under each category</p>
+                <h2 class="crm-title">Product Sub Category</h2>
+                <p class="crm-subtitle">Define configurable product details and sub-categories</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.index') }}" class="crm-btn crm-btn-ghost">← Back</a>
+                <a href="{{ route('masters.index') }}" class="crm-btn crm-btn-ghost">← Back</a>
                 <button class="crm-btn crm-btn-primary" onclick="openModal('addModal')">+ Add New</button>
             </div>
         </div>
@@ -43,7 +43,7 @@
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
-                                    <form action="{{ route('settings.product-attribute.destroy', $sub) }}" method="POST"
+                                    <form action="{{ route('masters.product-attribute.destroy', $sub) }}" method="POST"
                                           onsubmit="return confirm('Delete this sub-category?')">
                                         @csrf @method('DELETE')
                                         <input type="hidden" name="id" value="{{ $sub->id }}">
@@ -71,8 +71,8 @@
     {{-- ADD --}}
     <div id="addModal" class="crm-modal-overlay" style="display:none">
         <div class="crm-modal">
-            <div class="crm-modal-header"><h3>Add Attributes</h3><button onclick="closeModal('addModal')">✕</button></div>
-            <form action="{{ route('settings.product-attribute.store') }}" method="POST">
+            <div class="crm-modal-header"><h3>Add Product Sub Category</h3><button onclick="closeModal('addModal')">✕</button></div>
+            <form action="{{ route('masters.product-attribute.store') }}" method="POST">
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Product Category <span class="req">*</span></label>
@@ -82,7 +82,7 @@
                             <option value="{{ $cat->id }}">{{ $cat->name }}</option>
                         @endforeach
                     </select>
-                    <label class="crm-label" style="margin-top:12px">Attribute Name <span class="req">*</span></label>
+                    <label class="crm-label" style="margin-top:12px">Sub Category Name <span class="req">*</span></label>
                     <input type="text" name="name" class="crm-input" placeholder="" required>
                 </div>
                 <div class="crm-modal-footer">
@@ -127,7 +127,7 @@ function openEdit(id, name, catId, id) {
     document.getElementById('editName').value   = name;
     document.getElementById('editCatId').value  = catId;
     document.getElementById('id').value  = id;
-    document.getElementById('editForm').action  = `/settings/product-attribute/${id}`;
+    document.getElementById('editForm').action  = `/masters/product-attribute/${id}`;
     openModal('editModal');
 }
 </script>

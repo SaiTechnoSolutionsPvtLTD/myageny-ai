@@ -676,6 +676,15 @@ details[open] summary.att-accordion-header {
         <form method="GET" action="{{ route('attendance.index') }}" class="att-filter-form" style="margin-top:16px;">
             @if($managerAttendanceView)
             <div class="att-field">
+                <label class="att-label">Branch</label>
+                <select name="branch_id" class="att-select">
+                    <option value="">All Branches</option>
+                    @foreach($branches as $branch)
+                        <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="att-field">
                 <label class="att-label">Employee</label>
                 <input type="text" name="employee_name" class="att-input" value="{{ request('employee_name') }}" placeholder="Search employee name">
             </div>
@@ -730,7 +739,7 @@ details[open] summary.att-accordion-header {
                 @if($managerAttendanceView)
                     <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
                 @endif
-                @if(request()->hasAny(['employee_name', 'department_id', 'from_date', 'to_date', 'status', 'login_timing', 'attendee_type']))
+                @if(request()->hasAny(['employee_name', 'branch_id', 'department_id', 'from_date', 'to_date', 'status', 'login_timing', 'attendee_type']))
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
             </div>
@@ -777,6 +786,9 @@ details[open] summary.att-accordion-header {
                                             <div class="att-cell-title">{{ $attendance['employee_name'] }}</div>
                                             <div class="att-cell-sub">
                                                 <span class="att-chip att-chip-{{ $attendance['attendee_type'] }}">{{ ucfirst($attendance['attendee_type']) }}</span>
+                                                @if($attendance['branch_name'] ?? null)
+                                                    <span style="font-size:11px;color:#64748b;margin-left:4px;">• {{ $attendance['branch_name'] }}</span>
+                                                @endif
                                             </div>
                                         </div>
                                     </div>

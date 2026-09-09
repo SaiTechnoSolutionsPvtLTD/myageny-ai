@@ -24,7 +24,7 @@ class LeadStatusController extends Controller
             'name'       => $request->name,
         ]);
 
-        return redirect()->route('settings.lead-statuses.index')
+        return redirect()->route('masters.lead-statuses.index')
                          ->with('success', 'Lead Status created successfully.');
     }
 
@@ -39,7 +39,7 @@ class LeadStatusController extends Controller
         $this->authorizeCompany($leadStatus);
         $leadStatus->update(['name' => $request->name]);
 
-        return redirect()->route('settings.lead-statuses.index')
+        return redirect()->route('masters.lead-statuses.index')
                          ->with('success', 'Lead Status updated successfully.');
     }
 
@@ -48,7 +48,7 @@ class LeadStatusController extends Controller
         $this->authorizeCompany($leadStatus);
         $leadStatus->delete();
 
-        return redirect()->route('settings.lead-statuses.index')
+        return redirect()->route('masters.lead-statuses.index')
                          ->with('success', 'Lead Status deleted.');
     }
 

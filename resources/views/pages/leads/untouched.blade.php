@@ -353,11 +353,11 @@
                             <div class="ld-input-wrap">
                                 <i class="bi bi-building ld-fi"></i>
                                 <select name="branch_id" class="ld-fs" id="f_branch">
-                                    @if(auth()->user() && app(\App\Services\DataVisibilityService::class)->isCompanyWideUser(auth()->user()))
+                                    @if($branches->count() > 1)
                                         <option value="">All Branches</option>
                                     @endif
                                     @foreach($branches as $b)
-                                        <option value="{{ $b->id }}" {{ request('branch_id') == $b->id ? 'selected':'' }}>{{ $b->name }}</option>
+                                        <option value="{{ $b->id }}" {{ (request('branch_id') == $b->id || $branches->count() === 1) ? 'selected':'' }}>{{ $b->name }}</option>
                                     @endforeach
                                 </select>
                                 <i class="bi bi-chevron-down ld-fc"></i>

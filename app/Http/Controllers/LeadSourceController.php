@@ -23,7 +23,7 @@ class LeadSourceController extends Controller
             'name'       => $request->name,
         ]);
 
-        return redirect()->route('settings.lead-sources.index')
+        return redirect()->route('masters.lead-sources.index')
                          ->with('success', 'Lead Source created successfully.');
     }
 
@@ -38,7 +38,7 @@ class LeadSourceController extends Controller
         $this->authorizeCompany($leadSource);
         $leadSource->update(['name' => $request->name]);
 
-        return redirect()->route('settings.lead-sources.index')
+        return redirect()->route('masters.lead-sources.index')
                          ->with('success', 'Lead Source updated successfully.');
     }
 
@@ -47,7 +47,7 @@ class LeadSourceController extends Controller
         $this->authorizeCompany($leadSource);
         $leadSource->delete();
 
-        return redirect()->route('settings.lead-sources.index')
+        return redirect()->route('masters.lead-sources.index')
                          ->with('success', 'Lead Source deleted.');
     }
 

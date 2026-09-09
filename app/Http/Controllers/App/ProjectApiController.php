@@ -1019,8 +1019,11 @@ class ProjectApiController extends Controller
     {
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
-        $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->orderBy('name')->get(['users.id', 'users.name']);
-        $hasMappedUsers = $managedUsers->isNotEmpty();
+
+        $visibility = app(\App\Services\DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+        $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
 
         $assignedProjects = $this->timesheetProjectsQuery($user)
             ->get()
@@ -1039,9 +1042,7 @@ class ProjectApiController extends Controller
 
         $accessibleUserIds = $isAdminLike
             ? null
-            : ($hasMappedUsers
-                ? array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all()))
-                : [$user->id]);
+            : $allAccessibleIds;
 
         $timesheets = ProjectTimesheet::query()
             ->with(['project' => fn($q) => $q->with($this->projectRelations()), 'user'])
@@ -1436,26 +1437,37 @@ class ProjectApiController extends Controller
 
     private function timesheetProjectsQuery(User $user): Builder
     {
-        $isTestingUser = $user->belongsToTestingDepartment() || $user->hasTestingLikeRole();
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
+            return ProductionInitiation::query()
+                ->with($this->projectRelations())
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->latest('production_approval_reviewed_at');
+        }
+
+        $visibility = app(\App\Services\DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+        $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
 
         return ProductionInitiation::query()
             ->with($this->projectRelations())
             ->whereIn('production_approval_status', ['approval', 'approved'])
-            ->where(function ($q) use ($user, $isTestingUser) {
-                if ($isTestingUser) {
-                    $q->whereHas('testingDetails')
-                      ->orWhereJsonContains('project_allocated_employee_user_ids', $user->id)
-                      ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
-                } else {
-                    $q->where(function ($sub) use ($user) {
-                        $sub->where('project_allocation_status', 'allocated')
-                            ->whereJsonContains('project_allocated_employee_user_ids', $user->id);
-                    })
-                    ->orWhereHas('testingDetails', function ($tq) use ($user) {
-                        $tq->where('testing_tl_id', $user->id)
-                           ->orWhere('moved_by_user_id', $user->id);
-                    });
+            ->where(function ($q) use ($user, $allAccessibleIds) {
+                foreach ($allAccessibleIds as $uId) {
+                    $q->orWhereJsonContains('project_allocated_employee_user_ids', $uId)
+                      ->orWhereJsonContains('project_allocated_tl_user_ids', $uId);
                 }
+
+                $q->orWhereHas('testingDetails', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('testing_tl_id', $allAccessibleIds)
+                       ->orWhereIn('moved_by_user_id', $allAccessibleIds);
+                })
+                ->orWhereHas('productionTasks', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('assigned_to', $allAccessibleIds);
+                })
+                ->orWhereHas('timesheets', function ($tq) use ($allAccessibleIds) {
+                    $tq->whereIn('user_id', $allAccessibleIds);
+                });
             })
             ->latest('production_approval_reviewed_at');
     }

@@ -327,8 +327,8 @@
         </a>
         @endcan
 
-        @can('field_customization.menuview')
-        <a href="{{ url('/lead/form-customization') }}" class="settings-card facebook">
+        @canany(['form_customization.menuview', 'field_customization.menuview'])
+        <a href="{{ route('settings.form-customization.index') }}" class="settings-card facebook">
             <div class="settings-card-icon facebook">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
@@ -337,17 +337,17 @@
                     <path d="M9 17h3"/>
                 </svg>
             </div>
-            <h4 class="settings-card-title">Field Customization</h4>
+            <h4 class="settings-card-title">Form Customization</h4>
             <p class="settings-card-text">Customize lead form fields to capture the specific information your business needs for lead intake.</p>
             <span class="settings-card-link">
-                Open Field Customization
+                Open Form Customization
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>
                 </svg>
             </span>
         </a>
-        @endcan
+        @endcanany
 
         @can('facebook_integration.menuview')
         <a href="/settings/facebook-integration" class="settings-card facebook">
@@ -412,7 +412,7 @@
         @endcan
 
         @can('design_settings.menuview')
-        <a href="{{ route('settings.design-settings.index') }}" class="settings-card design">
+        {{--  <a href="{{ route('settings.design-settings.index') }}" class="settings-card design">
             <div class="settings-card-icon design">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="3"/>
@@ -428,7 +428,7 @@
                     <polyline points="12 5 19 12 12 19"/>
                 </svg>
             </span>
-        </a>
+        </a>  --}}
         @endcan
 
         @can('sales_targets.menuview')

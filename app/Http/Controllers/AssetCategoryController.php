@@ -39,7 +39,7 @@ class AssetCategoryController extends Controller
         $assetCategory = AssetCategory::create($request->validated());
 
         return redirect()
-            ->route('settings.asset-categories.index')
+            ->route('hrms.masters.asset-categories.index')
             ->with('success', "Asset category {$assetCategory->name} created successfully.");
     }
 
@@ -60,7 +60,7 @@ class AssetCategoryController extends Controller
         }
 
         return redirect()
-            ->route('settings.asset-categories.index')
+            ->route('hrms.masters.asset-categories.index')
             ->with('success', "Asset category {$assetCategory->name} updated successfully.");
     }
 
@@ -70,7 +70,7 @@ class AssetCategoryController extends Controller
         $assetCategory->delete();
 
         return redirect()
-            ->route('settings.asset-categories.index')
+            ->route('hrms.masters.asset-categories.index')
             ->with('success', "Asset category {$assetCategoryName} deleted successfully.");
     }
 }

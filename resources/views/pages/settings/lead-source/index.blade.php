@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Lead Source — Settings')
+@section('title', 'Lead Source — Masters')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -42,7 +42,7 @@
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
-                                    <form action="{{ route('settings.lead-sources.destroy', $source) }}" method="POST"
+                                    <form action="{{ route('masters.lead-sources.destroy', $source) }}" method="POST"
                                           onsubmit="return confirm('Delete this source?')">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="crm-table-dropdown-item danger">
@@ -73,7 +73,7 @@
                 <h3>Add Lead Source</h3>
                 <button onclick="closeModal('addModal')">✕</button>
             </div>
-            <form action="{{ route('settings.lead-sources.store') }}" method="POST">
+            <form action="{{ route('masters.lead-sources.store') }}" method="POST">
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Source Name <span class="req">*</span></label>
@@ -114,7 +114,7 @@
 <script>
 function openEdit(id, name) {
     document.getElementById('editName').value = name;
-    document.getElementById('editForm').action = `/settings/lead-sources/${id}`;
+    document.getElementById('editForm').action = `/masters/lead-sources/${id}`;
     openModal('editModal');
 }
 </script>

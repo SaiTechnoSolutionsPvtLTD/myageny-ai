@@ -170,6 +170,11 @@ class ProductionInitiation extends Model
         return $this->hasMany(ProjectTimesheet::class);
     }
 
+    public function productionTasks(): HasMany
+    {
+        return $this->hasMany(ProductionTask::class, 'production_initiation_id');
+    }
+
     public function countReport()
     {
         return $this->hasOne(ProductionCountReport::class);

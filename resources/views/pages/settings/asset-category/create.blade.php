@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Add a category that can be selected in asset entries.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.asset-categories.store') }}">
+        <form method="POST" action="{{ route('hrms.masters.asset-categories.store') }}">
             @csrf
             <div class="crm-form-wrap">
                 <div class="crm-form-head">
@@ -45,7 +45,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Create Asset Category</button>
                 </div>
             </div>

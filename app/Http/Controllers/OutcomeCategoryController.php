@@ -26,7 +26,7 @@ class OutcomeCategoryController extends Controller
             'name'       => $request->name,
         ]);
 
-        return redirect()->route('settings.outcome-categories.index')
+        return redirect()->route('masters.outcome-categories.index')
                          ->with('success', 'Outcome Category created successfully.');
     }
 
@@ -41,7 +41,7 @@ class OutcomeCategoryController extends Controller
         $this->authorizeCompany($outcomeCategory);
         $outcomeCategory->update(['name' => $request->name]);
 
-        return redirect()->route('settings.outcome-categories.index')
+        return redirect()->route('masters.outcome-categories.index')
                          ->with('success', 'Outcome Category updated successfully.');
     }
 
@@ -50,7 +50,7 @@ class OutcomeCategoryController extends Controller
         $this->authorizeCompany($outcomeCategory);
         $outcomeCategory->delete(); // cascade deletes sub categories
 
-        return redirect()->route('settings.outcome-categories.index')
+        return redirect()->route('masters.outcome-categories.index')
                          ->with('success', 'Outcome Category deleted.');
     }
 

@@ -109,12 +109,8 @@ class EmployeeApiController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // Mirrors EmployeeOnboarding::STATUS_ACTIVE / STATUS_RESIGNED exactly —
-        // these are the only two values the `status` column ever holds (see
-        // employee-index.blade.php's filter <select>). The previous list
-        // here (pending/verified/rejected) never matched a real row, so the
-        // mobile status filter silently returned nothing.
-        $statuses = [EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED];
+        // Mirrors EmployeeOnboarding::STATUS_ACTIVE / STATUS_INACTIVE / STATUS_RESIGNED exactly
+        $statuses = [EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_INACTIVE, EmployeeOnboarding::STATUS_RESIGNED];
 
         $user = request()->user();
 

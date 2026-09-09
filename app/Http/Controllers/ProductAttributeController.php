@@ -30,8 +30,7 @@ class ProductAttributeController extends Controller
         'product_category_id' => $request->category_id,
     ]);
 
-    return redirect()
-        ->route('settings.product-attribute.index')
+        return redirect()->route('masters.product-attribute.index')
         ->with('success', 'Product Attribute created successfully.');
 }
 
@@ -51,7 +50,7 @@ class ProductAttributeController extends Controller
             'product_category_id' => $request->category_id,
         ]);
 
-        return redirect()->route('settings.product-attribute.index')
+        return redirect()->route('masters.product-attribute.index')
                          ->with('success', 'Product Attribute updated successfully.');
     }
 
@@ -60,8 +59,7 @@ class ProductAttributeController extends Controller
     $attribute = Attribute::find($request->id);
     $attribute->delete();
 
-    return redirect()
-        ->route('settings.product-attribute.index')
+        return redirect()->route('masters.product-attribute.index')
         ->with('success', 'Attribute deleted.');
 }
 

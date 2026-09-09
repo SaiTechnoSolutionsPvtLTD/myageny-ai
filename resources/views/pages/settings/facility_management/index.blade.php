@@ -67,17 +67,19 @@
                             <details class="crm-table-dropdown">
                                 <summary class="crm-table-dropdown-trigger">Actions</summary>
                                 <div class="crm-table-dropdown-menu">
-                            <a href="{{ route('facility-management.edit', $entry) }}" class="crm-icon-btn" title="Edit" aria-label="Edit facility entry">
-                                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                            </a>
-                            <form action="{{ route('facility-management.destroy', $entry) }}" method="POST" style="display:inline"
-                                  onsubmit="return confirm('Delete this facility entry?')">
-                                @csrf
-                                @method('DELETE')
-                                <button class="crm-icon-btn danger" title="Delete" aria-label="Delete facility entry">
-                                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                                </button>
-                            </form>
+                                    <a href="{{ route('facility-management.edit', $entry) }}" class="crm-table-dropdown-item">
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        <span>Edit</span>
+                                    </a>
+                                    <form action="{{ route('facility-management.destroy', $entry) }}" method="POST" style="display:inline"
+                                          onsubmit="return confirm('Delete this facility entry?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="crm-table-dropdown-item danger">
+                                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
                                 </div>
                             </details>
                         </td>

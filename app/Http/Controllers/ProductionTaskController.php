@@ -343,7 +343,15 @@ class ProductionTaskController extends Controller
 
             $allocUserIds = collect($empIds)
                 ->concat($tlIds)
-                ->concat(collect($tlAlloc)->flatMap(fn($a) => array_merge([$a['tl_user_id'] ?? null], $a['employee_user_ids'] ?? [])))
+                ->concat(collect($tlAlloc)->flatMap(function ($a, $key) {
+                    if (is_array($a)) {
+                        $tl = $a['tl_user_id'] ?? (is_numeric($key) ? (int)$key : null);
+                        $emps = $a['employee_user_ids'] ?? [];
+                        return array_merge([$tl], is_array($emps) ? $emps : []);
+                    }
+                    return is_numeric($key) ? [(int)$key] : [];
+                }))
+                ->push($project->ovp_allocated_to)
                 ->filter()
                 ->map(fn($id) => (int) $id)
                 ->unique()

@@ -2,13 +2,13 @@
     $employee = $employee ?? null;
     $portalUser = $employee?->portalUser;
     $selectedTlUserId = old('tl_user_id', $portalUser?->managerMappings?->first()?->manager_id);
-    $portalBranchId = old('branch_id', $portalUser?->branch_id ?? ((($method ?? 'POST') === 'POST') ? auth()->user()?->branch_id : null));
+    $portalBranchId = old('branch_id', $portalUser?->branch_id ?? $employee?->branch?->id ?? ((($method ?? 'POST') === 'POST') ? auth()->user()?->branch_id : null));
     $portalEmail = old('portal_email', $portalUser?->email ?? '');
     $portalPasswordRequired = ($method ?? 'POST') === 'POST';
     $portalAccountRequired = $portalPasswordRequired || (bool) $portalUser;
 
     $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    $statusOptions = ['active' => 'Active', 'resigned' => 'Resigned'];
+    $statusOptions = ['active' => 'Active', 'inactive' => 'Inactive', 'resigned' => 'Resigned'];
 
     $defaultEducations = [
         ['qualification' => 'PG', 'institution_name' => '', 'year_of_passing' => '', 'percentage' => '', 'specialization' => ''],
@@ -390,7 +390,7 @@
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Department @if($portalAccountRequired)<span class="eob-label-required">*</span>@endif</label>
-                                <select name="department_id" class="eob-select" id="employeeDepartmentSelect" @if($portalAccountRequired) required @endif>
+                                <select name="department_id" class="eob-select" id="employeeDepartmentSelect" data-selected-department="{{ old('department_id', $employee?->department_id) }}" @if($portalAccountRequired) required @endif>
                                     <option value="">Select department</option>
                                     @foreach($departments as $department)
                                         <option value="{{ $department->id }}" @selected((string) old('department_id', $employee?->department_id) === (string) $department->id)>
@@ -402,7 +402,7 @@
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Role @if($portalAccountRequired)<span class="eob-label-required">*</span>@endif</label>
-                                <select name="role_id" class="eob-select" id="employeeRoleSelect" @if($portalAccountRequired) required @endif>
+                                <select name="role_id" class="eob-select" id="employeeRoleSelect" data-selected-role="{{ old('role_id', $employee?->role_id) }}" @if($portalAccountRequired) required @endif>
                                     <option value="">Select role</option>
                                     @foreach($roles as $role)
                                         <option
@@ -438,10 +438,6 @@
                                 </select>
                                 <div class="eob-help" id="employeeTlHelp">TLs will appear after department and role selection.</div>
                                 @error('tl_user_id')<div class="eob-error">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="eob-group full">
-                                <label class="eob-label">Portal Mapping Summary</label>
-                                <div class="eob-help" id="employeePortalMappingSummary">Select department and role to view available TLs and current mapping details.</div>
                             </div>
                         </div>
                     </div>
@@ -960,13 +956,32 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }) : [];
 
+    function refreshSelect2(element) {
+        if (!element) return;
+        if (window.jQuery && $(element).hasClass('select2-hidden-accessible')) {
+            var val = element.value;
+            $(element).select2('destroy');
+            if (typeof window.initSelect2 === 'function') {
+                window.initSelect2(element);
+            } else {
+                $(element).select2({ width: '100%' });
+            }
+            if (val !== undefined && val !== null) {
+                $(element).val(val).trigger('change.select2');
+            }
+        }
+    }
+
     function syncDepartmentFromRole(force) {
         if (!roleSelect || !departmentSelect) {
             return;
         }
 
         const selectedOption = roleSelect.options[roleSelect.selectedIndex];
-        const departmentId = selectedOption ? selectedOption.getAttribute('data-department-id') : '';
+        const savedOption = allRoleOptions.find(function (option) {
+            return String(option.value) === String(roleSelect.value);
+        });
+        const departmentId = selectedOption ? selectedOption.getAttribute('data-department-id') : (savedOption ? savedOption.departmentId : '');
 
         if (!departmentId) {
             return;
@@ -974,6 +989,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (force || !departmentSelect.value) {
             departmentSelect.value = departmentId;
+            refreshSelect2(departmentSelect);
         }
     }
 
@@ -993,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 return true;
             }
 
-            return option.departmentId === '' || option.departmentId === selectedDepartmentId;
+            return option.departmentId === '' || String(option.departmentId) === String(selectedDepartmentId);
         });
 
         roleSelect.innerHTML = '';
@@ -1015,7 +1031,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 optionElement.setAttribute('data-parent-role-name', option.parentRoleLabel);
             }
 
-            if (option.value === selectedRoleId) {
+            if (String(option.value) === String(selectedRoleId)) {
                 optionElement.selected = true;
             }
 
@@ -1023,12 +1039,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         const selectedRoleStillExists = filteredRoleOptions.some(function (option) {
-            return option.value === selectedRoleId;
+            return String(option.value) === String(selectedRoleId);
         });
 
         if (!selectedRoleStillExists) {
             roleSelect.value = '';
         }
+
+        refreshSelect2(roleSelect);
     }
 
     function selectedRoleMeta() {
@@ -1054,6 +1072,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     }
 
+    function isTlUserExecutiveOrAdmin(tlUser) {
+        const roleLabelLower = (tlUser.role_label || '').toLowerCase();
+        return Boolean(
+            tlUser.is_super_admin ||
+            tlUser.is_company_admin ||
+            tlUser.is_executive ||
+            roleLabelLower.includes('company admin') ||
+            roleLabelLower.includes('chief business officer') ||
+            roleLabelLower.includes('cheif business officer') ||
+            roleLabelLower.includes('cbo') ||
+            roleLabelLower.includes('coo') ||
+            roleLabelLower.includes('super admin')
+        );
+    }
+
     function tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel) {
         const roleIds = Array.isArray(tlUser.role_ids) ? tlUser.role_ids.map(String) : [];
 
@@ -1062,8 +1095,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const parentKey = normalizedRoleLabel(parentRoleLabel);
+        const isExecutive = isTlUserExecutiveOrAdmin(tlUser);
 
-        return Boolean(tlUser.is_super_admin && ['super_admin', 'admin'].includes(parentKey));
+        if (['super_admin', 'admin', 'company_admin'].includes(parentKey)) {
+            return isExecutive;
+        }
+
+        return Boolean(isExecutive && ['chief_business_officer', 'cheif_business_officer', 'cbo'].includes(parentKey));
     }
 
     function filteredTlUsersForSelection() {
@@ -1078,14 +1116,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
 
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
+            const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
 
             if (parentRoleId) {
                 return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
             }
 
             const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
-            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
+            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || isExecutiveOrAdmin;
 
             return matchesDepartment && matchesBranch;
         });
@@ -1100,8 +1139,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
 
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
-            const isBranchAdminOrManager = tlUser.is_branch_admin_or_manager || tlUser.is_super_admin;
+            const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
+            const isBranchAdminOrManager = tlUser.is_branch_admin_or_manager || isExecutiveOrAdmin;
 
             return matchesBranch && isBranchAdminOrManager;
         });
@@ -1131,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (tlHelp) {
                 tlHelp.textContent = 'TLs will appear after department and role selection.';
             }
+            refreshSelect2(tlSelect);
             return;
         }
 
@@ -1142,14 +1183,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
 
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
+            const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
 
             if (parentRoleId) {
                 return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
             }
 
             const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
-            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
+            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || isExecutiveOrAdmin;
 
             return matchesDepartment && matchesBranch;
         });
@@ -1183,9 +1225,13 @@ document.addEventListener('DOMContentLoaded', function () {
             tlSelect.appendChild(option);
         });
 
-        if (!filteredTlUsers.some(function (tlUser) {
+        if (filteredTlUsers.some(function (tlUser) {
             return String(tlUser.id) === String(previousValue);
         })) {
+            tlSelect.value = String(previousValue);
+        } else if (filteredTlUsers.length === 1) {
+            tlSelect.value = String(filteredTlUsers[0].id);
+        } else {
             tlSelect.value = '';
         }
 
@@ -1201,6 +1247,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        refreshSelect2(tlSelect);
         updatePortalMappingSummary();
     }
 
@@ -1249,28 +1296,38 @@ document.addEventListener('DOMContentLoaded', function () {
         portalSummary.textContent = summary;
     }
 
-    if (roleSelect) {
-        roleSelect.addEventListener('change', function () {
-            syncDepartmentFromRole(true);
-            filterRolesByDepartment();
-            updateTlOptions();
-            updatePortalMappingSummary();
-        });
+    function onRoleChange() {
+        syncDepartmentFromRole(true);
+        filterRolesByDepartment();
+        updateTlOptions();
+        updatePortalMappingSummary();
     }
 
-    if (departmentSelect) {
-        departmentSelect.addEventListener('change', function () {
-            filterRolesByDepartment();
-            updateTlOptions();
-            updatePortalMappingSummary();
-        });
+    function onDepartmentChange() {
+        filterRolesByDepartment();
+        updateTlOptions();
+        updatePortalMappingSummary();
     }
 
-    if (branchSelect) {
-        branchSelect.addEventListener('change', function () {
-            updateTlOptions();
-            updatePortalMappingSummary();
-        });
+    function onBranchChange() {
+        updateTlOptions();
+        updatePortalMappingSummary();
+    }
+
+    function onTlChange() {
+        updatePortalMappingSummary();
+    }
+
+    if (window.jQuery) {
+        if (roleSelect) $(roleSelect).on('change', onRoleChange);
+        if (departmentSelect) $(departmentSelect).on('change', onDepartmentChange);
+        if (branchSelect) $(branchSelect).on('change', onBranchChange);
+        if (tlSelect) $(tlSelect).on('change', onTlChange);
+    } else {
+        if (roleSelect) roleSelect.addEventListener('change', onRoleChange);
+        if (departmentSelect) departmentSelect.addEventListener('change', onDepartmentChange);
+        if (branchSelect) branchSelect.addEventListener('change', onBranchChange);
+        if (tlSelect) tlSelect.addEventListener('change', onTlChange);
     }
 
     if (departmentSelect && !departmentSelect.value && roleSelect && roleSelect.value) {
@@ -1279,6 +1336,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     filterRolesByDepartment();
     updateTlOptions();
+
+    if (window.jQuery) {
+        $(document).ready(function () {
+            filterRolesByDepartment();
+            updateTlOptions();
+        });
+    }
 
     const salaryInputs = {
         grossSalary: form.querySelector('[data-salary-input="gross_salary"]'),

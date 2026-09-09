@@ -90,6 +90,11 @@ class RecruitmentCandidate extends Model
         return $this->hasOne(RecruitmentInterview::class)->latestOfMany('scheduled_at');
     }
 
+    public function reminders(): HasMany
+    {
+        return $this->hasMany(RecruitmentReminder::class)->orderBy('remind_at');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
