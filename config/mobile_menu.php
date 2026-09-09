@@ -50,6 +50,10 @@ return [
         'items' => [
             ['key' => 'projects.dashboard', 'label' => 'Dashboard',          'section' => 'PROJECTS', 'order' => 10],
             ['key' => 'projects.list',      'label' => 'Projects Details',   'section' => 'PROJECTS', 'order' => 20],
+            // Mobile mirror of the web sidebar's "Tasks" link under Projects
+            // (App\Http\Controllers\ProductionTaskController, gated
+            // @can('tasks.menuview') there) — same permission here.
+            ['key' => 'projects.tasks',      'label' => 'Tasks',              'section' => 'PROJECTS', 'order' => 25, 'permission' => 'tasks.menuview'],
             ['key' => 'projects.timesheets', 'label' => 'Timesheets',         'section' => 'PROJECTS', 'order' => 30, 'permission' => 'timesheets.menuview'],
             [
                 'key' => 'projects.my_accounts',

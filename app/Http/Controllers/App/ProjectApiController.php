@@ -5,6 +5,7 @@ namespace App\Http\Controllers\App;
 use App\Http\Controllers\Controller;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
+use App\Models\ProductionTask;
 use App\Models\ProjectTimesheet;
 use App\Models\ProjectUpdate;
 use App\Models\User;
@@ -935,20 +936,73 @@ class ProjectApiController extends Controller
         return response()->json(['success' => true, 'message' => 'Schedule updated successfully.']);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  PATCH /mobile/projects/timesheets/{timesheet}/status
+    //
+    //  Upgraded to the NEW web flow (App\Http\Controllers\ProjectController::
+    //  updateTimesheetStatus()): 3-way status (adds 'ongoing'), accepts an
+    //  optional day_closing_update/poster_count/video_count alongside the
+    //  status change (mirrors the web "View Timesheets" modal's combined
+    //  Add/Edit Closing Update + status-select flow), and gates status
+    //  changes on a non-empty, non-placeholder closing update exactly like
+    //  web does. Permission check widened from the old "owner or super
+    //  admin only" rule to owner/admin-like/TL-like, matching web.
+    // ─────────────────────────────────────────────────────────────────────────
     public function updateTimesheetStatus(Request $request, ProjectTimesheet $timesheet): JsonResponse
     {
         $user = auth()->user();
-        if ($timesheet->user_id !== $user->id && ! $user->hasRole('super admin')) {
+        if ($timesheet->user_id !== $user->id && ! $user->hasAdminLikeRole() && ! $user->hasTlLikeRole()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
         }
 
-        $validated = $request->validate(['status' => ['required', 'string', 'in:pending,completed']]);
-        $timesheet->update(['status' => $validated['status']]);
+        $validated = $request->validate([
+            'status'             => ['nullable', 'string', 'in:pending,ongoing,completed'],
+            'day_closing_update' => ['nullable', 'string'],
+            'poster_count'       => ['nullable', 'integer', 'min:0'],
+            'video_count'        => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $updateData = [];
+        if (isset($validated['status'])) {
+            $closingUpdate = isset($validated['day_closing_update'])
+                ? trim((string) $validated['day_closing_update'])
+                : trim((string) $timesheet->day_closing_update);
+
+            if ($closingUpdate === '' || str_starts_with($closingUpdate, "Assigned Task:\n")) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please add a Day Closing Update before changing the status.',
+                ], 422);
+            }
+            $updateData['status'] = $validated['status'];
+        }
+        if (isset($validated['day_closing_update'])) {
+            $updateData['day_closing_update'] = $validated['day_closing_update'];
+        }
+        if (isset($validated['poster_count'])) {
+            $updateData['poster_count'] = (int) $validated['poster_count'];
+        }
+        if (isset($validated['video_count'])) {
+            $updateData['video_count'] = (int) $validated['video_count'];
+        }
+
+        if (! empty($updateData)) {
+            $timesheet->update($updateData);
+
+            if (! empty($updateData['day_closing_update'])) {
+                ProjectUpdate::create([
+                    'production_initiation_id' => $timesheet->production_initiation_id,
+                    'type'       => 'timesheet',
+                    'content'    => 'Timesheet Date: ' . optional($timesheet->timesheet_date)->format('d M Y') . "\nUpdate:\n" . $updateData['day_closing_update'],
+                    'created_by' => $user->id,
+                ]);
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Timesheet status updated successfully.',
-            'data' => $this->serializeTimesheet($timesheet),
+            'message' => 'Timesheet updated successfully.',
+            'data' => $this->serializeTimesheet($timesheet->refresh()),
         ]);
     }
 
@@ -1014,6 +1068,15 @@ class ProjectApiController extends Controller
 
     // ─────────────────────────────────────────────────────────────────────────
     //  GET /mobile/projects/timesheets
+    //
+    //  Upgraded to the NEW web flow (App\Http\Controllers\ProjectController::
+    //  timesheets()): grouped-by-date+user response (was a flat list),
+    //  Department + Employee filters added, assigned_task_desc/
+    //  user_closing_update split added (joins ProductionTask, mirroring
+    //  web's Task<->Timesheet linkage in the read path too, not just on
+    //  create). Unlike web, grouping+pagination happens at the DB level —
+    //  see the distinct-group-keys-first approach below — instead of
+    //  loading every matching row into memory and paginating in PHP.
     // ─────────────────────────────────────────────────────────────────────────
     public function timesheets(Request $request): JsonResponse
     {
@@ -1023,79 +1086,249 @@ class ProjectApiController extends Controller
         $visibility = app(\App\Services\DataVisibilityService::class);
         $mappedIds = $visibility->descendantUserIds($user);
         $directManagedIds = $user->managedUsers()->pluck('users.id');
-        $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
+        $allMappedIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int) $id)->values();
 
-        $assignedProjects = $this->timesheetProjectsQuery($user)
+        $managedUsers = User::whereIn('id', $allMappedIds->reject(fn($id) => (int) $id === (int) $user->id))
+            ->where('users.user_status', 'active')
+            ->orderBy('name')
+            ->get(['users.id', 'users.name']);
+        $hasMappedUsers = $managedUsers->isNotEmpty();
+        $canViewTeamTimesheets = $isAdminLike || $hasMappedUsers || $user->hasTlLikeRole();
+
+        $allUsers = $isAdminLike
+            ? User::where('user_status', 'active')->orderBy('name')->get(['id', 'name'])
+            : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect([$user]));
+
+        $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
+            ? ($user->isDevelopmentProjectCoordinator()
+                ? Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orderBy('name')->get(['id', 'name'])
+                : Department::orderBy('name')->get(['id', 'name']))
+            : $user->roles()->with('department')->get()->pluck('department')->filter()->unique('id')->values();
+
+        if (! $isAdminLike && $departments->isEmpty()) {
+            if ($user->belongsToDesigningDepartment()) {
+                $departments = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->orderBy('name')->get(['id', 'name']);
+            } elseif ($user->belongsToDigitalMarketingDepartment()) {
+                $departments = Department::whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])->orderBy('name')->get(['id', 'name']);
+            } elseif ($user->belongsToSalesDepartment()) {
+                $departments = Department::whereRaw('LOWER(name) LIKE ?', ['%sales%'])->orderBy('name')->get(['id', 'name']);
+            }
+        }
+
+        $selectedDepartmentId = trim((string) $request->query('filter_department_id', ''));
+
+        $assignedProjectsQuery = $isAdminLike
+            ? ProductionInitiation::query()->with($this->projectRelations())->whereIn('production_approval_status', ['approval', 'approved'])->latest('production_approval_reviewed_at')
+            : $this->timesheetProjectsQuery($user);
+
+        if ($selectedDepartmentId !== '') {
+            $assignedProjectsQuery->where('department_id', (int) $selectedDepartmentId);
+        }
+
+        $assignedProjects = $assignedProjectsQuery
             ->get()
             ->map(function (ProductionInitiation $p) {
                 $p->timesheet_delivery_date = $this->projectDeliveryDate($p)?->toDateString();
+                $p->resolved_product_name = $p->product_name ?: ($p->leadProduct?->product_name ?: 'Product');
+                $p->resolved_company_name = trim($p->company_name ?: ($p->lead?->company_name ?: ($p->client_name ?: ($p->lead?->contact_name ?: 'No Company'))));
                 return $p;
             });
 
+        $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
+            $firstProj = $projects->first();
+            return [
+                'lead_id'         => $firstProj->lead_id,
+                'lead_display_id' => $firstProj->lead_id ? 'LD-' . str_pad((string) $firstProj->lead_id, 4, '0', STR_PAD_LEFT) : null,
+                'company_name'    => $firstProj->resolved_company_name ?: 'No Company',
+                'department_id'   => $firstProj->department_id,
+            ];
+        })->values();
+
         $filters = [
-            'filter_date'       => trim((string) $request->query('filter_date', '')),
-            'filter_lead_id'     => trim((string) $request->query('filter_lead_id', '')),
-            'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
-            'filter_status'     => trim((string) $request->query('filter_status', '')),
-            'filter_user_id'    => trim((string) $request->query('filter_user_id', '')),
+            'filter_date_from'      => trim((string) $request->query('filter_date_from', '')),
+            'filter_date_to'        => trim((string) $request->query('filter_date_to', '')),
+            'filter_lead_id'        => trim((string) $request->query('filter_lead_id', '')),
+            'filter_project_id'     => trim((string) $request->query('filter_project_id', '')),
+            'filter_status'         => trim((string) $request->query('filter_status', '')),
+            'filter_user_id'        => trim((string) $request->query('filter_user_id', '')),
+            'filter_department_id'  => $selectedDepartmentId,
         ];
 
-        $accessibleUserIds = $isAdminLike
-            ? null
-            : $allAccessibleIds;
+        $accessibleUserIds = $isAdminLike ? null : $allMappedIds->all();
 
-        $timesheets = ProjectTimesheet::query()
-            ->with(['project' => fn($q) => $q->with($this->projectRelations()), 'user'])
-            ->when(!$isAdminLike, function ($q) use ($accessibleUserIds) {
-                $q->whereIn('user_id', $accessibleUserIds);
-            })
-            ->when($filters['filter_date'] !== '', function ($q) use ($filters) {
+        $applyFilters = function ($query) use ($filters, $isAdminLike, $accessibleUserIds) {
+            if (! $isAdminLike) {
+                $query->whereIn('user_id', $accessibleUserIds);
+            }
+            if ($filters['filter_date_from'] !== '') {
                 try {
-                    $q->whereDate('timesheet_date', Carbon::parse($filters['filter_date'])->toDateString());
+                    $query->whereDate('timesheet_date', '>=', Carbon::parse($filters['filter_date_from'])->toDateString());
                 } catch (\Throwable) {
                 }
-            })
-            ->when($filters['filter_lead_id'] !== '', function ($q) use ($filters) {
-                $q->whereHas('project', function ($sq) use ($filters) {
-                    $sq->where('lead_id', (int) $filters['filter_lead_id']);
-                });
-            })
-            ->when($filters['filter_project_id'] !== '', function ($q) use ($filters) {
-                $q->where('production_initiation_id', (int) $filters['filter_project_id']);
-            })
-            ->when($filters['filter_status'] !== '', function ($q) use ($filters) {
-                $q->where('status', $filters['filter_status']);
-            })
-            ->when($filters['filter_user_id'] !== '', function ($q) use ($filters, $isAdminLike, $accessibleUserIds) {
+            }
+            if ($filters['filter_date_to'] !== '') {
+                try {
+                    $query->whereDate('timesheet_date', '<=', Carbon::parse($filters['filter_date_to'])->toDateString());
+                } catch (\Throwable) {
+                }
+            }
+            if ($filters['filter_lead_id'] !== '') {
+                $query->whereHas('project', fn ($q) => $q->where('lead_id', (int) $filters['filter_lead_id']));
+            }
+            if ($filters['filter_project_id'] !== '') {
+                $query->where('production_initiation_id', (int) $filters['filter_project_id']);
+            }
+            if ($filters['filter_status'] !== '') {
+                $query->where('status', $filters['filter_status']);
+            }
+            if ($filters['filter_user_id'] !== '') {
                 $targetUserId = (int) $filters['filter_user_id'];
                 if ($isAdminLike || in_array($targetUserId, $accessibleUserIds ?? [], true)) {
-                    $q->where('user_id', $targetUserId);
+                    $query->where('user_id', $targetUserId);
                 }
-            })
-            ->latest('created_at')
-            ->latest('timesheet_date')
+            }
+            if ($filters['filter_department_id'] !== '') {
+                $query->whereHas('project', fn ($q) => $q->where('department_id', (int) $filters['filter_department_id']));
+            }
+            return $query;
+        };
+
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = 15;
+
+        $groupKeysQuery = $applyFilters(ProjectTimesheet::query()->select('timesheet_date', 'user_id')->distinct());
+        $totalGroups = DB::query()->fromSub($groupKeysQuery, 'g')->count();
+
+        $pageGroupKeys = $applyFilters(ProjectTimesheet::query()->select('timesheet_date', 'user_id')->distinct())
+            ->orderByDesc('timesheet_date')
+            ->orderBy('user_id')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
             ->get();
+
+        $groups = [];
+        if ($pageGroupKeys->isNotEmpty()) {
+            $timesheets = ProjectTimesheet::query()
+                ->with(['project' => fn ($q) => $q->with($this->projectRelations()), 'user'])
+                ->where(function ($q) use ($pageGroupKeys) {
+                    foreach ($pageGroupKeys as $key) {
+                        $dateStr = $key->timesheet_date instanceof Carbon ? $key->timesheet_date->toDateString() : Carbon::parse($key->timesheet_date)->toDateString();
+                        $q->orWhere(function ($sq) use ($dateStr, $key) {
+                            $sq->whereDate('timesheet_date', $dateStr)->where('user_id', $key->user_id);
+                        });
+                    }
+                })
+                ->latest('created_at')
+                ->get();
+
+            $pageUserIds = $timesheets->pluck('user_id')->unique()->filter()->all();
+            $pageProjectIds = $timesheets->pluck('production_initiation_id')->unique()->filter()->all();
+            $matchingTasks = (! empty($pageUserIds) && ! empty($pageProjectIds))
+                ? ProductionTask::query()
+                    ->whereIn('assigned_to', $pageUserIds)
+                    ->whereIn('production_initiation_id', $pageProjectIds)
+                    ->get()
+                : collect();
+
+            $timesheets->each(function (ProjectTimesheet $t) use ($matchingTasks) {
+                $tDateStr = $t->timesheet_date ? $t->timesheet_date->toDateString() : '';
+                $tasksForEntry = $matchingTasks->filter(function ($pt) use ($t, $tDateStr) {
+                    return (int) $pt->assigned_to === (int) $t->user_id
+                        && (int) $pt->production_initiation_id === (int) $t->production_initiation_id
+                        && ($pt->task_date ? $pt->task_date->toDateString() : '') === $tDateStr;
+                });
+
+                if ($tasksForEntry->isNotEmpty()) {
+                    $t->assigned_task_desc = $tasksForEntry->pluck('task_description')->filter()->implode("\n\n");
+                } else {
+                    $t->assigned_task_desc = str_starts_with((string) $t->day_closing_update, "Assigned Task:\n")
+                        ? trim(substr((string) $t->day_closing_update, strlen("Assigned Task:\n")))
+                        : '—';
+                }
+
+                $t->user_closing_update = str_starts_with((string) $t->day_closing_update, "Assigned Task:\n")
+                    ? ''
+                    : (string) $t->day_closing_update;
+            });
+
+            $groupedTimesheets = $timesheets->groupBy(function ($t) {
+                return ($t->timesheet_date ? $t->timesheet_date->toDateString() : 'no_date') . '_' . $t->user_id;
+            });
+
+            foreach ($pageGroupKeys as $key) {
+                $dateStr = $key->timesheet_date instanceof Carbon ? $key->timesheet_date->toDateString() : Carbon::parse($key->timesheet_date)->toDateString();
+                $groupKey = $dateStr . '_' . $key->user_id;
+                $groupEntries = $groupedTimesheets->get($groupKey, collect());
+                if ($groupEntries->isEmpty()) {
+                    continue;
+                }
+                $groups[] = $this->serializeTimesheetGroup($groupEntries);
+            }
+        }
 
         return response()->json([
             'success' => true,
             'data' => [
-                'assigned_projects' => $assignedProjects->map(fn($p) => [
+                'assigned_projects' => $assignedProjects->map(fn ($p) => [
                     'id'                      => $p->id,
+                    'lead_id'                 => $p->lead_id,
                     'product_name'            => $p->product_name,
                     'company_name'            => $p->company_name,
-                    'lead_id'                 => $p->lead_id,
                     'department'              => $p->department?->name,
+                    'department_id'           => $p->department_id,
                     'timesheet_delivery_date' => $p->timesheet_delivery_date,
                 ])->values(),
-                'timesheets' => $timesheets->map(fn($ts) => $this->serializeTimesheet($ts))->values(),
-                'filters'    => $filters,
-                'today'      => Carbon::today()->toDateString(),
+                'unique_leads'             => $uniqueLeads,
+                'departments'              => $departments->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),
+                'all_users'                => $allUsers->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+                'is_admin_like'            => $isAdminLike,
+                'can_view_team_timesheets' => $canViewTeamTimesheets,
+                'groups'                   => $groups,
+                'pagination' => [
+                    'current_page' => $page,
+                    'last_page'    => max(1, (int) ceil($totalGroups / $perPage)),
+                    'per_page'     => $perPage,
+                    'total'        => $totalGroups,
+                    'has_more'     => $page * $perPage < $totalGroups,
+                ],
+                'filters' => $filters,
+                'today'   => Carbon::today()->toDateString(),
             ],
         ]);
     }
 
+    private function serializeTimesheetGroup(Collection $groupEntries): array
+    {
+        $first = $groupEntries->first();
+        $uniqueCompanies = $groupEntries->map(function (ProjectTimesheet $ts) {
+            return $ts->project?->company_name ?: ($ts->project?->lead?->company_name ?: 'No Company');
+        })->unique()->values();
+
+        $latestSubmitted = $groupEntries->sortByDesc('created_at')->first()?->created_at;
+
+        return [
+            'timesheet_date'      => $first->timesheet_date?->toDateString(),
+            'user'                => $first->user ? [
+                'id'          => $first->user->id,
+                'name'        => $first->user->name,
+                'designation' => $first->user->designation,
+            ] : null,
+            'total_entries'       => $groupEntries->count(),
+            'companies'           => $uniqueCompanies,
+            'pending_count'       => $groupEntries->where('status', 'pending')->count(),
+            'ongoing_count'       => $groupEntries->where('status', 'ongoing')->count(),
+            'completed_count'     => $groupEntries->where('status', 'completed')->count(),
+            'latest_submitted_at' => optional($latestSubmitted)->toDateTimeString(),
+            'entries'             => $groupEntries->values()->map(fn ($t, $idx) => $this->serializeTimesheet($t, $idx + 1))->values(),
+        ];
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  POST /mobile/projects/timesheets
+    //
+    //  Upgraded to the NEW web flow: 3-way status (adds 'ongoing') and a
+    //  future-or-today date restriction (after_or_equal:today), matching
+    //  App\Http\Controllers\ProjectController::storeTimesheet() exactly.
     // ─────────────────────────────────────────────────────────────────────────
     public function storeTimesheet(Request $request): JsonResponse
     {
@@ -1103,8 +1336,8 @@ class ProjectApiController extends Controller
 
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
-            'timesheet_date'           => ['required', 'date'],
-            'status'                   => ['required', 'string', 'in:pending,completed'],
+            'timesheet_date'           => ['required', 'date', 'after_or_equal:today'],
+            'status'                   => ['required', 'string', 'in:pending,ongoing,completed'],
             'project_type'             => ['nullable', 'string', 'in:recurring,onetime'],
             'poster_count'             => ['nullable', 'integer', 'min:0', 'max:100000'],
             'video_count'              => ['nullable', 'integer', 'min:0', 'max:100000'],
@@ -1112,7 +1345,10 @@ class ProjectApiController extends Controller
             'committed_videos'         => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_posters'          => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_videos'           => ['nullable', 'integer', 'min:0', 'max:100000'],
-            'day_closing_update'       => ['nullable', 'string'],
+            'day_closing_update'       => ['required', 'string'],
+        ], [
+            'timesheet_date.after_or_equal' => 'Past dates cannot be selected for timesheets.',
+            'day_closing_update.required'   => 'The day closing update is required.',
         ]);
 
         $project = $this->timesheetProjectsQuery($user)
@@ -1122,26 +1358,23 @@ class ProjectApiController extends Controller
         $timesheetDate = Carbon::parse($validated['timesheet_date'])->toDateString();
         $isOnetime = ($validated['project_type'] ?? '') === 'onetime';
 
-        // Mirrors web: day closing update required unless the project is
-        // Design/DM AND project_type is 'recurring'.
-        if (trim((string) ($validated['day_closing_update'] ?? '')) === '') {
+        $closingUpdate = trim((string) $validated['day_closing_update']);
+        if ($closingUpdate === '') {
             return response()->json([
                 'success' => false,
                 'message' => 'The day closing update is required.',
                 'errors'  => ['day_closing_update' => ['The day closing update is required.']],
             ], 422);
         }
-        if (filled($validated['day_closing_update'] ?? null)) {
-            $lines = collect(preg_split('/\R/', (string) $validated['day_closing_update']))
-                ->map(fn($l) => trim($l))->filter();
-            if ($lines->count() < 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Please add at least 1 task line in the day closing update.',
-                    'errors'  => ['day_closing_update' => ['Please add at least 1 task line in the day closing update.']],
-                ], 422);
-            }
+        $lines = collect(preg_split('/\R/', $closingUpdate))->map(fn ($l) => trim($l))->filter();
+        if ($lines->count() < 1) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please add at least 1 task line in the day closing update.',
+                'errors'  => ['day_closing_update' => ['Please add at least 1 task line in the day closing update.']],
+            ], 422);
         }
+        $validated['day_closing_update'] = $closingUpdate;
 
         $payload = [
             'status'             => $validated['status'],
@@ -1333,14 +1566,30 @@ class ProjectApiController extends Controller
         ];
     }
 
-    private function serializeTimesheet(ProjectTimesheet $ts): array
+    // Note: 'day_closing_update' here intentionally carries the USER's own
+    // text (mirrors web's $groupTimesheetsData 'day_closing_update' key,
+    // which is populated from user_closing_update, not the raw column) so
+    // an Edit sheet on mobile never shows the auto-seeded
+    // "Assigned Task:\n..." placeholder back to the user as if they'd
+    // typed it. 'assigned_task_desc' carries the (read-only) task
+    // description(s) that produced the auto-linked timesheet, when any.
+    private function serializeTimesheet(ProjectTimesheet $ts, ?int $sno = null): array
     {
+        $deptName = strtolower((string) ($ts->project?->department?->name ?? ''));
+        $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
+
+        $userClosingUpdate = $ts->user_closing_update ?? (
+            str_starts_with((string) $ts->day_closing_update, "Assigned Task:\n") ? '' : (string) $ts->day_closing_update
+        );
+
         return [
-            'id'                    => $ts->id,
+            'id'                        => $ts->id,
+            'sno'                       => $sno,
             'production_initiation_id' => $ts->production_initiation_id,
             'project_name'          => $ts->project?->product_name,
             'company_name'          => $ts->project?->company_name,
             'lead_id'               => $ts->project?->lead_id,
+            'lead_display_id'       => $ts->project?->lead_id ? 'LD-' . str_pad((string) $ts->project->lead_id, 4, '0', STR_PAD_LEFT) : null,
             'timesheet_date'        => $ts->timesheet_date?->toDateString(),
             'project_delivery_date' => $ts->project_delivery_date?->toDateString(),
             'status'                => $ts->status,
@@ -1351,7 +1600,9 @@ class ProjectApiController extends Controller
             'committed_videos'      => (int) $ts->committed_videos,
             'waiting_posters'       => (int) $ts->waiting_posters,
             'waiting_videos'        => (int) $ts->waiting_videos,
-            'day_closing_update'    => $ts->day_closing_update,
+            'day_closing_update'    => $userClosingUpdate,
+            'assigned_task_desc'    => $ts->assigned_task_desc ?? '—',
+            'is_design_dm'          => $isDesignOrDm,
             'submitted_at'          => $ts->created_at?->toDateTimeString(),
             // Fixed: read the real status column instead of comparing dates.
             'is_completed'          => $ts->status === 'completed',

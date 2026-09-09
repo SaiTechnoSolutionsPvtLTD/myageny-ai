@@ -36,6 +36,7 @@ use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
 use App\Http\Controllers\App\ProjectApiController;
+use App\Http\Controllers\App\ProductionTaskApiController;
 use App\Http\Controllers\App\ReportApiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\App\AppMenuController;
@@ -400,6 +401,22 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('mobile.projects.testing-dashboard.update-status');
         Route::patch('bugs/{bug}/status', [ProjectApiController::class, 'updateBugStatus'])
             ->name('mobile.projects.bugs.update-status');
+
+        // ── Production Tasks — mirrors web's NEW ProductionTaskController
+        //    flow (Projects > Tasks), with Timesheet auto-linkage on store().
+        //    Static 'tasks' segments must stay ahead of the
+        //    '/{productionInitiation}' wildcard below, same reason
+        //    'testing-dashboard'/'bugs' do.
+        Route::get('tasks/meta', [ProductionTaskApiController::class, 'meta'])
+            ->name('mobile.projects.tasks.meta');
+        Route::get('tasks', [ProductionTaskApiController::class, 'index'])
+            ->name('mobile.projects.tasks.index');
+        Route::post('tasks', [ProductionTaskApiController::class, 'store'])
+            ->name('mobile.projects.tasks.store');
+        Route::patch('tasks/{task}/status', [ProductionTaskApiController::class, 'updateStatus'])
+            ->name('mobile.projects.tasks.update-status');
+        Route::delete('tasks/{task}', [ProductionTaskApiController::class, 'destroy'])
+            ->name('mobile.projects.tasks.destroy');
 
         // ── {productionInitiation} wildcard LAST ────────────────────────────
         Route::get('/{productionInitiation}', [ProjectApiController::class, 'show'])
