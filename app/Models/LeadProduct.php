@@ -157,6 +157,35 @@ class LeadProduct extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    // ── Converted-product detection ─────────────────────────────────────
+    // Single source of truth for "is this lead product a converted sale?" —
+    // previously duplicated as an inline closure in DashboardController's
+    // Payment Financials block; now also used by LeadController's mobile
+    // Lead Products endpoint (Home Dashboard card-tap navigation) so both
+    // screens agree on exactly the same converted set. Mirrors
+    // Lead::scopeConverted()'s spirit but at the product level: checks the
+    // literal product_status string first, then falls back to the
+    // product's own lead_status_id against this company's "Converted"/
+    // "Won"-named LeadStatus rows.
+    public static function convertedStatusIds(): array
+    {
+        return \App\Models\LeadStatus::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%');
+            })
+            ->pluck('id')
+            ->toArray();
+    }
+
+    public function isConvertedProduct(?array $convertedStatusIds = null): bool
+    {
+        $ids = $convertedStatusIds ?? static::convertedStatusIds();
+        $status = strtolower(trim((string) $this->product_status));
+        return in_array($status, ['converted', 'won'], true)
+            || ($this->lead_status_id && in_array($this->lead_status_id, $ids, true));
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────
     public function getAmountPaidAttribute(): float
     {

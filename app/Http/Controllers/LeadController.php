@@ -845,9 +845,19 @@ class LeadController extends Controller
         return back()->with('success', 'Lead status updated successfully.');
     }
 
-    public function leadStatus()
+    public function leadStatus(Request $request)
     {
-        $leadStatus = LeadStatus::get();
+        // Scope explicitly by the logged-in user's company_id at the query
+        // level (rather than relying only on LeadStatus's global scope,
+        // which silently no-ops when there is no authenticated user) so we
+        // never fetch other companies' statuses and never load the full
+        // table just to filter it client-side.
+        $companyId = $request->user()?->company_id;
+
+        $leadStatus = LeadStatus::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get();
 
         return new LeadStatusCollection($leadStatus);
     }

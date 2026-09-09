@@ -13,6 +13,7 @@ use App\Models\LeadFormField;
 use App\Models\LeadFieldValue;
 use App\Models\LeadProductPriceRequest;
 use App\Models\LeadProduct;
+use App\Models\LeadProductPayment;
 use App\Models\LeadCallUpdate;
 use App\Models\LeadStatus;
 use App\Models\LeadSource;
@@ -51,6 +52,7 @@ class LeadController extends Controller
             new OA\Parameter(name: "lead_status",   in: "query", required: false, schema: new OA\Schema(type: "string")),
             new OA\Parameter(name: "priority",      in: "query", required: false, schema: new OA\Schema(type: "string")),
             new OA\Parameter(name: "assigned_to",   in: "query", required: false, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: "pre_sale_executive_id", in: "query", required: false, schema: new OA\Schema(type: "integer")),
             new OA\Parameter(name: "mobile_number", in: "query", required: false, schema: new OA\Schema(type: "string")),
             new OA\Parameter(name: "product_name",  in: "query", required: false, schema: new OA\Schema(type: "string")),
             new OA\Parameter(name: "date_from",     in: "query", required: false, schema: new OA\Schema(type: "string", format: "date")),
@@ -83,7 +85,13 @@ class LeadController extends Controller
                     ->orWhere('contact_name', 'like', "%{$s}%")
                     ->orWhere('mobile_number', 'like', "%{$s}%")
                     ->orWhere('email',        'like', "%{$s}%")
-                    ->orWhereHas('product', fn($pq) => $pq->where('product_name', 'like', "%{$s}%"));
+                    ->orWhereHas('product', fn($pq) => $pq->where('product_name', 'like', "%{$s}%"))
+                    // Mobile's Lead List "Search" field (both the screen's own
+                    // search bar and the Filter Leads sheet's Search field
+                    // route through this same param) also needs to match the
+                    // assigned user's name — matches the Lead Products
+                    // screen's own combined search, which already does this.
+                    ->orWhereHas('assignedTo', fn($uq) => $uq->where('name', 'like', "%{$s}%"));
             });
         }
 
@@ -115,16 +123,48 @@ class LeadController extends Controller
         // counts as this status either at its own top level OR via any of
         // its products (leads with multiple products can have a product
         // sitting at a different stage than the lead's own lead_status_id).
+        //
+        // The dropdown in the Filter Leads modal sends a numeric
+        // lead_status_id (see meta() below), but the CRM Dashboard's Active
+        // Customers card sends the literal keyword 'won'/'converted' —
+        // this company's lead_statuses table has no row literally named
+        // "Won", only "Converted", so a plain id/name lookup for 'won'
+        // would never match anything. Lead::scopeConverted() is the single
+        // already-correct definition of "this lead is a converted/active
+        // customer" (used by the dashboard's own won-leads KPI below), so
+        // reuse it here to guarantee the Lead List always shows exactly
+        // the leads the dashboard counted — instead of two independent
+        // status checks that could silently drift apart.
         if ($request->filled('lead_status')) {
-            $statusId = $request->lead_status;
-            $query->where(function ($q) use ($statusId) {
-                $q->where('lead_status_id', $statusId)
-                    ->orWhereHas('products', fn($pq) => $pq->where('lead_status_id', $statusId));
-            });
+            $statusVal = $request->lead_status;
+            if (is_numeric($statusVal)) {
+                $statusId = (int) $statusVal;
+                $query->where(function ($q) use ($statusId) {
+                    $q->where('lead_status_id', $statusId)
+                        ->orWhereHas('products', fn($pq) => $pq->where('lead_status_id', $statusId));
+                });
+            } elseif (in_array(strtolower($statusVal), ['won', 'converted'], true)) {
+                $query->converted();
+            } else {
+                // Any other non-numeric value — a raw status name sent
+                // instead of its id. Mirrors the product_status handling
+                // further down: resolve the name to its LeadStatus id.
+                $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
+                if ($statusRecord) {
+                    $sid = $statusRecord->id;
+                    $query->where(function ($q) use ($sid) {
+                        $q->where('lead_status_id', $sid)
+                            ->orWhereHas('products', fn($pq) => $pq->where('lead_status_id', $sid));
+                    });
+                }
+            }
         }
         if ($request->filled('priority'))      $query->where('priority',     $request->priority);
         if ($request->filled('assigned_to'))   $query->where('assigned_to',  $request->assigned_to);
         if ($request->filled('product_name'))  $query->whereHas('product', fn($pq) => $pq->where('product_name', 'like', '%' . $request->product_name . '%'));
+        // Mirrors web's LeadController@index — the Filter Leads sheet's new
+        // "Pre Sales Exec" dropdown (see meta()'s pre_sale_executives list).
+        if ($request->filled('pre_sale_executive_id')) $query->where('pre_sale_executive_id', $request->pre_sale_executive_id);
         if ($request->filled('date_from'))     $query->whereDate('lead_date', '>=', $request->date_from);
         if ($request->filled('date_to'))       $query->whereDate('lead_date', '<=', $request->date_to);
 
@@ -578,6 +618,21 @@ class LeadController extends Controller
                 'products'       => tap(Product::query(), fn($query) => $this->visibility->applyProductVisibility($query, request()->user()))
                     ->orderBy('product_name')
                     ->get(['id', 'product_name as name']),
+                // Backs the Filter Leads sheet's "Pre Sales Exec" searchable
+                // dropdown — mirrors web's LeadController@index
+                // $preSaleExecutives query exactly (users with a pre_sale-like
+                // role, or who are already set as some lead's
+                // pre_sale_executive_id), just company-scoped like every
+                // other list in this meta() response.
+                'pre_sale_executives' => User::query()
+                    ->where('is_active', true)
+                    ->when($user?->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                    ->where(function ($q) {
+                        $q->whereHas('roles', fn ($rq) => $rq->where('name', 'like', '%pre_sale%')->orWhere('display_name', 'like', '%pre%sale%'))
+                          ->orWhereIn('id', Lead::query()->whereNotNull('pre_sale_executive_id')->distinct()->pluck('pre_sale_executive_id'));
+                    })
+                    ->orderBy('name')
+                    ->get(['id', 'name']),
             ],
         ]);
     }
@@ -1072,11 +1127,20 @@ class LeadController extends Controller
         // default (now()->startOfMonth()/endOfMonth()). Previously defaulted
         // to today only, which silently diverged from web whenever this
         // endpoint is hit without explicit dates.
+        //
+        // `all_dates` — sent by the mobile Lead Products screen's Quick
+        // Dates 'All' chip (mirrors the Home Dashboard's own 'All' chip and
+        // the Leads List screen's allDates flag) — means "no date
+        // restriction at all", which is otherwise inexpressible here: with
+        // no explicit all_dates flag, omitting date_from/date_to would just
+        // fall back to the current-month default below rather than actually
+        // removing the restriction.
+        $allDates = $request->boolean('all_dates');
         $hasDateFilter = $request->filled('date_from') || $request->filled('date_to');
         $dateFrom = $request->filled('date_from') ? $request->date_from : now()->startOfMonth()->toDateString();
         $dateTo   = $request->filled('date_to')   ? $request->date_to   : now()->endOfMonth()->toDateString();
 
-        if (!$hasDateFilter) {
+        if (!$allDates && !$hasDateFilter) {
             $request->merge([
                 'date_from' => $dateFrom,
                 'date_to'   => $dateTo,
@@ -1097,6 +1161,12 @@ class LeadController extends Controller
         $this->visibility->applyLeadRelationVisibility($query, 'lead', $request->user());
 
         // ── Search ──────────────────────────────────────────────
+        // Mobile's Lead Products screen now sends one combined SEARCH box
+        // instead of separate Lead ID / Mobile Number fields, matching
+        // web's own filter panel placeholder ("Search client name, mobile,
+        // Lead ID, company, email..."). This block already covered
+        // company/contact/mobile — added lead.id and lead.email so the
+        // same box actually matches everything the placeholder promises.
         if ($request->filled('search')) {
             $search = trim($request->search);
             $query->where(function ($q) use ($search) {
@@ -1107,7 +1177,9 @@ class LeadController extends Controller
                     ->orWhereHas('lead', fn($lq) =>
                     $lq->where('company_name', 'like', "%{$search}%")
                         ->orWhere('contact_name', 'like', "%{$search}%")
-                        ->orWhere('mobile_number', 'like', "%{$search}%"));
+                        ->orWhere('mobile_number', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('id', $search));
             });
         }
 
@@ -1173,25 +1245,98 @@ class LeadController extends Controller
             $query->whereHas('product', fn ($q) => $q->where('status', $status));
         }
 
-        if ($request->filled('date_from')) {
+        if (!$allDates && $request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $dateFrom);
         }
 
-        if ($request->filled('date_to')) {
+        if (!$allDates && $request->filled('date_to')) {
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
-        // ── Stats (before paginating) ────────────────────────────
-        $statsRows = (clone $query)->get();
-        $stats = [
-            'total_products' => $statsRows->count(),
-            'total_value'    => (float) $statsRows->sum('total_price'),
-            'received'       => (float) $statsRows->sum('amount_paid'),
-            'pending'        => (float) $statsRows->sum(fn($lp) => $lp->amount_pending),
-        ];
+        // ── Payment-based scope (Converted Products / Amount Received /
+        // Amount Pending cards) ────────────────────────────────────────
+        // Sent only by the mobile Home Dashboard's Payment Financials cards
+        // (web has no equivalent — its cards aren't clickable). "Converted"
+        // isn't a plain product_status match (see LeadProduct::
+        // isConvertedProduct() — it also checks lead_status_id against this
+        // company's Converted/Won LeadStatus rows), and amount_paid/
+        // amount_pending aren't reliable SQL columns (amount_paid can be a
+        // stale raw value that doesn't match what's actually been logged in
+        // the Lead Products Payment table), so none of this can be a plain
+        // ->where(...) clause. Everything below is computed off one
+        // in-memory fetch of the converted set so the row list, this
+        // response's stats block, and the dashboard's own Payment
+        // Financials numbers all agree by construction.
+        $paymentFilter = $request->filled('payment_filter') ? $request->payment_filter : null;
 
-        // ── Paginate ─────────────────────────────────────────────
-        $leadProducts = $query->paginate(15)->withQueryString();
+        if (in_array($paymentFilter, ['converted', 'received', 'pending'], true)) {
+            $allRows = (clone $query)->get();
+            $convertedStatusIds = LeadProduct::convertedStatusIds();
+            $convertedRows = $allRows
+                ->filter(fn($lp) => $lp->isConvertedProduct($convertedStatusIds))
+                ->values();
+
+            // Amount actually collected per product — strictly from the
+            // Lead Products Payment table (LeadProductPayment), not the
+            // row's own amount_paid column, which can understate or
+            // overstate real payments and was previously producing an
+            // Amount Pending inconsistent with the Converted Products
+            // value. Mirrors DashboardController's own Payment Financials
+            // computation so these two screens can never diverge.
+            $productIds = $convertedRows->pluck('id');
+            $paidByProduct = LeadProductPayment::whereIn('lead_product_id', $productIds)
+                ->select('lead_product_id', DB::raw('SUM(amount) as total'))
+                ->groupBy('lead_product_id')
+                ->pluck('total', 'lead_product_id');
+            $receivedFor = fn($lp) => (float) ($paidByProduct[$lp->id] ?? 0);
+            $pendingFor  = fn($lp) => max(0, (float) $lp->total_price - $receivedFor($lp));
+
+            // Stats always reflect the full converted set — identical to
+            // the dashboard's own Converted/Received/Pending figures —
+            // regardless of which card was tapped; only the row list below
+            // narrows to that card's specific condition. This is what keeps
+            // "the dashboard card amounts and the Lead Products screen
+            // values consistent with each other".
+            $convertedValue = (float) $convertedRows->sum('total_price');
+            $receivedTotal  = (float) $convertedRows->sum($receivedFor);
+            $pendingTotal   = max(0, $convertedValue - $receivedTotal);
+            $stats = [
+                'total_products' => $convertedRows->count(),
+                'total_value'    => $convertedValue,
+                'received'       => $receivedTotal,
+                'pending'        => $pendingTotal,
+            ];
+
+            if ($paymentFilter === 'received') {
+                $rows = $convertedRows->filter(fn($lp) => $receivedFor($lp) > 0)->values();
+            } elseif ($paymentFilter === 'pending') {
+                $rows = $convertedRows->filter(fn($lp) => $pendingFor($lp) > 0)->values();
+            } else {
+                $rows = $convertedRows;
+            }
+
+            $page    = max(1, (int) $request->input('page', 1));
+            $perPage = 15;
+            $leadProducts = new \Illuminate\Pagination\LengthAwarePaginator(
+                $rows->forPage($page, $perPage)->values(),
+                $rows->count(),
+                $perPage,
+                $page,
+                ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()]
+            );
+        } else {
+            // ── Stats (before paginating) ────────────────────────────
+            $statsRows = (clone $query)->get();
+            $stats = [
+                'total_products' => $statsRows->count(),
+                'total_value'    => (float) $statsRows->sum('total_price'),
+                'received'       => (float) $statsRows->sum('amount_paid'),
+                'pending'        => (float) $statsRows->sum(fn($lp) => $lp->amount_pending),
+            ];
+
+            // ── Paginate ─────────────────────────────────────────────
+            $leadProducts = $query->paginate(15)->withQueryString();
+        }
 
         // ── Filter option lists ──────────────────────────────────
         $branches = Branch::where('is_active', true)

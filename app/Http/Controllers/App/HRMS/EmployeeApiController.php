@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
+use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -48,6 +50,15 @@ class EmployeeApiController extends Controller
             })
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->department_id, fn ($q) => $q->where('department_id', $request->department_id))
+            ->when($request->role_id, fn ($q) => $q->where('role_id', $request->role_id))
+            // Branch lives on the linked portal user (User::branch_id), not
+            // on EmployeeOnboarding itself — mirrors the same relationship
+            // this model's own booted() global scope already filters through
+            // for branch admins.
+            ->when($request->branch_id, fn ($q) => $q->whereHas(
+                'portalUser',
+                fn ($sub) => $sub->where('branch_id', $request->branch_id)
+            ))
             ->latest();
 
         $perPage    = (int) ($request->per_page ?? 15);
@@ -105,11 +116,42 @@ class EmployeeApiController extends Controller
         // mobile status filter silently returned nothing.
         $statuses = [EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_RESIGNED];
 
+        $user = request()->user();
+
+        // Branch options — mirrors LeadController::meta()'s own
+        // company/branch-admin scoping (Branch::is_active + company_id, then
+        // narrowed to the branch admin's own branch(es)) so this filter list
+        // never offers a branch that would just return an empty result —
+        // that scoping is the same one EmployeeOnboarding's booted() global
+        // scope already enforces on the underlying query.
+        $branchesQuery = Branch::where('is_active', true);
+        if ($user?->company_id) {
+            $branchesQuery->where('company_id', $user->company_id);
+        }
+        if ($user && $user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                $branchesQuery->whereIn('id', $branchIds);
+            }
+        }
+        $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
+
+        // Role options — company-scoped (Role carries BelongsToCompany).
+        // Uses display_name (falling back to the technical name) since
+        // that's what mapList()/mapDetail() already show for `role`.
+        $roles = Role::when($user?->company_id, fn ($q, $companyId) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'display_name'])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->display_name ?: $r->name])
+            ->values();
+
         return response()->json([
             'success' => true,
             'data'    => [
                 'departments' => $departments,
                 'statuses'    => $statuses,
+                'branches'    => $branches,
+                'roles'       => $roles,
             ],
         ]);
     }

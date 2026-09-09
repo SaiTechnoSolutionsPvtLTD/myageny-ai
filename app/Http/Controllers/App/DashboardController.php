@@ -100,11 +100,27 @@ class DashboardController extends Controller
 
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
-        $wonLeads      = (clone $base())->where('lead_status', 'won')->count();
+        // "Active Customers" (won_leads) — was `where('lead_status','won')`
+        // against the legacy plain-string column, which only matched leads
+        // whose old string literally said 'won'. This company's actual
+        // lead_statuses master table has no "Won" row, only "Converted",
+        // so any lead that was only ever marked converted via the newer
+        // lead_status_id FK (not the legacy string) was silently excluded
+        // from this count — and the mobile Lead List's own lead_status
+        // filter (App\LeadController::index()) has no way to match the
+        // legacy string at all, so tapping this card returned zero leads
+        // even though this KPI showed a non-zero count. Lead::scopeConverted()
+        // is the single already-correct "is this a converted/active
+        // customer lead" definition (same one web's own dashboard uses),
+        // so using it here keeps this count and the Lead List filter it
+        // navigates to (which also calls scopeConverted() for the 'won'/
+        // 'converted' keyword) permanently in sync instead of two
+        // independently-maintained conditions that can drift apart.
+        $wonLeads      = (clone $base())->converted()->count();
         $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
         $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
         $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-        $wonValue      = (float)(clone $base())->where('lead_status', 'won')->sum('deal_value');
+        $wonValue      = (float)(clone $base())->converted()->sum('deal_value');
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
@@ -146,24 +162,40 @@ class DashboardController extends Controller
         $lpBase = $this->getLeadProductBaseQuery($request);
         $lpProducts = (clone $lpBase)->with('payments')->get();
 
-        $convertedStatusIds = LeadStatus::query()
-            ->where(function ($q) {
-                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
-                  ->orWhere('name', 'like', '%convert%');
-            })
-            ->pluck('id')
-            ->toArray();
-
-        $isConvertedProduct = function (LeadProduct $lp) use ($convertedStatusIds) {
-            $status = strtolower(trim((string) $lp->product_status));
-            return in_array($status, ['converted', 'won'])
-                || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
-        };
+        $convertedStatusIds = LeadProduct::convertedStatusIds();
+        $isConvertedProduct = fn(LeadProduct $lp) => $lp->isConvertedProduct($convertedStatusIds);
 
         $convertedProducts = $lpProducts->filter($isConvertedProduct);
         $convertedValue    = (float) $convertedProducts->sum('total_price');
         $convertedCount    = $convertedProducts->count();
-        $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
+
+        // Amount Received / Amount Pending — Payment Financials cards.
+        // $totalProductValue/$totalPaid/$totalPending were previously
+        // referenced below (in the 'financials' response block) without
+        // ever being assigned anywhere in this method — a pre-existing
+        // bug where PHP silently treated the undefined variables as
+        // null/0, which is also why these numbers could show as 0 or
+        // drift out of sync with each other on mobile.
+        //
+        // Amount Received is sourced strictly from the Lead Products
+        // Payment table (LeadProductPayment) — NOT the LeadProduct's own
+        // amount_paid column/accessor. That column can be stale relative
+        // to what's actually been logged as payments (e.g. an old
+        // migrated/raw value), and summing the per-row clamped
+        // getAmountPendingAttribute() (max(0, total_price - amount_paid))
+        // silently inflates the total whenever any single converted
+        // product's raw amount_paid overstates its real payments — a
+        // negative per-row contribution gets clamped to 0 instead of
+        // offsetting the total, which is exactly what was producing an
+        // Amount Pending far larger than the Converted Products value.
+        // Per the business rule Converted Products Amount = Amount
+        // Received + Amount Pending, Pending is now the straight
+        // aggregate difference, not a per-row sum.
+        $convertedProductIds = $convertedProducts->pluck('id');
+        $totalProductValue = (float) $lpProducts->sum('total_price');
+        $totalPaid    = (float) LeadProductPayment::whereIn('lead_product_id', $convertedProductIds)->sum('amount');
+        $totalPending = max(0, $convertedValue - $totalPaid);
+        $payPct       = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
 
         // Mirrors SuperAdminDashboardController's KPI block — these were
         // previously computed nowhere on the mobile side, so the "Converted
@@ -365,8 +397,14 @@ class DashboardController extends Controller
                 $leadIds        = (clone $q)->pluck('id');
                 $productConvCnt = LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->count();
                 $productConvVal = (float) LeadProduct::whereIn('lead_id', $leadIds)->where('product_status', 'converted')->sum('total_price');
-                $wonLeads       = (clone $q)->where('lead_status', 'won')->count();
-                $wonVal         = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                // Same fix as the main KPIs above — Lead::scopeConverted()
+                // instead of the legacy lead_status='won' string, so this
+                // "WON" column (rendered in the app's own Branch-wise
+                // Performance table) agrees with the Active Customers KPI
+                // and Lead List filter rather than a narrower, separately
+                // -maintained condition.
+                $wonLeads       = (clone $q)->converted()->count();
+                $wonVal         = (float)(clone $q)->converted()->sum('deal_value');
 
                 $convertedCount = $productConvCnt > 0 ? $productConvCnt : $wonLeads;
                 $convertedVal   = $productConvVal > 0 ? $productConvVal : $wonVal;
@@ -402,9 +440,15 @@ class DashboardController extends Controller
                 $this->visibility->applyLeadVisibility($q, $request->user());
 
                 $total  = (clone $q)->count();
-                $won    = (clone $q)->where('lead_status', 'won')->count();
+                // Same fix as the main KPIs above — Lead::scopeConverted()
+                // instead of the legacy lead_status='won' string, so this
+                // "WON" column (rendered in the app's own Team Performance
+                // table) agrees with the Active Customers KPI and Lead
+                // List filter rather than a narrower, separately
+                // -maintained condition.
+                $won    = (clone $q)->converted()->count();
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
-                $wonVal = (float)(clone $q)->where('lead_status', 'won')->sum('deal_value');
+                $wonVal = (float)(clone $q)->converted()->sum('deal_value');
 
                 return [
                     'user_id'         => $user->id,

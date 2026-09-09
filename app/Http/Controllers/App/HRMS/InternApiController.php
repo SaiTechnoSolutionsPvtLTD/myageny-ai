@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\Department;
 use App\Models\InternJoiningForm;
+use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,6 +49,15 @@ class InternApiController extends Controller
             })
             ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->integer('department_id')))
             ->when($request->filled('internship_status'), fn ($q) => $q->where('internship_status', $request->string('internship_status')->toString()))
+            ->when($request->filled('role_id'), fn ($q) => $q->where('role_id', $request->integer('role_id')))
+            // Branch lives on the linked portal user (User::branch_id), not
+            // on InternJoiningForm itself — mirrors this model's own
+            // booted() global scope, which filters branch admins through
+            // the same relationship.
+            ->when($request->filled('branch_id'), fn ($q) => $q->whereHas(
+                'portalUser',
+                fn ($sub) => $sub->where('branch_id', $request->integer('branch_id'))
+            ))
             ->latest();
 
         $perPage = (int) ($request->per_page ?? 15);
@@ -98,11 +109,40 @@ class InternApiController extends Controller
         // two values intern-index.blade.php's Status <select> offers.
         $statuses = [InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_RESIGNED];
 
+        $user = request()->user();
+
+        // Branch options — same company/branch-admin scoping as
+        // EmployeeApiController::meta() (see its comment); keeps this
+        // filter list from ever offering a branch that would return an
+        // empty result under InternJoiningForm's own branch-admin global
+        // scope.
+        $branchesQuery = Branch::where('is_active', true);
+        if ($user?->company_id) {
+            $branchesQuery->where('company_id', $user->company_id);
+        }
+        if ($user && $user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                $branchesQuery->whereIn('id', $branchIds);
+            }
+        }
+        $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
+
+        // Role options — company-scoped, same shape as
+        // EmployeeApiController::meta().
+        $roles = Role::when($user?->company_id, fn ($q, $companyId) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'display_name'])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->display_name ?: $r->name])
+            ->values();
+
         return response()->json([
             'success' => true,
             'data'    => [
                 'departments' => $departments,
                 'statuses'    => $statuses,
+                'branches'    => $branches,
+                'roles'       => $roles,
             ],
         ]);
     }

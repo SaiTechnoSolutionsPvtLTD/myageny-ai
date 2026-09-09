@@ -40,10 +40,102 @@ class OvpModuleApiController extends Controller
     {
     }
 
+    // Bucket key -> the SQL this bucket's items must satisfy, applied on top
+    // of a base query that already has the shared filters (dates/product/
+    // status/user/company/department + executive scoping). 'new' and
+    // 'overdue' both come from the same underlying statuses
+    // ('ovp_pending'/'initiated') and are split purely by whether created_at
+    // has crossed the 3-day SLA — see isOverdue(). Keeping that split at the
+    // SQL level (rather than fetching every row and branching in PHP, like
+    // the old implementation did) is what lets this be paginated.
+    private const OVP_NEW_OVERDUE_STATUSES = ['ovp_pending', 'initiated'];
+    private const OVP_APPROVED_STATUSES = ['approval', 'approved'];
+    private const OVP_REJECTED_STATUSES = ['rejected', 'reject'];
+
+    private function applyBucketScope($query, string $bucket): void
+    {
+        $overdueCutoff = Carbon::now()->subDays(3);
+
+        match ($bucket) {
+            'new' => $query->whereIn('status', self::OVP_NEW_OVERDUE_STATUSES)
+                ->where('created_at', '>=', $overdueCutoff),
+            'overdue' => $query->whereIn('status', self::OVP_NEW_OVERDUE_STATUSES)
+                ->where('created_at', '<', $overdueCutoff),
+            'approved' => $query->whereIn('status', self::OVP_APPROVED_STATUSES),
+            'reject' => $query->whereIn('status', self::OVP_REJECTED_STATUSES),
+            default => $query->where('status', 'pending'), // 'pending' bucket
+        };
+    }
+
+    /**
+     * GET /mobile/ovp?bucket=new|pending|overdue|approved|reject&page=&per_page=
+     *
+     * Previously this ran `->get()` with no LIMIT at all, hydrated every
+     * production initiation in the OVP workflow (with 10 eager-loaded
+     * relations each) across the company's entire history, classified each
+     * one into a bucket in PHP, and shipped all 5 buckets' full item lists
+     * back in one response — every time the screen opened. That's what made
+     * the Approved tab (and every other tab) slow as the table grew. This
+     * mirrors ProductionApprovalApiController::index(): paginate at the
+     * database level and only fetch the one bucket the user is actually
+     * looking at; the other 4 buckets' tab badges come from cheap aggregate
+     * COUNT(*) queries instead of being a side effect of loading everything.
+     */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page'     => ['nullable', 'integer', 'min:1'],
+        ]);
+
         $user = auth()->user();
         $isExecutiveScopedView = $this->isExecutiveScopedUser($user);
+
+        $bucket = $request->query('bucket');
+        if (! in_array($bucket, ['new', 'pending', 'overdue', 'approved', 'reject'], true)) {
+            $bucket = 'new';
+        }
+
+        $applyFilters = function ($query) use ($request, $isExecutiveScopedView, $user) {
+            // Mirrors web OvpModuleController::index() exactly, so mobile and
+            // web return the same result set for the same query params.
+            if ($request->filled('start_date')) {
+                $query->whereDate('created_at', '>=', $request->query('start_date'));
+            }
+            if ($request->filled('end_date')) {
+                $query->whereDate('created_at', '<=', $request->query('end_date'));
+            }
+            if ($request->filled('product_id')) {
+                $query->where('product_id', $request->query('product_id'));
+            }
+            if ($request->filled('status')) {
+                $query->where('status', $request->query('status'));
+            }
+            if ($request->filled('user_id')) {
+                $query->where('ovp_allocated_to', $request->query('user_id'));
+            }
+            if ($request->filled('company_id')) {
+                $query->where('company_id', $request->query('company_id'));
+            }
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->query('department_id'));
+            }
+            $query->when($isExecutiveScopedView, fn($q) => $q->where('ovp_allocated_to', $user->id));
+
+            return $query;
+        };
+
+        // Counts for all 5 tab badges — cheap aggregate COUNT(*) queries (no
+        // rows/relations hydrated), not a side effect of fetching everything
+        // like the old implementation. Same filters apply to every count so
+        // the badges stay consistent with whatever's active.
+        $counts = [];
+        foreach (['new', 'pending', 'overdue', 'approved', 'reject'] as $key) {
+            $countQuery = ProductionInitiation::query();
+            $applyFilters($countQuery);
+            $this->applyBucketScope($countQuery, $key);
+            $counts[$key] = $countQuery->count();
+        }
 
         $query = ProductionInitiation::query()
             ->with([
@@ -59,65 +151,45 @@ class OvpModuleApiController extends Controller
                 'ovpAllocatedBy:id,name',
                 'reviewedBy:id,name',
             ]);
+        $applyFilters($query);
+        $this->applyBucketScope($query, $bucket);
 
-        // Filters — mirrors web OvpModuleController::index() exactly, so mobile
-        // and web return the same result set for the same query params.
-        if ($request->filled('start_date')) {
-            $query->whereDate('created_at', '>=', $request->query('start_date'));
-        }
-        if ($request->filled('end_date')) {
-            $query->whereDate('created_at', '<=', $request->query('end_date'));
-        }
-        if ($request->filled('product_id')) {
-            $query->where('product_id', $request->query('product_id'));
-        }
-        if ($request->filled('status')) {
-            $query->where('status', $request->query('status'));
-        }
-        if ($request->filled('user_id')) {
-            $query->where('ovp_allocated_to', $request->query('user_id'));
-        }
-        if ($request->filled('company_id')) {
-            $query->where('company_id', $request->query('company_id'));
-        }
-        if ($request->filled('department_id')) {
-            $query->where('department_id', $request->query('department_id'));
-        }
-
-        $initiations = $query
-            ->when($isExecutiveScopedView, fn($q) => $q->where('ovp_allocated_to', $user->id))
-            ->latest()
-            ->get();
-
-        $buckets = [
-            'new'      => ['title' => 'New',      'count' => 0, 'items' => []],
-            'pending'  => ['title' => 'Pending',   'count' => 0, 'items' => []],
-            'overdue'  => ['title' => 'Overdue',   'count' => 0, 'items' => []],
-            'approved' => ['title' => 'Approved',  'count' => 0, 'items' => []],
-            'reject'   => ['title' => 'Rejected',  'count' => 0, 'items' => []],
-        ];
-
-        foreach ($initiations as $initiation) {
-            $bucket = $this->resolveBucket($initiation);
-            if (!$bucket) continue;
-
-            $buckets[$bucket]['items'][] = $this->formatInitiation($initiation, $user);
-            $buckets[$bucket]['count']++;
-        }
-
-        $counts = collect($buckets)->map(fn($b) => $b['count']);
+        $perPage     = (int) $request->input('per_page', 15);
+        $initiations = $query->latest()->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'data' => [
-                'buckets' => $buckets,
-                'counts'  => $counts,
+                'bucket' => $bucket,
+                'items'  => $initiations->getCollection()
+                    ->map(fn ($i) => $this->formatInitiation($i, $user))
+                    ->values(),
+                'pagination' => [
+                    'current_page' => $initiations->currentPage(),
+                    'last_page'    => $initiations->lastPage(),
+                    'per_page'     => $initiations->perPage(),
+                    'total'        => $initiations->total(),
+                ],
+                'counts' => $counts,
                 'is_tl'   => $this->isTlScopedUser($user),
                 'is_executive' => $isExecutiveScopedView,
-                // Filter dropdown data — same source as web's index() (Product/
-                // Department/User/Company, active-only where applicable).
-                'filters' => $this->filterOptions(),
             ],
+        ]);
+    }
+
+    /**
+     * GET /mobile/ovp/filters
+     *
+     * Dropdown data for the mobile filter sheet — split out of index() so
+     * the app fetches (and caches) this once instead of re-querying all
+     * products/departments/active users/companies on every single list
+     * request (same reasoning as ProductionApprovalApiController::filters()).
+     */
+    public function filters(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->filterOptions(),
         ]);
     }
 

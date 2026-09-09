@@ -135,7 +135,10 @@ Route::prefix('mobile/auth')->group(function () {
 
 Route::get('/get-outcome-category', [OutcomeCategoryController::class, 'getOutcomeCategory']);
 Route::get('/get-subcategories/{id}', [OutcomeCategoryController::class, 'getSubCategories']);
-Route::get('/get-lead-status', [LeadController::class, 'leadStatus']);
+// Mobile app's "Change Status" picker relies on the authenticated user's
+// company_id to scope statuses (see LeadController::leadStatus) — must run
+// behind auth:sanctum so the Bearer token actually resolves to a user.
+Route::get('/get-lead-status', [LeadController::class, 'leadStatus'])->middleware('auth:sanctum');
 Route::get('/get-lead-source', [LeadController::class, 'leadSource']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -327,6 +330,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
     // ── OVP Module ───────────────────────────────────────────────────────────────
     Route::prefix('ovp')->name('ovp.')->group(function () {
+        Route::get('/filters',                               [OvpModuleApiController::class, 'filters'])->name('filters');
         Route::get('/',                                      [OvpModuleApiController::class, 'index'])->name('index');
         Route::get('/executives',                            [OvpModuleApiController::class, 'executives'])->name('executives');
         Route::post('/{productionInitiation}/allocate',      [OvpModuleApiController::class, 'allocate'])->name('allocate');
