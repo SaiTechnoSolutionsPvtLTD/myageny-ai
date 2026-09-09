@@ -514,6 +514,31 @@
                                     <div class="ps-value">{{ $projectItem->productionApprovalReviewedBy?->name ?: 'Pending' }}</div>
                                 </div>
                                 <div class="ps-detail">
+                                    <div class="ps-label">TL Name</div>
+                                    <div class="ps-value">
+                                        @if($allocatedTlUsers->isNotEmpty())
+                                            {{ $allocatedTlUsers->pluck('name')->implode(', ') }}
+                                        @else
+                                            <span class="ps-value-soft">Pending Allocation</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="ps-detail">
+                                    <div class="ps-label">Team Name</div>
+                                    <div class="ps-value">
+                                        @php
+                                            $allAllocatedEmployees = $allocatedEmployees->concat(
+                                                $tlAllocationSummaries->flatMap(fn ($s) => $s->employees)
+                                            )->unique('id')->filter();
+                                        @endphp
+                                        @if($allAllocatedEmployees->isNotEmpty())
+                                            {{ $allAllocatedEmployees->pluck('name')->implode(', ') }}
+                                        @else
+                                            <span class="ps-value-soft">Pending Allocation</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="ps-detail">
                                     <div class="ps-label">Delivery Date</div>
                                     <div class="ps-value">{{ optional($projectDeliveryDate ?? null)->format('d M Y') ?: 'Not set' }}</div>
                                 </div>

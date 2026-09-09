@@ -55,6 +55,10 @@
 .eob-chip-rejected { background:#fef2f2; color:#b91c1c; }
 .eob-chip-billable { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
 .eob-chip-non-billable { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.eob-status-trigger { cursor:pointer; border:1px solid transparent; transition:all .18s ease; outline:none; }
+.eob-status-trigger:hover { transform:translateY(-1px); box-shadow:0 3px 8px rgba(0,0,0,.08); filter:brightness(0.96); }
+.eob-status-trigger:active { transform:translateY(0); }
+.eob-badge-branch { font-weight:600; font-size:12px; color:#334155; display:inline-flex; align-items:center; gap:5px; padding:3px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; }
 .eob-filter-card, .eob-table-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:hidden; }
 .eob-filter-form { display:flex; gap:12px; flex-wrap:wrap; padding:16px; align-items:flex-end; }
 .eob-field { display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1; }

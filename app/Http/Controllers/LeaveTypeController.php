@@ -41,7 +41,7 @@ class LeaveTypeController extends Controller
         $leaveType = LeaveType::create($request->validated());
 
         return redirect()
-            ->route('settings.leave-types.index')
+            ->route('hrms.masters.leave-types.index')
             ->with('success', "Leave type {$leaveType->name} created successfully.");
     }
 
@@ -58,7 +58,7 @@ class LeaveTypeController extends Controller
         $leaveType->update($request->validated());
 
         return redirect()
-            ->route('settings.leave-types.index')
+            ->route('hrms.masters.leave-types.index')
             ->with('success', "Leave type {$leaveType->name} updated successfully.");
     }
 
@@ -69,7 +69,7 @@ class LeaveTypeController extends Controller
         $leaveType->delete();
 
         return redirect()
-            ->route('settings.leave-types.index')
+            ->route('hrms.masters.leave-types.index')
             ->with('success', "Leave type {$leaveTypeName} deleted successfully.");
     }
 

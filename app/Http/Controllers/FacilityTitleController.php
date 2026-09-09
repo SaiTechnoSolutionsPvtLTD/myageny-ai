@@ -38,7 +38,7 @@ class FacilityTitleController extends Controller
         $facilityTitle = FacilityTitle::create($request->validated());
 
         return redirect()
-            ->route('settings.facility-titles.index')
+            ->route('hrms.masters.facility-titles.index')
             ->with('success', "Facility title {$facilityTitle->name} created successfully.");
     }
 
@@ -52,7 +52,7 @@ class FacilityTitleController extends Controller
         $facilityTitle->update($request->validated());
 
         return redirect()
-            ->route('settings.facility-titles.index')
+            ->route('hrms.masters.facility-titles.index')
             ->with('success', "Facility title {$facilityTitle->name} updated successfully.");
     }
 
@@ -62,7 +62,7 @@ class FacilityTitleController extends Controller
         $facilityTitle->delete();
 
         return redirect()
-            ->route('settings.facility-titles.index')
+            ->route('hrms.masters.facility-titles.index')
             ->with('success', "Facility title {$facilityTitleName} deleted successfully.");
     }
 }

@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Update the department details without losing soft-delete history.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.departments.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.departments.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.departments.update', $department) }}">
+        <form method="POST" action="{{ route('hrms.masters.departments.update', $department) }}">
             @csrf
             @method('PUT')
             <div class="crm-form-wrap">
@@ -56,7 +56,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.departments.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.departments.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Update Department</button>
                 </div>
             </div>

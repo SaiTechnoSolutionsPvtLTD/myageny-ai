@@ -44,6 +44,7 @@ class UserController extends Controller
             ->when($request->status !== null && $request->status !== '', fn($q) =>
                 $q->where('is_active', $request->status)
             )
+            ->orderByDesc('is_active')
             ->when($request->activity, function ($q) use ($request) {
                 if ($request->activity === 'last_seen') {
                     $q->whereNotNull('last_login_at')

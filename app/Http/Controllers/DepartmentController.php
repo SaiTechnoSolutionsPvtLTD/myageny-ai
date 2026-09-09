@@ -40,7 +40,7 @@ class DepartmentController extends Controller
         $department = Department::create($request->validated());
 
         return redirect()
-            ->route('settings.departments.index')
+            ->route('hrms.masters.departments.index')
             ->with('success', "Department {$department->name} created successfully.");
     }
 
@@ -57,7 +57,7 @@ class DepartmentController extends Controller
         $department->update($request->validated());
 
         return redirect()
-            ->route('settings.departments.index')
+            ->route('hrms.masters.departments.index')
             ->with('success', "Department {$department->name} updated successfully.");
     }
 
@@ -67,7 +67,7 @@ class DepartmentController extends Controller
         $department->delete();
 
         return redirect()
-            ->route('settings.departments.index')
+            ->route('hrms.masters.departments.index')
             ->with('success', "Department {$departmentName} deleted successfully.");
     }
 }

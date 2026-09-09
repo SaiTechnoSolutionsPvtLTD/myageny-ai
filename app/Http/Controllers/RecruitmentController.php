@@ -535,7 +535,7 @@ class RecruitmentController extends Controller
         ]));
 
         if (!empty($validated['scheduled_at'])) {
-            $roundName = $validated['round'] ?: 'Interview Round';
+            $roundName = !empty($validated['round']) ? $validated['round'] : 'Interview Round';
             RecruitmentReminder::create([
                 'company_id' => auth()->user()?->company_id,
                 'recruitment_candidate_id' => $recruitment->id,

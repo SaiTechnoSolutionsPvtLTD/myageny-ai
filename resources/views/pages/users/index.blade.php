@@ -182,14 +182,6 @@
             <div class="usr-page-title">User Management</div>
             <div class="usr-breadcrumb">Admin › <span>Users</span></div>
         </div>
-        <div class="usr-topbar-right">
-
-            <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary">
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add User
-            </a>
-
-        </div>
     </div>
 
     {{-- Filter Bar --}}
@@ -476,17 +468,6 @@
                                     <a href="{{ route('users.show', $user) }}" class="usr-action-btn" title="View">
                                         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                     </a>
-                                    @can('users.manage')
-                                    <a href="{{ route('users.edit', $user) }}" class="usr-action-btn edit" title="Edit">
-                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                    </a>
-                                    @if($user->id !== auth()->id() && !$user->isSystemAdmin() && !($user->company && $user->company->super_admin_user_id === $user->id))
-                                    <button class="usr-action-btn del" title="Delete"
-                                        onclick="confirmDelete({{ $user->id }}, '{{ addslashes($user->name) }}')">
-                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                                    </button>
-                                    @endif
-                                    @endcan
                                 </div>
                             </td>
                         </tr>
@@ -529,43 +510,10 @@
 
     </div>{{-- /usr-body --}}
 </div>{{-- /usr-page --}}
-
-{{-- Delete Confirmation Modal --}}
-<div class="usr-modal-overlay" id="deleteModal">
-    <div class="usr-modal">
-        <div class="usr-modal-icon">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-        </div>
-        <div class="usr-modal-title">Delete User?</div>
-        <div class="usr-modal-sub" id="deleteModalSub">This action will permanently remove the user and cannot be undone.</div>
-        <div class="usr-modal-btns">
-            <button class="usr-modal-btn usr-modal-cancel" onclick="closeDeleteModal()">Cancel</button>
-            <form id="deleteForm" method="POST" style="flex:1;">
-                @csrf @method('DELETE')
-                <button type="submit" class="usr-modal-btn usr-modal-delete" style="width:100%;">Delete</button>
-            </form>
-        </div>
-    </div>
-</div>
 @endsection
 
 @push('scripts')
 <script>
-// ── Delete modal ─────────────────────────────────────────────────
-function confirmDelete(id, name) {
-    document.getElementById('deleteModalSub').textContent =
-        `Are you sure you want to delete "${name}"? This cannot be undone.`;
-    document.getElementById('deleteForm').action = `/users/${id}`;
-    document.getElementById('deleteModal').style.display = 'flex';
-}
-function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
-}
-document.getElementById('deleteModal').addEventListener('click', function(e) {
-    if (e.target === this) closeDeleteModal();
-});
-document.addEventListener('keydown', e => { if(e.key==='Escape') closeDeleteModal(); });
-
 // ── Debounced search ─────────────────────────────────────────────
 let searchTimer;
 function delaySubmit() {

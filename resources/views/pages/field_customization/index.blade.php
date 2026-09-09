@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Lead Form Customization')
+@section('title', 'Form Customization - myAgenci.ai')
 
 @push('styles')
 <style>
@@ -232,13 +232,14 @@ select.form-control { appearance:none; cursor:pointer; }
     <!-- Top Header -->
     <header class="top-header">
         <div class="breadcrumbs">
-            <span class="crumb-item">Home</span>
-            <i class="bi bi-chevron-right crumb-sep" style="font-size:11px;"></i>
-            <span class="crumb-item">Sales</span>
+            <a href="{{ route('settings.index') }}" class="crumb-item" style="text-decoration:none; color:inherit;">Settings</a>
             <i class="bi bi-chevron-right crumb-sep" style="font-size:11px;"></i>
             <span class="crumb-item active">Form Customization</span>
         </div>
         <div class="header-actions">
+            <a href="{{ route('settings.index') }}" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                Back
+            </a>
             <button class="btn-primary" onclick="openCreateModal()">
                 <i class="bi bi-plus-lg"></i> Add Field
             </button>

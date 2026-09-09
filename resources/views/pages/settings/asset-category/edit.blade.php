@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Update the asset category master data.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.asset-categories.update', $assetCategory) }}">
+        <form method="POST" action="{{ route('hrms.masters.asset-categories.update', $assetCategory) }}">
             @csrf
             @method('PUT')
             <div class="crm-form-wrap">
@@ -46,7 +46,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Update Asset Category</button>
                 </div>
             </div>

@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Add a new leave type for HR and attendance workflows.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.leave-types.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.leave-types.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.leave-types.store') }}">
+        <form method="POST" action="{{ route('hrms.masters.leave-types.store') }}">
             @csrf
             <div class="crm-form-wrap">
                 <div class="crm-form-head">
@@ -45,7 +45,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.leave-types.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.leave-types.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Create Leave Type</button>
                 </div>
             </div>

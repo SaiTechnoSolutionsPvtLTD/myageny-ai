@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Update the facility title master data.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.facility-titles.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.facility-titles.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.facility-titles.update', $facilityTitle) }}">
+        <form method="POST" action="{{ route('hrms.masters.facility-titles.update', $facilityTitle) }}">
             @csrf
             @method('PUT')
             <div class="crm-form-wrap">
@@ -46,7 +46,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.facility-titles.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.facility-titles.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Update Facility Title</button>
                 </div>
             </div>

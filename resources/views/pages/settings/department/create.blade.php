@@ -22,13 +22,13 @@
                 <p class="crm-subtitle">Add a new department for employee classification and HR workflows.</p>
             </div>
             <div class="crm-header-actions">
-                <a href="{{ route('settings.departments.index') }}" class="crm-btn crm-btn-ghost">Back</a>
+                <a href="{{ route('hrms.masters.departments.index') }}" class="crm-btn crm-btn-ghost">Back</a>
             </div>
         </div>
 
         @include('pages.settings.partials.alert')
 
-        <form method="POST" action="{{ route('settings.departments.store') }}">
+        <form method="POST" action="{{ route('hrms.masters.departments.store') }}">
             @csrf
             <div class="crm-form-wrap">
                 <div class="crm-form-head">
@@ -55,7 +55,7 @@
                     </div>
                 </div>
                 <div class="crm-form-foot">
-                    <a href="{{ route('settings.departments.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
+                    <a href="{{ route('hrms.masters.departments.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
                     <button type="submit" class="crm-btn crm-btn-primary">Create Department</button>
                 </div>
             </div>

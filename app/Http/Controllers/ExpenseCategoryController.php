@@ -53,7 +53,7 @@ class ExpenseCategoryController extends Controller
         $category = ExpenseCategory::create($validated);
 
         return redirect()
-            ->route('settings.expense-categories.index')
+            ->route('hrms.masters.expense-categories.index')
             ->with('success', "Expense category \"{$category->name}\" created successfully.");
     }
 
@@ -74,7 +74,7 @@ class ExpenseCategoryController extends Controller
         $expenseCategory->update($validated);
 
         return redirect()
-            ->route('settings.expense-categories.index')
+            ->route('hrms.masters.expense-categories.index')
             ->with('success', "Expense category \"{$expenseCategory->name}\" updated successfully.");
     }
 
@@ -87,7 +87,7 @@ class ExpenseCategoryController extends Controller
         $expenseCategory->delete();
 
         return redirect()
-            ->route('settings.expense-categories.index')
+            ->route('hrms.masters.expense-categories.index')
             ->with('success', "Expense category \"{$categoryName}\" deleted successfully.");
     }
 
@@ -101,7 +101,7 @@ class ExpenseCategoryController extends Controller
         ]);
 
         return redirect()
-            ->route('settings.expense-categories.index')
+            ->route('hrms.masters.expense-categories.index')
             ->with('success', "Category \"{$expenseCategory->name}\" status updated successfully.");
     }
 }

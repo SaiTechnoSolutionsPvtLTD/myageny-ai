@@ -96,10 +96,7 @@ Route::get('/forgot-password', function () {
 })->name('password.request');
 
 
-Route::get('/lead/form-customization', function () {
-    $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
-    return view('pages.field_customization.index', compact('companies'));
-})->middleware(['auth', 'can:form_customization.menuview']);
+Route::get('/lead/form-customization', fn() => redirect()->route('settings.form-customization.index'))->middleware('auth');
 Route::middleware(['auth'])->group(function () {
 
   // Dashboard
@@ -172,6 +169,34 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('product-attribute', ProductAttributeController::class)
             ->middleware('can:product_attributes.view')
             ->except(['create', 'show']);
+    });
+
+    Route::prefix('hrms/masters')->name('hrms.masters.')->group(function () {
+        Route::resource('departments', DepartmentController::class)
+            ->middleware('can:departments.menuview');
+
+        Route::resource('leave-types', LeaveTypeController::class)
+            ->middleware('can:settings.manage');
+
+        Route::resource('facility-titles', FacilityTitleController::class)
+            ->middleware('can:settings.manage')
+            ->except(['show']);
+
+        Route::resource('asset-categories', AssetCategoryController::class)
+            ->middleware('can:settings.manage')
+            ->except(['show']);
+
+        Route::resource('expense-categories', ExpenseCategoryController::class)
+            ->except(['create', 'show', 'edit']);
+        Route::patch('expense-categories/{expenseCategory}/toggle', [ExpenseCategoryController::class, 'toggleStatus'])
+            ->name('expense-categories.toggle-status');
+
+        Route::get('payroll', [PayrollSettingController::class, 'index'])
+            ->middleware('can:payroll_settings.menuview')
+            ->name('payroll.index');
+        Route::post('payroll', [PayrollSettingController::class, 'update'])
+            ->middleware('can:payroll_settings.manage')
+            ->name('payroll.update');
     });
 
     Route::get('/authentications', [UserController::class, 'authIndex'])
@@ -482,6 +507,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::post('employee-onboarding/{employee_onboarding}/update-photo', [EmployeeOnboardingController::class, 'updatePhoto'])->name('employee-onboarding.update-photo');
     Route::post('employee-onboarding/{employee_onboarding}/update-document', [EmployeeOnboardingController::class, 'updateDocument'])->name('employee-onboarding.update-document');
+    Route::patch('employee-onboarding/{employee_onboarding}/update-status', [EmployeeOnboardingController::class, 'updateStatus'])->name('employee-onboarding.update-status');
     Route::resource('employee-onboarding', EmployeeOnboardingController::class);
     Route::post('/employee-exit-requests', [EmployeeExitController::class, 'store'])->name('employee-exit-requests.store');
     Route::post('/employee-exit-requests/{employeeExitRequest}/revoke', [EmployeeExitController::class, 'requestRevoke'])->name('employee-exit-requests.revoke');
@@ -633,27 +659,34 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
     Route::get('/activity-logs/export', [ActivityLogController::class, 'export'])->name('activity-logs.export');
     Route::get('/activity-logs/{activityLog}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
 
-    // Backward compatibility redirects to Masters
+    // Backward compatibility redirects to Masters & HRMS Masters
     Route::get('lead-statuses', fn() => redirect()->route('masters.lead-statuses.index'))->name('lead-statuses.index');
     Route::get('product-category', fn() => redirect()->route('masters.product-category.index'))->name('product-category.index');
 
-    Route::resource('departments', DepartmentController::class)
-         ->middleware('can:settings.manage')
-         ->except(['show']);
+    Route::get('departments', fn() => redirect()->route('hrms.masters.departments.index'))->name('departments.index');
+    Route::get('departments/create', fn() => redirect()->route('hrms.masters.departments.create'))->name('departments.create');
+    Route::post('departments', [DepartmentController::class, 'store'])->middleware('can:departments.create')->name('departments.store');
+    Route::get('departments/{department}/edit', fn(\App\Models\Department $department) => redirect()->route('hrms.masters.departments.edit', $department))->name('departments.edit');
+    Route::put('departments/{department}', [DepartmentController::class, 'update'])->middleware('can:departments.edit')->name('departments.update');
+    Route::delete('departments/{department}', [DepartmentController::class, 'destroy'])->middleware('can:departments.delete')->name('departments.destroy');
 
     Route::resource('branches', BranchController::class)
          ->middleware('can:branches.manage')
          ->except(['show']);
 
+    Route::get('leave-types', fn() => redirect()->route('hrms.masters.leave-types.index'))->name('leave-types.index');
+    Route::get('leave-types/create', fn() => redirect()->route('hrms.masters.leave-types.create'))->name('leave-types.create');
+    Route::post('leave-types', [LeaveTypeController::class, 'store'])->middleware('can:settings.manage')->name('leave-types.store');
+    Route::get('leave-types/{leaveType}/edit', fn(\App\Models\LeaveType $leaveType) => redirect()->route('hrms.masters.leave-types.edit', $leaveType))->name('leave-types.edit');
+    Route::put('leave-types/{leaveType}', [LeaveTypeController::class, 'update'])->middleware('can:settings.manage')->name('leave-types.update');
+    Route::delete('leave-types/{leaveType}', [LeaveTypeController::class, 'destroy'])->middleware('can:settings.manage')->name('leave-types.destroy');
 
-
-    Route::resource('leave-types', LeaveTypeController::class)
-         ->middleware('can:settings.manage')
-         ->except(['show']);
-
-    Route::resource('asset-categories', AssetCategoryController::class)
-         ->middleware('can:settings.manage')
-         ->except(['show']);
+    Route::get('asset-categories', fn() => redirect()->route('hrms.masters.asset-categories.index'))->name('asset-categories.index');
+    Route::get('asset-categories/create', fn() => redirect()->route('hrms.masters.asset-categories.create'))->name('asset-categories.create');
+    Route::post('asset-categories', [AssetCategoryController::class, 'store'])->middleware('can:settings.manage')->name('asset-categories.store');
+    Route::get('asset-categories/{assetCategory}/edit', fn(\App\Models\AssetCategory $assetCategory) => redirect()->route('hrms.masters.asset-categories.edit', $assetCategory))->name('asset-categories.edit');
+    Route::put('asset-categories/{assetCategory}', [AssetCategoryController::class, 'update'])->middleware('can:settings.manage')->name('asset-categories.update');
+    Route::delete('asset-categories/{assetCategory}', [AssetCategoryController::class, 'destroy'])->middleware('can:settings.manage')->name('asset-categories.destroy');
 
     Route::resource('house-keeping-categories', HouseKeepingCategoryController::class)
          ->middleware('can:settings.manage')
@@ -663,9 +696,12 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->middleware('can:settings.manage')
          ->except(['show']);
 
-    Route::resource('facility-titles', FacilityTitleController::class)
-         ->middleware('can:settings.manage')
-         ->except(['show']);
+    Route::get('facility-titles', fn() => redirect()->route('hrms.masters.facility-titles.index'))->name('facility-titles.index');
+    Route::get('facility-titles/create', fn() => redirect()->route('hrms.masters.facility-titles.create'))->name('facility-titles.create');
+    Route::post('facility-titles', [FacilityTitleController::class, 'store'])->middleware('can:settings.manage')->name('facility-titles.store');
+    Route::get('facility-titles/{facilityTitle}/edit', fn(\App\Models\FacilityTitle $facilityTitle) => redirect()->route('hrms.masters.facility-titles.edit', $facilityTitle))->name('facility-titles.edit');
+    Route::put('facility-titles/{facilityTitle}', [FacilityTitleController::class, 'update'])->middleware('can:settings.manage')->name('facility-titles.update');
+    Route::delete('facility-titles/{facilityTitle}', [FacilityTitleController::class, 'destroy'])->middleware('can:settings.manage')->name('facility-titles.destroy');
 
     Route::get('product-attribute', fn() => redirect()->route('masters.product-attribute.index'))->name('product-attribute.index');
 
@@ -711,7 +747,7 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
 
 
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->middleware('can:quotation_settings.menuview')->name('quotation');
-    Route::get('/payroll', [PayrollSettingController::class, 'index'])->middleware('can:payroll_settings.menuview')->name('payroll.index');
+    Route::get('/payroll', fn() => redirect()->route('hrms.masters.payroll.index'))->name('payroll.index');
     Route::post('/payroll', [PayrollSettingController::class, 'update'])->middleware('can:payroll_settings.manage')->name('payroll.update');
 
     Route::get('/design-settings', [DesignSettingController::class, 'index'])->middleware('can:design_settings.menuview')->name('design-settings.index');
@@ -756,12 +792,20 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
     });
 
     // Expense Category Master
-    Route::resource('expense-categories', \App\Http\Controllers\ExpenseCategoryController::class)->except(['create', 'show', 'edit']);
+    Route::get('expense-categories', fn() => redirect()->route('hrms.masters.expense-categories.index'))->name('expense-categories.index');
+    Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+    Route::put('expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
+    Route::delete('expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'destroy'])->name('expense-categories.destroy');
     Route::patch('expense-categories/{expenseCategory}/toggle', [\App\Http\Controllers\ExpenseCategoryController::class, 'toggleStatus'])->name('expense-categories.toggle-status');
 
     Route::get('lead-sources', fn() => redirect()->route('masters.lead-sources.index'))->name('lead-sources.index');
     Route::get('outcome-categories', fn() => redirect()->route('masters.outcome-categories.index'))->name('outcome-categories.index');
     Route::get('outcome-sub-categories', fn() => redirect()->route('masters.outcome-sub-categories.index'))->name('outcome-sub-categories.index');
+
+    Route::get('form-customization', function () {
+        $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
+        return view('pages.field_customization.index', compact('companies'));
+    })->middleware('can:form_customization.menuview')->name('form-customization.index');
 });
     Route::get('/get-subcategories/{id}', [OutcomeCategoryController::class, 'getSubCategories'])->middleware('can:leads.view');
 
