@@ -27,7 +27,7 @@ class OutcomeSubCategoryController extends Controller
             'category_id' => $request->category_id,
         ]);
 
-        return redirect()->route('settings.outcome-sub-categories.index')
+        return redirect()->route('masters.outcome-sub-categories.index')
                          ->with('success', 'Sub Category created successfully.');
     }
 
@@ -47,7 +47,7 @@ class OutcomeSubCategoryController extends Controller
             'category_id' => $request->category_id,
         ]);
 
-        return redirect()->route('settings.outcome-sub-categories.index')
+        return redirect()->route('masters.outcome-sub-categories.index')
                          ->with('success', 'Sub Category updated successfully.');
     }
 
@@ -56,7 +56,7 @@ class OutcomeSubCategoryController extends Controller
         $this->authorizeCompany($outcomeSubCategory);
         $outcomeSubCategory->delete();
 
-        return redirect()->route('settings.outcome-sub-categories.index')
+        return redirect()->route('masters.outcome-sub-categories.index')
                          ->with('success', 'Sub Category deleted.');
     }
 

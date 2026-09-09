@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
@@ -38,6 +39,7 @@ class AttendanceController extends Controller
             'sortDir' => $attendanceData['sort_dir'],
             'stats' => $attendanceData['stats'],
             'departments' => $this->attendanceDepartments(),
+            'branches' => $this->attendanceBranches(),
             'canViewAllAttendance' => $this->canViewAllAttendance(),
             'hasTeamMembers' => $this->hasMappedTeamMembers(),
             'thresholds' => [
@@ -59,6 +61,8 @@ class AttendanceController extends Controller
                 'Attendee Type' => ucfirst($record['attendee_type']),
                 'Attendee ID' => $record['employee_id'] ?: 'N/A',
                 'Attendee Name' => $record['employee_name'],
+                'Branch' => $record['branch_name'] ?: 'N/A',
+                'Department' => $record['department_name'] ?: 'N/A',
                 'Attendance Date' => Carbon::parse($record['attendance_date'])->format('d-m-Y'),
                 'Status' => ucfirst($record['attendance_status']),
                 'Leave Category' => $record['attendance_status'] === 'leave'
@@ -342,6 +346,7 @@ class AttendanceController extends Controller
     {
         $rules = [
             'employee_name' => ['nullable', 'string', 'max:255'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'from_date' => ['nullable', 'date'],
             'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
@@ -362,6 +367,7 @@ class AttendanceController extends Controller
         $selectedFromDate = $validated['from_date'] ?? now()->toDateString();
         $selectedToDate = $validated['to_date'] ?? $selectedFromDate;
         $employeeNameFilter = trim((string) ($validated['employee_name'] ?? ''));
+        $branchIdFilter = isset($validated['branch_id']) ? (int) $validated['branch_id'] : 0;
         $departmentIdFilter = isset($validated['department_id']) ? (int) $validated['department_id'] : 0;
         $statusFilter = $validated['status'] ?? '';
         $loginTimingFilter = $validated['login_timing'] ?? '';
@@ -396,7 +402,7 @@ class AttendanceController extends Controller
         $accessibleInternIds = $accessibleAttendees->where('attendee_type', 'intern')->pluck('id')->values();
 
         $attendanceCollection = DailyAttendance::query()
-            ->with(['employee.department', 'intern.department'])
+            ->with(['employee.department', 'intern.department', 'employee.portalUser.branch', 'intern.portalUser.branch'])
             ->whereDate('attendance_date', '>=', $selectedFromDate)
             ->whereDate('attendance_date', '<=', $selectedToDate)
             ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
@@ -431,6 +437,12 @@ class AttendanceController extends Controller
                 'employee_id' => (string) $attendeeId,
                 'employee_name' => $attendeeName,
                 'attendee_type' => $isIntern ? 'intern' : 'employee',
+                'branch_id' => $isIntern
+                    ? ($attendance->intern?->portalUser?->branch_id ?? null)
+                    : ($attendance->employee?->portalUser?->branch_id ?? null),
+                'branch_name' => $isIntern
+                    ? ($attendance->intern?->portalUser?->branch?->name ?? null)
+                    : ($attendance->employee?->portalUser?->branch?->name ?? null),
                 'department_id' => $isIntern ? $attendance->intern?->department_id : $attendance->employee?->department_id,
                 'department_name' => $isIntern
                     ? ($attendance->intern?->department?->name ?? null)
@@ -483,6 +495,8 @@ class AttendanceController extends Controller
                         'employee_id' => $attendee['display_id'],
                         'employee_name' => $attendee['name'],
                         'attendee_type' => $attendee['attendee_type'],
+                        'branch_id' => $attendee['branch_id'] ?? null,
+                        'branch_name' => $attendee['branch_name'] ?? null,
                         'department_id' => $attendee['department_id'],
                         'department_name' => $attendee['department_name'],
                         'attendance_date' => $attendanceDate,
@@ -528,8 +542,12 @@ class AttendanceController extends Controller
         };
 
         $records = $records
-            ->filter(function (array $record) use ($employeeNameFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
+            ->filter(function (array $record) use ($employeeNameFilter, $branchIdFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
                 if ($employeeNameFilter !== '' && ! str_contains($this->normalizeValue($record['employee_name']), $this->normalizeValue($employeeNameFilter))) {
+                    return false;
+                }
+
+                if ($branchIdFilter > 0 && (int) ($record['branch_id'] ?? 0) !== $branchIdFilter) {
                     return false;
                 }
 
@@ -723,11 +741,11 @@ class AttendanceController extends Controller
     {
         $employeeQuery = $this->activeEmployeesQuery()
             ->whereNotNull('name')
-            ->with('department');
+            ->with(['department', 'portalUser.branch']);
 
         $internQuery = $this->activeInternsQuery()
             ->whereNotNull('name')
-            ->with('department');
+            ->with(['department', 'portalUser.branch']);
 
         if (! $this->canViewAllAttendance()) {
             $user = auth()->user();
@@ -757,7 +775,7 @@ class AttendanceController extends Controller
 
         $employees = $employeeQuery
             ->orderBy('name')
-            ->get(['id', 'employee_id', 'name', 'status', 'photograph', 'department_id'])
+            ->get(['id', 'employee_id', 'name', 'status', 'photograph', 'department_id', 'portal_user_id', 'email'])
             ->map(fn (EmployeeOnboarding $employee) => [
                 'id' => $employee->id,
                 'attendee_type' => 'employee',
@@ -766,13 +784,15 @@ class AttendanceController extends Controller
                 'status' => $employee->status,
                 'department_id' => $employee->department_id,
                 'department_name' => $employee->department?->name,
+                'branch_id' => $employee->portalUser?->branch_id,
+                'branch_name' => $employee->portalUser?->branch?->name,
                 'photo_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 'select_key' => 'employee:' . $employee->id,
             ]);
 
         $interns = $internQuery
             ->orderBy('name')
-            ->get(['id', 'intern_id', 'name', 'photograph', 'department_id'])
+            ->get(['id', 'intern_id', 'name', 'photograph', 'department_id', 'portal_user_id', 'email'])
             ->map(fn (InternJoiningForm $intern) => [
                 'id' => $intern->id,
                 'attendee_type' => 'intern',
@@ -781,6 +801,8 @@ class AttendanceController extends Controller
                 'status' => null,
                 'department_id' => $intern->department_id,
                 'department_name' => $intern->department?->name,
+                'branch_id' => $intern->portalUser?->branch_id,
+                'branch_name' => $intern->portalUser?->branch?->name,
                 'photo_url' => $intern->photograph ? asset('storage/' . $intern->photograph) : null,
                 'select_key' => 'intern:' . $intern->id,
             ]);
@@ -849,6 +871,14 @@ class AttendanceController extends Controller
     {
         return Department::query()
             ->withoutGlobalScope('company')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
+    private function attendanceBranches(): Collection
+    {
+        return Branch::query()
+            ->active()
             ->orderBy('name')
             ->get(['id', 'name']);
     }

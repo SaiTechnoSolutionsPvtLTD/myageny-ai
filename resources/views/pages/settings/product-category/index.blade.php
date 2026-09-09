@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Product Category')
+@section('title', 'Product Category — Masters')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -13,7 +13,7 @@
         <div class="crm-page-header">
             <div>
                 <h2 class="crm-title">Product Category</h2>
-                <p class="crm-subtitle">Group your call/meeting outcomes</p>
+                <p class="crm-subtitle">Group your products into categories</p>
             </div>
             <div class="crm-header-actions">
                 <a href="{{ route('masters.index') }}" class="crm-btn crm-btn-ghost">← Back</a>
@@ -43,7 +43,7 @@
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
-                                    <form action="{{ route('settings.product-category.destroy', $cat) }}" method="POST"
+                                    <form action="{{ route('masters.product-category.destroy', $cat) }}" method="POST"
                                           onsubmit="return confirm('Delete this category and all its sub-categories?')">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="crm-table-dropdown-item danger">
@@ -56,7 +56,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="crm-empty">No outcome categories yet.</td></tr>
+                    <tr><td colspan="5" class="crm-empty">No product categories yet.</td></tr>
                 @endforelse
                 </tbody>
             </table>
@@ -71,7 +71,7 @@
     <div id="addModal" class="crm-modal-overlay" style="display:none">
         <div class="crm-modal">
             <div class="crm-modal-header"><h3>Add Product Category</h3><button onclick="closeModal('addModal')">✕</button></div>
-            <form action="{{ route('settings.product-category.store') }}" method="POST">
+            <form action="{{ route('masters.product-category.store') }}" method="POST">
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Category Name <span class="req">*</span></label>
@@ -109,7 +109,7 @@
 <script>
 function openEdit(id, name) {
     document.getElementById('editName').value = name;
-    document.getElementById('editForm').action = `/settings/product-category/${id}`;
+    document.getElementById('editForm').action = `/masters/product-category/${id}`;
     openModal('editModal');
 }
 </script>

@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Outcome Sub Category — Settings')
+@section('title', 'Outcome Sub Category — Masters')
 
 @push('styles')
 @include('pages.settings.partials.table-styles')
@@ -44,7 +44,7 @@
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
-                                    <form action="{{ route('settings.outcome-sub-categories.destroy', $sub) }}" method="POST"
+                                    <form action="{{ route('masters.outcome-sub-categories.destroy', $sub) }}" method="POST"
                                           onsubmit="return confirm('Delete this sub-category?')">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="crm-table-dropdown-item danger">
@@ -72,7 +72,7 @@
     <div id="addModal" class="crm-modal-overlay" style="display:none">
         <div class="crm-modal">
             <div class="crm-modal-header"><h3>Add Sub Category</h3><button onclick="closeModal('addModal')">✕</button></div>
-            <form action="{{ route('settings.outcome-sub-categories.store') }}" method="POST">
+            <form action="{{ route('masters.outcome-sub-categories.store') }}" method="POST">
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Outcome Category <span class="req">*</span></label>
@@ -125,7 +125,7 @@
 function openEdit(id, name, catId) {
     document.getElementById('editName').value   = name;
     document.getElementById('editCatId').value  = catId;
-    document.getElementById('editForm').action  = `/settings/outcome-sub-categories/${id}`;
+    document.getElementById('editForm').action  = `/masters/outcome-sub-categories/${id}`;
     openModal('editModal');
 }
 </script>

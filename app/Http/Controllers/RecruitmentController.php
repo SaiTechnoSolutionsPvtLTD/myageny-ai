@@ -187,11 +187,31 @@ class RecruitmentController extends Controller
 
         $callUpdates = $query->paginate(15)->withQueryString();
 
-        // Distinct callers
-        $userIds = RecruitmentCallUpdate::query()->distinct()->pluck('user_id')->filter();
-        $users = User::whereIn('id', $userIds)->orderBy('name')->get(['id', 'name']);
+        // HR department users for the Caller / HR filter
+        $onboardingUserIds = \App\Models\EmployeeOnboarding::whereHas('department', function ($q) {
+            $q->where('name', 'LIKE', '%hr%')
+              ->orWhere('name', 'LIKE', '%human%');
+        })->pluck('portal_user_id')->filter()->toArray();
+
+        $internUserIds = \App\Models\InternJoiningForm::whereHas('department', function ($q) {
+            $q->where('name', 'LIKE', '%hr%')
+              ->orWhere('name', 'LIKE', '%human%');
+        })->pluck('portal_user_id')->filter()->toArray();
+
+        $users = User::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->filter(function ($u) use ($onboardingUserIds, $internUserIds) {
+                return $u->belongsToHrDepartment()
+                    || $u->hasHrLikeRole()
+                    || in_array($u->id, $onboardingUserIds)
+                    || in_array($u->id, $internUserIds);
+            })
+            ->values();
+
         if ($users->isEmpty()) {
-            $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+            $userIds = RecruitmentCallUpdate::query()->distinct()->pluck('user_id')->filter();
+            $users = User::whereIn('id', $userIds)->orderBy('name')->get(['id', 'name']);
         }
 
         return view('pages.hrms.recruitment.call_updates.index', [

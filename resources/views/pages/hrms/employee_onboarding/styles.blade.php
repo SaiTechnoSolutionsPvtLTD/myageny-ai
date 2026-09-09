@@ -69,12 +69,14 @@
 .eob-icon-btn:hover { background:#fff7ed; color:#fe5f04; border-color:#fdba74; }
 .eob-icon-btn.danger:hover { background:#fef2f2; color:#dc2626; border-color:#fecaca; }
 .eob-table-dropdown { position:relative; display:inline-block; }
+.eob-table-dropdown[open] { z-index:60; }
 .eob-table-dropdown summary { list-style:none; }
 .eob-table-dropdown summary::-webkit-details-marker { display:none; }
 .eob-table-dropdown-trigger { min-width:42px; height:36px; padding:0 12px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; border:1px solid #e1dee3; background:#fff; color:#121212; cursor:pointer; font-size:12px; font-weight:800; }
 .eob-table-dropdown[open] .eob-table-dropdown-trigger,
 .eob-table-dropdown-trigger:hover { background:#fff7ed; color:#fe5f04; border-color:#fdba74; }
-.eob-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:170px; padding:8px; border-radius:14px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.12); z-index:20; display:flex; flex-direction:column; gap:6px; }
+.eob-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:170px; padding:8px; border-radius:14px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.15), 0 4px 12px rgba(0,0,0,.08); z-index:999; display:flex; flex-direction:column; gap:6px; }
+.eob-table-dropdown.dropup .eob-table-dropdown-menu { top:auto !important; bottom:calc(100% + 8px) !important; box-shadow:0 -16px 40px rgba(18,18,18,.15), 0 -4px 12px rgba(0,0,0,.08) !important; }
 .eob-table-dropdown-item { width:100%; display:flex; align-items:center; gap:8px; padding:9px 10px; border:1px solid transparent; border-radius:10px; background:#fff; color:#121212; text-decoration:none; font-size:13px; font-weight:700; cursor:pointer; text-align:left; }
 .eob-table-dropdown-item:hover { background:#fff7ed; color:#fe5f04; border-color:#fed7aa; }
 .eob-table-dropdown-item.danger:hover { background:#fef2f2; color:#dc2626; border-color:#fecaca; }

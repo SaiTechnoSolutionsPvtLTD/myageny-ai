@@ -294,7 +294,7 @@
                                         $groupDate = $firstTimesheet->timesheet_date;
                                         $timesheetUser = $firstTimesheet->user;
                                         $totalEntries = $group->count();
-                                        
+
                                         $pendingCount = $group->where('status', 'pending')->count();
                                         $ongoingCount = $group->where('status', 'ongoing')->count();
                                         $completedCount = $group->where('status', 'completed')->count();
@@ -306,7 +306,7 @@
                                             $companyName = $t->project?->company_name ?: ($t->project?->lead?->company_name ?: 'No Company');
                                             $productName = $t->project?->product_name ?: 'Project removed';
                                             $deliveryDate = optional($t->project_delivery_date)->format('d M Y') ?: (optional($t->project?->timesheet_delivery_date)->format('d M Y') ?: 'Not available');
-                                            
+
                                             $deptName = strtolower((string)($t->project?->department?->name ?? ''));
                                             $isDesignOrDm = str_contains($deptName, 'design') || str_contains($deptName, 'dm') || str_contains($deptName, 'digital marketing');
 
@@ -379,8 +379,8 @@
 
                                         <!-- Timesheets button -->
                                         <td>
-                                            <button type="button" 
-                                                    class="pts-btn pts-btn-outline open-timesheets-modal-btn" 
+                                            <button type="button"
+                                                    class="pts-btn pts-btn-outline open-timesheets-modal-btn"
                                                     data-user-name="{{ $timesheetUser?->name ?: 'My Timesheets' }}"
                                                     data-timesheet-date="{{ optional($groupDate)->format('d M Y') }}"
                                                     data-timesheets='@json($groupTimesheetsData)'>
@@ -1070,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (hasClosingUpdate) {
                             closingActionHtml = `
                                 <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn" 
+                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn"
                                             data-project-name="${escapeHtml(ts.product_name)}"
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
@@ -1081,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         <span>View</span>
                                     </button>
-                                    <button type="button" class="pts-btn open-entry-closing-btn" 
+                                    <button type="button" class="pts-btn open-entry-closing-btn"
                                             data-project-name="${escapeHtml(ts.product_name)}"
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
@@ -1097,7 +1097,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         } else {
                             closingActionHtml = `
                                 <div class="closing-btn-group">
-                                    <button type="button" class="pts-btn pts-btn-primary open-entry-closing-btn" 
+                                    <button type="button" class="pts-btn pts-btn-primary open-entry-closing-btn"
                                             data-project-name="${escapeHtml(ts.product_name)}"
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
@@ -1132,8 +1132,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 ${closingActionHtml}
                             </td>
                             <td class="td-center">
-                                <select class="pts-status-select ${statusClass} modal-timesheet-status-select" 
-                                        data-timesheet-id="${ts.id}" 
+                                <select class="pts-status-select ${statusClass} modal-timesheet-status-select"
+                                        data-timesheet-id="${ts.id}"
                                         data-update-url="${ts.update_status_url}"
                                         ${isStatusDisabled ? 'disabled' : ''}
                                         title="${statusDisabledTooltip}">
@@ -1153,7 +1153,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             const timesheetId = this.getAttribute('data-timesheet-id');
                             const updateUrl = this.getAttribute('data-update-url');
                             const currentSelect = this;
-                            
+
                             // Visual feedback
                             currentSelect.style.opacity = '0.6';
 
@@ -1393,7 +1393,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (cell) {
                             cell.innerHTML = `
                                 <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn" 
+                                    <button type="button" class="pts-btn pts-btn-outline open-view-closing-btn"
                                             data-project-name="${escapeHtml(projectName)}"
                                             data-lead-name="${escapeHtml(leadName)}"
                                             data-closing-text="${escapeHtml(newText)}"
@@ -1403,7 +1403,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         <span>View</span>
                                     </button>
-                                    <button type="button" class="pts-btn open-entry-closing-btn" 
+                                    <button type="button" class="pts-btn open-entry-closing-btn"
                                             data-project-name="${escapeHtml(projectName)}"
                                             data-lead-name="${escapeHtml(leadName)}"
                                             data-closing-text="${escapeHtml(newText)}"

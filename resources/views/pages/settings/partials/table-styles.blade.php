@@ -14,7 +14,7 @@
 .crm-btn-ghost:hover { background:#f8f8f8; }
 
 /* Table */
-.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; min-height: 220px; }
 .crm-table          { width:100%; border-collapse:collapse; font-size:14px; }
 .crm-table thead tr { background:#f8f8f8; }
 .crm-table th       { padding:12px 16px; text-align:left; font-size:12px; color:#9e9e9e; font-weight:600; border-bottom:1px solid #f1f1f1; }
@@ -44,12 +44,14 @@
 .crm-icon-btn:hover { background:#f3f3f3; }
 .crm-icon-btn.danger:hover { background:#fff0f0; }
 .crm-table-dropdown { position:relative; display:inline-block; }
+.crm-table-dropdown[open] { z-index:60; }
 .crm-table-dropdown summary { list-style:none; }
 .crm-table-dropdown summary::-webkit-details-marker { display:none; }
 .crm-table-dropdown-trigger { min-width:42px; height:36px; padding:0 12px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; border:1px solid #e1dee3; background:#fff; color:#121212; cursor:pointer; font-size:12px; font-weight:700; transition:all .15s ease; user-select:none; }
 .crm-table-dropdown[open] .crm-table-dropdown-trigger,
 .crm-table-dropdown-trigger:hover { background:#fff7ed; color:#fe5f04; border-color:#fdba74; }
-.crm-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:140px; padding:6px; border-radius:12px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.12); z-index:20; display:flex; flex-direction:column; gap:4px; text-align:left; }
+.crm-table-dropdown-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:140px; padding:6px; border-radius:12px; border:1px solid #ece7ec; background:#fff; box-shadow:0 16px 40px rgba(18,18,18,.15), 0 4px 12px rgba(0,0,0,.08); z-index:999; display:flex; flex-direction:column; gap:4px; text-align:left; }
+.crm-table-dropdown.dropup .crm-table-dropdown-menu { top:auto !important; bottom:calc(100% + 8px) !important; box-shadow:0 -16px 40px rgba(18,18,18,.15), 0 -4px 12px rgba(0,0,0,.08) !important; }
 .crm-table-dropdown-item { width:100%; display:flex; align-items:center; gap:9px; padding:8px 12px; border:1px solid transparent; border-radius:8px; background:#fff; color:#121212; text-decoration:none; font-size:13px; font-weight:600; cursor:pointer; text-align:left; transition:all .15s ease; box-sizing:border-box; }
 .crm-table-dropdown-item i { font-size:14px; line-height:1; }
 .crm-table-dropdown-item svg { flex-shrink:0; }

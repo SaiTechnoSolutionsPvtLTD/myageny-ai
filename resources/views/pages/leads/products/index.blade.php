@@ -270,9 +270,11 @@
                     <div class="lpd-field">
                         <label class="lpd-label" for="branch_id">Branch</label>
                         <select id="branch_id" name="branch_id" class="lpd-select">
-                            <option value="">All Branches</option>
+                            @if($branches->count() > 1)
+                                <option value="">All Branches</option>
+                            @endif
                             @foreach($branches as $branch)
-                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
+                                <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id || $branches->count() === 1)>{{ $branch->name }}</option>
                             @endforeach
                         </select>
                     </div>

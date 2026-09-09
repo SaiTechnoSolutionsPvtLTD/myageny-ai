@@ -148,6 +148,32 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:masters.view')
         ->name('hrms.masters.index');
 
+    Route::prefix('masters')->name('masters.')->group(function () {
+        Route::resource('lead-statuses', LeadStatusController::class)
+            ->middleware('can:lead_status.view')
+            ->except(['create', 'show']);
+
+        Route::resource('lead-sources', LeadSourceController::class)
+            ->middleware('can:lead_source.view')
+            ->except(['create', 'show']);
+
+        Route::resource('outcome-categories', OutcomeCategoryController::class)
+            ->middleware('can:outcome_category.view')
+            ->except(['create', 'show']);
+
+        Route::resource('outcome-sub-categories', OutcomeSubCategoryController::class)
+            ->middleware('can:outcome_sub_category.view')
+            ->except(['create', 'show']);
+
+        Route::resource('product-category', ProductCategoryController::class)
+            ->middleware('can:product_category.view')
+            ->except(['create', 'show']);
+
+        Route::resource('product-attribute', ProductAttributeController::class)
+            ->middleware('can:product_attributes.view')
+            ->except(['create', 'show']);
+    });
+
     Route::get('/authentications', [UserController::class, 'authIndex'])
         ->middleware('can:authentication.menuview')
         ->name('auth.index');
@@ -607,14 +633,9 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
     Route::get('/activity-logs/export', [ActivityLogController::class, 'export'])->name('activity-logs.export');
     Route::get('/activity-logs/{activityLog}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
 
-    // Lead Status  (no create/show pages – handled via modal on index)
-    Route::resource('lead-statuses', LeadStatusController::class)
-
-         ->except(['create', 'show']);
-
-    Route::resource('product-category', ProductCategoryController::class)
-
-         ->except(['create', 'show']);
+    // Backward compatibility redirects to Masters
+    Route::get('lead-statuses', fn() => redirect()->route('masters.lead-statuses.index'))->name('lead-statuses.index');
+    Route::get('product-category', fn() => redirect()->route('masters.product-category.index'))->name('product-category.index');
 
     Route::resource('departments', DepartmentController::class)
          ->middleware('can:settings.manage')
@@ -646,9 +667,7 @@ Route::prefix('settings')->name('settings.')->middleware('can:settings.view')->g
          ->middleware('can:settings.manage')
          ->except(['show']);
 
-    Route::resource('product-attribute', ProductAttributeController::class)
-         ->middleware('can:settings.manage')
-         ->except(['create', 'show']);
+    Route::get('product-attribute', fn() => redirect()->route('masters.product-attribute.index'))->name('product-attribute.index');
 
     Route::get('/facebook-integration',       [FacebookIntegrationController::class, 'index'])->middleware('can:facebook_integration.menuview')->name('facebook-integration');
 
@@ -740,20 +759,9 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
     Route::resource('expense-categories', \App\Http\Controllers\ExpenseCategoryController::class)->except(['create', 'show', 'edit']);
     Route::patch('expense-categories/{expenseCategory}/toggle', [\App\Http\Controllers\ExpenseCategoryController::class, 'toggleStatus'])->name('expense-categories.toggle-status');
 
-    // Lead Source
-    Route::resource('lead-sources', LeadSourceController::class)
-         ->middleware('can:lead_source.view')
-         ->except(['create', 'show']);
-
-    // Outcome Category
-    Route::resource('outcome-categories', OutcomeCategoryController::class)
-         ->middleware('can:outcome_category.view')
-         ->except(['create', 'show']);
-
-    // Outcome Sub Category
-    Route::resource('outcome-sub-categories', OutcomeSubCategoryController::class)
-         ->middleware('can:outcome_sub_category.view')
-         ->except(['create', 'show']);
+    Route::get('lead-sources', fn() => redirect()->route('masters.lead-sources.index'))->name('lead-sources.index');
+    Route::get('outcome-categories', fn() => redirect()->route('masters.outcome-categories.index'))->name('outcome-categories.index');
+    Route::get('outcome-sub-categories', fn() => redirect()->route('masters.outcome-sub-categories.index'))->name('outcome-sub-categories.index');
 });
     Route::get('/get-subcategories/{id}', [OutcomeCategoryController::class, 'getSubCategories'])->middleware('can:leads.view');
 

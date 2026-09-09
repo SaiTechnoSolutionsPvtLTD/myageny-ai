@@ -762,7 +762,82 @@
     color: #b0b0b0;
 }
 
-        .has-dropdown.open .chevron {
+/* ── Universal Table Action Dropdown Styles & Overflow Fix ── */
+.crm-table-dropdown,
+.eob-table-dropdown,
+.payroll-table-dropdown,
+.table-dropdown,
+details.action-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.crm-table-dropdown summary,
+.eob-table-dropdown summary,
+.payroll-table-dropdown summary,
+.table-dropdown summary,
+details.action-dropdown summary {
+    list-style: none;
+    outline: none;
+    cursor: pointer;
+}
+.crm-table-dropdown summary::-webkit-details-marker,
+.eob-table-dropdown summary::-webkit-details-marker,
+.payroll-table-dropdown summary::-webkit-details-marker,
+.table-dropdown summary::-webkit-details-marker,
+details.action-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.crm-table-dropdown[open],
+.eob-table-dropdown[open],
+.payroll-table-dropdown[open],
+.table-dropdown[open] {
+    z-index: 60;
+}
+
+.crm-table-dropdown-menu,
+.eob-table-dropdown-menu,
+.payroll-table-dropdown-menu,
+.table-dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 140px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #ece7ec;
+    background: #ffffff;
+    box-shadow: 0 16px 40px rgba(18, 18, 18, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+}
+
+/* Dropup orientation when space below is tight */
+.crm-table-dropdown.dropup .crm-table-dropdown-menu,
+.eob-table-dropdown.dropup .eob-table-dropdown-menu,
+.payroll-table-dropdown.dropup .payroll-table-dropdown-menu,
+.table-dropdown.dropup .table-dropdown-menu,
+details[open].dropup > div[class*="dropdown-menu"] {
+    top: auto !important;
+    bottom: calc(100% + 6px) !important;
+    box-shadow: 0 -16px 40px rgba(18, 18, 18, 0.15), 0 -4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Safe min-height for table wrappers so single-row tables never clip dropdowns */
+.crm-table-wrap,
+.eob-table-wrap,
+.payroll-table-wrap,
+.table-wrap,
+.hk-table-wrap,
+.eob-table-card,
+.eob-list-wrap {
+    min-height: 220px;
+}
+
+.has-dropdown.open .chevron {
     transform: rotate(90deg);
 }
 
@@ -1231,6 +1306,128 @@ function toggleDropdown(element) {
     });
 })();
 
+// ── Universal Table Action Dropdown Handler ──
+(function() {
+    function getDropdownSelector() {
+        return 'details.crm-table-dropdown, details.eob-table-dropdown, details.payroll-table-dropdown, details.table-dropdown, details.action-dropdown, details[class*="table-dropdown"]';
+    }
+
+    function getOpenTableDropdowns() {
+        return document.querySelectorAll(getDropdownSelector() + '[open]');
+    }
+
+    function positionDropdown(details) {
+        if (!details.open) return;
+
+        const trigger = details.querySelector('summary') || details;
+        const menu = details.querySelector('div[class*="dropdown-menu"], .crm-table-dropdown-menu, .eob-table-dropdown-menu, .payroll-table-dropdown-menu, .table-dropdown-menu');
+        if (!menu) return;
+
+        // Elevate parent table cell and row
+        const td = details.closest('td');
+        const tr = details.closest('tr');
+        if (td) {
+            td.style.position = 'relative';
+            td.style.zIndex = '60';
+        }
+        if (tr) {
+            tr.style.position = 'relative';
+            tr.style.zIndex = '60';
+        }
+
+        const triggerRect = trigger.getBoundingClientRect();
+        const menuHeight = menu.offsetHeight || 130;
+        const spaceBelowViewport = window.innerHeight - triggerRect.bottom;
+        const spaceAboveViewport = triggerRect.top;
+
+        // Check distance to bottom of scrollable table wrapper if any
+        const tableWrap = details.closest('.crm-table-wrap, .eob-table-wrap, .payroll-table-wrap, .table-wrap, .hk-table-wrap, .eob-table-card, [class*="table-wrap"], [class*="table-card"]');
+        let spaceBelowContainer = 999;
+        if (tableWrap) {
+            const wrapRect = tableWrap.getBoundingClientRect();
+            spaceBelowContainer = wrapRect.bottom - triggerRect.bottom;
+        }
+
+        // If space below is not enough (< menuHeight + 16px) but space above is sufficient, flip up!
+        if ((spaceBelowViewport < menuHeight + 16 || spaceBelowContainer < menuHeight + 10) && spaceAboveViewport > menuHeight + 20) {
+            details.classList.add('dropup');
+        } else {
+            details.classList.remove('dropup');
+        }
+    }
+
+    // Single document click handler to coordinate all details dropdowns
+    document.addEventListener('click', function(event) {
+        const clickedSummary = event.target.closest(getDropdownSelector() + ' > summary');
+        const clickedDetails = clickedSummary ? clickedSummary.closest('details') : event.target.closest(getDropdownSelector());
+
+        // Close every OTHER open dropdown
+        getOpenTableDropdowns().forEach(function(openDetails) {
+            if (openDetails !== clickedDetails) {
+                openDetails.removeAttribute('open');
+                openDetails.classList.remove('dropup');
+                const td = openDetails.closest('td');
+                const tr = openDetails.closest('tr');
+                if (td) { td.style.position = ''; td.style.zIndex = ''; }
+                if (tr) { tr.style.position = ''; tr.style.zIndex = ''; }
+            }
+        });
+
+        // If clicking an action item/button/link inside the menu, close it
+        const clickedAction = event.target.closest('.crm-table-dropdown-item, .eob-table-dropdown-item, .payroll-table-dropdown-item, [class*="dropdown-item"], a, button');
+        if (clickedAction && clickedDetails && !clickedSummary) {
+            setTimeout(function() {
+                clickedDetails.removeAttribute('open');
+                clickedDetails.classList.remove('dropup');
+                const td = clickedDetails.closest('td');
+                const tr = clickedDetails.closest('tr');
+                if (td) { td.style.position = ''; td.style.zIndex = ''; }
+                if (tr) { tr.style.position = ''; tr.style.zIndex = ''; }
+            }, 120);
+        }
+    });
+
+    // Listen to toggle event on details
+    document.addEventListener('toggle', function(event) {
+        const target = event.target;
+        if (target && target.matches && target.matches(getDropdownSelector())) {
+            if (target.open) {
+                // Close any other open details
+                getOpenTableDropdowns().forEach(function(openDetails) {
+                    if (openDetails !== target) {
+                        openDetails.removeAttribute('open');
+                        openDetails.classList.remove('dropup');
+                        const td = openDetails.closest('td');
+                        const tr = openDetails.closest('tr');
+                        if (td) { td.style.position = ''; td.style.zIndex = ''; }
+                        if (tr) { tr.style.position = ''; tr.style.zIndex = ''; }
+                    }
+                });
+                positionDropdown(target);
+            } else {
+                target.classList.remove('dropup');
+                const td = target.closest('td');
+                const tr = target.closest('tr');
+                if (td) { td.style.position = ''; td.style.zIndex = ''; }
+                if (tr) { tr.style.position = ''; tr.style.zIndex = ''; }
+            }
+        }
+    }, true);
+
+    // Escape key to close any open dropdown
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            getOpenTableDropdowns().forEach(function(openDetails) {
+                openDetails.removeAttribute('open');
+                openDetails.classList.remove('dropup');
+                const td = openDetails.closest('td');
+                const tr = openDetails.closest('tr');
+                if (td) { td.style.position = ''; td.style.zIndex = ''; }
+                if (tr) { tr.style.position = ''; tr.style.zIndex = ''; }
+            });
+        }
+    });
+})();
     </script>
 </body>
 </html>

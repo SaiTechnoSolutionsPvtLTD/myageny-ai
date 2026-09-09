@@ -140,8 +140,30 @@
     </div>
 
     <div class="rcu-body">
+        @php
+            $todayStr = now()->toDateString();
+            $tomorrowStr = now()->addDay()->toDateString();
+            $yesterdayStr = now()->subDay()->toDateString();
+            $startOfWeekStr = now()->startOfWeek()->toDateString();
+            $endOfWeekStr = now()->endOfWeek()->toDateString();
+            $startOfMonthStr = now()->startOfMonth()->toDateString();
+            $endOfMonthStr = now()->endOfMonth()->toDateString();
+
+            $reqFrom = request('date_from', $dateFrom);
+            $reqTo = request('date_to', $dateTo);
+            $quick = request('quick_range');
+
+            $isToday = $quick === 'today' || ($reqFrom === $todayStr && $reqTo === $todayStr);
+            $isTomorrow = $quick === 'tomorrow' || ($reqFrom === $tomorrowStr && $reqTo === $tomorrowStr);
+            $isYesterday = $quick === 'yesterday' || ($reqFrom === $yesterdayStr && $reqTo === $yesterdayStr);
+            $isThisWeek = $quick === 'this_week' || ($reqFrom === $startOfWeekStr && ($reqTo === $todayStr || $reqTo === $endOfWeekStr));
+            $isThisMonth = $quick === 'this_month' || ($reqFrom === $startOfMonthStr && $reqTo === $endOfMonthStr);
+            $isAllTime = $quick === 'all_time' || (request()->has('date_from') && empty(request('date_from')) && empty(request('date_to')));
+        @endphp
+
         {{-- Filter Card --}}
         <form method="GET" action="{{ route('recruitment.calls.index') }}" class="rcu-filter-card" id="recruitmentFilterForm">
+            <input type="hidden" name="quick_range" id="quick_range" value="{{ request('quick_range') }}">
             <div class="rcu-filter-head">
                 <div>
                     <div class="rcu-head-title">Filter Recruitment Calls</div>
@@ -152,11 +174,12 @@
             <div class="rcu-filter-body">
                 {{-- Quick Date Range Buttons --}}
                 <div class="rcu-quick-filters">
-                    <button type="button" class="rcu-qbtn" onclick="setDateRange('today')">Today</button>
-                    <button type="button" class="rcu-qbtn" onclick="setDateRange('yesterday')">Yesterday</button>
-                    <button type="button" class="rcu-qbtn" onclick="setDateRange('this_week')">This Week</button>
-                    <button type="button" class="rcu-qbtn" onclick="setDateRange('this_month')">This Month</button>
-                    <button type="button" class="rcu-qbtn" onclick="setDateRange('all_time')">All Time</button>
+                    <button type="button" class="rcu-qbtn {{ $isToday ? 'is-active' : '' }}" onclick="setDateRange('today')">Today</button>
+                    <button type="button" class="rcu-qbtn {{ $isTomorrow ? 'is-active' : '' }}" onclick="setDateRange('tomorrow')">Tomorrow</button>
+                    <button type="button" class="rcu-qbtn {{ $isYesterday ? 'is-active' : '' }}" onclick="setDateRange('yesterday')">Yesterday</button>
+                    <button type="button" class="rcu-qbtn {{ $isThisWeek ? 'is-active' : '' }}" onclick="setDateRange('this_week')">This Week</button>
+                    <button type="button" class="rcu-qbtn {{ $isThisMonth ? 'is-active' : '' }}" onclick="setDateRange('this_month')">This Month</button>
+                    <button type="button" class="rcu-qbtn {{ $isAllTime ? 'is-active' : '' }}" onclick="setDateRange('all_time')">All Time</button>
                 </div>
 
                 <div class="rcu-row">
@@ -363,8 +386,8 @@
             </div>
 
             @if($callUpdates->hasPages())
-                <div style="padding:16px 20px; border-top:1px solid #f1eef2;">
-                    {{ $callUpdates->links() }}
+                <div style="border-top:1px solid #f1eef2;">
+                    @include('partials.table-pagination', ['paginator' => $callUpdates])
                 </div>
             @endif
         </div>
@@ -431,6 +454,7 @@ function setDateRange(range) {
     const today = new Date();
     const fromInput = document.getElementById('date_from');
     const toInput = document.getElementById('date_to');
+    const quickRangeInput = document.getElementById('quick_range');
 
     function formatDate(d) {
         const year = d.getFullYear();
@@ -439,9 +463,18 @@ function setDateRange(range) {
         return `${year}-${month}-${day}`;
     }
 
+    if (quickRangeInput) {
+        quickRangeInput.value = range;
+    }
+
     if (range === 'today') {
         fromInput.value = formatDate(today);
         toInput.value = formatDate(today);
+    } else if (range === 'tomorrow') {
+        const tom = new Date(today);
+        tom.setDate(tom.getDate() + 1);
+        fromInput.value = formatDate(tom);
+        toInput.value = formatDate(tom);
     } else if (range === 'yesterday') {
         const yest = new Date(today);
         yest.setDate(yest.getDate() - 1);

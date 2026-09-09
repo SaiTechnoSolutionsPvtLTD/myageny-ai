@@ -12,7 +12,7 @@
 </div>
 @endif
 
-@if($errors->any())
+@if(isset($errors) && $errors->any())
 <div class="crm-alert crm-alert-error">
     <span>Error: {{ $errors->first() }}</span>
     <button type="button" onclick="this.parentElement.remove()">x</button>

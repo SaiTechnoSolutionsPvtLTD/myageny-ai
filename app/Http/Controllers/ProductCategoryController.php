@@ -24,7 +24,7 @@ class ProductCategoryController extends Controller
             'name'       => $request->name,
         ]);
 
-        return redirect()->route('settings.product-category.index')
+        return redirect()->route('masters.product-category.index')
                          ->with('success', 'Product Category created successfully.');
     }
 
@@ -39,7 +39,7 @@ class ProductCategoryController extends Controller
         // $this->authorizeCompany($ProductCategory);
         $ProductCategory->update(['name' => $request->name]);
 
-        return redirect()->route('settings.product-category.index')
+        return redirect()->route('masters.product-category.index')
                          ->with('success', 'Product Category updated successfully.');
     }
 
@@ -48,7 +48,7 @@ class ProductCategoryController extends Controller
         // $this->authorizeCompany($ProductCategory);
         $ProductCategory->delete(); // cascade deletes sub categories
 
-        return redirect()->route('settings.product-category.index')
+        return redirect()->route('masters.product-category.index')
                          ->with('success', 'Product Category deleted.');
     }
 

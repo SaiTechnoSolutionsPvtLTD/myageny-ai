@@ -460,9 +460,11 @@
             <div class="da-fw">
                 <svg class="da-fi" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                 <select class="da-fsel" id="fBranch" onchange="onFilterChange()">
+                    @if(count($branches ?? []) > 1)
                     <option value="">All Branches</option>
+                    @endif
                     @foreach($branches ?? [] as $b)
-                    <option value="{{ $b->id }}">{{ $b->name }}</option>
+                    <option value="{{ $b->id }}" {{ count($branches ?? []) === 1 ? 'selected' : '' }}>{{ $b->name }}</option>
                     @endforeach
                 </select>
                 <svg class="da-fcaret" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -882,8 +884,13 @@ window.applyFilters = function() {
 };
 
 window.resetFilters = function() {
-    state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
-    ['fBranch','fUser','fStage','fSource'].forEach(function(id) { document.getElementById(id).value = ''; });
+    var bSel = document.getElementById('fBranch');
+    var defaultBranch = (bSel && bSel.options.length === 1) ? bSel.value : '';
+    state = { quick:'month', branch: defaultBranch, user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
+    ['fBranch','fUser','fStage','fSource'].forEach(function(id) { 
+        var el = document.getElementById(id);
+        if (el) el.value = (id === 'fBranch' ? defaultBranch : ''); 
+    });
     var qSel = document.getElementById('fQuickDate');
     if (qSel) qSel.value = 'month';
     var dates = calcPresetDates('month');
@@ -898,6 +905,10 @@ window.resetFilters = function() {
 
 // Auto-switch to custom when date input is manually picked
 document.addEventListener('DOMContentLoaded', function() {
+    var bSel = document.getElementById('fBranch');
+    if (bSel && bSel.value) {
+        state.branch = bSel.value;
+    }
     var dFrom = document.getElementById('fDateFrom');
     var dTo = document.getElementById('fDateTo');
     if (dFrom) dFrom.addEventListener('change', function() {

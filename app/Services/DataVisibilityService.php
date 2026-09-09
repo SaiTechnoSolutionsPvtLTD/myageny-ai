@@ -476,6 +476,19 @@ class DataVisibilityService
 
         $companyId = $this->companyIdFor($user);
 
+        if ($this->hasBranchAdminRole($user) || $user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                return collect($branchIds)->filter()->unique()->values();
+            }
+
+            if ($user->branch_id) {
+                return collect([(int) $user->branch_id]);
+            }
+
+            return collect();
+        }
+
         if ($this->isCompanyWideUser($user)) {
             $query = DB::table('branches')
                 ->where('is_active', true);
@@ -506,6 +519,7 @@ class DataVisibilityService
         return DB::table('branches')
             ->select('id', 'name')
             ->where('is_active', true)
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->when($branchIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $branchIds))
             ->when($branchIds->isEmpty(), fn ($query) => $query->whereRaw('1 = 0'))
             ->orderBy('name')
@@ -528,7 +542,7 @@ class DataVisibilityService
 
     public function isCompanyWideUser(User $user): bool
     {
-        if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
+        if ($user->isSystemAdmin() || $user->isCompanyAdmin()) {
             return true;
         }
 
@@ -540,8 +554,8 @@ class DataVisibilityService
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'ceo', 'chief_executive_officer', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'branch_admin', 'ceo', 'chief_executive_officer', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
+            return in_array($this->roleKey($role->name), ['super_admin', 'admin', 'company_admin', 'ceo', 'chief_executive_officer', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['super_admin', 'admin', 'company_admin', 'ceo', 'chief_executive_officer', 'chief_business_officer', 'cbo', 'chief_operating_officer', 'cheif_operating_officer', 'coo'], true);
         });
     }
 

@@ -49,8 +49,10 @@ class HouseKeepingEmployeeController extends Controller
             ->with('success', "Housekeeping employee '{$employee->name}' added successfully.");
     }
 
-    public function update(Request $request, HouseKeepingEmployee $employee): RedirectResponse
+    public function update(Request $request, $id): RedirectResponse
     {
+        $employee = HouseKeepingEmployee::findOrFail($id);
+
         $validated = $request->validate([
             'name'          => 'required|string|max:150',
             'mobile_number' => 'nullable|string|max:50',
@@ -67,8 +69,9 @@ class HouseKeepingEmployeeController extends Controller
             ->with('success', "Housekeeping employee '{$employee->name}' updated successfully.");
     }
 
-    public function destroy(HouseKeepingEmployee $employee): RedirectResponse
+    public function destroy($id): RedirectResponse
     {
+        $employee = HouseKeepingEmployee::findOrFail($id);
         $name = $employee->name;
         $employee->delete();
 
