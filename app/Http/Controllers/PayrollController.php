@@ -651,19 +651,19 @@ class PayrollController extends Controller
 
         $usePf = (bool) ($row['use_pf'] ?? false);
         $useEsi = (bool) ($row['use_esi'] ?? false);
-        $pfEmployeePercentage = round((float) ($row['pf_employee_percentage'] ?? 25), 2);
-        $pfEmployerPercentage = round((float) ($row['pf_employer_percentage'] ?? 25), 2);
-        $esiEmployeePercentage = round((float) ($row['esi_employee_percentage'] ?? 4), 2);
-        $esiEmployerPercentage = round((float) ($row['esi_employer_percentage'] ?? 4), 2);
+        $pfEmployeePercentage = round((float) ($row['pf_employee_percentage'] ?? 12), 2);
+        $pfEmployerPercentage = round((float) ($row['pf_employer_percentage'] ?? 13), 2);
+        $esiEmployeePercentage = round((float) ($row['esi_employee_percentage'] ?? 0.75), 2);
+        $esiEmployerPercentage = round((float) ($row['esi_employer_percentage'] ?? 3.25), 2);
         $esiSalaryLimit = round((float) ($row['esi_salary_limit'] ?? 21000), 2);
 
         $pfBaseAmount = $grossSalary > self::PF_GROSS_THRESHOLD
             ? self::PF_BASIC_CAP
             : ($earnedBasic + $earnedTravel + $earnedOther);
-        $pfEmployee = $usePf ? round($pfBaseAmount * 0.25, 0) : 0;
-        $pfEmployer = $usePf ? round($pfBaseAmount * 0.25, 0) : 0;
-        $esiEmployee = $useEsi ? round($earnedGross * 0.04, 0) : 0;
-        $esiEmployer = $useEsi ? round($earnedGross * 0.04, 0) : 0;
+        $pfEmployee = $usePf ? round($pfBaseAmount * ($pfEmployeePercentage / 100), 2) : 0;
+        $pfEmployer = $usePf ? round($pfBaseAmount * ($pfEmployerPercentage / 100), 2) : 0;
+        $esiEmployee = $useEsi ? round($earnedGross * ($esiEmployeePercentage / 100), 2) : 0;
+        $esiEmployer = $useEsi ? round($earnedGross * ($esiEmployerPercentage / 100), 2) : 0;
         $professionalTax = round((float) ($row['professional_tax'] ?? 0), 2);
         $tdsAmount = round((float) ($row['tds_amount'] ?? 0), 2);
         $loanDeduction = round((float) ($row['loan_deduction'] ?? 0), 2);

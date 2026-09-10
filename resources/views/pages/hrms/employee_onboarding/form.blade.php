@@ -719,12 +719,12 @@
                                 @error('pf_account_no')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">PF Employee Contribution</label>
+                                <label class="eob-label">PF Employee Contribution (12%)</label>
                                 <input type="number" step="0.01" min="0" name="pf_employee_contribution" class="eob-input" data-salary-output="pf_employee_contribution" value="{{ old('pf_employee_contribution', $employee?->pf_employee_contribution) }}" readonly>
                                 @error('pf_employee_contribution')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">PF Employer Contribution</label>
+                                <label class="eob-label">PF Employer Contribution (13%)</label>
                                 <input type="number" step="0.01" min="0" name="pf_employer_contribution" class="eob-input" data-salary-output="pf_employer_contribution" value="{{ old('pf_employer_contribution', $employee?->pf_employer_contribution) }}" readonly>
                                 @error('pf_employer_contribution')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
@@ -732,16 +732,16 @@
                             <div class="eob-group">
                                 <label class="eob-label">ESI No</label>
                                 <input type="text" name="esi_no" class="eob-input" value="{{ old('esi_no', $employee?->esi_no) }}">
-                                <div class="eob-help" id="esiEligibilityHelp">ESI amount is calculated as 4% of gross salary whenever ESI is enabled.</div>
+                                <div class="eob-help" id="esiEligibilityHelp">ESI is calculated as Employee 0.75% and Employer 3.25% of gross salary whenever ESI is enabled.</div>
                                 @error('esi_no')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">ESI Employee Contribution</label>
+                                <label class="eob-label">ESI Employee Contribution (0.75%)</label>
                                 <input type="number" step="0.01" min="0" name="esi_employee_contribution" class="eob-input" data-salary-output="esi_employee_contribution" value="{{ old('esi_employee_contribution', $employee?->esi_employee_contribution) }}" readonly>
                                 @error('esi_employee_contribution')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">ESI Employer Contribution</label>
+                                <label class="eob-label">ESI Employer Contribution (3.25%)</label>
                                 <input type="number" step="0.01" min="0" name="esi_employer_contribution" class="eob-input" data-salary-output="esi_employer_contribution" value="{{ old('esi_employer_contribution', $employee?->esi_employer_contribution) }}" readonly>
                                 @error('esi_employer_contribution')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
@@ -1454,10 +1454,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const pfBaseAmount = grossSalary > 21000
             ? 15000
             : (breakdown.basicSalary + breakdown.specialAllowance + breakdown.otherAllowance);
-        const pfEmployee = pfEnabled ? Math.round(pfBaseAmount * 0.25) : 0;
-        const pfEmployer = pfEnabled ? Math.round(pfBaseAmount * 0.25) : 0;
-        const esiEmployee = esiEnabled ? Math.round(grossSalary * 0.04) : 0;
-        const esiEmployer = esiEnabled ? Math.round(grossSalary * 0.04) : 0;
+        const pfEmployee = pfEnabled ? (Math.round(pfBaseAmount * 0.12 * 100) / 100) : 0;
+        const pfEmployer = pfEnabled ? (Math.round(pfBaseAmount * 0.13 * 100) / 100) : 0;
+        const esiEmployee = esiEnabled ? (Math.round(grossSalary * 0.0075 * 100) / 100) : 0;
+        const esiEmployer = esiEnabled ? (Math.round(grossSalary * 0.0325 * 100) / 100) : 0;
         const totalDeduction = pfEmployee + esiEmployee + professionalTax + tdsAmount + loanDeduction + otherDeduction;
         const netSalary = Math.max(grossSalary - totalDeduction, 0);
 
@@ -1490,12 +1490,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (!esiEnabled) {
-            esiHelp.textContent = 'ESI amount is calculated as 4% of gross salary whenever ESI is enabled.';
+            esiHelp.textContent = 'ESI is calculated as Employee 0.75% and Employer 3.25% of gross salary whenever ESI is enabled.';
             esiHelp.style.color = '';
             return;
         }
 
-        esiHelp.textContent = 'ESI calculation is active at 4% of gross salary.';
+        esiHelp.textContent = 'ESI calculation is active: Employee 0.75% and Employer 3.25% of gross salary.';
         esiHelp.style.color = '#166534';
     }
 

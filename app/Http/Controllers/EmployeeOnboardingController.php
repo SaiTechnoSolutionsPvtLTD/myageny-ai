@@ -28,10 +28,12 @@ class EmployeeOnboardingController extends Controller
     private const BASIC_SALARY_RATIO = 0.50;
     private const HRA_RATIO = 0.30;
     private const SPECIAL_ALLOWANCE_RATIO = 0.10;
-    private const PF_CONTRIBUTION_RATE = 0.25;
+    private const PF_EMPLOYEE_RATE = 0.12;
+    private const PF_EMPLOYER_RATE = 0.13;
     private const PF_BASIC_SALARY_CAP = 15000.00;
     private const PF_GROSS_SALARY_THRESHOLD = 21000.00;
-    private const ESI_CONTRIBUTION_RATE = 0.04;
+    private const ESI_EMPLOYEE_RATE = 0.0075;
+    private const ESI_EMPLOYER_RATE = 0.0325;
 
     private const DOCUMENT_LABELS = [
         'photograph' => 'Photograph',
@@ -352,10 +354,10 @@ class EmployeeOnboardingController extends Controller
         $pfBaseAmount = $grossSalary > self::PF_GROSS_SALARY_THRESHOLD
             ? self::PF_BASIC_SALARY_CAP
             : ($basicSalary + $specialAllowance + $otherAllowance);
-        $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * self::PF_CONTRIBUTION_RATE, 0) : 0;
-        $pfEmployerContribution = $pfEnabled ? round($pfBaseAmount * self::PF_CONTRIBUTION_RATE, 0) : 0;
-        $esiEmployeeContribution = $esiEnabled ? round($grossSalary * self::ESI_CONTRIBUTION_RATE, 0) : 0;
-        $esiEmployerContribution = $esiEnabled ? round($grossSalary * self::ESI_CONTRIBUTION_RATE, 0) : 0;
+        $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * self::PF_EMPLOYEE_RATE, 2) : 0;
+        $pfEmployerContribution = $pfEnabled ? round($pfBaseAmount * self::PF_EMPLOYER_RATE, 2) : 0;
+        $esiEmployeeContribution = $esiEnabled ? round($grossSalary * self::ESI_EMPLOYEE_RATE, 2) : 0;
+        $esiEmployerContribution = $esiEnabled ? round($grossSalary * self::ESI_EMPLOYER_RATE, 2) : 0;
 
         $professionalTax = round((float) ($attributes['professional_tax'] ?? 0), 2);
         $tdsAmount = round((float) ($attributes['tds_amount'] ?? 0), 2);
