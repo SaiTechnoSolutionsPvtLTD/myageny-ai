@@ -165,6 +165,21 @@
                 </a>
                 @endif
 
+                @if(auth()->user()?->belongsToDigitalMarketingDepartment() || auth()->user()?->hasAdminLikeRole())
+                <a href="{{ route('projects.campaigns.index') }}" class="nav-item {{ request()->routeIs('projects.campaigns.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('projects.campaigns.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                            <line x1="4" y1="22" x2="4" y2="15"></line>
+                        </svg>
+                        <span>Campaigns</span>
+                    </div>
+                </a>
+                @endif
+
                 @php
                     $canViewAllProjectsMenu = auth()->user()?->hasAdminLikeRole()
                         || auth()->user()?->belongsToDesigningDepartment()

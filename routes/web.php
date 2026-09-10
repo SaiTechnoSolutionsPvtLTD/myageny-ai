@@ -10,12 +10,14 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CrmReportController;
+use App\Http\Controllers\CustomerCampaignController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DesignSettingController;
 use App\Http\Controllers\DynamicFormController;
 use App\Http\Controllers\EmployeeExitController;
 use App\Http\Controllers\EmployeeOnboardingController;
+use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\FacebookIntegrationController;
 use App\Http\Controllers\FacilityManagementController;
 use App\Http\Controllers\FacilityTitleController;
@@ -260,6 +262,26 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.my-accounts');
         Route::get('/projects/my-accounts/{lead}', [ProjectController::class, 'showMyAccount'])
             ->name('projects.my-accounts.show');
+        Route::get('/projects/campaigns', [CustomerCampaignController::class, 'index'])
+            ->name('projects.campaigns.index');
+        Route::get('/projects/campaigns/{lead}', [CustomerCampaignController::class, 'show'])
+            ->name('projects.campaigns.show');
+        Route::post('/projects/campaigns/{lead}', [CustomerCampaignController::class, 'store'])
+            ->name('projects.campaigns.store');
+        Route::put('/projects/campaigns/{campaign}', [CustomerCampaignController::class, 'update'])
+            ->name('projects.campaigns.update');
+        Route::delete('/projects/campaigns/{campaign}', [CustomerCampaignController::class, 'destroy'])
+            ->name('projects.campaigns.destroy');
+        Route::post('/projects/campaigns/{campaign}/toggle-status', [CustomerCampaignController::class, 'toggleStatus'])
+            ->name('projects.campaigns.toggle-status');
+        Route::post('/projects/campaigns/{campaign}/pause', [CustomerCampaignController::class, 'pause'])
+            ->name('projects.campaigns.pause');
+        Route::post('/projects/campaigns/{campaign}/resume', [CustomerCampaignController::class, 'resume'])
+            ->name('projects.campaigns.resume');
+        Route::post('/projects/campaigns/{campaign}/extend', [CustomerCampaignController::class, 'extend'])
+            ->name('projects.campaigns.extend');
+        Route::post('/projects/campaigns/{campaign}/stop', [CustomerCampaignController::class, 'stop'])
+            ->name('projects.campaigns.stop');
         Route::post('/projects/dashboard/update-planned-task', [ProjectController::class, 'updatePlannedTask'])
             ->name('projects.dashboard.update-planned-task');
         Route::post('/projects/dashboard/allocate-task', [ProjectController::class, 'allocateDailyTask'])

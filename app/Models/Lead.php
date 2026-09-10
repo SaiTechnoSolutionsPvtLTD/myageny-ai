@@ -141,6 +141,21 @@ class Lead extends Model
         return $this->hasMany(LeadCstUpdate::class)->latest();
     }
 
+    public function productionInitiations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductionInitiation::class);
+    }
+
+    public function customerCampaigns(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CustomerCampaign::class)->latest();
+    }
+
+    public function activeCustomerCampaigns(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CustomerCampaign::class)->where('status', 'active');
+    }
+
     /**
      * Returns [id => name] map for all lead sources.
      */

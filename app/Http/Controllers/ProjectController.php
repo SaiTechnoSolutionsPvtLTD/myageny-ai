@@ -1358,6 +1358,15 @@ class ProjectController extends Controller
             ->latest()
             ->get();
 
+        $customerCampaigns = collect();
+        if ($productionInitiation->lead_id) {
+            $customerCampaigns = \App\Models\CustomerCampaign::query()
+                ->with(['creator', 'extendedFrom', 'extensions'])
+                ->where('lead_id', $productionInitiation->lead_id)
+                ->latest()
+                ->get();
+        }
+
         return view('pages.projects.show', [
             'projectItem' => $productionInitiation,
             'projectDeliveryDate' => $projectDeliveryDate,
@@ -1378,6 +1387,7 @@ class ProjectController extends Controller
             'testingTlUsers' => $testingTlUsers,
             'testingDetails' => $testingDetails,
             'bugs' => $bugs,
+            'customerCampaigns' => $customerCampaigns,
         ]);
     }
 

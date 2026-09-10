@@ -233,6 +233,110 @@
 .cc-cell-link { color:#2563eb; font-weight:700; text-decoration:none; border-bottom:1px dashed #bfdbfe; transition:color .12s,border-color .12s; }
 .cc-cell-link:hover { color:#1d4ed8; border-bottom-color:#1d4ed8; }
 </style>
+<script>
+const allProjectCustomerCampaigns = @json($customerCampaigns ?? []);
+
+function openProjectExtendModal(campaignOrId) {
+    let campaign = null;
+    if (typeof campaignOrId === 'object' && campaignOrId !== null) {
+        campaign = campaignOrId;
+    } else if (typeof campaignOrId === 'number' || typeof campaignOrId === 'string') {
+        campaign = allProjectCustomerCampaigns.find(c => c.id == campaignOrId);
+    }
+    if (!campaign) {
+        console.warn('Campaign not found for ID:', campaignOrId);
+        return;
+    }
+
+    const form = document.getElementById('projectExtendForm');
+    if (!form) return;
+    form.action = '/projects/campaigns/' + campaign.id + '/extend';
+
+    const parentNameEl = document.getElementById('projectExtendParentName');
+    if (parentNameEl) {
+        parentNameEl.textContent = campaign.campaign_name || ('Campaign #' + campaign.id);
+    }
+
+    let rawName = campaign.campaign_name || 'Campaign';
+    let cleanBase = rawName.replace(/\s*\((Renewal|Extension)(\s*#?\d*)?\)/gi, '').trim();
+
+    let extensionsCount = campaign.extensions ? campaign.extensions.length : 0;
+    let nextIndex = extensionsCount + 1;
+    let suggestedName = nextIndex > 1 ? `${cleanBase} (Renewal #${nextIndex})` : `${cleanBase} (Renewal)`;
+
+    const nameInput = document.getElementById('proj_extend_campaign_name');
+    if (nameInput) nameInput.value = suggestedName;
+
+    const adAccInput = document.getElementById('proj_extend_ad_account_name');
+    if (adAccInput) adAccInput.value = campaign.ad_account_name || '';
+
+    const platformInput = document.getElementById('proj_extend_platform');
+    if (platformInput) platformInput.value = campaign.platform || 'Facebook / Meta';
+
+    const statusInput = document.getElementById('proj_extend_status');
+    if (statusInput) statusInput.value = 'active';
+
+    const budgetInput = document.getElementById('proj_extend_budget_amount');
+    if (budgetInput) budgetInput.value = campaign.budget_amount || '';
+
+    const budgetTypeInput = document.getElementById('proj_extend_budget_type');
+    if (budgetTypeInput) budgetTypeInput.value = campaign.budget_type || 'Monthly';
+
+    let nextStartDate = '';
+    if (campaign.end_date) {
+        let d = new Date(campaign.end_date);
+        d.setDate(d.getDate() + 1);
+        nextStartDate = d.toISOString().substring(0, 10);
+    } else {
+        nextStartDate = new Date().toISOString().substring(0, 10);
+    }
+    const startInput = document.getElementById('proj_extend_start_date');
+    if (startInput) startInput.value = nextStartDate;
+
+    const endInput = document.getElementById('proj_extend_end_date');
+    if (endInput) endInput.value = '';
+
+    const remarksInput = document.getElementById('proj_extend_remarks');
+    if (remarksInput) remarksInput.value = 'Renewal from ' + cleanBase;
+
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    const modal = document.getElementById('projectExtendCampaignModal');
+    if (overlay) {
+        overlay.classList.add('is-open');
+        overlay.style.display = 'block';
+    }
+    if (modal) {
+        modal.classList.add('is-open');
+        modal.style.display = 'block';
+    }
+}
+
+function closeProjectExtendModal() {
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    const modal = document.getElementById('projectExtendCampaignModal');
+    if (overlay) {
+        overlay.classList.remove('is-open');
+        overlay.style.display = 'none';
+    }
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.style.display = 'none';
+    }
+}
+
+document.addEventListener('click', function(e) {
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    if (overlay && e.target === overlay) {
+        closeProjectExtendModal();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeProjectExtendModal();
+    }
+});
+</script>
 @endpush
 
 @section('content')
@@ -337,7 +441,9 @@
     );
 
     $isDevDept = str_contains($deptName, 'development') || str_contains($deptName, 'dev') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app');
-    $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
+        $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
+    $isDmDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm');
+    $customerCampaigns = $customerCampaigns ?? collect();
 
     $canSeeTestingTab = ($isDevDept || $isDevUser) && ! $isNonDevDept;
 
@@ -352,6 +458,11 @@
             <div class="ps-breadcrumb">{{ $pageCrumb }}</div>
         </div>
         <div class="ps-actions">
+            @if($lead?->id && (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing')))
+                <a href="{{ route('projects.campaigns.show', $lead->id) }}" class="ps-btn ps-btn-primary" style="background:linear-gradient(135deg,#fe5f04,#ea580c); border-color:#ea580c; color:#fff;">
+                    <i class="bx bx-bullseye"></i> Campaigns & Extensions
+                </a>
+            @endif
             <a href="{{ route('projects.index') }}" class="ps-btn">Back</a>
         </div>
     </div>
@@ -366,6 +477,11 @@
 
         <div class="ps-tabbar" role="tablist" aria-label="Project details sections">
             <button type="button" class="ps-tab-btn {{ $activeTab === 'overview' ? 'is-active' : '' }}" data-tab-target="overview">Overview</button>
+            @if($isDmDept)
+            <button type="button" class="ps-tab-btn {{ $activeTab === 'campaigns' ? 'is-active' : '' }}" data-tab-target="campaigns">
+                <i class="bx bx-bullseye" style="margin-right:4px;"></i>Campaigns & Extensions
+            </button>
+            @endif
             <button type="button" class="ps-tab-btn {{ $activeTab === 'approvals' ? 'is-active' : '' }}" data-tab-target="approvals">Approvals</button>
             <button type="button" class="ps-tab-btn {{ $activeTab === 'allocation' ? 'is-active' : '' }}" data-tab-target="allocation">{{ $isTlScopedView ? 'Team Allocation' : 'TL Allocation' }}</button>
             @if(auth()->user()?->allowsProductionUpdates())
@@ -480,6 +596,8 @@
                             </div>
                         </div>
                     </section>
+
+
                 </div>
 
                 <section class="ps-card">
@@ -598,6 +716,215 @@
                 @endif
             </div>
         </section>
+
+                {{-- Campaigns & Extensions Tab Panel --}}
+        @if($isDmDept)
+        <section class="ps-tab-panel {{ $activeTab === 'campaigns' ? 'is-active' : '' }}" data-tab-panel="campaigns">
+            @php
+                $extendedParentIds = $customerCampaigns->pluck('extended_from_id')->filter()->unique()->toArray();
+                $latestActiveCampaigns = $customerCampaigns->reject(fn($c) => in_array($c->id, $extendedParentIds, true))->values();
+                $latestRunningCampaign = $latestActiveCampaigns->first();
+                $activeCampaignsCount = $customerCampaigns->where('status', 'active')->count();
+                $totalCampaignsCount = $customerCampaigns->count();
+                $dailySpendSum = $customerCampaigns->where('status', 'active')->sum(fn($c) => $c->calculateDailyBudget());
+            @endphp
+
+            {{-- 1. Hero Overview Card --}}
+            <section class="ps-card" style="border: 1px solid #fed7aa; background: linear-gradient(180deg, #fffaf5 0%, #ffffff 100%);">
+                <div class="ps-card-head" style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border-bottom: 1px solid #fed7aa; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 24px;">
+                    <div>
+                        <div class="ps-card-title" style="color: #c2410c; font-size: 18px; font-weight: 900; display: flex; align-items: center; gap: 8px;">
+                            <span>📢 Digital Marketing Campaigns & Extensions</span>
+                        </div>
+                        <div class="ps-card-sub" style="color: #9a3412; font-size: 13px; margin-top: 4px;">
+                            Client: <strong>{{ $projectItem->company_name ?: ($lead?->company_name ?: ($lead?->contact_name ?: 'Customer')) }}</strong>
+                            @if($lead?->contact_name) • Contact: <strong>{{ $lead->contact_name }}</strong> @endif
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        @if($latestRunningCampaign)
+                            <button type="button" class="ps-btn ps-btn-primary" style="background: linear-gradient(135deg,#fe5f04,#ea580c); border-color:#ea580c; color:#fff; font-size:13px; font-weight:800; padding:8px 16px; border-radius:12px; box-shadow:0 4px 14px rgba(234,88,12,.2);" onclick="openProjectExtendModal({{ $latestRunningCampaign->id }})">
+                                🔄 Extend / Renew Campaign
+                            </button>
+                        @endif
+                        @if($lead?->id)
+                            <a href="{{ route('projects.campaigns.show', $lead->id) }}" class="ps-btn" style="background:#fff; border-color:#fed7aa; color:#c2410c; font-size:13px; font-weight:800; padding:8px 16px; border-radius:12px;" title="Open full campaigns module">
+                                ↗ Open Full Campaigns Board
+                            </a>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- 2. Mini KPI Stats --}}
+                <div style="padding: 18px 24px; border-bottom: 1px solid #f1f5f9; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; background: #fff;">
+                    <div class="ps-detail" style="border-color: #e2e8f0; background: #f8fafc; padding: 12px 16px;">
+                        <div class="ps-label" style="font-size: 11px; color: #64748b;">Total Campaigns</div>
+                        <div class="ps-value" style="font-size: 20px; font-weight: 900; color: #0f172a; margin-top: 4px;">
+                            {{ $totalCampaignsCount }}
+                        </div>
+                    </div>
+                    <div class="ps-detail" style="border-color: #bbf7d0; background: #f0fdf4; padding: 12px 16px;">
+                        <div class="ps-label" style="font-size: 11px; color: #166534;">Active Campaigns</div>
+                        <div class="ps-value" style="font-size: 20px; font-weight: 900; color: #15803d; margin-top: 4px;">
+                            {{ $activeCampaignsCount }}
+                        </div>
+                    </div>
+                    <div class="ps-detail" style="border-color: #fed7aa; background: #fff7ed; padding: 12px 16px;">
+                        <div class="ps-label" style="font-size: 11px; color: #c2410c;">Active Daily Spend</div>
+                        <div class="ps-value" style="font-size: 20px; font-weight: 900; color: #ea580c; margin-top: 4px;">
+                            ₹{{ number_format((float)$dailySpendSum, 2) }} <span style="font-size: 11px; font-weight: 600; color: #9a3412;">/day</span>
+                        </div>
+                    </div>
+                    <div class="ps-detail" style="border-color: #ddd6fe; background: #f5f3ff; padding: 12px 16px;">
+                        <div class="ps-label" style="font-size: 11px; color: #6d28d9;">Campaign Extensions</div>
+                        <div class="ps-value" style="font-size: 20px; font-weight: 900; color: #7c3aed; margin-top: 4px;">
+                            {{ $customerCampaigns->whereNotNull('extended_from_id')->count() }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ps-card-body" style="padding: 22px;">
+                    @if($latestRunningCampaign)
+                        <div style="font-size: 13px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px;">
+                            ⭐ Current Live Campaign Snapshot
+                        </div>
+                        <div class="ps-detail-grid" style="margin-bottom: 20px;">
+                            <div class="ps-detail" style="border-color:#fed7aa; background:#fffdfa;">
+                                <div class="ps-label" style="color:#ea580c;">Current Campaign Name</div>
+                                <div class="ps-value" style="color:#0f172a; font-size:15px; font-weight:900;">
+                                    {{ $latestRunningCampaign->campaign_name }}
+                                </div>
+                                @if($latestRunningCampaign->extendedFrom)
+                                    <div style="font-size:11.5px; color:#7c3aed; font-weight:700; margin-top:4px;">
+                                        🔄 Extended from: <strong>{{ $latestRunningCampaign->extendedFrom->campaign_name }}</strong>
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="ps-detail" style="border-color:#fed7aa; background:#fffdfa;">
+                                <div class="ps-label" style="color:#ea580c;">Live Status</div>
+                                <div class="ps-value">
+                                    @if($latestRunningCampaign->status === 'active')
+                                        <span class="ps-pill done">● Active</span>
+                                    @elseif($latestRunningCampaign->status === 'paused')
+                                        <span class="ps-pill pending">❚❚ Paused</span>
+                                    @elseif($latestRunningCampaign->status === 'stopped')
+                                        <span class="ps-pill hold">🛑 Stopped</span>
+                                    @else
+                                        <span class="ps-pill">{{ ucfirst($latestRunningCampaign->status) }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="ps-detail" style="border-color:#fed7aa; background:#fffdfa;">
+                                <div class="ps-label" style="color:#ea580c;">Platform & Ad Account</div>
+                                <div class="ps-value" style="font-size:13.5px; font-weight:700;">
+                                    {{ $latestRunningCampaign->platform ?: 'Meta / Google Ads' }}
+                                    @if($latestRunningCampaign->ad_account_name)
+                                        <div style="font-size:12px; color:#475569; font-weight:600; margin-top:3px;">💼 {{ $latestRunningCampaign->ad_account_name }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="ps-detail" style="border-color:#fed7aa; background:#fffdfa;">
+                                <div class="ps-label" style="color:#ea580c;">Budget & Run Period</div>
+                                <div class="ps-value" style="font-size:13.5px;">
+                                    @if($latestRunningCampaign->budget_amount)
+                                        <strong>₹{{ number_format((float)$latestRunningCampaign->budget_amount, 2) }}</strong> (₹{{ number_format($latestRunningCampaign->calculateDailyBudget(), 2) }}/d)
+                                    @else
+                                        <span style="color:#94a3b8;">No budget set</span>
+                                    @endif
+                                    <div style="font-size:11.5px; color:#64748b; margin-top:3px;">
+                                        📅 {{ $latestRunningCampaign->start_date ? $latestRunningCampaign->start_date->format('d M Y') : 'Start' }} → {{ $latestRunningCampaign->end_date ? $latestRunningCampaign->end_date->format('d M Y') : 'Ongoing' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- 3. Customer Campaigns List Table in Tab --}}
+                        <div style="font-size: 13px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; margin-top: 24px;">
+                            📋 Customer Campaigns Overview (Latest Extended Versions)
+                        </div>
+                        <div class="cc-table-wrap" style="overflow-x:auto; border-radius:14px; border:1px solid #e2e8f0;">
+                            <table class="cc-table" style="width:100%; border-collapse:collapse; min-width:680px; font-size:13px;">
+                                <thead>
+                                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                                        <th style="padding:12px 16px; text-align:left; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Campaign</th>
+                                        <th style="padding:12px 16px; text-align:left; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Platform & Account</th>
+                                        <th style="padding:12px 16px; text-align:left; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Status</th>
+                                        <th style="padding:12px 16px; text-align:left; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Budget</th>
+                                        <th style="padding:12px 16px; text-align:left; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Dates</th>
+                                        <th style="padding:12px 16px; text-align:right; font-size:11px; font-weight:800; color:#475569; text-transform:uppercase;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($latestActiveCampaigns as $cItem)
+                                        <tr style="border-bottom:1px solid #f1f5f9;">
+                                            <td style="padding:12px 16px; vertical-align:middle;">
+                                                <div style="font-weight:800; color:#0f172a;">{{ $cItem->campaign_name }}</div>
+                                                @if($cItem->extendedFrom)
+                                                    <div style="font-size:11px; color:#7c3aed; font-weight:700;">
+                                                        🔄 Extended from: {{ $cItem->extendedFrom->campaign_name }}
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td style="padding:12px 16px; vertical-align:middle;">
+                                                <div style="font-weight:600; color:#334155;">{{ $cItem->platform ?: 'Meta / Google' }}</div>
+                                                @if($cItem->ad_account_name)
+                                                    <div style="font-size:11px; color:#64748b;">💼 {{ $cItem->ad_account_name }}</div>
+                                                @endif
+                                            </td>
+                                            <td style="padding:12px 16px; vertical-align:middle;">
+                                                @if($cItem->status === 'active')
+                                                    <span class="ps-pill done">● Active</span>
+                                                @elseif($cItem->status === 'paused')
+                                                    <span class="ps-pill pending">❚❚ Paused</span>
+                                                @elseif($cItem->status === 'stopped')
+                                                    <span class="ps-pill hold">🛑 Stopped</span>
+                                                @else
+                                                    <span class="ps-pill">{{ ucfirst($cItem->status) }}</span>
+                                                @endif
+                                            </td>
+                                            <td style="padding:12px 16px; vertical-align:middle;">
+                                                @if($cItem->budget_amount)
+                                                    <div style="font-weight:800; color:#0f172a;">₹{{ number_format((float)$cItem->budget_amount, 2) }}</div>
+                                                    <div style="font-size:11px; color:#64748b;">(₹{{ number_format($cItem->calculateDailyBudget(), 2) }}/d)</div>
+                                                @else
+                                                    <span style="color:#94a3b8;">—</span>
+                                                @endif
+                                            </td>
+                                            <td style="padding:12px 16px; vertical-align:middle; font-size:12px; color:#334155;">
+                                                {{ $cItem->start_date ? $cItem->start_date->format('d M Y') : 'Start' }} → {{ $cItem->end_date ? $cItem->end_date->format('d M Y') : 'Ongoing' }}
+                                            </td>
+                                            <td style="padding:12px 16px; text-align:right; vertical-align:middle;">
+                                                <button type="button" class="ps-btn ps-btn-primary" style="background:#ea580c; border-color:#ea580c; color:#fff; font-size:11.5px; padding:4px 10px; border-radius:8px;" onclick="openProjectExtendModal({{ $cItem->id }})">
+                                                    🔄 Extend
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">No campaigns found.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div style="text-align:center; padding:36px 16px; color:#64748b; font-size:13px;">
+                            <div style="font-size:32px; margin-bottom:8px;">📢</div>
+                            <div style="font-weight:800; color:#1e293b; font-size:16px;">No Campaigns Created Yet For This Customer</div>
+                            <div style="font-size:13px; color:#94a3b8; margin-top:4px;">You can initialize and manage ad campaigns for this client directly.</div>
+                            @if($lead?->id)
+                                <div style="margin-top:16px;">
+                                    <a href="{{ route('projects.campaigns.show', $lead->id) }}" class="ps-btn ps-btn-primary" style="background: linear-gradient(135deg,#fe5f04,#ea580c); border-color:#ea580c; color:#fff; font-size:13px; font-weight:800; padding:10px 20px; border-radius:12px;">
+                                        + Create First Campaign in Campaigns Module
+                                    </a>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            </section>
+        </section>
+        @endif
 
         <section class="ps-tab-panel {{ $activeTab === 'approvals' ? 'is-active' : '' }}" data-tab-panel="approvals">
             <div class="ps-grid">
@@ -1481,6 +1808,8 @@ function handleMoveToTestingSubmit(event, form) {
         if (text) text.textContent = ' Sending Notification Mail...';
     }
 }
+
+
 </script>
 
 <div class="ps-modal-overlay {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal-overlay></div>
@@ -1543,10 +1872,103 @@ function handleMoveToTestingSubmit(event, form) {
         </div>
     </form>
 </div>
+
+{{-- Quick Extend Campaign Modal in Project Details --}}
+@if($isDmDept && $lead)
+<div class="ps-modal-overlay" id="projectExtendCampaignModalOverlay" style="display: none; z-index: 1300;"></div>
+<div class="ps-modal" id="projectExtendCampaignModal" style="display: none; z-index: 1310; max-width: 620px;">
+    <div class="ps-modal-head">
+        <div class="ps-modal-title" style="font-size: 16px; font-weight: 800; color: #0f172a;">🔄 Quick Extend / Renew Campaign</div>
+        <button type="button" class="ps-modal-close" onclick="closeProjectExtendModal()">&times;</button>
+    </div>
+    <form method="POST" id="projectExtendForm" action="">
+        @csrf
+        <div class="ps-modal-body" style="display: grid; gap: 14px; padding: 22px;">
+            <div style="padding: 10px 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; font-size: 12px; color: #9a3412;">
+                Extending from original campaign: <strong id="projectExtendParentName">Campaign</strong>
+            </div>
+
+            <div class="ps-inline-grid">
+                <div>
+                    <label class="ps-label">New Campaign Name *</label>
+                    <input type="text" id="proj_extend_campaign_name" name="campaign_name" required class="ps-input" style="min-height: 40px; font-size: 13px;">
+                </div>
+                <div>
+                    <label class="ps-label">Ad Account Name</label>
+                    <input type="text" id="proj_extend_ad_account_name" name="ad_account_name" class="ps-input" style="min-height: 40px; font-size: 13px;">
+                </div>
+            </div>
+
+            <div class="ps-inline-grid">
+                <div>
+                    <label class="ps-label">Platform</label>
+                    <select id="proj_extend_platform" name="platform" class="ps-select">
+                        <option value="Facebook / Meta">Facebook / Meta</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="Google Ads">Google Ads</option>
+                        <option value="YouTube Ads">YouTube Ads</option>
+                        <option value="LinkedIn Ads">LinkedIn Ads</option>
+                        <option value="SEO / SEM">SEO / SEM</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="ps-label">Status *</label>
+                    <select id="proj_extend_status" name="status" required class="ps-select">
+                        <option value="active" selected>Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="expired">Expired</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="ps-inline-grid">
+                <div>
+                    <label class="ps-label">Budget Amount (₹)</label>
+                    <input type="number" step="0.01" min="0" id="proj_extend_budget_amount" name="budget_amount" class="ps-input" style="min-height: 40px; font-size: 13px;">
+                </div>
+                <div>
+                    <label class="ps-label">Budget Type</label>
+                    <select id="proj_extend_budget_type" name="budget_type" class="ps-select">
+                        <option value="Daily">Daily</option>
+                        <option value="Monthly" selected>Monthly</option>
+                        <option value="Total">Total</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="ps-inline-grid">
+                <div>
+                    <label class="ps-label">Renewal Start Date</label>
+                    <input type="date" id="proj_extend_start_date" name="start_date" class="ps-input" style="min-height: 40px; font-size: 13px;">
+                </div>
+                <div>
+                    <label class="ps-label">Renewal End Date</label>
+                    <input type="date" id="proj_extend_end_date" name="end_date" class="ps-input" style="min-height: 40px; font-size: 13px;">
+                </div>
+            </div>
+
+            <div>
+                <label class="ps-label">Remarks / Notes</label>
+                <textarea id="proj_extend_remarks" name="remarks" rows="2" class="ps-textarea" style="min-height: 60px; padding: 10px; font-size: 13px;"></textarea>
+            </div>
+        </div>
+        <div class="ps-modal-head" style="border-top: 1px solid #eef2f7; border-bottom: none; background: #fafcff; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="ps-btn" onclick="closeProjectExtendModal()">Cancel</button>
+            <button type="submit" class="ps-btn ps-btn-primary" style="background: linear-gradient(135deg,#fe5f04,#ea580c); border-color:#ea580c; color:#fff; font-weight:800;">
+                Confirm & Extend Campaign
+            </button>
+        </div>
+    </form>
+</div>
+@endif
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js" referrerpolicy="origin">
+
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const updateModal = document.querySelector('[data-update-modal]');
@@ -1712,6 +2134,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+
 </script>
 
 @if($isContentCalendarDept && $contentCalendarSheetUrl)
@@ -1896,6 +2320,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.ccFetchSheet = ccFetchSheet;
 })();
+
+
 </script>
 @endif
 
@@ -2152,6 +2578,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 250);
     }
 });
+
+
 </script>
 
 {{-- Support Portal Style Process Overlay for Team / Employee Allocation (Orange Theme) --}}
@@ -2308,6 +2736,112 @@ document.addEventListener('DOMContentLoaded', function () {
             fill.style.width = currentProgress + '%';
             percentText.innerText = currentProgress + '%';
         }, 250);
+    }
+});
+
+
+</script>
+<script>
+const allProjectCustomerCampaigns = @json($customerCampaigns ?? []);
+
+function openProjectExtendModal(campaignOrId) {
+    let campaign = null;
+    if (typeof campaignOrId === 'object' && campaignOrId !== null) {
+        campaign = campaignOrId;
+    } else if (typeof campaignOrId === 'number' || typeof campaignOrId === 'string') {
+        campaign = allProjectCustomerCampaigns.find(c => c.id == campaignOrId);
+    }
+    if (!campaign) {
+        console.warn('Campaign not found for ID:', campaignOrId);
+        return;
+    }
+
+    const form = document.getElementById('projectExtendForm');
+    if (!form) return;
+    form.action = '/projects/campaigns/' + campaign.id + '/extend';
+
+    const parentNameEl = document.getElementById('projectExtendParentName');
+    if (parentNameEl) {
+        parentNameEl.textContent = campaign.campaign_name || ('Campaign #' + campaign.id);
+    }
+
+    let rawName = campaign.campaign_name || 'Campaign';
+    let cleanBase = rawName.replace(/\s*\((Renewal|Extension)(\s*#?\d*)?\)/gi, '').trim();
+
+    let extensionsCount = campaign.extensions ? campaign.extensions.length : 0;
+    let nextIndex = extensionsCount + 1;
+    let suggestedName = nextIndex > 1 ? `${cleanBase} (Renewal #${nextIndex})` : `${cleanBase} (Renewal)`;
+
+    const nameInput = document.getElementById('proj_extend_campaign_name');
+    if (nameInput) nameInput.value = suggestedName;
+
+    const adAccInput = document.getElementById('proj_extend_ad_account_name');
+    if (adAccInput) adAccInput.value = campaign.ad_account_name || '';
+
+    const platformInput = document.getElementById('proj_extend_platform');
+    if (platformInput) platformInput.value = campaign.platform || 'Facebook / Meta';
+
+    const statusInput = document.getElementById('proj_extend_status');
+    if (statusInput) statusInput.value = 'active';
+
+    const budgetInput = document.getElementById('proj_extend_budget_amount');
+    if (budgetInput) budgetInput.value = campaign.budget_amount || '';
+
+    const budgetTypeInput = document.getElementById('proj_extend_budget_type');
+    if (budgetTypeInput) budgetTypeInput.value = campaign.budget_type || 'Monthly';
+
+    let nextStartDate = '';
+    if (campaign.end_date) {
+        let d = new Date(campaign.end_date);
+        d.setDate(d.getDate() + 1);
+        nextStartDate = d.toISOString().substring(0, 10);
+    } else {
+        nextStartDate = new Date().toISOString().substring(0, 10);
+    }
+    const startInput = document.getElementById('proj_extend_start_date');
+    if (startInput) startInput.value = nextStartDate;
+
+    const endInput = document.getElementById('proj_extend_end_date');
+    if (endInput) endInput.value = '';
+
+    const remarksInput = document.getElementById('proj_extend_remarks');
+    if (remarksInput) remarksInput.value = 'Renewal from ' + cleanBase;
+
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    const modal = document.getElementById('projectExtendCampaignModal');
+    if (overlay) {
+        overlay.classList.add('is-open');
+        overlay.style.display = 'block';
+    }
+    if (modal) {
+        modal.classList.add('is-open');
+        modal.style.display = 'block';
+    }
+}
+
+function closeProjectExtendModal() {
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    const modal = document.getElementById('projectExtendCampaignModal');
+    if (overlay) {
+        overlay.classList.remove('is-open');
+        overlay.style.display = 'none';
+    }
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.style.display = 'none';
+    }
+}
+
+document.addEventListener('click', function(e) {
+    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
+    if (overlay && e.target === overlay) {
+        closeProjectExtendModal();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeProjectExtendModal();
     }
 });
 </script>
