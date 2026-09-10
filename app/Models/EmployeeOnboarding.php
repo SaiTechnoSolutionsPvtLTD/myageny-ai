@@ -24,8 +24,16 @@ class EmployeeOnboarding extends Model
             if ($user && $user->isBranchAdmin()) {
                 $branchIds = $user->getMyBranchIds();
                 if (!empty($branchIds)) {
-                    $builder->whereHas('portalUser', function ($query) use ($branchIds) {
-                        $query->whereIn('branch_id', $branchIds);
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+                    $builder->where(function ($q) use ($branchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($query) use ($branchIds) {
+                            $query->whereIn('branch_id', $branchIds);
+                        });
+
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('employee_id', 'like', $code . '%');
+                        }
                     });
                 }
             }

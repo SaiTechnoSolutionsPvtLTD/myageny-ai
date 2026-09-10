@@ -22,11 +22,38 @@ class DailyAttendance extends Model
             if ($user && $user->isBranchAdmin()) {
                 $branchIds = $user->getMyBranchIds();
                 if (!empty($branchIds)) {
-                    $builder->where(function ($query) use ($branchIds) {
-                        $query->whereHas('employee.portalUser', function ($q) use ($branchIds) {
-                            $q->whereIn('branch_id', $branchIds);
-                        })->orWhereHas('intern.portalUser', function ($q) use ($branchIds) {
-                            $q->whereIn('branch_id', $branchIds);
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+                    $builder->where(function ($query) use ($branchIds, $branchCodes) {
+                        $query->where(function ($eqQuery) use ($branchIds, $branchCodes) {
+                            $eqQuery->where('attendee_type', 'employee')
+                                ->whereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
+                                    $eq->where(function ($q) use ($branchIds, $branchCodes) {
+                                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                                            $puQ->whereIn('branch_id', $branchIds);
+                                        });
+                                        foreach ($branchCodes as $code) {
+                                            $q->orWhere('employee_id', 'like', $code . '%');
+                                        }
+                                    });
+                                });
+                        })->orWhere(function ($iqQuery) use ($branchIds, $branchCodes) {
+                            $iqQuery->where('attendee_type', 'intern')
+                                ->whereHas('intern', function ($iq) use ($branchIds, $branchCodes) {
+                                    $iq->where(function ($q) use ($branchIds, $branchCodes) {
+                                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                                            $puQ->whereIn('branch_id', $branchIds);
+                                        });
+                                        foreach ($branchCodes as $code) {
+                                            $q->orWhere('intern_id', 'like', $code . '%');
+                                        }
+                                    });
+                                });
+                        })->orWhere(function ($uqQuery) use ($branchIds) {
+                            $uqQuery->where('attendee_type', 'user')
+                                ->whereHas('user', function ($uq) use ($branchIds) {
+                                    $uq->whereIn('branch_id', $branchIds);
+                                });
                         });
                     });
                 }
@@ -82,5 +109,10 @@ class DailyAttendance extends Model
     public function intern(): BelongsTo
     {
         return $this->belongsTo(InternJoiningForm::class, 'intern_joining_form_id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'employee_id');
     }
 }

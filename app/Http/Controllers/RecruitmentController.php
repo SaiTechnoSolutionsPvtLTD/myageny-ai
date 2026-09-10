@@ -30,6 +30,17 @@ class RecruitmentController extends Controller
             ->withCount(['callUpdates', 'interviews'])
             ->latest();
 
+        $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
+        $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
+
+        if ($dateFrom) {
+            $query->whereDate('created_at', '>=', $dateFrom);
+        }
+
+        if ($dateTo) {
+            $query->whereDate('created_at', '<=', $dateTo);
+        }
+
         if ($request->filled('search')) {
             $search = trim((string) $request->search);
             $query->where(function ($subQuery) use ($search) {
@@ -79,18 +90,22 @@ class RecruitmentController extends Controller
 
         $candidates = $query->paginate(12)->withQueryString();
 
-        $assignedCountQuery = RecruitmentCandidate::query();
-        $applyAssignedFilter($assignedCountQuery);
+        $baseCountQuery = RecruitmentCandidate::query();
+        if ($dateFrom) {
+            $baseCountQuery->whereDate('created_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $baseCountQuery->whereDate('created_at', '<=', $dateTo);
+        }
 
         $counts = [
-            'all' => RecruitmentCandidate::count(),
-            'active' => RecruitmentCandidate::whereNotIn('status', [
+            'all' => (clone $baseCountQuery)->count(),
+            'active' => (clone $baseCountQuery)->whereNotIn('status', [
                 RecruitmentCandidate::STATUS_SELECTED,
                 RecruitmentCandidate::STATUS_REJECTED,
             ])->count(),
-            'assigned' => $assignedCountQuery->count(),
-            'selected' => RecruitmentCandidate::where('status', RecruitmentCandidate::STATUS_SELECTED)->count(),
-            'rejected' => RecruitmentCandidate::where('status', RecruitmentCandidate::STATUS_REJECTED)->count(),
+            'selected' => (clone $baseCountQuery)->where('status', RecruitmentCandidate::STATUS_SELECTED)->count(),
+            'rejected' => (clone $baseCountQuery)->where('status', RecruitmentCandidate::STATUS_REJECTED)->count(),
         ];
 
         return view('pages.hrms.recruitment.index', [

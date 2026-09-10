@@ -547,6 +547,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/payroll/{payroll}/payslip/{item}', [PayrollController::class, 'payslip'])->name('payroll.payslip');
     Route::get('/interns/{intern}/convert-to-employee', [InternJoiningFormController::class, 'showConvertToEmployeeForm'])->name('interns.convert-to-employee');
     Route::post('/interns/{intern}/convert-to-employee', [InternJoiningFormController::class, 'convertToEmployee'])->name('interns.convert-to-employee.store');
+    Route::patch('/interns/{intern}/update-status', [InternJoiningFormController::class, 'updateStatus'])->name('interns.update-status');
+    Route::post('/interns/{intern}/update-status', [InternJoiningFormController::class, 'updateStatus'])->name('interns.update-status.post');
     Route::resource('interns', InternJoiningFormController::class);
     Route::get('/visitor-management/qr-code', [VisitorManagementController::class, 'qrCode'])->name('visitor-management.qr-code');
     Route::get('/visitor-management', [VisitorManagementController::class, 'index'])->name('visitor-management.index');

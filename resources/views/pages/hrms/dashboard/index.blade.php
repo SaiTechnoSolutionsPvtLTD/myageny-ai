@@ -285,6 +285,7 @@
     position:relative;
     overflow:hidden;
     color:#fff !important;
+    text-decoration:none !important;
     border:none !important;
     border-radius:20px !important;
     box-shadow:0 10px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.05) !important;
@@ -293,6 +294,7 @@
     flex-direction:column;
     justify-content:space-between;
     min-height:130px;
+    cursor:pointer;
 }
 .hrms-stat-card:hover{
     transform:translateY(-4px);
@@ -435,6 +437,35 @@
 .hrms-announcement-title{font-size:14px;font-weight:700;color:#121212;margin-bottom:4px}
 .hrms-announcement-message{font-size:13px;color:#7d7d7d;margin-bottom:8px}
 .hrms-announcement-date{font-size:11px;color:#9ca3af}
+/* Scrollable Card Lists & Custom Scrollbars */
+.hrms-panel-scrollable {
+    display: flex;
+    flex-direction: column;
+    height: 480px;
+}
+.hrms-panel-scrollable .hrms-panel-head {
+    flex-shrink: 0;
+}
+.hrms-panel-scrollable .hrms-feature-list {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 6px;
+    align-content: flex-start;
+}
+.hrms-feature-list::-webkit-scrollbar {
+    width: 5px;
+}
+.hrms-feature-list::-webkit-scrollbar-track {
+    background: #fbf8f5;
+    border-radius: 8px;
+}
+.hrms-feature-list::-webkit-scrollbar-thumb {
+    background: #e2d7cf;
+    border-radius: 8px;
+}
+.hrms-feature-list::-webkit-scrollbar-thumb:hover {
+    background: #fe5f04;
+}
 .hrms-alert{padding:16px 18px;border-radius:18px;border:1px solid;font-size:13px;font-weight:700}
 .hrms-alert-success{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
 .hrms-alert-error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
@@ -721,37 +752,37 @@
 
         <!-- Key Metrics -->
         <section class="hrms-stats">
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+            <a href="{{ route('attendance.index') }}" class="hrms-stat-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-people-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Profile' : 'People' }}</div>
                 <div class="hrms-stat-value">{{ $stats['employees_total'] }}</div>
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? 'Your HRMS profile' : (($stats['employee_count'] ?? 0) . ' Emp / ' . ($stats['interns_total'] ?? 0) . ' Int') }}</div>
-            </div>
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);">
+            </a>
+            <a href="{{ route('attendance.index', ['status' => 'present']) }}" class="hrms-stat-card" style="background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-check-fill"></i></span>
                 <div class="hrms-stat-label">Present Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_present'] }}</div>
                 <div class="hrms-stat-meta">Marked present</div>
-            </div>
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%);">
+            </a>
+            <a href="{{ route('attendance.index', ['login_timing' => 'late']) }}" class="hrms-stat-card" style="background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%);">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-clock-fill"></i></span>
                 <div class="hrms-stat-label">Late Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_late'] }}</div>
                 <div class="hrms-stat-meta">Late arrivals @if(($stats['today_early'] ?? 0) > 0) / Early: {{ $stats['today_early'] }} @endif</div>
-            </div>
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
+            </a>
+            <a href="{{ route('attendance.index', ['status' => 'absent']) }}" class="hrms-stat-card" style="background: linear-gradient(135deg, #7f1d1d 0%, #ef4444 100%);">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-x-fill"></i></span>
                 <div class="hrms-stat-label">Absent Today</div>
                 <div class="hrms-stat-value">{{ $stats['today_absent'] }}</div>
                 <div class="hrms-stat-meta">Not present</div>
-            </div>
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #4c1d95 0%, #8b5cf6 100%);">
+            </a>
+            <a href="{{ $selfServiceMode ? '#' : route('interns.index', ['internship_status' => 'active']) }}" class="hrms-stat-card" style="background: linear-gradient(135deg, #4c1d95 0%, #8b5cf6 100%);">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-backpack-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Latest Payslip' : 'Interns' }}</div>
                 <div class="hrms-stat-value">{{ $selfServiceMode ? (optional(optional($stats['latest_payroll_item'] ?? null)->payroll)->salary_month?->format('M Y') ?: 'N/A') : $stats['interns_total'] }}</div>
                 <div class="hrms-stat-meta">{{ $selfServiceMode ? optional(optional($stats['latest_payroll_item'] ?? null)->payroll)->salary_month?->format('M Y') ?: 'Not available' : 'Intern workforce' }}</div>
-            </div>
-            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #831843 0%, #db2777 100%);">
+            </a>
+            <div class="hrms-stat-card" style="background: linear-gradient(135deg, #831843 0%, #db2777 100%); cursor: default;">
                 <span class="hrms-stat-icon-wrapper"><i class="bi bi-person-dash-fill"></i></span>
                 <div class="hrms-stat-label">{{ $selfServiceMode ? 'Latest Net Salary' : 'Resigned Employees' }}</div>
                 <div class="hrms-stat-value">{{ $selfServiceMode ? number_format((float) optional($stats['latest_payroll_item'] ?? null)->net_salary, 2) : $stats['employees_pending'] }}</div>
@@ -763,7 +794,7 @@
         <!-- Main Content Panels -->
         <section class="hrms-panels">
             <!-- Department-wise Employee Count & Salary -->
-            <div class="hrms-card hrms-panel">
+            <div class="hrms-card hrms-panel hrms-panel-scrollable">
                 <div class="hrms-panel-head">
                     <div>
                         <div class="hrms-panel-title">Today's Celebrations</div>
@@ -831,7 +862,7 @@
             </div>
 
             <!-- Interview Assigned Section -->
-            <div class="hrms-card hrms-panel" style="grid-column: span 2;">
+            <div class="hrms-card hrms-panel hrms-panel-scrollable" style="grid-column: span 2;">
                 <div class="hrms-panel-head">
                     <div>
                         <div class="hrms-panel-title">🎯 Interview Assigned</div>

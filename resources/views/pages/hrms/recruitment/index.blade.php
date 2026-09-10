@@ -29,23 +29,19 @@
         @endif
 
         <div class="rec-stats">
-            <a href="{{ route('recruitment.index') }}" class="rec-stat {{ request('bucket') === null && request('status') === null && request('assigned') === null ? 'is-active' : '' }}">
+            <a href="{{ route('recruitment.index', request()->except('bucket', 'page')) }}" class="rec-stat {{ request('bucket') === null && request('status') === null ? 'is-active' : '' }}">
                 <div class="rec-stat-label">All Candidates</div>
                 <div class="rec-stat-value">{{ $counts['all'] }}</div>
             </a>
-            <a href="{{ route('recruitment.index', ['bucket' => 'active']) }}" class="rec-stat {{ request('bucket') === 'active' ? 'is-active' : '' }}">
+            <a href="{{ route('recruitment.index', array_merge(request()->except('page'), ['bucket' => 'active'])) }}" class="rec-stat {{ request('bucket') === 'active' ? 'is-active' : '' }}">
                 <div class="rec-stat-label">Active Pipeline</div>
                 <div class="rec-stat-value">{{ $counts['active'] }}</div>
             </a>
-            <a href="{{ route('recruitment.index', ['assigned' => 'me']) }}" class="rec-stat {{ request('assigned') === 'me' ? 'is-active' : '' }}">
-                <div class="rec-stat-label">🎯 My Interviews</div>
-                <div class="rec-stat-value">{{ $counts['assigned'] }}</div>
-            </a>
-            <a href="{{ route('recruitment.index', ['bucket' => 'selected']) }}" class="rec-stat {{ request('bucket') === 'selected' ? 'is-active' : '' }}">
+            <a href="{{ route('recruitment.index', array_merge(request()->except('page'), ['bucket' => 'selected'])) }}" class="rec-stat {{ request('bucket') === 'selected' ? 'is-active' : '' }}">
                 <div class="rec-stat-label">Selected Bucket</div>
                 <div class="rec-stat-value">{{ $counts['selected'] }}</div>
             </a>
-            <a href="{{ route('recruitment.index', ['bucket' => 'rejected']) }}" class="rec-stat {{ request('bucket') === 'rejected' ? 'is-active' : '' }}">
+            <a href="{{ route('recruitment.index', array_merge(request()->except('page'), ['bucket' => 'rejected'])) }}" class="rec-stat {{ request('bucket') === 'rejected' ? 'is-active' : '' }}">
                 <div class="rec-stat-label">Rejected Bucket</div>
                 <div class="rec-stat-value">{{ $counts['rejected'] }}</div>
             </a>
@@ -53,17 +49,14 @@
 
         <div class="eob-filter-card">
             <form method="GET" action="{{ route('recruitment.index') }}" class="eob-filter-form">
-                @if(request('assigned'))
-                    <input type="hidden" name="assigned" value="{{ request('assigned') }}">
-                @endif
                 @if(request('bucket'))
                     <input type="hidden" name="bucket" value="{{ request('bucket') }}">
                 @endif
-                <div class="eob-field">
+                <div class="eob-field" style="min-width: 200px;">
                     <label class="eob-label">Search</label>
                     <input type="text" name="search" class="eob-input" value="{{ request('search') }}" placeholder="Name, mobile, email, job, location">
                 </div>
-                <div class="eob-field" style="max-width:220px;">
+                <div class="eob-field" style="max-width: 180px; min-width: 130px;">
                     <label class="eob-label">Status</label>
                     <select name="status" class="eob-select">
                         <option value="">All Status</option>
@@ -72,9 +65,17 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="eob-field" style="max-width: 160px; min-width: 130px;">
+                    <label class="eob-label">From Date</label>
+                    <input type="date" name="date_from" class="eob-input" value="{{ request('date_from') }}">
+                </div>
+                <div class="eob-field" style="max-width: 160px; min-width: 130px;">
+                    <label class="eob-label">To Date</label>
+                    <input type="date" name="date_to" class="eob-input" value="{{ request('date_to') }}">
+                </div>
                 <div class="eob-actions">
                     <button type="submit" class="eob-btn eob-btn-primary">Filter</button>
-                    @if(request()->hasAny(['search', 'status', 'bucket', 'assigned']))
+                    @if(request()->hasAny(['search', 'status', 'bucket', 'date_from', 'date_to']))
                         <a href="{{ route('recruitment.index') }}" class="eob-btn eob-btn-ghost">Reset</a>
                     @endif
                 </div>
@@ -84,15 +85,14 @@
         <div class="eob-table-card">
             <div class="eob-card-head">
                 <div>
-                    <div class="eob-card-title">
-                        Candidate Pipeline
-                        @if(request('assigned') === 'me')
-                            <span style="font-size: 12px; font-weight: 700; color: #fe5f04; background: #fff3eb; padding: 2px 8px; border-radius: 999px; margin-left: 6px; border: 1px solid #ffd9bf;">🎯 Assigned to Me</span>
-                        @endif
-                    </div>
+                    <div class="eob-card-title">Candidate Pipeline</div>
                     <div class="eob-card-sub">
-                        @if(request('assigned') === 'me')
-                            Showing only candidates with interviews scheduled/allocated to you.
+                        @if(request('date_from') && request('date_to'))
+                            Showing candidates from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
+                        @elseif(request('date_from'))
+                            Showing candidates from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> onwards.
+                        @elseif(request('date_to'))
+                            Showing candidates up to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
                         @else
                             Track applicants from first contact through interview, selection, or rejection.
                         @endif

@@ -51,7 +51,7 @@ class InternJoiningFormController extends Controller
     public function index(Request $request): View
     {
         $forms = InternJoiningForm::query()
-            ->with(['documents', 'convertedEmployee', 'department'])
+            ->with(['documents', 'convertedEmployee', 'department', 'role', 'portalUser.branch'])
             ->when($request->search, function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -63,19 +63,40 @@ class InternJoiningFormController extends Controller
                         ->orWhere('aadhaar_card_no', 'like', '%' . $search . '%');
                 });
             })
+            ->when($request->filled('branch_id'), function ($query) use ($request) {
+                $branchId = $request->integer('branch_id');
+                $branch = Branch::withoutGlobalScopes()->find($branchId);
+                $query->where(function ($sub) use ($branchId, $branch) {
+                    $sub->whereHas('portalUser', fn ($q) => $q->where('branch_id', $branchId));
+                    if ($branch && $branch->code) {
+                        $sub->orWhere(function ($q2) use ($branch) {
+                            $q2->whereNull('portal_user_id')
+                               ->where('intern_id', 'like', '%' . $branch->code . '%');
+                        });
+                    }
+                });
+            })
             ->when($request->filled('department_id'), function ($query) use ($request) {
                 $query->where('department_id', $request->integer('department_id'));
             })
+            ->when($request->filled('role_id'), function ($query) use ($request) {
+                $query->where('role_id', $request->integer('role_id'));
+            })
             ->when($request->filled('internship_status'), function ($query) use ($request) {
                 $query->where('internship_status', $request->string('internship_status')->toString());
+            })
+            ->when($request->filled('status'), function ($query) use ($request) {
+                $query->where('internship_status', $request->string('status')->toString());
             })
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
         $departments = Department::orderBy('name')->get(['id', 'name']);
+        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get();
 
-        return view('pages.hrms.Interns.intern_joining_forms.index', compact('forms', 'departments'));
+        return view('pages.hrms.Interns.intern_joining_forms.index', compact('forms', 'departments', 'branches', 'roles'));
     }
 
     public function create(): View
@@ -205,6 +226,40 @@ class InternJoiningFormController extends Controller
         return redirect()
             ->route('interns.show', $intern)
             ->with('success', "Intern joining form for <strong>{$intern->name}</strong> updated successfully.");
+    }
+
+    public function updateStatus(Request $request, InternJoiningForm $intern): RedirectResponse|\Illuminate\Http\JsonResponse
+    {
+        abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,inactive,resigned'],
+        ]);
+
+        $newStatus = $validated['status'];
+
+        DB::transaction(function () use ($intern, $newStatus) {
+            $intern->internship_status = $newStatus;
+            $intern->save();
+
+            $portalUser = User::withoutGlobalScopes()->find($intern->portal_user_id);
+            if ($portalUser) {
+                $portalUser->is_active = ($newStatus === InternJoiningForm::STATUS_ACTIVE);
+                $portalUser->save();
+            }
+        });
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Status for {$intern->name} updated to " . ucfirst($newStatus) . ".",
+                'status' => $newStatus,
+                'status_label' => ucfirst($newStatus),
+                'portal_user_active' => $intern->portalUser?->is_active,
+            ]);
+        }
+
+        return back()->with('success', "Status for <strong>{$intern->name}</strong> updated to <strong>" . ucfirst($newStatus) . "</strong>.");
     }
 
     public function destroy(InternJoiningForm $intern): RedirectResponse
@@ -608,9 +663,15 @@ class InternJoiningFormController extends Controller
             'branch_id' => $validated['branch_id'],
         ];
 
+        if (array_key_exists('internship_status', $validated)) {
+            $attributes['is_active'] = ($validated['internship_status'] === InternJoiningForm::STATUS_ACTIVE);
+        }
+
         if (! $user) {
             $attributes['company_id'] = auth()->user()?->company_id;
-            $attributes['is_active'] = true;
+            $attributes['is_active'] = array_key_exists('internship_status', $validated)
+                ? ($validated['internship_status'] === InternJoiningForm::STATUS_ACTIVE)
+                : true;
             $attributes['password'] = Hash::make($validated['portal_password']);
 
             $user = User::create($attributes);
@@ -629,7 +690,12 @@ class InternJoiningFormController extends Controller
 
     private function syncPortalMapping(User $user, mixed $tlUserId): void
     {
-        UserMapping::updateOrCreate(
+        if (empty($tlUserId)) {
+            UserMapping::withoutGlobalScopes()->where('user_id', $user->id)->delete();
+            return;
+        }
+
+        UserMapping::withoutGlobalScopes()->updateOrCreate(
             ['user_id' => $user->id],
             [
                 'manager_id' => $tlUserId,
