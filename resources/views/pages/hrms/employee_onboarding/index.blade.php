@@ -359,33 +359,6 @@ document.addEventListener('DOMContentLoaded', function () {
             document.querySelectorAll('details.eob-table-dropdown[open]').forEach(d => d.removeAttribute('open'));
         }
     });
-
-    // ── Actions dropdown toggle & dropup positioning ────────────────
-    const dropdowns = document.querySelectorAll('details.eob-table-dropdown');
-    dropdowns.forEach(function (dropdown) {
-        dropdown.addEventListener('toggle', function () {
-            if (dropdown.open) {
-                dropdowns.forEach(function (other) {
-                    if (other !== dropdown) other.removeAttribute('open');
-                });
-
-                const rect = dropdown.getBoundingClientRect();
-                const menuHeight = 170;
-                const spaceBelow = window.innerHeight - rect.bottom;
-                if (spaceBelow < menuHeight && rect.top > menuHeight) {
-                    dropdown.classList.add('dropup');
-                } else {
-                    dropdown.classList.remove('dropup');
-                }
-            }
-        });
-    });
-
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest('details.eob-table-dropdown')) {
-            dropdowns.forEach(d => d.removeAttribute('open'));
-        }
-    });
 });
 </script>
 @endpush

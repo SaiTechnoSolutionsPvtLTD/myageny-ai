@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
+use App\Models\User;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\RedirectResponse;
@@ -148,8 +149,8 @@ class AttendanceController extends Controller
 
         [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
 
-        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
-            return back()->withErrors(['attendee_key' => 'Please select a valid employee or intern.'])->withInput();
+        if (! in_array($attendeeType, ['employee', 'intern', 'user'], true) || ! $attendeeId) {
+            return back()->withErrors(['attendee_key' => 'Please select a valid employee, intern, or user.'])->withInput();
         }
 
         if ($attendeeType === 'employee') {
@@ -168,7 +169,7 @@ class AttendanceController extends Controller
                 'attendee_type' => 'employee',
                 'employee_id' => $employee->id,
             ];
-        } else {
+        } elseif ($attendeeType === 'intern') {
             $intern = $this->activeInternsQuery()->findOrFail($attendeeId);
 
             $attendanceAttributes = [
@@ -183,6 +184,22 @@ class AttendanceController extends Controller
             $matchKey = [
                 'attendee_type' => 'intern',
                 'intern_joining_form_id' => $intern->id,
+            ];
+        } else {
+            $userRecord = User::findOrFail($attendeeId);
+
+            $attendanceAttributes = [
+                'company_id' => $userRecord->company_id,
+                'employee_id' => $userRecord->id,
+                'attendee_type' => 'user',
+                'intern_joining_form_id' => null,
+                'employee_name' => $userRecord->name,
+                'attendance_photo' => $userRecord->photo ? 'storage/' . $userRecord->photo : '',
+            ];
+
+            $matchKey = [
+                'attendee_type' => 'user',
+                'employee_id' => $userRecord->id,
             ];
         }
 
@@ -250,8 +267,8 @@ class AttendanceController extends Controller
 
         [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
 
-        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
-            return back()->withErrors(['attendee_key' => 'Please select a valid employee or intern.'])->withInput();
+        if (! in_array($attendeeType, ['employee', 'intern', 'user'], true) || ! $attendeeId) {
+            return back()->withErrors(['attendee_key' => 'Please select a valid attendee.'])->withInput();
         }
 
         $isAccessible = $this->accessibleAttendees()->contains(function ($attendee) use ($attendeeType, $attendeeId) {
@@ -259,12 +276,12 @@ class AttendanceController extends Controller
         });
 
         if (! $isAccessible) {
-            return back()->withErrors(['attendee_key' => 'Please select a valid employee or intern.'])->withInput();
+            return back()->withErrors(['attendee_key' => 'Please select a valid attendee.'])->withInput();
         }
 
         $attendance = DailyAttendance::query()
             ->where('attendee_type', $attendeeType)
-            ->when($attendeeType === 'employee',
+            ->when($attendeeType === 'employee' || $attendeeType === 'user',
                 fn ($query) => $query->where('employee_id', $attendeeId),
                 fn ($query) => $query->where('intern_joining_form_id', $attendeeId)
             )
@@ -311,7 +328,7 @@ class AttendanceController extends Controller
 
         [$attendeeType, $attendeeId] = $this->parseAttendeeKey($validated['attendee_key']);
 
-        if (! in_array($attendeeType, ['employee', 'intern'], true) || ! $attendeeId) {
+        if (! in_array($attendeeType, ['employee', 'intern', 'user'], true) || ! $attendeeId) {
             return response()->json(['found' => false]);
         }
 
@@ -325,7 +342,7 @@ class AttendanceController extends Controller
 
         $attendance = DailyAttendance::query()
             ->where('attendee_type', $attendeeType)
-            ->when($attendeeType === 'employee',
+            ->when($attendeeType === 'employee' || $attendeeType === 'user',
                 fn ($query) => $query->where('employee_id', $attendeeId),
                 fn ($query) => $query->where('intern_joining_form_id', $attendeeId)
             )
@@ -426,27 +443,45 @@ class AttendanceController extends Controller
 
         $attendanceRecords = $attendanceCollection->map(function (DailyAttendance $attendance) {
             $isIntern = $attendance->attendee_type === 'intern';
-            $attendeeId = $isIntern
-                ? ($attendance->intern?->intern_id ?: 'INT-' . $attendance->intern_joining_form_id)
-                : ($attendance->employee?->employee_id ?: $attendance->employee_id);
-            $attendeeName = $isIntern
-                ? ($attendance->intern?->name ?: ($attendance->employee_name ?: 'Unknown Intern'))
-                : ($attendance->employee?->name ?: ($attendance->employee_name ?: 'Unknown Employee'));
+            $isUser = $attendance->attendee_type === 'user';
+
+            if ($isIntern) {
+                $attendeeId = $attendance->intern?->intern_id ?: 'INT-' . $attendance->intern_joining_form_id;
+                $attendeeName = $attendance->intern?->name ?: ($attendance->employee_name ?: 'Unknown Intern');
+                $branch = $attendance->intern?->branch;
+                $branchId = $branch?->id ?? $attendance->intern?->portalUser?->branch_id;
+                $branchName = $branch?->name ?? ($attendance->intern?->portalUser?->branch?->name ?? null);
+                $departmentId = $attendance->intern?->department_id;
+                $departmentName = $attendance->intern?->department?->name;
+                $profilePhoto = $attendance->intern?->photograph ? asset('storage/' . $attendance->intern->photograph) : null;
+            } elseif ($isUser) {
+                $attendeeId = 'USR-' . str_pad((string) $attendance->employee_id, 4, '0', STR_PAD_LEFT);
+                $attendeeName = $attendance->user?->name ?: ($attendance->employee_name ?: 'Unknown User');
+                $branch = $attendance->user?->branch;
+                $branchId = $attendance->user?->branch_id;
+                $branchName = $branch?->name;
+                $departmentId = null;
+                $departmentName = $attendance->user?->designation ?: 'Staff';
+                $profilePhoto = $attendance->user?->photo ? asset('storage/' . $attendance->user->photo) : null;
+            } else {
+                $attendeeId = $attendance->employee?->employee_id ?: $attendance->employee_id;
+                $attendeeName = $attendance->employee?->name ?: ($attendance->employee_name ?: 'Unknown Employee');
+                $branch = $attendance->employee?->branch;
+                $branchId = $branch?->id ?? $attendance->employee?->portalUser?->branch_id;
+                $branchName = $branch?->name ?? ($attendance->employee?->portalUser?->branch?->name ?? null);
+                $departmentId = $attendance->employee?->department_id;
+                $departmentName = $attendance->employee?->department?->name;
+                $profilePhoto = $attendance->employee?->photograph ? asset('storage/' . $attendance->employee->photograph) : null;
+            }
 
             return [
                 'employee_id' => (string) $attendeeId,
                 'employee_name' => $attendeeName,
-                'attendee_type' => $isIntern ? 'intern' : 'employee',
-                'branch_id' => $isIntern
-                    ? ($attendance->intern?->portalUser?->branch_id ?? null)
-                    : ($attendance->employee?->portalUser?->branch_id ?? null),
-                'branch_name' => $isIntern
-                    ? ($attendance->intern?->portalUser?->branch?->name ?? null)
-                    : ($attendance->employee?->portalUser?->branch?->name ?? null),
-                'department_id' => $isIntern ? $attendance->intern?->department_id : $attendance->employee?->department_id,
-                'department_name' => $isIntern
-                    ? ($attendance->intern?->department?->name ?? null)
-                    : ($attendance->employee?->department?->name ?? null),
+                'attendee_type' => $attendance->attendee_type ?: 'employee',
+                'branch_id' => $branchId,
+                'branch_name' => $branchName,
+                'department_id' => $departmentId,
+                'department_name' => $departmentName,
                 'attendance_date' => optional($attendance->attendance_date)->format('Y-m-d'),
                 'attendance_status' => strtolower((string) $attendance->attendance_status) ?: 'present',
                 'leave_category' => $attendance->leave_category,
@@ -460,9 +495,7 @@ class AttendanceController extends Controller
                 'login_location' => $attendance->login_location,
                 'logout_location' => $attendance->logout_location,
                 'remarks' => $attendance->remarks,
-                'profile_photo_url' => $isIntern
-                    ? ($attendance->intern?->photograph ? asset('storage/' . $attendance->intern->photograph) : null)
-                    : ($attendance->employee?->photograph ? asset('storage/' . $attendance->employee->photograph) : null),
+                'profile_photo_url' => $profilePhoto,
                 'attendance_photo_url' => $attendance->attendance_photo ? asset($attendance->attendance_photo) : null,
                 'logout_photo_url' => $attendance->logout_photo ? asset($attendance->logout_photo) : null,
                 'login_timing' => strtolower((string) $attendance->attendance_status) === 'leave' ? null : $this->resolveLoginTiming($attendance->login_time),
@@ -784,8 +817,8 @@ class AttendanceController extends Controller
                 'status' => $employee->status,
                 'department_id' => $employee->department_id,
                 'department_name' => $employee->department?->name,
-                'branch_id' => $employee->portalUser?->branch_id,
-                'branch_name' => $employee->portalUser?->branch?->name,
+                'branch_id' => $employee->branch?->id ?? $employee->portalUser?->branch_id,
+                'branch_name' => $employee->branch_name !== '—' ? $employee->branch_name : ($employee->portalUser?->branch?->name),
                 'photo_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 'select_key' => 'employee:' . $employee->id,
             ]);
@@ -801,8 +834,8 @@ class AttendanceController extends Controller
                 'status' => null,
                 'department_id' => $intern->department_id,
                 'department_name' => $intern->department?->name,
-                'branch_id' => $intern->portalUser?->branch_id,
-                'branch_name' => $intern->portalUser?->branch?->name,
+                'branch_id' => $intern->branch?->id ?? $intern->portalUser?->branch_id,
+                'branch_name' => $intern->branch_name !== '—' ? $intern->branch_name : ($intern->portalUser?->branch?->name),
                 'photo_url' => $intern->photograph ? asset('storage/' . $intern->photograph) : null,
                 'select_key' => 'intern:' . $intern->id,
             ]);
@@ -823,16 +856,17 @@ class AttendanceController extends Controller
 
         if ($this->shouldFilterByBranch()) {
             $branchIds = auth()->user()?->getMyBranchIds() ?? [];
-            $query->where(function (Builder $q) use ($branchIds) {
-                $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                    $puQ->whereIn('branch_id', $branchIds);
-                })
-                ->orWhereHas('portalUser.roles', function ($rq) {
-                    $rq->whereIn('name', ['branch_admin', 'branch_manager', 'bm'])
-                       ->orWhere('display_name', 'like', '%Branch Manager%')
-                       ->orWhere('display_name', 'like', '%Branch Admin%');
+            if (!empty($branchIds)) {
+                $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                $query->where(function (Builder $q) use ($branchIds, $branchCodes) {
+                    $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                        $puQ->whereIn('branch_id', $branchIds);
+                    });
+                    foreach ($branchCodes as $code) {
+                        $q->orWhere('employee_id', 'like', $code . '%');
+                    }
                 });
-            });
+            }
         }
 
         return $query;
@@ -849,9 +883,17 @@ class AttendanceController extends Controller
 
         if ($this->shouldFilterByBranch()) {
             $branchIds = auth()->user()?->getMyBranchIds() ?? [];
-            $query->whereHas('portalUser', function ($q) use ($branchIds) {
-                $q->whereIn('branch_id', $branchIds);
-            });
+            if (!empty($branchIds)) {
+                $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                $query->where(function (Builder $q) use ($branchIds, $branchCodes) {
+                    $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                        $puQ->whereIn('branch_id', $branchIds);
+                    });
+                    foreach ($branchCodes as $code) {
+                        $q->orWhere('intern_id', 'like', $code . '%');
+                    }
+                });
+            }
         }
 
         return $query;
@@ -877,10 +919,18 @@ class AttendanceController extends Controller
 
     private function attendanceBranches(): Collection
     {
-        return Branch::query()
+        $query = Branch::query()
             ->active()
-            ->orderBy('name')
-            ->get(['id', 'name']);
+            ->orderBy('name');
+
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+            if (!empty($branchIds)) {
+                $query->whereIn('id', $branchIds);
+            }
+        }
+
+        return $query->get(['id', 'name']);
     }
 
     private function leaveCategoryLabel(?string $leaveCategory): ?string

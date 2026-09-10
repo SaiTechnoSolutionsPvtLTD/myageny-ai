@@ -14,6 +14,7 @@
 .pr-field{display:flex;flex-direction:column;gap:8px;min-width:180px}
 .pr-label{font-size:13px;font-weight:700;color:#444}
 .pr-input{height:44px;border:1px solid #e1dee3;border-radius:10px;padding:0 14px;background:#fff;color:#20222a;font-size:14px}
+.pr-select{height:44px;border:1px solid #e1dee3;border-radius:10px;padding:0 14px;background:#fff;color:#20222a;font-size:14px;min-width:180px}
 .pr-textarea{min-height:90px;border:1px solid #e1dee3;border-radius:10px;padding:12px 14px;background:#fff;color:#20222a;font-size:14px}
 .pr-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:10px;border:1px solid transparent;background:#fff;color:#121212;text-decoration:none;font-size:13px;font-weight:700}
 .pr-btn-primary{background:linear-gradient(135deg,#fe5f04,#ff7c30);border-color:#fe5f04;color:#fff}
@@ -66,7 +67,21 @@
                     <label class="pr-label">Salary Month</label>
                     <input type="month" name="month" class="pr-input" value="{{ $selectedMonth->format('Y-m') }}">
                 </div>
+                <div class="pr-field">
+                    <label class="pr-label">Branch</label>
+                    <select name="branch_id" class="pr-select">
+                        <option value="">All Branches</option>
+                        @foreach($branches as $branch)
+                            <option value="{{ $branch->id }}" @selected((string) $selectedBranchId === (string) $branch->id)>
+                                {{ $branch->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
                 <button type="submit" class="pr-btn pr-btn-primary">Load Employees</button>
+                @if(request()->filled('branch_id'))
+                    <a href="{{ route('payroll.create', ['month' => $selectedMonth->format('Y-m')]) }}" class="pr-btn pr-btn-ghost">Reset Branch</a>
+                @endif
                 <a href="{{ route('settings.payroll.index') }}" class="pr-btn pr-btn-ghost">Payroll Settings</a>
             </form>
         </div>
@@ -103,7 +118,13 @@
                     PF formula: if Gross Salary is above 21,000, PF uses fixed 15,000. Otherwise PF uses Basic + Travel + Other. ESI formula: 4% of Gross Salary. Both PF and ESI round to the nearest whole number.
                 </div>
                 <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:12px;font-weight:600;">
-                    Paid Leave: {{ number_format((float) $payrollSettings->paid_leave_days, 2, '.', '') }} day(s) per month. Permission: {{ (int) $payrollSettings->permission_days_per_month }} day(s) per month up to {{ number_format((float) $payrollSettings->permission_hours_per_day, 2, '.', '') }} hour(s) per day. Late login after {{ \Carbon\Carbon::createFromFormat('H:i:s', (string) $payrollSettings->grace_login_time)->format('h:i A') }} consumes one permission day.
+                <div style="margin-top:14px;padding:14px 16px;border-radius:12px;background:#fff8f4;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:13px;font-weight:700;color:#9a3412;">⚡ Quick Set Working Days:</span>
+                        <input type="number" step="0.01" min="0" id="bulkWorkingDaysInput" class="pr-input" style="width:110px;height:38px;" value="{{ $workingDays }}" placeholder="Days">
+                        <button type="button" id="btnApplyBulkWorkingDays" class="pr-btn pr-btn-primary" style="padding:7px 14px;font-size:12px;">Apply to All Employees</button>
+                    </div>
+                    <span style="font-size:12px;color:#c2410c;font-weight:600;">Changing working days per row or in bulk will automatically recalculate payable days, LOP, deductions, and Net Salary in real-time.</span>
                 </div>
 
                 <div style="overflow-x:auto;margin-top:16px;">
@@ -143,7 +164,7 @@
                                 <tr class="payroll-row" data-index="{{ $index }}">
                                     <td>
                                         <div class="pr-emp-name">{{ $row['employee_name'] }}</div>
-                                        <div class="pr-emp-sub">{{ $row['employee_code'] }} | {{ $row['designation'] }}</div>
+                                        <div class="pr-emp-sub">{{ $row['employee_code'] }} | {{ $row['designation'] }} @if(!empty($row['branch_name']) && $row['branch_name'] !== '—') | <span style="color:#fe5f04;font-weight:600;">{{ $row['branch_name'] }}</span> @endif</div>
                                         <input type="hidden" name="items[{{ $index }}][employee_onboarding_id]" value="{{ $row['employee_onboarding_id'] }}">
                                     </td>
                                     <td><input type="number" step="0.01" min="0" name="items[{{ $index }}][working_days]" value="{{ old("items.$index.working_days", $row['working_days']) }}" data-key="working_days"></td>
@@ -260,13 +281,38 @@ document.addEventListener('DOMContentLoaded', function () {
         overallNet.textContent = 'Rs ' + total.toFixed(2);
     }
 
+    const btnApplyBulkWorkingDays = document.getElementById('btnApplyBulkWorkingDays');
+    const bulkWorkingDaysInput = document.getElementById('bulkWorkingDaysInput');
+
+    if (btnApplyBulkWorkingDays && bulkWorkingDaysInput) {
+        btnApplyBulkWorkingDays.addEventListener('click', function () {
+            const daysVal = parseFloat(bulkWorkingDaysInput.value);
+            if (isNaN(daysVal) || daysVal < 0) {
+                alert('Please enter a valid working days value.');
+                return;
+            }
+            rows.forEach(function (row) {
+                const wdInput = row.querySelector('[data-key="working_days"]');
+                if (wdInput) {
+                    wdInput.value = daysVal;
+                    syncRow(row);
+                }
+            });
+            syncOverall();
+        });
+    }
+
     rows.forEach(function (row) {
-        row.querySelectorAll('input').forEach(function (input) {
+        row.querySelectorAll('input, select').forEach(function (input) {
             input.addEventListener('input', function () {
                 syncRow(row);
                 syncOverall();
             });
             input.addEventListener('change', function () {
+                syncRow(row);
+                syncOverall();
+            });
+            input.addEventListener('keyup', function () {
                 syncRow(row);
                 syncOverall();
             });

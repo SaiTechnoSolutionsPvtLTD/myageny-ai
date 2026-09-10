@@ -20,7 +20,14 @@ class AccessMappingController extends Controller
 
     public function roleIndex()
     {
+        $companyId = auth()->user()?->company_id;
+
         $roles = Role::with(['roleMapping', 'users', 'roleParentMapping.parentRole', 'childRoleMappings.childRole'])
+            ->when($companyId !== null, function ($query) use ($companyId) {
+                $query->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            })
             ->orderByRaw('COALESCE(display_name, name)')
             ->get();
         $roleChart = $this->buildRoleChart($roles);
@@ -39,9 +46,15 @@ class AccessMappingController extends Controller
             'parents.*' => ['nullable', 'integer', 'exists:roles,id'],
         ]);
 
-        $roles = Role::whereIn('id', array_keys($data['mappings']))->get();
-        $rolesById = $roles->keyBy('id');
         $companyId = auth()->user()?->company_id;
+        $rolesQuery = Role::whereIn('id', array_keys($data['mappings']));
+        if ($companyId !== null) {
+            $rolesQuery->where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+        $roles = $rolesQuery->get();
+        $rolesById = $roles->keyBy('id');
         $submittedParents = collect($data['parents'] ?? [])
             ->mapWithKeys(fn ($parentId, $childId) => [(int) $childId => $parentId ? (int) $parentId : null]);
 
@@ -107,21 +120,36 @@ class AccessMappingController extends Controller
 
     public function userIndex(Request $request)
     {
+        $companyId = auth()->user()?->company_id;
+
         $users = User::with('roles')
             ->where('is_active', true)
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
             ->get();
 
+        $userIds = $users->pluck('id')->all();
+
         $selectedManagerId = (int) ($request->input('manager_id') ?: $users->first()?->id);
         $selectedUserIds = $selectedManagerId
-            ? UserMapping::where('manager_id', $selectedManagerId)->pluck('user_id')->map(fn ($id) => (int) $id)->all()
+            ? UserMapping::withoutGlobalScopes()
+                ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+                ->where('manager_id', $selectedManagerId)
+                ->pluck('user_id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
             : [];
-        $parentMap = UserMapping::query()
+        $parentMap = UserMapping::withoutGlobalScopes()
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+            ->whereIn('user_id', $userIds)
             ->pluck('manager_id', 'user_id')
             ->map(fn ($managerId) => (int) $managerId)
             ->all();
 
-        $mappings = UserMapping::with(['manager.roles', 'user.roles'])
+        $mappings = UserMapping::withoutGlobalScopes()
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+            ->whereIn('user_id', $userIds)
+            ->with(['manager.roles', 'user.roles'])
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -163,8 +191,12 @@ class AccessMappingController extends Controller
 
     public function productionIndex()
     {
-        $departments = Department::with(['products' => function ($query) {
+        $companyId = auth()->user()?->company_id;
+
+        $departments = Department::when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+            ->with(['products' => function ($query) use ($companyId) {
                 $query->select('products.id', 'package_name', 'product_name', 'final_price', 'status')
+                    ->when($companyId !== null, fn ($q) => $q->where('products.company_id', $companyId))
                     ->orderBy('package_name')
                     ->orderBy('product_name');
             }])
@@ -181,13 +213,24 @@ class AccessMappingController extends Controller
 
     public function productionShow(Department $department)
     {
-        $department->load(['products' => function ($query) {
+        $companyId = auth()->user()?->company_id;
+        if ($companyId !== null && $department->company_id && (int) $department->company_id !== (int) $companyId) {
+            abort(403);
+        }
+
+        $department->load(['products' => function ($query) use ($companyId) {
             $query->select('products.id', 'package_name', 'product_name', 'final_price', 'status')
+                ->when($companyId !== null, fn ($q) => $q->where('products.company_id', $companyId))
                 ->orderBy('package_name')
                 ->orderBy('product_name');
         }]);
 
         $roles = Role::query()
+            ->when($companyId !== null, function ($query) use ($companyId) {
+                $query->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            })
             ->orderByRaw('COALESCE(display_name, name)')
             ->get();
 
@@ -329,7 +372,10 @@ class AccessMappingController extends Controller
 
     private function buildUserTree(User $user, Collection $users, Collection $visited): array
     {
+        $companyId = auth()->user()?->company_id;
+
         $children = UserMapping::query()
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
             ->where('manager_id', $user->id)
             ->pluck('user_id')
             ->map(fn ($id) => (int) $id)
@@ -439,19 +485,26 @@ class AccessMappingController extends Controller
             'parents.*' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
+        $companyId = auth()->user()?->company_id;
+
         $parentMap = collect($data['parents'])
             ->mapWithKeys(fn ($managerId, $userId) => [(int) $userId => $managerId ? (int) $managerId : null]);
 
         $userIds = $parentMap->keys()->map(fn ($id) => (int) $id)->values();
-        $users = User::with('roles')
-            ->whereIn('id', $userIds)
-            ->get()
-            ->keyBy(fn ($user) => (int) $user->id);
+        $usersQuery = User::with('roles')->whereIn('id', $userIds);
 
-        if (auth()->user()?->company_id !== null) {
-            $companyId = auth()->user()->company_id;
-            $invalidCompanyUser = $users->contains(fn (User $user) => (int) $user->company_id !== (int) $companyId);
-            abort_if($invalidCompanyUser, 403);
+        if ($companyId !== null) {
+            $usersQuery->where('company_id', $companyId);
+        }
+
+        $users = $usersQuery->get()->keyBy(fn ($user) => (int) $user->id);
+
+        if ($companyId !== null) {
+            // Keep only mappings for users belonging to the company
+            $parentMap = $parentMap->filter(fn ($managerId, $userId) => $users->has($userId));
+            $validUserIds = $parentMap->keys()->values();
+        } else {
+            $validUserIds = $userIds;
         }
 
         foreach ($parentMap as $userId => $managerId) {
@@ -484,8 +537,9 @@ class AccessMappingController extends Controller
             }
         }
 
-        UserMapping::query()
-            ->whereIn('user_id', $userIds)
+        UserMapping::withoutGlobalScopes()
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+            ->whereIn('user_id', $validUserIds)
             ->delete();
 
         foreach ($parentMap as $userId => $managerId) {
@@ -494,12 +548,16 @@ class AccessMappingController extends Controller
             }
 
             $manager = $users->get((int) $managerId);
+            $targetUser = $users->get((int) $userId);
+            $targetCompanyId = $manager?->company_id ?: ($targetUser?->company_id ?: $companyId);
 
-            UserMapping::create([
-                'user_id' => (int) $userId,
-                'manager_id' => (int) $managerId,
-                'company_id' => $manager?->company_id ?: auth()->user()?->company_id,
-            ]);
+            UserMapping::withoutGlobalScopes()->updateOrCreate(
+                ['user_id' => (int) $userId],
+                [
+                    'manager_id' => (int) $managerId,
+                    'company_id' => $targetCompanyId,
+                ]
+            );
         }
 
         return redirect()
@@ -515,18 +573,23 @@ class AccessMappingController extends Controller
             'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
         ]);
 
+        $companyId = auth()->user()?->company_id;
+
         $manager = User::findOrFail($data['manager_id']);
+
+        if ($companyId !== null && (int) $manager->company_id !== (int) $companyId) {
+            abort(403);
+        }
+
         $userIds = collect($data['user_ids'] ?? [])
             ->map(fn ($id) => (int) $id)
             ->reject(fn (int $id) => $id === (int) $manager->id)
             ->unique()
             ->values();
 
-        if (auth()->user()?->company_id !== null) {
-            $idsToCheck = $userIds->merge([$manager->id])->unique();
-
-            $invalidCompanyUser = User::whereIn('id', $idsToCheck)
-                ->where('company_id', '!=', auth()->user()->company_id)
+        if ($companyId !== null && $userIds->isNotEmpty()) {
+            $invalidCompanyUser = User::whereIn('id', $userIds)
+                ->where('company_id', '!=', $companyId)
                 ->exists();
 
             abort_if($invalidCompanyUser, 403);
@@ -542,16 +605,21 @@ class AccessMappingController extends Controller
             }
         }
 
-        UserMapping::where('manager_id', $manager->id)
+        UserMapping::withoutGlobalScopes()
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
+            ->where('manager_id', $manager->id)
             ->whereNotIn('user_id', $userIds)
             ->delete();
 
         foreach ($userIds as $userId) {
-            UserMapping::updateOrCreate(
-                ['user_id' => $userId],
+            $targetUser = User::find($userId);
+            $targetCompanyId = $manager->company_id ?: ($targetUser?->company_id ?: $companyId);
+
+            UserMapping::withoutGlobalScopes()->updateOrCreate(
+                ['user_id' => (int) $userId],
                 [
-                    'manager_id' => $manager->id,
-                    'company_id' => $manager->company_id ?: auth()->user()?->company_id,
+                    'manager_id' => (int) $manager->id,
+                    'company_id' => $targetCompanyId,
                 ]
             );
         }
