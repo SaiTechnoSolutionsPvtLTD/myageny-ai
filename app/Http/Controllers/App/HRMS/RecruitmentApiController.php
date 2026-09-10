@@ -39,15 +39,23 @@ class RecruitmentApiController extends Controller
     // Static, cacheable dropdown data for the mobile Add Call Update / Schedule
     // Interview / Decision forms — mirrors the $statuses/$callTypes/
     // $callOutcomes/$interviewModes/$interviewStatuses/$activeUsers arrays
-    // RecruitmentController::show() passes into the web Blade view.
     public function meta(Request $request): JsonResponse
     {
-        $interviewers = User::query()
+        $user = auth()->user() ?? $request->user();
+        $isCompanyAdmin = (bool) ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin()));
+
+        $interviewersQuery = User::query()
             ->with(['roles'])
             ->where(function ($query) {
                 $query->where('is_active', true)
                     ->orWhere('user_status', 'active');
-            })
+            });
+
+        if (! $isCompanyAdmin && $user?->branch_id) {
+            $interviewersQuery->where('branch_id', $user->branch_id);
+        }
+
+        $interviewers = $interviewersQuery
             ->orderBy('name')
             ->get()
             ->filter(fn ($u) => $u->hasTlLikeRole() || $u->isSuperAdmin() || $u->isCompanyAdmin() || $u->hasAdminLikeRole())

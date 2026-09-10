@@ -7,6 +7,8 @@ use App\Models\Branch;
 use App\Models\Department;
 use App\Models\InternJoiningForm;
 use App\Models\Role;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -32,9 +34,32 @@ class InternApiController extends Controller
         'document_bank_passbook' => 'Bank Passbook',
     ];
 
+    private function isCompanyAdmin(?User $user): bool
+    {
+        return (bool) ($user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin')
+        ));
+    }
+
     // ── GET /api/mobile/hrms/interns ──────────────────────────────────────────
     public function index(Request $request): JsonResponse
     {
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
+
+        $actingBranchId = null;
+        if ($isCompanyAdmin) {
+            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
+                $actingBranchId = (int) $request->branch_id;
+            }
+        } else {
+            // Non-Company Admin is strictly scoped to their own branch_id
+            $actingBranchId = $user?->branch_id;
+        }
+
         $query = InternJoiningForm::query()
             ->with(['department', 'convertedEmployee'])
             ->when($request->search, function ($q) use ($request) {
@@ -50,14 +75,18 @@ class InternApiController extends Controller
             ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->integer('department_id')))
             ->when($request->filled('internship_status'), fn ($q) => $q->where('internship_status', $request->string('internship_status')->toString()))
             ->when($request->filled('role_id'), fn ($q) => $q->where('role_id', $request->integer('role_id')))
-            // Branch lives on the linked portal user (User::branch_id), not
-            // on InternJoiningForm itself — mirrors this model's own
-            // booted() global scope, which filters branch admins through
-            // the same relationship.
-            ->when($request->filled('branch_id'), fn ($q) => $q->whereHas(
-                'portalUser',
-                fn ($sub) => $sub->where('branch_id', $request->integer('branch_id'))
-            ))
+            ->when($actingBranchId, function ($q, $branchId) {
+                $branch = Branch::find($branchId);
+                $branchCode = $branch?->code;
+                $q->where(function (Builder $sub) use ($branchId, $branchCode) {
+                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $branchId));
+                    if ($branchCode && $branchCode !== 'STS') {
+                        $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                            $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                        });
+                    }
+                });
+            })
             ->latest();
 
         $perPage = (int) ($request->per_page ?? 15);
@@ -92,6 +121,26 @@ class InternApiController extends Controller
             'portalUser',
         ])->findOrFail($id);
 
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
+
+        if (! $isCompanyAdmin) {
+            $userBranchId   = $user?->branch_id;
+            $internBranchId = $intern->portalUser?->branch_id;
+            $branch         = $userBranchId ? Branch::find($userBranchId) : null;
+            $branchCode     = $branch?->code;
+
+            $matchesBranch = ($userBranchId && $internBranchId === $userBranchId)
+                || ($branchCode && $branchCode !== 'STS' && is_null($intern->portal_user_id) && str_starts_with($intern->intern_id ?? '', $branchCode));
+
+            if (! $matchesBranch && $user?->id !== $intern->portal_user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to view intern details for another branch.',
+                ], 403);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data'    => $this->mapDetail($intern),
@@ -109,24 +158,19 @@ class InternApiController extends Controller
         // two values intern-index.blade.php's Status <select> offers.
         $statuses = [InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_RESIGNED];
 
-        $user = request()->user();
+        $user = auth()->user() ?? request()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
 
-        // Branch options — same company/branch-admin scoping as
-        // EmployeeApiController::meta() (see its comment); keeps this
-        // filter list from ever offering a branch that would return an
-        // empty result under InternJoiningForm's own branch-admin global
-        // scope.
-        $branchesQuery = Branch::where('is_active', true);
-        if ($user?->company_id) {
-            $branchesQuery->where('company_id', $user->company_id);
-        }
-        if ($user && $user->isBranchAdmin()) {
-            $branchIds = $user->getMyBranchIds();
-            if (!empty($branchIds)) {
-                $branchesQuery->whereIn('id', $branchIds);
+        // Branch options — only Company Admin can view and select other branches.
+        // For non-Company Admin, branches is empty and UI hides the branch filter.
+        $branches = [];
+        if ($isCompanyAdmin) {
+            $branchesQuery = Branch::where('is_active', true);
+            if ($user?->company_id) {
+                $branchesQuery->where('company_id', $user->company_id);
             }
+            $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
         }
-        $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
 
         // Role options — company-scoped, same shape as
         // EmployeeApiController::meta().
@@ -139,10 +183,11 @@ class InternApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'departments' => $departments,
-                'statuses'    => $statuses,
-                'branches'    => $branches,
-                'roles'       => $roles,
+                'departments'      => $departments,
+                'statuses'         => $statuses,
+                'branches'         => $branches,
+                'roles'            => $roles,
+                'is_company_admin' => $isCompanyAdmin,
             ],
         ]);
     }

@@ -81,13 +81,20 @@ class MenuService
      * treats HRMS the same way (dashboard.view || dashboard.menuview ||
      * modules_menu.hrms || isCompanyAdmin || isSystemAdmin) rather than
      * requiring modules_menu.hrms alone.
+     *
+     * face_attendance gets the same exception for the same reason: it's a
+     * self-service tile (mark attendance via face) with `gate => null`, and
+     * no web-sidebar equivalent exists to have ever granted a
+     * modules_menu.face_attendance permission in the first place.
      */
     public function accessibleModules(User $user): array
     {
         $modules = [];
 
+        $alwaysVisible = ['hrms', 'face_attendance'];
+
         foreach (config('mobile_menu', []) as $key => $config) {
-            $canAccess = $key === 'hrms' || $user->can("modules_menu.$key");
+            $canAccess = in_array($key, $alwaysVisible, true) || $user->can("modules_menu.$key");
 
             if ($canAccess) {
                 $modules[] = [

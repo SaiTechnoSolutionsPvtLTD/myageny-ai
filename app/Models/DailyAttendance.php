@@ -36,6 +36,7 @@ class DailyAttendance extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'employee_id',
         'attendee_type',
         'intern_joining_form_id',
@@ -63,6 +64,7 @@ class DailyAttendance extends Model
     ];
 
     protected $casts = [
+        'branch_id' => 'integer',
         'employee_id' => 'integer',
         'intern_joining_form_id' => 'integer',
         'login_latitude' => 'float',

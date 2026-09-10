@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -123,17 +125,28 @@ class AttendanceApiController extends Controller
             $employeeQuery->whereKey($currentEmployee->id);
         }
 
-        if ($this->shouldFilterByBranch()) {
-            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
-            $employeeQuery->where(function ($q) use ($branchIds) {
-                $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                    $puQ->whereIn('branch_id', $branchIds);
-                })
-                ->orWhereHas('portalUser.roles', function ($rq) {
-                    $rq->whereIn('name', ['branch_admin', 'branch_manager', 'bm'])
-                       ->orWhere('display_name', 'like', '%Branch Manager%')
-                       ->orWhere('display_name', 'like', '%Branch Admin%');
-                });
+        $user = auth()->user();
+        $isCompanyAdmin = (bool) ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin()));
+
+        $actingBranchId = null;
+        if ($isCompanyAdmin) {
+            if (request()->filled('branch_id') && request('branch_id') !== 'all') {
+                $actingBranchId = (int) request('branch_id');
+            }
+        } elseif ($this->shouldFilterByBranch()) {
+            $actingBranchId = $user?->branch_id;
+        }
+
+        if ($actingBranchId) {
+            $branch = Branch::find($actingBranchId);
+            $branchCode = $branch?->code;
+            $employeeQuery->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
+                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $actingBranchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                    });
+                }
             });
         }
 
@@ -157,10 +170,16 @@ class AttendanceApiController extends Controller
             InternJoiningForm::query()->active()
         )->whereNotNull('name');
 
-        if ($this->shouldFilterByBranch()) {
-            $branchIds = auth()->user()?->getMyBranchIds() ?? [];
-            $internQuery->whereHas('portalUser', function ($q) use ($branchIds) {
-                $q->whereIn('branch_id', $branchIds);
+        if ($actingBranchId) {
+            $branch = Branch::find($actingBranchId);
+            $branchCode = $branch?->code;
+            $internQuery->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
+                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $actingBranchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                    });
+                }
             });
         }
 
@@ -329,6 +348,7 @@ class AttendanceApiController extends Controller
             'outside_office'  => ['nullable', 'in:checkin,checkout,any'],
             'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
             'page'            => ['nullable', 'integer', 'min:1'],
+            'branch_id'       => ['nullable', 'string'],
         ];
 
         // HR/Admin can filter by name, employee_id, attendee_type

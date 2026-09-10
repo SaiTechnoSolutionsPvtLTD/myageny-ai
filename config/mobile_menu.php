@@ -83,6 +83,25 @@ return [
         ],
     ],
 
+    // ── Face Attendance ─────────────────────────────────────────────────────
+    // New self-service module (ticket: "New Module – Face Recognition
+    // Attendance"). gate => null, same as 'hrms' below, so this tile is
+    // universally visible to every employee regardless of Spatie
+    // modules_menu.* permissions — see MenuService::accessibleModules()'s
+    // hardcoded allow-list, which now includes this key for the same reason
+    // it already includes 'hrms': self-service employees never get explicit
+    // modules_menu.* grants but still need to be able to mark attendance.
+    // No sub-items: the module is a single Mark Attendance flow reached
+    // directly from the Modules-tab tile, not a per-item drawer menu.
+    'face_attendance' => [
+        'label' => 'Face Attendance',
+        'order' => 35,
+        'gate' => null,
+        'items' => [
+            ['key' => 'face_attendance.mark', 'label' => 'Mark Attendance', 'section' => 'FACE ATTENDANCE', 'order' => 10],
+        ],
+    ],
+
     // ── HRMS (NEW) ───────────────────────────────────────────────────────
     'hrms' => [
         'label' => 'HRMS',
@@ -204,6 +223,23 @@ return [
                 'label' => 'Outside Office Approval',
                 'section' => 'HRMS',
                 'order' => 97,
+                'require_any_method' => [
+                    'isSystemAdmin',
+                    'belongsToHrDepartment',
+                    'hasHrLikeRole',
+                    'isCompanyAdmin',
+                    'isBranchAdmin',
+                ],
+            ],
+            // HR/Admin-only, same gate pattern as outside_office_approval
+            // above — employees must never see or reach this item (ticket
+            // section 2: "Employees should not have access to register or
+            // update their own face"). See FaceRegistrationApiController.
+            [
+                'key' => 'hrms.face_registration',
+                'label' => 'Face Registration',
+                'section' => 'HRMS',
+                'order' => 96,
                 'require_any_method' => [
                     'isSystemAdmin',
                     'belongsToHrDepartment',

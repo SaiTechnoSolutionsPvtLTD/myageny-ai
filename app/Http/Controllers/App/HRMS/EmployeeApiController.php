@@ -7,6 +7,8 @@ use App\Models\Branch;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\Role;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -33,9 +35,32 @@ class EmployeeApiController extends Controller
         'document_bank_passbook' => 'Bank Passbook',
     ];
 
+    private function isCompanyAdmin(?User $user): bool
+    {
+        return (bool) ($user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin')
+        ));
+    }
+
     // ── GET /api/mobile/hrms/employees ────────────────────────────────────────
     public function index(Request $request): JsonResponse
     {
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
+
+        $actingBranchId = null;
+        if ($isCompanyAdmin) {
+            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
+                $actingBranchId = (int) $request->branch_id;
+            }
+        } else {
+            // Non-Company Admin is strictly scoped to their own branch_id
+            $actingBranchId = $user?->branch_id;
+        }
+
         $query = EmployeeOnboarding::query()
             ->with(['role', 'department', 'sourceIntern'])
             ->when($request->search, function ($q) use ($request) {
@@ -51,14 +76,18 @@ class EmployeeApiController extends Controller
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->department_id, fn ($q) => $q->where('department_id', $request->department_id))
             ->when($request->role_id, fn ($q) => $q->where('role_id', $request->role_id))
-            // Branch lives on the linked portal user (User::branch_id), not
-            // on EmployeeOnboarding itself — mirrors the same relationship
-            // this model's own booted() global scope already filters through
-            // for branch admins.
-            ->when($request->branch_id, fn ($q) => $q->whereHas(
-                'portalUser',
-                fn ($sub) => $sub->where('branch_id', $request->branch_id)
-            ))
+            ->when($actingBranchId, function ($q, $branchId) {
+                $branch = Branch::find($branchId);
+                $branchCode = $branch?->code;
+                $q->where(function (Builder $sub) use ($branchId, $branchCode) {
+                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $branchId));
+                    if ($branchCode && $branchCode !== 'STS') {
+                        $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                            $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                        });
+                    }
+                });
+            })
             ->latest();
 
         $perPage    = (int) ($request->per_page ?? 15);
@@ -96,6 +125,26 @@ class EmployeeApiController extends Controller
             'portalUser.managerMappings.manager',
         ])->findOrFail($id);
 
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
+
+        if (! $isCompanyAdmin) {
+            $userBranchId = $user?->branch_id;
+            $empBranchId  = $employee->portalUser?->branch_id;
+            $branch       = $userBranchId ? Branch::find($userBranchId) : null;
+            $branchCode   = $branch?->code;
+
+            $matchesBranch = ($userBranchId && $empBranchId === $userBranchId)
+                || ($branchCode && $branchCode !== 'STS' && is_null($employee->portal_user_id) && str_starts_with($employee->employee_id ?? '', $branchCode));
+
+            if (! $matchesBranch && $user?->id !== $employee->portal_user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to view employee details for another branch.',
+                ], 403);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data'    => $this->mapDetail($employee),
@@ -112,25 +161,19 @@ class EmployeeApiController extends Controller
         // Mirrors EmployeeOnboarding::STATUS_ACTIVE / STATUS_INACTIVE / STATUS_RESIGNED exactly
         $statuses = [EmployeeOnboarding::STATUS_ACTIVE, EmployeeOnboarding::STATUS_INACTIVE, EmployeeOnboarding::STATUS_RESIGNED];
 
-        $user = request()->user();
+        $user = auth()->user() ?? request()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
 
-        // Branch options — mirrors LeadController::meta()'s own
-        // company/branch-admin scoping (Branch::is_active + company_id, then
-        // narrowed to the branch admin's own branch(es)) so this filter list
-        // never offers a branch that would just return an empty result —
-        // that scoping is the same one EmployeeOnboarding's booted() global
-        // scope already enforces on the underlying query.
-        $branchesQuery = Branch::where('is_active', true);
-        if ($user?->company_id) {
-            $branchesQuery->where('company_id', $user->company_id);
-        }
-        if ($user && $user->isBranchAdmin()) {
-            $branchIds = $user->getMyBranchIds();
-            if (!empty($branchIds)) {
-                $branchesQuery->whereIn('id', $branchIds);
+        // Branch options — only Company Admin can view and select other branches.
+        // For non-Company Admin, branches is empty and UI hides the branch filter.
+        $branches = [];
+        if ($isCompanyAdmin) {
+            $branchesQuery = Branch::where('is_active', true);
+            if ($user?->company_id) {
+                $branchesQuery->where('company_id', $user->company_id);
             }
+            $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
         }
-        $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
 
         // Role options — company-scoped (Role carries BelongsToCompany).
         // Uses display_name (falling back to the technical name) since
@@ -144,10 +187,11 @@ class EmployeeApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'departments' => $departments,
-                'statuses'    => $statuses,
-                'branches'    => $branches,
-                'roles'       => $roles,
+                'departments'      => $departments,
+                'statuses'         => $statuses,
+                'branches'         => $branches,
+                'roles'            => $roles,
+                'is_company_admin' => $isCompanyAdmin,
             ],
         ]);
     }

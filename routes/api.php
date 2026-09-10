@@ -32,6 +32,8 @@ use App\Http\Controllers\App\HRMS\AttendanceLocationApiController;
 use App\Http\Controllers\App\HRMS\OutsideOfficeApprovalApiController;
 use App\Http\Controllers\App\HRMS\RecruitmentApiController;
 use App\Http\Controllers\App\HRMS\PettyCashApiController;
+use App\Http\Controllers\App\HRMS\FaceAttendanceApiController;
+use App\Http\Controllers\App\HRMS\FaceRegistrationApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -299,6 +301,28 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('outside-office-requests', [OutsideOfficeApprovalApiController::class, 'index'])->name('outside-office-requests.index');
         Route::post('outside-office-requests/{outsideOfficeRequest}/approve', [OutsideOfficeApprovalApiController::class, 'approve'])->name('outside-office-requests.approve');
         Route::post('outside-office-requests/{outsideOfficeRequest}/reject',  [OutsideOfficeApprovalApiController::class, 'reject'])->name('outside-office-requests.reject');
+
+        // ── Face Registration (HR/Admin only) ─────────────────────────────────
+        // Deliberately namespaced under hrms/, not under the self-service
+        // face-attendance/ group below — employees never hit these routes,
+        // only HR/Admin, on an employee's behalf. See
+        // FaceRegistrationApiController's class doc comment.
+        Route::get('face-registration/employees', [FaceRegistrationApiController::class, 'index'])->name('face-registration.employees');
+        Route::post('face-registration/register', [FaceRegistrationApiController::class, 'register'])->name('face-registration.register');
+    });
+
+    // ── Face Attendance (new self-service module, separate from the
+    // existing HRMS check-in/out flow above) ──────────────────────────────
+    // Parallel to, not nested inside, the "attendance" group below — this is
+    // a distinct Modules-tab tile with its own 1:1 face-verification gate.
+    // See FaceAttendanceApiController's class doc comment for why the
+    // existing attendance/check-in|check-out routes are left untouched.
+    Route::prefix('face-attendance')->name('face-attendance.')->group(function () {
+        Route::get('status', [FaceAttendanceApiController::class, 'status'])->name('status');
+        Route::post('recognize', [FaceAttendanceApiController::class, 'recognize'])->name('recognize');
+        Route::post('mark', [FaceAttendanceApiController::class, 'markAttendance'])->name('mark');
+        Route::post('check-in', [FaceAttendanceApiController::class, 'checkIn'])->name('check-in');
+        Route::post('check-out', [FaceAttendanceApiController::class, 'checkOut'])->name('check-out');
     });
 
     Route::prefix('attendance')->name('attendance.')->group(function () {

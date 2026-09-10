@@ -226,7 +226,14 @@ class LeadController extends Controller
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'lead_status'     => ['nullable', 'string'],
             'product_id'    => ['nullable', 'integer', 'exists:products,id'],
-            'priority'      => ['required', 'string'],
+            // The mobile app no longer exposes a Priority field on Add Lead
+            // (Lead Priority – Mobile App Changes ticket) — this stays
+            // 'nullable' rather than 'required' purely so the request
+            // doesn't fail when the key is simply absent. The actual value
+            // saved is always forced to 'medium' below, regardless of
+            // whether this was sent at all, since priority is mandatory in
+            // the leads table.
+            'priority'      => ['nullable', 'string'],
             'remarks'       => ['nullable', 'string'],
             'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
             'assigned_to'   => ['nullable', 'integer', 'exists:users,id'],
@@ -247,6 +254,10 @@ class LeadController extends Controller
             $leadData['created_by'] = $request->user()->id;
             $leadData['assigned_to'] = $leadData['assigned_to'] ?? $request->user()->id;
             $leadData['branch_id'] = $leadData['branch_id'] ?? $request->user()->branch_id;
+            // Priority is no longer settable from the mobile app — every
+            // mobile-created lead is saved as 'medium' to satisfy the
+            // leads.priority NOT NULL column, regardless of anything sent.
+            $leadData['priority'] = 'medium';
 
             abort_unless($this->visibility->canAssignTo($leadData['assigned_to'], $request->user()), 403);
             abort_unless($this->canAssignBranch($leadData['branch_id'], $request->user()), 403);

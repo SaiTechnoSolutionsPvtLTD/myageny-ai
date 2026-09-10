@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\OutsideOfficeAttendanceRequest;
+use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +45,45 @@ class OutsideOfficeApprovalApiController extends Controller
         ));
     }
 
+    private function isCompanyAdmin(?User $user): bool
+    {
+        return (bool) ($user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin')
+        ));
+    }
+
+    private function requestBelongsToBranch(OutsideOfficeAttendanceRequest $request, ?int $branchId): bool
+    {
+        if (! $branchId) {
+            return false;
+        }
+
+        $request->loadMissing(['employee.portalUser', 'intern.portalUser']);
+        $portalUser = $request->attendee_type === 'intern'
+            ? $request->intern?->portalUser
+            : $request->employee?->portalUser;
+
+        if ($portalUser && $portalUser->branch_id === $branchId) {
+            return true;
+        }
+
+        $branch = Branch::find($branchId);
+        $branchCode = $branch?->code;
+        if ($branchCode && $branchCode !== 'STS' && ! $portalUser) {
+            $identifier = $request->attendee_type === 'intern'
+                ? $request->intern?->intern_id
+                : $request->employee?->employee_id;
+            if ($identifier && str_starts_with((string) $identifier, $branchCode)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function index(Request $request): JsonResponse
     {
         if (! $this->canManage()) {
@@ -61,6 +103,48 @@ class OutsideOfficeApprovalApiController extends Controller
             return response()->json(['status' => false, 'message' => 'Validation failed.', 'errors' => $validator->errors()], 422);
         }
 
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdmin($user);
+
+        $actingBranchId = null;
+        if ($isCompanyAdmin) {
+            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
+                $actingBranchId = (int) $request->branch_id;
+            }
+        } else {
+            // Non-Company Admin is strictly scoped to their own branch_id
+            $actingBranchId = $user?->branch_id;
+        }
+
+        $branchScope = function (Builder $q) use ($actingBranchId) {
+            if (! $actingBranchId) {
+                return;
+            }
+            $branch = Branch::find($actingBranchId);
+            $branchCode = $branch?->code;
+            $q->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
+                $sub->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
+                    $eq->where(function ($eqSub) use ($actingBranchId, $branchCode) {
+                        $eqSub->whereHas('portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $eqSub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                })->orWhereHas('intern', function ($iq) use ($actingBranchId, $branchCode) {
+                    $iq->where(function ($iqSub) use ($actingBranchId, $branchCode) {
+                        $iqSub->whereHas('portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $iqSub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                });
+            });
+        };
+
         // Defaults to 'pending' — this is the queue HR/Admin lands on from the
         // dashboard's "Outside Office Attendance" count, and the primary
         // working view for this screen; 'all'/'approved'/'rejected' are for
@@ -68,6 +152,10 @@ class OutsideOfficeApprovalApiController extends Controller
         $status = $request->input('status', 'pending');
 
         $query = OutsideOfficeAttendanceRequest::query()->latest('created_at');
+
+        if ($actingBranchId) {
+            $query->where($branchScope);
+        }
 
         if ($status !== 'all') {
             $query->where('status', $status);
@@ -94,6 +182,10 @@ class OutsideOfficeApprovalApiController extends Controller
         $paginated->getCollection()->transform(fn(OutsideOfficeAttendanceRequest $r) => $this->formatRequest($r));
 
         $pendingBase = OutsideOfficeAttendanceRequest::query()->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING);
+        if ($actingBranchId) {
+            $pendingBase->where($branchScope);
+        }
+
         $stats = [
             'pending_checkins'  => (clone $pendingBase)->where('request_type', OutsideOfficeAttendanceRequest::TYPE_CHECKIN)->count(),
             'pending_checkouts' => (clone $pendingBase)->where('request_type', OutsideOfficeAttendanceRequest::TYPE_CHECKOUT)->count(),
@@ -112,6 +204,11 @@ class OutsideOfficeApprovalApiController extends Controller
     {
         if (! $this->canManage()) {
             return response()->json(['status' => false, 'message' => 'You are not authorized to approve outside-office requests.'], 403);
+        }
+
+        $user = auth()->user();
+        if (! $this->isCompanyAdmin($user) && ! $this->requestBelongsToBranch($outsideOfficeRequest, $user?->branch_id)) {
+            return response()->json(['status' => false, 'message' => 'You do not have permission to approve outside-office requests for another branch.'], 403);
         }
 
         if (! $outsideOfficeRequest->isPending()) {
@@ -214,6 +311,11 @@ class OutsideOfficeApprovalApiController extends Controller
     {
         if (! $this->canManage()) {
             return response()->json(['status' => false, 'message' => 'You are not authorized to reject outside-office requests.'], 403);
+        }
+
+        $user = auth()->user();
+        if (! $this->isCompanyAdmin($user) && ! $this->requestBelongsToBranch($outsideOfficeRequest, $user?->branch_id)) {
+            return response()->json(['status' => false, 'message' => 'You do not have permission to reject outside-office requests for another branch.'], 403);
         }
 
         if (! $outsideOfficeRequest->isPending()) {

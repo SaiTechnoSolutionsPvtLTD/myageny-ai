@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\Department;
 use App\Models\EmployeeExitRequest;
@@ -41,6 +42,11 @@ class DashboardApiController extends Controller
     {
         $today           = Carbon::today();
         $currentEmployee = $this->currentEmployee();
+        $actingBranchId  = $this->resolveActingBranchId($request);
+        $isCompanyAdmin  = $this->isCompanyAdminUser(auth()->user());
+
+        $branch          = $actingBranchId ? Branch::find($actingBranchId) : null;
+        $branchCode      = $branch?->code;
 
         // ── Own exit request (same as web org dashboard) ──────────────────────
         $exitRequest = $currentEmployee
@@ -59,10 +65,10 @@ class DashboardApiController extends Controller
         // employees_total/attendance figures combine BOTH EmployeeOnboarding and
         // InternJoiningForm records, and absent is "no attendance record today"
         // rather than a naive subtraction — matching web exactly.
-        $attendanceStats = $this->organizationAttendanceStatsForDate($today);
+        $attendanceStats = $this->organizationAttendanceStatsForDate($today, $actingBranchId);
 
         $employees_total    = $attendanceStats['total_employees'];
-        $employees_pending  = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED)->count();
+        $employees_pending  = $this->employeeStatusQuery(EmployeeOnboarding::STATUS_RESIGNED, $actingBranchId)->count();
         $employees_verified = $employees_total;
         $interns_total      = $attendanceStats['intern_count'];
 
@@ -75,12 +81,18 @@ class DashboardApiController extends Controller
         $today_outside_office_checkouts = $attendanceStats['outside_office_checkouts_count'];
 
         // Pending Outside Office Attendance requests awaiting HR/Admin review.
-        // Deliberately NOT scoped to "today" — an unreviewed request from
-        // yesterday is still actionable, so it should keep counting until
-        // someone approves or rejects it (see OutsideOfficeAttendanceRequest,
-        // company/branch already scoped via its own global scopes).
         $outside_office_pending = OutsideOfficeAttendanceRequest::query()
             ->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING)
+            ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
+                $q->where(function ($sub) use ($actingBranchId, $branchCode) {
+                    $sub->whereHas('employee.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId))
+                        ->orWhereHas('intern.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                    if ($branchCode && $branchCode !== 'STS') {
+                        $sub->orWhereHas('employee', fn ($eq) => $eq->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%'))
+                            ->orWhereHas('intern', fn ($iq) => $iq->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%'));
+                    }
+                });
+            })
             ->count();
 
         // ── Department-wise employee count and salary ─────────────────────────
@@ -106,9 +118,27 @@ class DashboardApiController extends Controller
             })
             ->leftJoin('users as portal_users', 'portal_users.id', '=', 'eo.portal_user_id')
             ->whereNull('departments.deleted_at')
-            ->where(function ($query) {
-                $query->whereNull('eo.portal_user_id')
-                    ->orWhere('portal_users.is_active', true);
+            ->where(function ($query) use ($actingBranchId, $branchCode) {
+                if ($actingBranchId) {
+                    $query->whereNull('eo.id')
+                        ->orWhere(function ($q) use ($actingBranchId, $branchCode) {
+                            $q->where(function ($inner) {
+                                $inner->whereNull('eo.portal_user_id')
+                                      ->orWhere('portal_users.is_active', true);
+                            })
+                            ->where(function ($sub) use ($actingBranchId, $branchCode) {
+                                $sub->where('portal_users.branch_id', $actingBranchId);
+                                if ($branchCode && $branchCode !== 'STS') {
+                                    $sub->orWhere(function ($q2) use ($branchCode) {
+                                        $q2->whereNull('eo.portal_user_id')->where('eo.employee_id', 'like', $branchCode . '%');
+                                    });
+                                }
+                            });
+                        });
+                } else {
+                    $query->whereNull('eo.portal_user_id')
+                        ->orWhere('portal_users.is_active', true);
+                }
             })
             ->groupBy(
                 'departments.id',
@@ -130,7 +160,7 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's birthdays ─────────────────────────────────────────────────
-        $today_birthdays = $this->employeeQueryForDashboard()->whereMonth('date_of_birth', $today->month)
+        $today_birthdays = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_birth', $today->month)
             ->whereDay('date_of_birth', $today->day)
             ->with('role')
             ->get()
@@ -142,7 +172,7 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's work anniversaries ────────────────────────────────────────
-        $today_work_anniversaries = $this->employeeQueryForDashboard()->whereMonth('joining_date', $today->month)
+        $today_work_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('joining_date', $today->month)
             ->whereDay('joining_date', $today->day)
             ->with('role')
             ->get()
@@ -156,7 +186,7 @@ class DashboardApiController extends Controller
             ]);
 
         // ── Today's marriage anniversaries ────────────────────────────────────
-        $today_anniversaries = $this->employeeQueryForDashboard()->whereMonth('date_of_marriage', $today->month)
+        $today_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_marriage', $today->month)
             ->whereDay('date_of_marriage', $today->day)
             ->with('role')
             ->get()
@@ -172,19 +202,35 @@ class DashboardApiController extends Controller
         $upcoming_holidays = $this->upcomingHolidays($holidayFilter);
 
         // ── Payroll ───────────────────────────────────────────────────────────
-        $salary_day_1_employees  = $this->employeeQueryForDashboard()
+        $salary_day_1_employees  = $this->employeeQueryForDashboard($actingBranchId)
             ->where('salary_payment_mode', 'monthly_1st')->count();
-        $salary_day_10_employees = $this->employeeQueryForDashboard()
+        $salary_day_10_employees = $this->employeeQueryForDashboard($actingBranchId)
             ->where('salary_payment_mode', 'monthly_10th')->count();
 
         // ── Monthly leave data (last 6 months) ────────────────────────────────
+        $employeeIds = $this->employeeQueryForDashboard($actingBranchId)->pluck('id');
+        $internIds   = $this->internQueryForDashboard($actingBranchId)->pluck('id');
+
         $monthly_leave_data = [];
         for ($i = 5; $i >= 0; $i--) {
             $month  = $today->copy()->subMonths($i);
-            $leaves = DailyAttendance::whereYear('attendance_date', $month->year)
+            $leavesQuery = DailyAttendance::whereYear('attendance_date', $month->year)
                 ->whereMonth('attendance_date', $month->month)
-                ->where('attendance_status', 'leave')
-                ->count();
+                ->where('attendance_status', 'leave');
+
+            if ($actingBranchId) {
+                $leavesQuery->where(function ($q) use ($employeeIds, $internIds) {
+                    $q->where(function ($sub) use ($employeeIds) {
+                        $sub->where('attendee_type', 'employee')
+                            ->whereIn('employee_id', $employeeIds);
+                    })->orWhere(function ($sub) use ($internIds) {
+                        $sub->where('attendee_type', 'intern')
+                            ->whereIn('intern_joining_form_id', $internIds);
+                    });
+                });
+            }
+
+            $leaves = $leavesQuery->count();
 
             $monthly_leave_data[] = [
                 'month'       => $month->format('M Y'),
@@ -197,8 +243,8 @@ class DashboardApiController extends Controller
         $announcements = $this->announcementsForDashboard();
 
         // ── Today's leave & permission approvals ──────────────────────────────
-        $today_leave_approvals      = $this->todayLeaveApprovals($today);
-        $today_permission_approvals = $this->todayPermissionApprovals($today);
+        $today_leave_approvals      = $this->todayLeaveApprovals($today, $actingBranchId);
+        $today_permission_approvals = $this->todayPermissionApprovals($today, $actingBranchId);
 
         // ── Interviews assigned to me today (mirrors web's Interview
         // Assigned dashboard panel) ────────────────────────────────────────────
@@ -209,6 +255,18 @@ class DashboardApiController extends Controller
         $exit_approval_queue   = $canManageExitRequests
             ? EmployeeExitRequest::with(['employee', 'user'])
                 ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+                ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
+                    $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
+                        $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
+                            $sub->whereHas('portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                            if ($branchCode && $branchCode !== 'STS') {
+                                $sub->orWhere(function ($q2) use ($branchCode) {
+                                    $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                                });
+                            }
+                        });
+                    });
+                })
                 ->where(function ($q) {
                     $q->where('exit_status', EmployeeExitRequest::EXIT_STATUS_PENDING)
                       ->orWhere('revoke_status', EmployeeExitRequest::REVOKE_STATUS_PENDING);
@@ -236,6 +294,8 @@ class DashboardApiController extends Controller
             'success' => true,
             'mode'    => 'organization',
             'data'    => [
+                'is_company_admin'   => $isCompanyAdmin,
+                'branch_id'          => $actingBranchId,
                 'employees_total'    => $employees_total,
                 'employees_pending'  => $employees_pending,
                 'employees_verified' => $employees_verified,
@@ -383,9 +443,13 @@ class DashboardApiController extends Controller
         // ── Announcements ─────────────────────────────────────────────────────
         $announcements = $this->announcementsForDashboard();
 
+        // ── Branch resolution ────────────────────────────────────────────────
+        $actingBranchId = $this->resolveActingBranchId($request);
+        $isCompanyAdmin = $this->isCompanyAdminUser(auth()->user());
+
         // ── Today's leave & permission approvals (same as web) ────────────────
-        $today_leave_approvals      = $this->todayLeaveApprovals($today);
-        $today_permission_approvals = $this->todayPermissionApprovals($today);
+        $today_leave_approvals      = $this->todayLeaveApprovals($today, $actingBranchId);
+        $today_permission_approvals = $this->todayPermissionApprovals($today, $actingBranchId);
 
         // ── Interviews assigned to me today (same as web) ─────────────────────
         $assigned_interviews = $this->assignedInterviewsForUser();
@@ -396,7 +460,7 @@ class DashboardApiController extends Controller
         $isWorkAnniversaryToday = $this->isWorkAnniversaryToday($employee, $today);
 
         // ── All employees celebrating today (mirrors web self-service) ─────────
-        $today_birthdays = $this->employeeQueryForDashboard()->whereMonth('date_of_birth', $today->month)
+        $today_birthdays = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_birth', $today->month)
             ->whereDay('date_of_birth', $today->day)
             ->with('role')
             ->get()
@@ -407,7 +471,7 @@ class DashboardApiController extends Controller
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
-        $today_anniversaries = $this->employeeQueryForDashboard()->whereMonth('date_of_marriage', $today->month)
+        $today_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_marriage', $today->month)
             ->whereDay('date_of_marriage', $today->day)
             ->with('role')
             ->get()
@@ -418,7 +482,7 @@ class DashboardApiController extends Controller
                 'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
             ]);
 
-        $today_work_anniversaries = $this->employeeQueryForDashboard()->whereMonth('joining_date', $today->month)
+        $today_work_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('joining_date', $today->month)
             ->whereDay('joining_date', $today->day)
             ->with('role')
             ->get()
@@ -514,6 +578,8 @@ class DashboardApiController extends Controller
 
                 'can_manage_exit_requests' => false,
                 'can_manage_announcements' => false,
+                'is_company_admin'         => $isCompanyAdmin,
+                'branch_id'                => $actingBranchId,
             ],
         ]);
     }
@@ -611,12 +677,27 @@ class DashboardApiController extends Controller
             ->toArray();
     }
 
-    private function todayLeaveApprovals(Carbon $today): array
+    private function todayLeaveApprovals(Carbon $today, ?int $actingBranchId = null): array
     {
+        $branch = $actingBranchId ? Branch::find($actingBranchId) : null;
+        $branchCode = $branch?->code;
+
         return LeaveRequest::with(['employee.role', 'employee.department'])
             ->whereDate('start_date', '<=', $today->toDateString())
             ->whereDate('end_date', '>=', $today->toDateString())
             ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
+                $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
+                    $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->where('branch_id', $actingBranchId));
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $sub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                });
+            })
             ->orderBy('start_date')
             ->limit(6)
             ->get()
@@ -633,11 +714,26 @@ class DashboardApiController extends Controller
             ->toArray();
     }
 
-    private function todayPermissionApprovals(Carbon $today): array
+    private function todayPermissionApprovals(Carbon $today, ?int $actingBranchId = null): array
     {
+        $branch = $actingBranchId ? Branch::find($actingBranchId) : null;
+        $branchCode = $branch?->code;
+
         return PermissionRequest::with(['employee.role', 'employee.department'])
             ->whereDate('permission_date', $today->toDateString())
             ->where('status', PermissionRequest::STATUS_APPROVED)
+            ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
+                $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
+                    $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->where('branch_id', $actingBranchId));
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $sub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                });
+            })
             ->orderBy('from_time')
             ->limit(6)
             ->get()
@@ -718,6 +814,41 @@ class DashboardApiController extends Controller
             ->toArray();
     }
 
+    private function isCompanyAdminUser(?\App\Models\User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return (bool) ($user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin'));
+    }
+
+    private function resolveActingBranchId(Request $request): ?int
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return null;
+        }
+
+        $isCompanyAdmin = $this->isCompanyAdminUser($user);
+
+        if ($isCompanyAdmin) {
+            if ($request->filled('branch_id')) {
+                $val = $request->input('branch_id');
+                if ($val === 'all') {
+                    return null;
+                }
+                return (int) $val;
+            }
+            return $user->branch_id ? (int) $user->branch_id : null;
+        }
+
+        return $user->branch_id ? (int) $user->branch_id : null;
+    }
+
     private function currentEmployee(): ?EmployeeOnboarding
     {
         $user = auth()->user();
@@ -728,15 +859,8 @@ class DashboardApiController extends Controller
             ->first();
     }
 
-    private function employeeQueryForDashboard(): Builder
+    private function employeeQueryForDashboard(?int $branchId = null): Builder
     {
-        // Was withoutGlobalScopes() — that also strips EmployeeOnboarding's
-        // model-level 'branch' global scope (see EmployeeOnboarding::booted()),
-        // which only restricts results when the authenticated user
-        // isBranchAdmin() and is a no-op for every other role. Dropping the
-        // bypass lets that existing, already-tested scope apply here too, so
-        // Branch Admin's org-dashboard counts are branch-scoped consistently
-        // with the attendance figures below (which never bypassed it).
         $query = EmployeeOnboarding::active();
         $companyId = auth()->user()?->company_id;
 
@@ -752,14 +876,25 @@ class DashboardApiController extends Controller
                 ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
         });
 
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            $branchCode = $branch?->code;
+
+            $query->where(function (Builder $q) use ($branchId, $branchCode) {
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $q->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                    });
+                }
+            });
+        }
+
         return $query;
     }
 
-    private function employeeStatusQuery(string $status): Builder
+    private function employeeStatusQuery(string $status, ?int $branchId = null): Builder
     {
-        // See employeeQueryForDashboard() above — withoutGlobalScopes()
-        // removed for the same reason (restore branch scoping for Branch
-        // Admin without affecting any other role).
         $query = EmployeeOnboarding::where('status', $status);
         $companyId = auth()->user()?->company_id;
 
@@ -770,13 +905,25 @@ class DashboardApiController extends Controller
             });
         }
 
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            $branchCode = $branch?->code;
+
+            $query->where(function (Builder $q) use ($branchId, $branchCode) {
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $q->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                    });
+                }
+            });
+        }
+
         return $query;
     }
 
-    private function internQueryForDashboard(): Builder
+    private function internQueryForDashboard(?int $branchId = null): Builder
     {
-        // See employeeQueryForDashboard() above — same reasoning, applied to
-        // InternJoiningForm's equivalent 'branch' global scope.
         $query = InternJoiningForm::active();
         $companyId = auth()->user()?->company_id;
 
@@ -792,12 +939,25 @@ class DashboardApiController extends Controller
                 ->orWhereHas('portalUser', fn (Builder $portalUserQuery) => $portalUserQuery->where('is_active', true));
         });
 
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            $branchCode = $branch?->code;
+
+            $query->where(function (Builder $q) use ($branchId, $branchCode) {
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $q->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                    });
+                }
+            });
+        }
+
         return $query;
     }
 
-    private function internStatusQuery(string $status): Builder
+    private function internStatusQuery(string $status, ?int $branchId = null): Builder
     {
-        // See employeeQueryForDashboard() above.
         $query = InternJoiningForm::where('internship_status', $status);
         $companyId = auth()->user()?->company_id;
 
@@ -808,12 +968,26 @@ class DashboardApiController extends Controller
             });
         }
 
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            $branchCode = $branch?->code;
+
+            $query->where(function (Builder $q) use ($branchId, $branchCode) {
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $q->orWhere(function (Builder $q2) use ($branchCode) {
+                        $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                    });
+                }
+            });
+        }
+
         return $query;
     }
 
-    private function activeEmployeeAttendanceForDate(Carbon $date)
+    private function activeEmployeeAttendanceForDate(Carbon $date, ?int $branchId = null)
     {
-        $employeeIds = $this->employeeQueryForDashboard()->pluck('id');
+        $employeeIds = $this->employeeQueryForDashboard($branchId)->pluck('id');
 
         if ($employeeIds->isEmpty()) {
             return collect();
@@ -843,13 +1017,13 @@ class DashboardApiController extends Controller
      * across both, with absent = people who have no attendance record today
      * at all (not a naive present/leave subtraction).
      */
-    private function organizationAttendanceStatsForDate(Carbon $date): array
+    private function organizationAttendanceStatsForDate(Carbon $date, ?int $branchId = null): array
     {
-        $employees = $this->employeeQueryForDashboard()
+        $employees = $this->employeeQueryForDashboard($branchId)
             ->whereNotNull('name')
             ->get(['id']);
 
-        $interns = $this->internQueryForDashboard()
+        $interns = $this->internQueryForDashboard($branchId)
             ->whereNotNull('name')
             ->get(['id']);
 

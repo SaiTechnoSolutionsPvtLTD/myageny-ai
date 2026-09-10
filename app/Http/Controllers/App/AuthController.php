@@ -369,6 +369,7 @@ class AuthController extends Controller
             // branch. Read-only call into the shared service — never
             // modify DataVisibilityService itself (web depends on it too).
             'can_select_any_branch' => app(DataVisibilityService::class)->isCompanyWideUser($user),
+            'is_company_admin' => (bool) ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->hasRole('company_admin')),
             'branch_id'       => $activeBranchId ?? $user->branch_id,
             'branch' => $user->branch ? [
                 'id'                       => $user->branch->id,

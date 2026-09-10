@@ -44,6 +44,12 @@ return [
         'secret' => env('AI_AGENT_SECRET', ''),
     ],
 
+    'face_recognition' => [
+        'base_url' => env('FACE_RECOGNITION_SERVICE_URL', 'http://127.0.0.1:8001'),
+        'api_key'  => env('FACE_RECOGNITION_SERVICE_API_KEY', 'change-me-face-api-key'),
+        'timeout'  => env('FACE_RECOGNITION_SERVICE_TIMEOUT', 15),
+    ],
+
     'facebook' => [
         'client_id' => env( 'FACEBOOK_CLIENT_ID' ),
         'client_secret' => env( 'FACEBOOK_CLIENT_SECRET' ),
