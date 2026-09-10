@@ -25,8 +25,16 @@ class InternJoiningForm extends Model
             if ($user && $user->isBranchAdmin()) {
                 $branchIds = $user->getMyBranchIds();
                 if (!empty($branchIds)) {
-                    $builder->whereHas('portalUser', function ($query) use ($branchIds) {
-                        $query->whereIn('branch_id', $branchIds);
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+                    $builder->where(function ($q) use ($branchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($query) use ($branchIds) {
+                            $query->whereIn('branch_id', $branchIds);
+                        });
+
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('intern_id', 'like', $code . '%');
+                        }
                     });
                 }
             }
@@ -35,6 +43,7 @@ class InternJoiningForm extends Model
 
     public const INTERN_ID_PREFIX = 'STSINT-';
     public const STATUS_ACTIVE = 'active';
+    public const STATUS_INACTIVE = 'inactive';
     public const STATUS_RESIGNED = 'resigned';
 
     public const DOCUMENT_FIELDS = [
@@ -142,5 +151,31 @@ class InternJoiningForm extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('internship_status', self::STATUS_ACTIVE);
+    }
+
+    public function getBranchAttribute(): ?Branch
+    {
+        if ($this->relationLoaded('portalUser') && $this->portalUser?->relationLoaded('branch')) {
+            if ($this->portalUser->branch) {
+                return $this->portalUser->branch;
+            }
+        } elseif ($this->portalUser?->branch) {
+            return $this->portalUser->branch;
+        }
+
+        if ($this->intern_id) {
+            $code = preg_replace('/[0-9\-]+$/', '', (string) $this->intern_id);
+            $code = preg_replace('/INT$/', '', $code);
+            if ($code) {
+                return Branch::withoutGlobalScopes()->where('code', $code)->first();
+            }
+        }
+
+        return null;
+    }
+
+    public function getBranchNameAttribute(): string
+    {
+        return $this->branch?->name ?? '—';
     }
 }

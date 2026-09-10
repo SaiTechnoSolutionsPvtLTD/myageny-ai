@@ -243,11 +243,13 @@ class User extends Authenticatable
 
     public function isBranchAdmin(): bool
     {
-        if ($this->company_id === null) {
-            return false;
+        if ($this->company_id !== null && $this->hasExactRoleName(Role::tenantRoleName('branch_admin', $this->company_id))) {
+            return true;
         }
 
-        return $this->hasExactRoleName(Role::tenantRoleName('branch_admin', $this->company_id));
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->intersect(['branch_admin', 'branch_manager', 'bm'])->isNotEmpty();
     }
 
     private function hasExactRoleName(string $roleName): bool

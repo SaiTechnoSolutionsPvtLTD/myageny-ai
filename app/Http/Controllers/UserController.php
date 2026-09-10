@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\EmployeeOnboarding;
+use App\Models\InternJoiningForm;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -208,6 +209,7 @@ class UserController extends Controller
         $user->branches()->sync($selectedBranches);
 
         $this->syncEmployeeOnboardingStatus($user);
+        $this->syncInternJoiningFormStatus($user);
 
         // Sync role
         if ($roleName) {
@@ -269,6 +271,7 @@ class UserController extends Controller
         $user->update(['is_active' => !$user->is_active]);
 
         $this->syncEmployeeOnboardingStatus($user);
+        $this->syncInternJoiningFormStatus($user);
 
         $status = $user->is_active ? 'activated' : 'deactivated';
 
@@ -277,7 +280,11 @@ class UserController extends Controller
 
     private function syncEmployeeOnboardingStatus(User $user): void
     {
-        $employee = $user->employeeOnboarding ?? EmployeeOnboarding::where('email', $user->email)->first();
+        $employee = EmployeeOnboarding::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere('email', $user->email)
+            ->first();
+
         if (! $employee) {
             return;
         }
@@ -286,6 +293,24 @@ class UserController extends Controller
             $employee->update(['status' => EmployeeOnboarding::STATUS_INACTIVE]);
         } elseif ($user->is_active && $employee->status === EmployeeOnboarding::STATUS_INACTIVE) {
             $employee->update(['status' => EmployeeOnboarding::STATUS_ACTIVE]);
+        }
+    }
+
+    private function syncInternJoiningFormStatus(User $user): void
+    {
+        $intern = InternJoiningForm::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere('email', $user->email)
+            ->first();
+
+        if (! $intern) {
+            return;
+        }
+
+        if (! $user->is_active) {
+            $intern->update(['internship_status' => InternJoiningForm::STATUS_INACTIVE]);
+        } elseif ($user->is_active && $intern->internship_status === InternJoiningForm::STATUS_INACTIVE) {
+            $intern->update(['internship_status' => InternJoiningForm::STATUS_ACTIVE]);
         }
     }
 

@@ -245,6 +245,15 @@ class EmployeeOnboardingController extends Controller
             if ($portalUser) {
                 $employee_onboarding->portal_user_id = $portalUser->id;
             }
+
+            if (!empty($validated['branch_id'])) {
+                $newBranchCode = Branch::withoutGlobalScopes()->where('id', $validated['branch_id'])->value('code') ?: self::EMPLOYEE_ID_PREFIX;
+                $newBranchCode = trim((string) $newBranchCode);
+                if ($newBranchCode !== '' && !str_starts_with((string) $employee_onboarding->employee_id, $newBranchCode)) {
+                    $employee_onboarding->employee_id = $this->generateNextEmployeeId((int) $validated['branch_id']);
+                }
+            }
+
             $employee_onboarding->updated_by = auth()->id();
             $this->fillFileAttributes($employee_onboarding, $request, true);
             $employee_onboarding->save();
@@ -423,11 +432,11 @@ class EmployeeOnboardingController extends Controller
         }
 
         if (empty($validated['tl_user_id'])) {
-            UserMapping::where('user_id', $user->id)->delete();
+            UserMapping::withoutGlobalScopes()->where('user_id', $user->id)->delete();
             return;
         }
 
-        UserMapping::updateOrCreate(
+        UserMapping::withoutGlobalScopes()->updateOrCreate(
             ['user_id' => $user->id],
             [
                 'manager_id' => $validated['tl_user_id'],

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
 use App\Models\Company;
 use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
@@ -76,16 +77,42 @@ class PayrollController extends Controller
             ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
             : now()->startOfMonth();
 
+        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+
         $employees = EmployeeOnboarding::query()
             ->active()
-            ->with('role')
+            ->where(function ($query) {
+                $query->whereNull('portal_user_id')
+                    ->orWhereHas('portalUser', function ($userQuery) {
+                        $userQuery->where('is_active', true);
+                    });
+            })
+            ->with(['role', 'portalUser.branch'])
             ->when(auth()->user()?->company_id, function ($query) {
                 $query->whereHas('portalUser', function ($subQuery) {
                     $subQuery->where('company_id', auth()->user()->company_id);
                 });
             })
+            ->when($selectedBranchId, function ($query) use ($selectedBranchId) {
+                $branch = Branch::withoutGlobalScopes()->find($selectedBranchId);
+                $query->where(function ($sub) use ($selectedBranchId, $branch) {
+                    $sub->whereHas('portalUser', fn ($q) => $q->where('branch_id', $selectedBranchId));
+                    if ($branch && $branch->code) {
+                        $sub->orWhere(function ($q2) use ($branch) {
+                            $q2->whereNull('portal_user_id')
+                               ->where('employee_id', 'like', $branch->code . '%');
+                        });
+                    }
+                });
+            })
             ->orderBy('name')
             ->get();
+
+        $branches = Branch::query()
+            ->where('is_active', true)
+            ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
 
         $workingDays = $this->workingDaysInMonth($selectedMonth);
         $payrollSettings = PayrollSetting::forCompany(auth()->user()?->company_id);
@@ -104,6 +131,7 @@ class PayrollController extends Controller
                 'employee_onboarding_id' => $employee->id,
                 'employee_code' => $employee->employee_id,
                 'employee_name' => $employee->name,
+                'branch_name' => $employee->branch_name,
                 'designation' => $employee->role?->display_name ?: ($employee->role?->name ? Str::of(Str::afterLast($employee->role->name, '__'))->replace('_', ' ')->title()->value() : 'Employee'),
                 'date_of_joining' => optional($employee->joining_date ?: $employee->salary_effective_from)->format('Y-m-d'),
                 'uan_no' => $employee->uan_no,
@@ -134,6 +162,8 @@ class PayrollController extends Controller
 
         return view('pages.hrms.payroll.create', [
             'selectedMonth' => $selectedMonth,
+            'selectedBranchId' => $selectedBranchId,
+            'branches' => $branches,
             'workingDays' => $workingDays,
             'payrollSettings' => $payrollSettings,
             'rows' => $rows,
@@ -312,7 +342,17 @@ class PayrollController extends Controller
         $branchId = auth()->user()?->branch_id;
         $settings = QuotationSetting::allSettings($branchId);
         $company = $payroll->company ?: ($payroll->company_id ? Company::find($payroll->company_id) : null);
-        $signatureBase64 = $this->signatureBase64($settings['signature'] ?? null);
+        $signatureBase64 = $this->imageBase64($settings['signature'] ?? null);
+
+        $logoPath = $settings['logo'] ?? null;
+        if (! $logoPath || ! file_exists(public_path(ltrim((string) $logoPath, '/')))) {
+            if (file_exists(public_path('images/my_agenci_logo.png'))) {
+                $logoPath = 'images/my_agenci_logo.png';
+            } elseif (file_exists(public_path('images/logo.png'))) {
+                $logoPath = 'images/logo.png';
+            }
+        }
+        $logoBase64 = $this->imageBase64($logoPath);
 
         $pdf = Pdf::loadView('pages.hrms.payroll.pdf', [
             'payroll' => $payroll,
@@ -322,6 +362,7 @@ class PayrollController extends Controller
             'companyPhone' => $settings['company_phone'] ?: ($company?->mobile_number ?: ''),
             'companyEmail' => $settings['company_email'] ?: ($company?->email ?: ''),
             'signatureBase64' => $signatureBase64,
+            'logoBase64' => $logoBase64,
         ])->setPaper('a4', 'portrait')
             ->setOptions([
                 'defaultFont' => 'DejaVu Sans',
@@ -635,6 +676,7 @@ class PayrollController extends Controller
             'employee_onboarding_id' => $row['employee_onboarding_id'],
             'employee_code' => $row['employee_code'] ?? null,
             'employee_name' => $row['employee_name'] ?? 'Employee',
+            'branch_name' => $row['branch_name'] ?? null,
             'designation' => $row['designation'] ?? null,
             'date_of_joining' => $row['date_of_joining'] ?? null,
             'uan_no' => $row['uan_no'] ?? null,
@@ -700,13 +742,13 @@ class PayrollController extends Controller
         ];
     }
 
-    private function signatureBase64(?string $signaturePath): ?string
+    private function imageBase64(?string $imagePath): ?string
     {
-        if (! $signaturePath) {
+        if (! $imagePath) {
             return null;
         }
 
-        $resolvedPath = public_path(ltrim((string) $signaturePath, '/'));
+        $resolvedPath = public_path(ltrim((string) $imagePath, '/'));
 
         if (! file_exists($resolvedPath)) {
             return null;

@@ -202,6 +202,7 @@
                         <label class="intern-label">Internship Status <span class="intern-label-required">*</span></label>
                         <select name="internship_status" class="intern-select" required>
                             <option value="active" @selected(old('internship_status', $form?->internship_status ?? 'active') === 'active')>Active</option>
+                            <option value="inactive" @selected(old('internship_status', $form?->internship_status) === 'inactive')>Inactive</option>
                             <option value="resigned" @selected(old('internship_status', $form?->internship_status) === 'resigned')>Resigned</option>
                         </select>
                         @error('internship_status')<div class="text-danger small mt-1">{{ $message }}</div>@enderror

@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendAnnouncementEmailJob;
 use App\Models\Branch;
+use App\Models\EmployeeOnboarding;
 use App\Models\HrmsAnnouncement;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class HrmsAnnouncementController extends Controller
@@ -65,7 +68,7 @@ class HrmsAnnouncementController extends Controller
             $branchIds = array_values(array_unique(array_map('intval', $validated['branch_ids'])));
         }
 
-        HrmsAnnouncement::create([
+        $announcement = HrmsAnnouncement::create([
             'company_id' => auth()->user()?->company_id,
             'branch_ids' => $branchIds,
             'title' => $validated['title'],
@@ -77,9 +80,19 @@ class HrmsAnnouncementController extends Controller
             'updated_by' => auth()->id(),
         ]);
 
+        $queuedCount = 0;
+        if ($announcement->is_active) {
+            $queuedCount = $this->dispatchAnnouncementEmails($announcement);
+        }
+
+        $successMsg = 'Announcement created successfully.';
+        if ($queuedCount > 0) {
+            $successMsg .= " Email notifications queued for {$queuedCount} active employee(s) (3-sec interval).";
+        }
+
         return redirect()
             ->route('hrms-announcements.index')
-            ->with('success', 'Announcement created successfully.');
+            ->with('success', $successMsg);
     }
 
     public function edit(HrmsAnnouncement $announcement): View
@@ -118,6 +131,8 @@ class HrmsAnnouncementController extends Controller
             $branchIds = array_values(array_unique(array_map('intval', $validated['branch_ids'])));
         }
 
+        $wasInactive = ! $announcement->is_active;
+
         $announcement->update([
             'branch_ids' => $branchIds,
             'title' => $validated['title'],
@@ -128,9 +143,19 @@ class HrmsAnnouncementController extends Controller
             'updated_by' => auth()->id(),
         ]);
 
+        $queuedCount = 0;
+        if ($wasInactive && $announcement->is_active) {
+            $queuedCount = $this->dispatchAnnouncementEmails($announcement);
+        }
+
+        $successMsg = 'Announcement updated successfully.';
+        if ($queuedCount > 0) {
+            $successMsg .= " Email notifications queued for {$queuedCount} active employee(s) (3-sec interval).";
+        }
+
         return redirect()
             ->route('hrms-announcements.index')
-            ->with('success', 'Announcement updated successfully.');
+            ->with('success', $successMsg);
     }
 
     public function destroy(HrmsAnnouncement $announcement): RedirectResponse
@@ -144,6 +169,51 @@ class HrmsAnnouncementController extends Controller
         return redirect()
             ->route('hrms-announcements.index')
             ->with('success', "Announcement \"{$title}\" deleted successfully.");
+    }
+
+    private function dispatchAnnouncementEmails(HrmsAnnouncement $announcement): int
+    {
+        $employeesQuery = EmployeeOnboarding::withoutGlobalScopes()
+            ->with(['portalUser.branch'])
+            ->where('status', EmployeeOnboarding::STATUS_ACTIVE)
+            ->whereNotNull('email')
+            ->where('email', '!=', '');
+
+        if ($announcement->company_id) {
+            $employeesQuery->where('company_id', $announcement->company_id);
+        }
+
+        $employees = $employeesQuery->get();
+
+        if (!empty($announcement->branch_ids)) {
+            $targetBranchIds = array_map('intval', (array) $announcement->branch_ids);
+            $employees = $employees->filter(function (EmployeeOnboarding $employee) use ($targetBranchIds) {
+                $branch = $employee->branch;
+                return $branch && in_array((int) $branch->id, $targetBranchIds, true);
+            });
+        }
+
+        $queuedCount = 0;
+        $seenEmails = [];
+
+        foreach ($employees as $employee) {
+            $email = trim(strtolower((string) $employee->email));
+            if (empty($email) || ! filter_var($email, FILTER_VALIDATE_EMAIL) || isset($seenEmails[$email])) {
+                continue;
+            }
+
+            $seenEmails[$email] = true;
+            $delaySeconds = $queuedCount * 3; // 3-second stagger interval between emails
+
+            SendAnnouncementEmailJob::dispatch($announcement, $email, $employee->name)
+                ->delay(now()->addSeconds($delaySeconds));
+
+            $queuedCount++;
+        }
+
+        Log::info("[HrmsAnnouncement] Queued {$queuedCount} announcement emails for #{$announcement->id} with 3s staggered delays.");
+
+        return $queuedCount;
     }
 
     private function canManageAnnouncements(): bool

@@ -37,7 +37,7 @@ class StoreInternJoiningFormRequest extends FormRequest
             'internship_start_date' => ['required', 'date'],
             'internship_duration_months' => ['required', 'integer', 'min:1', 'max:60'],
             'internship_end_date' => ['nullable', 'date', 'after_or_equal:internship_start_date'],
-            'internship_status' => ['required', Rule::in([InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_RESIGNED])],
+            'internship_status' => ['required', Rule::in([InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_INACTIVE, InternJoiningForm::STATUS_RESIGNED])],
             'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
             'marital_status' => ['required', Rule::in(['single', 'married'])],
             'date_of_marriage' => ['nullable', 'date', 'required_if:marital_status,married'],

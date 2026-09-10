@@ -173,33 +173,39 @@
         }
         .app-notify-toggle {
             position: relative;
-            width: 56px;
-            height: 56px;
-            border-radius: 18px;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
             background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%);
             color: #fff;
-            box-shadow: 0 18px 40px rgba(254, 95, 4, 0.28);
+            box-shadow: 0 10px 24px rgba(254, 95, 4, 0.28);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 18px;
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .app-notify-toggle:hover {
+            transform: scale(1.05);
+            box-shadow: 0 14px 28px rgba(254, 95, 4, 0.35);
         }
         .app-notify-badge {
             position: absolute;
-            top: 7px;
-            right: 7px;
-            min-width: 20px;
-            height: 20px;
-            padding: 0 6px;
+            top: -4px;
+            right: -4px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 4px;
             border-radius: 999px;
             background: #fff;
             color: #fe5f04;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(255,255,255,.65);
+            border: 2px solid #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
         .app-notify-panel {
             width: 360px;
@@ -317,6 +323,12 @@
                 top: auto;
                 bottom: 18px;
                 transform: none;
+            }
+            .app-notify-toggle {
+                width: 40px;
+                height: 40px;
+                border-radius: 12px;
+                font-size: 16px;
             }
             .app-notify-panel {
                 width: min(360px, calc(100vw - 28px));
@@ -767,7 +779,8 @@
 .eob-table-dropdown,
 .payroll-table-dropdown,
 .table-dropdown,
-details.action-dropdown {
+details.action-dropdown,
+details[class*="table-dropdown"] {
     position: relative;
     display: inline-block;
 }
@@ -775,7 +788,8 @@ details.action-dropdown {
 .eob-table-dropdown summary,
 .payroll-table-dropdown summary,
 .table-dropdown summary,
-details.action-dropdown summary {
+details.action-dropdown summary,
+details[class*="table-dropdown"] summary {
     list-style: none;
     outline: none;
     cursor: pointer;
@@ -784,31 +798,35 @@ details.action-dropdown summary {
 .eob-table-dropdown summary::-webkit-details-marker,
 .payroll-table-dropdown summary::-webkit-details-marker,
 .table-dropdown summary::-webkit-details-marker,
-details.action-dropdown summary::-webkit-details-marker {
+details.action-dropdown summary::-webkit-details-marker,
+details[class*="table-dropdown"] summary::-webkit-details-marker {
     display: none;
 }
 
 .crm-table-dropdown[open],
 .eob-table-dropdown[open],
 .payroll-table-dropdown[open],
-.table-dropdown[open] {
-    z-index: 60;
+.table-dropdown[open],
+details.action-dropdown[open],
+details[class*="table-dropdown"][open] {
+    z-index: 1050 !important;
 }
 
 .crm-table-dropdown-menu,
 .eob-table-dropdown-menu,
 .payroll-table-dropdown-menu,
-.table-dropdown-menu {
+.table-dropdown-menu,
+details[open] > div[class*="dropdown-menu"] {
     position: absolute;
     right: 0;
     top: calc(100% + 6px);
-    min-width: 140px;
+    min-width: 150px;
     padding: 6px;
     border-radius: 12px;
     border: 1px solid #ece7ec;
     background: #ffffff;
-    box-shadow: 0 16px 40px rgba(18, 18, 18, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
-    z-index: 999;
+    box-shadow: 0 16px 40px rgba(18, 18, 18, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+    z-index: 99999 !important;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -823,18 +841,54 @@ details.action-dropdown summary::-webkit-details-marker {
 details[open].dropup > div[class*="dropdown-menu"] {
     top: auto !important;
     bottom: calc(100% + 6px) !important;
-    box-shadow: 0 -16px 40px rgba(18, 18, 18, 0.15), 0 -4px 12px rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 -16px 40px rgba(18, 18, 18, 0.18), 0 -4px 12px rgba(0, 0, 0, 0.08) !important;
 }
 
-/* Safe min-height for table wrappers so single-row tables never clip dropdowns */
+/* Ensure table cards never clip dropdown menus */
+.crm-table-card,
+.eob-table-card,
+.payroll-table-card,
+.task-table-card,
+.pa-table-card,
+.ovp-table-card,
+.cu-table-card,
+.usr-table-card,
+.lpd-table-card,
+.ld-table-card,
+.prd-table-card,
+.table-card,
+.prj-table-card,
+.smm-table-card,
+.al-table-card,
+.rec-rem-table-card,
+[class*="table-card"] {
+    overflow: visible !important;
+}
+
+/* Safe min-height & overflow for table wrappers so single-row tables never clip dropdowns */
 .crm-table-wrap,
 .eob-table-wrap,
 .payroll-table-wrap,
 .table-wrap,
 .hk-table-wrap,
-.eob-table-card,
-.eob-list-wrap {
-    min-height: 220px;
+.eob-list-wrap,
+[class*="table-wrap"] {
+    overflow: visible;
+    min-height: 240px;
+}
+
+/* On small screens, keep horizontal scroll with safe padding */
+@media (max-width: 991px) {
+    .crm-table-wrap,
+    .eob-table-wrap,
+    .payroll-table-wrap,
+    .table-wrap,
+    .hk-table-wrap,
+    .eob-list-wrap,
+    [class*="table-wrap"] {
+        overflow-x: auto;
+        padding-bottom: 90px;
+    }
 }
 
 .has-dropdown.open .chevron {
@@ -843,33 +897,33 @@ details[open].dropup > div[class*="dropdown-menu"] {
 
         .module-fab {
             position: fixed;
-            right: 24px;
-            bottom: 24px;
+            right: 20px;
+            bottom: 20px;
             z-index: 1200;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 62px;
-            height: 62px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             border: 0;
             color: #fff;
             background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%);
-            box-shadow: 0 18px 40px rgba(254, 95, 4, 0.28);
+            box-shadow: 0 10px 24px rgba(254, 95, 4, 0.28);
             transition: transform .2s ease, box-shadow .2s ease;
             animation: moduleFabFloat 2.6s ease-in-out infinite;
         }
         .module-fab:hover {
-            transform: translateY(-3px) scale(1.03);
-            box-shadow: 0 22px 44px rgba(254, 95, 4, 0.34);
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 14px 28px rgba(254, 95, 4, 0.35);
         }
         .module-fab:focus-visible {
-            outline: 3px solid rgba(254, 95, 4, 0.22);
-            outline-offset: 4px;
+            outline: 2px solid rgba(254, 95, 4, 0.3);
+            outline-offset: 3px;
         }
         .module-fab__pulse {
             position: absolute;
-            inset: -8px;
+            inset: -5px;
             border-radius: 50%;
             border: 1px solid rgba(254, 95, 4, 0.28);
             animation: moduleFabPulse 2.6s ease-out infinite;
@@ -877,7 +931,7 @@ details[open].dropup > div[class*="dropdown-menu"] {
         .module-fab__icon {
             position: relative;
             z-index: 1;
-            font-size: 24px;
+            font-size: 18px;
         }
         .module-overlay {
             position: fixed;
@@ -1056,10 +1110,13 @@ details[open].dropup > div[class*="dropdown-menu"] {
                 grid-template-columns: 1fr;
             }
             .module-fab {
-                right: 18px;
-                bottom: 18px;
-                width: 58px;
-                height: 58px;
+                right: 14px;
+                bottom: 14px;
+                width: 40px;
+                height: 40px;
+            }
+            .module-fab .module-fab__icon {
+                font-size: 16px;
             }
         }
 
@@ -1323,33 +1380,27 @@ function toggleDropdown(element) {
         const menu = details.querySelector('div[class*="dropdown-menu"], .crm-table-dropdown-menu, .eob-table-dropdown-menu, .payroll-table-dropdown-menu, .table-dropdown-menu');
         if (!menu) return;
 
-        // Elevate parent table cell and row
+        // Elevate parent table elements and ensure overflow is visible on cards
         const td = details.closest('td');
         const tr = details.closest('tr');
-        if (td) {
-            td.style.position = 'relative';
-            td.style.zIndex = '60';
-        }
-        if (tr) {
-            tr.style.position = 'relative';
-            tr.style.zIndex = '60';
-        }
+        const tbody = details.closest('tbody');
+        const table = details.closest('table');
+        const card = details.closest('[class*="table-card"], [class*="card"]');
+        const wrap = details.closest('[class*="table-wrap"], [class*="table-responsive"], .table-responsive');
+
+        if (td) { td.style.position = 'relative'; td.style.zIndex = '1050'; }
+        if (tr) { tr.style.position = 'relative'; tr.style.zIndex = '1050'; }
+        if (tbody) { tbody.style.position = 'relative'; tbody.style.zIndex = '1050'; }
+        if (table) { table.style.position = 'relative'; table.style.zIndex = '1050'; }
+        if (card) { card.style.overflow = 'visible'; }
 
         const triggerRect = trigger.getBoundingClientRect();
-        const menuHeight = menu.offsetHeight || 130;
+        const menuHeight = menu.offsetHeight || 180;
         const spaceBelowViewport = window.innerHeight - triggerRect.bottom;
         const spaceAboveViewport = triggerRect.top;
 
-        // Check distance to bottom of scrollable table wrapper if any
-        const tableWrap = details.closest('.crm-table-wrap, .eob-table-wrap, .payroll-table-wrap, .table-wrap, .hk-table-wrap, .eob-table-card, [class*="table-wrap"], [class*="table-card"]');
-        let spaceBelowContainer = 999;
-        if (tableWrap) {
-            const wrapRect = tableWrap.getBoundingClientRect();
-            spaceBelowContainer = wrapRect.bottom - triggerRect.bottom;
-        }
-
-        // If space below is not enough (< menuHeight + 16px) but space above is sufficient, flip up!
-        if ((spaceBelowViewport < menuHeight + 16 || spaceBelowContainer < menuHeight + 10) && spaceAboveViewport > menuHeight + 20) {
+        // If space below in viewport is tight, flip up
+        if (spaceBelowViewport < menuHeight + 20 && spaceAboveViewport > menuHeight + 20) {
             details.classList.add('dropup');
         } else {
             details.classList.remove('dropup');

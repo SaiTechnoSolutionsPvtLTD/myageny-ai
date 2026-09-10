@@ -211,10 +211,17 @@
     justify-content: center;
     background: linear-gradient(135deg, #fe5f04, #ff9a52);
     color: #fff;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 800;
     flex-shrink: 0;
-    box-shadow: 0 10px 20px rgba(254,95,4,.16);
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(254,95,4,.18);
+}
+.intern-person-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 14px;
 }
 .intern-person-name,
 .intern-contact-main,
