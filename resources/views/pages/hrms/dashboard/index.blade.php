@@ -983,7 +983,6 @@
                             <strong>{{ $leaveEntry['employee_name'] ?: 'Employee' }}</strong>
                             <span>{{ $leaveEntry['department_name'] ?: 'No department mapped' }}</span>
                             <span>{{ $leaveEntry['role_name'] ?: 'No role mapped' }}</span>
-                            <span>{{ $leaveEntry['leave_label'] ?: 'Leave' }}</span>
                         </div>
                     </div>
                     @empty
@@ -1014,7 +1013,7 @@
                         <div style="flex:1;">
                             <strong>{{ $permissionRequest->employee?->name ?: 'Employee' }}</strong>
                             <span>{{ $permissionRequest->employee?->department?->name ?: 'No department mapped' }}</span>
-                            <span>{{ $permissionRequest->employee?->role?->name ?: 'No role mapped' }}</span>
+                            <span>{{ $permissionRequest->employee?->role_name ?: 'No role mapped' }}</span>
                         </div>
                     </div>
                     @empty

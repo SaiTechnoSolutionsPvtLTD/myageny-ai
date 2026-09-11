@@ -108,6 +108,97 @@
         @media (max-width: 1100px) {
             .pr-summary-grid { grid-template-columns:1fr; }
         }
+
+        /* Filter Panel & Quick Filters */
+        .pr-filter-card {
+            background: #ffffff;
+            border: 1px solid #dce9f8;
+            border-radius: 18px;
+            padding: 20px 24px;
+            box-shadow: 0 10px 30px rgba(18, 18, 18, 0.04);
+            margin-bottom: 6px;
+        }
+        .pr-qfilter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 999px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: inherit;
+        }
+        .pr-qfilter-btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .pr-qfilter-btn.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(29, 78, 216, 0.25);
+        }
+        .pr-filter-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1.2fr 1fr 1fr 1fr auto;
+            gap: 14px;
+            align-items: flex-end;
+        }
+        .pr-filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pr-filter-label {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #4b5563;
+        }
+        .pr-filter-input {
+            width: 100%;
+            height: 42px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            font-size: 13px;
+            outline: none;
+            background: #fff;
+            font-family: inherit;
+            color: #1f2937;
+            transition: border-color .15s, box-shadow .15s;
+            box-sizing: border-box;
+        }
+        select.pr-filter-input {
+            cursor: pointer;
+        }
+        .pr-filter-input:focus {
+            border-color: #1d4ed8;
+            box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+        }
+        @media (max-width: 1200px) {
+            .pr-filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .pr-filter-actions-field {
+                grid-column: span 2;
+            }
+        }
+        @media (max-width: 640px) {
+            .pr-filter-grid {
+                grid-template-columns: 1fr;
+            }
+            .pr-filter-actions-field {
+                grid-column: span 1;
+            }
+        }
     </style>
 @endpush
 
@@ -133,6 +224,93 @@
         @endif
 
         <div class="pr-page">
+            @if($isCompanyAdmin ?? false)
+            {{-- Filter Panel for Admin / HR --}}
+            <div class="pr-filter-card">
+                <form method="GET" action="{{ route('permission-requests.index') }}" id="permissionFilterForm">
+                    <input type="hidden" name="quick_filter" id="perm_quick_filter_input" value="{{ request('quick_filter') }}">
+                    
+                    {{-- Quick Filters Row --}}
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid #f1f5f9;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#355e8b; margin-right:4px;">Quick Filters:</span>
+                            <button type="button" class="pr-qfilter-btn {{ !request('quick_filter') && !request('date_from') && !request('date_to') ? 'active' : '' }}" onclick="applyPermissionQuickFilter('')">All</button>
+                            <button type="button" class="pr-qfilter-btn {{ request('quick_filter') === 'today' ? 'active' : '' }}" onclick="applyPermissionQuickFilter('today')">Today</button>
+                            <button type="button" class="pr-qfilter-btn {{ request('quick_filter') === 'tomorrow' ? 'active' : '' }}" onclick="applyPermissionQuickFilter('tomorrow')">Tomorrow</button>
+                            <button type="button" class="pr-qfilter-btn {{ request('quick_filter') === 'weekly' ? 'active' : '' }}" onclick="applyPermissionQuickFilter('weekly')">Weekly</button>
+                            <button type="button" class="pr-qfilter-btn {{ request('quick_filter') === 'monthly' ? 'active' : '' }}" onclick="applyPermissionQuickFilter('monthly')">Monthly</button>
+                            <button type="button" class="pr-qfilter-btn {{ request('quick_filter') === 'year' ? 'active' : '' }}" onclick="applyPermissionQuickFilter('year')">Year</button>
+                        </div>
+                        @if(request()->hasAny(['quick_filter', 'employee_id', 'department_id', 'date_from', 'date_to', 'status']))
+                            <a href="{{ route('permission-requests.index') }}" style="font-size:12px; font-weight:700; color:#1d4ed8; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                                ✕ Clear All Filters
+                            </a>
+                        @endif
+                    </div>
+
+                    {{-- Detailed Filters Grid --}}
+                    <div class="pr-filter-grid">
+                        <div class="pr-filter-field">
+                            <label class="pr-filter-label">Employee</label>
+                            <select name="employee_id" class="pr-filter-input">
+                                <option value="">All Employees</option>
+                                @foreach($employees as $emp)
+                                <option value="{{ $emp->id }}" {{ request('employee_id') == $emp->id ? 'selected' : '' }}>
+                                    {{ $emp->name }} {{ $emp->employee_id ? "({$emp->employee_id})" : '' }}
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="pr-filter-field">
+                            <label class="pr-filter-label">Department</label>
+                            <select name="department_id" class="pr-filter-input">
+                                <option value="">All Departments</option>
+                                @foreach($departments as $dept)
+                                <option value="{{ $dept->id }}" {{ request('department_id') == $dept->id ? 'selected' : '' }}>
+                                    {{ $dept->name }}
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="pr-filter-field">
+                            <label class="pr-filter-label">Status</label>
+                            <select name="status" class="pr-filter-input">
+                                <option value="">All Status</option>
+                                <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                                <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                                <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                            </select>
+                        </div>
+
+                        <div class="pr-filter-field">
+                            <label class="pr-filter-label">From Date</label>
+                            <input type="date" name="date_from" class="pr-filter-input" value="{{ request('date_from') }}">
+                        </div>
+
+                        <div class="pr-filter-field">
+                            <label class="pr-filter-label">To Date</label>
+                            <input type="date" name="date_to" class="pr-filter-input" value="{{ request('date_to') }}">
+                        </div>
+
+                        <div class="pr-filter-field pr-filter-actions-field">
+                            <label class="pr-filter-label">&nbsp;</label>
+                            <div style="display:flex; gap:8px;">
+                                <button type="submit" class="eob-btn eob-btn-primary" style="flex:1; height:42px; justify-content:center; border-radius:10px; font-size:13px; font-weight:700; background:#1d4ed8;">
+                                    Apply Filter
+                                </button>
+                                @if(request()->hasAny(['employee_id', 'department_id', 'date_from', 'date_to', 'status', 'quick_filter']))
+                                <a href="{{ route('permission-requests.index') }}" class="eob-btn" style="height:42px; padding:0 14px; background:#f8fafc; border:1px solid #d1d5db; color:#6b7280; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                                    Reset
+                                </a>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            @else
             {{-- Summary Cards (Clickable Tabs) --}}
             <div class="pr-summary-grid">
                 @if(auth()->user()->can('permission_requests.approve') || $pendingApprovals->isNotEmpty())
@@ -143,9 +321,9 @@
                 </div>
                 @endif
                 <div class="pr-summary-card" data-tab="permission-my-requests" onclick="switchPermissionTab('permission-my-requests')">
-                    <div class="pr-summary-label">My Requests</div>
+                    <div class="pr-summary-label">{{ ($isCompanyAdmin ?? false) ? 'All Requests' : 'My Requests' }}</div>
                     <div class="pr-summary-value" style="color: #0d9488;">{{ $permissionRequests->total() }}</div>
-                    <div class="pr-summary-sub">All permission requests you have raised across dates and slots.</div>
+                    <div class="pr-summary-sub">{{ ($isCompanyAdmin ?? false) ? 'All employee permission requests across the company.' : 'All permission requests you have raised across dates and slots.' }}</div>
                 </div>
                 @if(auth()->user()->can('permission_requests.approve') || $handledApprovals->isNotEmpty())
                 <div class="pr-summary-card" data-tab="permission-decisions" onclick="switchPermissionTab('permission-decisions')">
@@ -155,8 +333,10 @@
                 </div>
                 @endif
             </div>
+            @endif
 
             {{-- Nav Tabs --}}
+            @if(! ($isCompanyAdmin ?? false))
             <div class="pr-nav" role="tablist">
                 @if(auth()->user()->can('permission_requests.approve') || $pendingApprovals->isNotEmpty())
                 <button type="button" class="pr-nav-link" data-tab="permission-approvals" onclick="switchPermissionTab('permission-approvals')">
@@ -229,13 +409,14 @@
                 @endif
             </div>
             @endif
+            @endif
 
-            {{-- Tab 2: My Permission Requests --}}
-            <div id="permission-my-requests" class="eob-table-card pr-tab-panel">
+            {{-- Tab 2: Permission Requests Table --}}
+            <div id="permission-my-requests" class="eob-table-card @if(! ($isCompanyAdmin ?? false)) pr-tab-panel @endif">
                 <div class="pr-section-head">
                     <div>
-                        <div class="pr-section-title">My Permission Requests</div>
-                        <div class="pr-section-sub">Track your permission request hierarchy approval status.</div>
+                        <div class="pr-section-title">{{ ($isCompanyAdmin ?? false) ? 'All Permission Requests' : 'My Permission Requests' }}</div>
+                        <div class="pr-section-sub">{{ ($isCompanyAdmin ?? false) ? 'Monitor all company permission requests and their hierarchy approval status.' : 'Track your permission request hierarchy approval status.' }}</div>
                     </div>
                     <div class="pr-section-badge">{{ $permissionRequests->total() }} request(s)</div>
                 </div>
@@ -248,6 +429,9 @@
                             <table class="eob-list-table">
                                 <thead>
                                     <tr>
+                                        @if($isCompanyAdmin ?? false)
+                                            <th>Employee</th>
+                                        @endif
                                         <th>Date</th>
                                         <th>Time</th>
                                         <th>Status</th>
@@ -260,6 +444,14 @@
                                     @foreach($permissionRequests as $permissionRequest)
                                         @php $currentApproval = $permissionRequest->approvals->firstWhere('step_key', $permissionRequest->current_step); @endphp
                                         <tr>
+                                            @if($isCompanyAdmin ?? false)
+                                                <td>
+                                                    <div class="pr-meta-stack">
+                                                        <div class="eob-cell-title">{{ $permissionRequest->employee?->name ?: $permissionRequest->user?->name }}</div>
+                                                        <div class="eob-cell-sub">{{ $permissionRequest->employee?->employee_id ?: $permissionRequest->user?->email }}</div>
+                                                    </div>
+                                                </td>
+                                            @endif
                                             <td>{{ $permissionRequest->permission_date->format('d M Y') }}</td>
                                             <td>
                                                 <div class="pr-meta-stack">
@@ -293,7 +485,7 @@
             </div>
 
             {{-- Tab 3: My Recent Decisions --}}
-            @if(auth()->user()->can('permission_requests.approve') || $handledApprovals->isNotEmpty())
+            @if(! ($isCompanyAdmin ?? false) && (auth()->user()->can('permission_requests.approve') || $handledApprovals->isNotEmpty()))
             <div id="permission-decisions" class="eob-table-card pr-tab-panel">
                 <div class="pr-section-head">
                     <div>
@@ -347,6 +539,23 @@
 
 @push('scripts')
 <script>
+function applyPermissionQuickFilter(val) {
+    var input = document.getElementById('perm_quick_filter_input');
+    if (input) {
+        input.value = val;
+    }
+    if (val) {
+        var fromEl = document.querySelector('input[name="date_from"]');
+        var toEl = document.querySelector('input[name="date_to"]');
+        if (fromEl) fromEl.value = '';
+        if (toEl) toEl.value = '';
+    }
+    var form = document.getElementById('permissionFilterForm');
+    if (form) {
+        form.submit();
+    }
+}
+
 function switchPermissionTab(tabId) {
     var targetPanel = document.getElementById(tabId);
     if (!targetPanel) return;
@@ -385,12 +594,19 @@ function switchPermissionTab(tabId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    var isCompanyAdmin = {{ ($isCompanyAdmin ?? false) ? 'true' : 'false' }};
+    if (isCompanyAdmin) {
+        return;
+    }
+
     var hash = window.location.hash ? window.location.hash.substring(1) : '';
     var initialTab = null;
+    var params = new URLSearchParams(window.location.search);
+    var hasFilterParams = params.has('requests_page') || params.has('quick_filter') || params.has('employee_id') || params.has('department_id') || params.has('date_from') || params.has('date_to') || params.has('status');
 
     if (hash && document.getElementById(hash)) {
         initialTab = hash;
-    } else if (new URLSearchParams(window.location.search).has('requests_page')) {
+    } else if (hasFilterParams) {
         initialTab = 'permission-my-requests';
     } else {
         @if(auth()->user()->can('permission_requests.approve') || $pendingApprovals->isNotEmpty())

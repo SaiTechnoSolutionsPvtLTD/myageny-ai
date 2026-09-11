@@ -40,7 +40,7 @@
                                 <summary class="crm-table-dropdown-trigger">Actions</summary>
                                 <div class="crm-table-dropdown-menu">
                                     <button type="button" class="crm-table-dropdown-item"
-                                        onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', {{ $sub->category_id }}); this.closest('details')?.removeAttribute('open');">
+                                        onclick="openEdit({{ $sub->id }}, '{{ addslashes($sub->name) }}', '{{ $sub->category_id }}'); this.closest('details')?.removeAttribute('open');">
                                         <i class="bi bi-pencil"></i>
                                         <span>Edit</span>
                                     </button>
@@ -76,7 +76,7 @@
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Outcome Category <span class="req">*</span></label>
-                    <select name="category_id" class="crm-input" required>
+                    <select name="category_id" class="crm-input no-select2" required>
                         <option value="">— Select Category —</option>
                         @foreach($categories as $cat)
                             <option value="{{ $cat->id }}">{{ $cat->name }}</option>
@@ -101,7 +101,7 @@
                 @csrf @method('PUT')
                 <div class="crm-modal-body">
                     <label class="crm-label">Outcome Category <span class="req">*</span></label>
-                    <select id="editCatId" name="category_id" class="crm-input" required>
+                    <select id="editCatId" name="category_id" class="crm-input no-select2" required>
                         <option value="">— Select Category —</option>
                         @foreach($categories as $cat)
                             <option value="{{ $cat->id }}">{{ $cat->name }}</option>
@@ -123,9 +123,15 @@
 @include('pages.settings.partials.modal-scripts')
 <script>
 function openEdit(id, name, catId) {
-    document.getElementById('editName').value   = name;
-    document.getElementById('editCatId').value  = catId;
-    document.getElementById('editForm').action  = `/masters/outcome-sub-categories/${id}`;
+    document.getElementById('editName').value = name;
+    const catSelect = document.getElementById('editCatId');
+    if (catSelect) {
+        catSelect.value = catId;
+    }
+    if (window.jQuery) {
+        $('#editCatId').val(catId).trigger('change');
+    }
+    document.getElementById('editForm').action = `/masters/outcome-sub-categories/${id}`;
     openModal('editModal');
 }
 </script>

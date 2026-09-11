@@ -48,7 +48,13 @@ class LeadReallocationController extends Controller
                 ->where('leads.assigned_to', $fromUserId)
                 ->count();
 
+            $fromUser = User::withoutGlobalScopes()->find($fromUserId);
+            $toUser = User::withoutGlobalScopes()->find($toUserId);
+
             $updateLeadData = ['assigned_to' => $toUserId];
+            if ($toUser) {
+                $updateLeadData['branch_id'] = $toUser->branch_id;
+            }
             if (auth()->check() && auth()->user()?->hasPreSalesLikeRole()) {
                 $updateLeadData['pre_sale_executive_id'] = auth()->id();
             }
@@ -65,9 +71,6 @@ class LeadReallocationController extends Controller
                 ->update(['lead_products.updated_at' => now()]);
 
             DB::commit();
-
-            $fromUser = User::find($fromUserId);
-            $toUser = User::find($toUserId);
 
             return back()->with('success', "Successfully reallocated {$leadsCount} leads and related products from {$fromUser->name} to {$toUser->name}.");
         } catch (\Exception $e) {

@@ -258,7 +258,6 @@
                                 request()->filled('product_id') ||
                                 request()->filled('status') ||
                                 request()->filled('user_id') ||
-                                request()->filled('company_id') ||
                                 request()->filled('department_id');
         @endphp
 
@@ -321,18 +320,6 @@
                                     <option value="">All Users</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Company</label>
-                            <div style="position:relative;">
-                                <select name="company_id" class="pa-input select2" style="padding:9px 12px; background:#fff;">
-                                    <option value="">All Companies</option>
-                                    @foreach($companies as $c)
-                                        <option value="{{ $c->id }}" {{ request('company_id') == $c->id ? 'selected' : '' }}>{{ $c->company_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -465,6 +452,10 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if($selectedCard['items']->hasPages())
+                    @include('partials.table-pagination', ['paginator' => $selectedCard['items']])
+                @endif
             @else
                 <div class="pa-empty">No production approval items are available in this status right now.</div>
             @endif

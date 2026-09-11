@@ -6,6 +6,7 @@ use App\Models\ProductionInitiation;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
@@ -50,7 +51,10 @@ class ProductionApprovalController extends Controller
             $query->where('department_id', $request->department_id);
         }
 
-        $initiations = $query->latest()->get();
+        $initiations = $query
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
 
         $buckets = [
             'pending' => [
@@ -94,10 +98,34 @@ class ProductionApprovalController extends Controller
             $selectedBucket = 'pending';
         }
 
+        $currentPage = LengthAwarePaginator::resolveCurrentPage() ?: 1;
+        $perPage = 15;
+        $bucketItems = $buckets[$selectedBucket]['items'];
+        $paginatedItems = new LengthAwarePaginator(
+            $bucketItems->forPage($currentPage, $perPage)->values(),
+            $bucketItems->count(),
+            $perPage,
+            $currentPage,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => $request->query(),
+            ]
+        );
+        $buckets[$selectedBucket]['items'] = $paginatedItems;
+
         $products = \App\Models\Product::orderBy('product_name')->get(['id', 'product_name']);
         $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
-        $users = \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']);
-        $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
+        $users = \App\Models\User::with(['roles.department'])
+            ->where('user_status', 'active')
+            ->orderBy('name')
+            ->get()
+            ->filter(function ($user) {
+                return $user->belongsToSalesDepartment()
+                    || $user->hasSalesLikeRole()
+                    || $user->belongsToCustomerSupportDepartment()
+                    || $user->hasCustomerSupportLikeRole();
+            })
+            ->values();
 
         return view('pages.production_approvals.index', [
             'cards' => $buckets,
@@ -106,7 +134,6 @@ class ProductionApprovalController extends Controller
             'products' => $products,
             'departments' => $departments,
             'users' => $users,
-            'companies' => $companies,
         ]);
     }
 

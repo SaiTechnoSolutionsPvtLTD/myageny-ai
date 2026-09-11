@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LeaveRequestFormRequest;
+use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
@@ -21,12 +22,76 @@ class LeaveRequestController extends Controller
 {
     public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
 
-    public function index(): View
+    public function index(Request $request): View
     {
         $user = auth()->user();
+        $isCompanyAdmin = $user && ($user->isHrOrAdmin() || $user->isCompanyAdmin() || $user->isSuperAdmin() || $user->isSystemAdmin());
 
-        $leaveRequests = LeaveRequest::with(['leaveType', 'employee', 'approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
+        $leaveRequestsQuery = LeaveRequest::with(['leaveType', 'user', 'employee.department', 'employee.role', 'approvals.approver', 'approvals.actionedBy']);
+
+        if (! $isCompanyAdmin) {
+            $leaveRequestsQuery->where('user_id', $user->id);
+        } else {
+            if ($user->company_id) {
+                $leaveRequestsQuery->where('company_id', $user->company_id);
+            }
+
+            // Quick Filters
+            $quickFilter = $request->query('quick_filter');
+            $today = Carbon::today();
+
+            if ($quickFilter === 'today') {
+                $todayStr = $today->toDateString();
+                $leaveRequestsQuery->whereDate('start_date', '<=', $todayStr)
+                    ->whereDate('end_date', '>=', $todayStr);
+            } elseif ($quickFilter === 'tomorrow') {
+                $tomorrowStr = $today->copy()->addDay()->toDateString();
+                $leaveRequestsQuery->whereDate('start_date', '<=', $tomorrowStr)
+                    ->whereDate('end_date', '>=', $tomorrowStr);
+            } elseif ($quickFilter === 'weekly') {
+                $weekStart = $today->copy()->startOfWeek()->toDateString();
+                $weekEnd = $today->copy()->endOfWeek()->toDateString();
+                $leaveRequestsQuery->whereDate('start_date', '<=', $weekEnd)
+                    ->whereDate('end_date', '>=', $weekStart);
+            } elseif ($quickFilter === 'monthly') {
+                $monthStart = $today->copy()->startOfMonth()->toDateString();
+                $monthEnd = $today->copy()->endOfMonth()->toDateString();
+                $leaveRequestsQuery->whereDate('start_date', '<=', $monthEnd)
+                    ->whereDate('end_date', '>=', $monthStart);
+            } elseif ($quickFilter === 'year') {
+                $yearStart = $today->copy()->startOfYear()->toDateString();
+                $yearEnd = $today->copy()->endOfYear()->toDateString();
+                $leaveRequestsQuery->whereDate('start_date', '<=', $yearEnd)
+                    ->whereDate('end_date', '>=', $yearStart);
+            }
+
+            // Employee filter
+            if ($request->filled('employee_id')) {
+                $leaveRequestsQuery->where('employee_id', $request->employee_id);
+            }
+
+            // Department filter
+            if ($request->filled('department_id')) {
+                $leaveRequestsQuery->whereHas('employee', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            // Date Range filter
+            if ($request->filled('date_from')) {
+                $leaveRequestsQuery->whereDate('end_date', '>=', $request->date_from);
+            }
+            if ($request->filled('date_to')) {
+                $leaveRequestsQuery->whereDate('start_date', '<=', $request->date_to);
+            }
+
+            // Status filter
+            if ($request->filled('status')) {
+                $leaveRequestsQuery->where('status', $request->status);
+            }
+        }
+
+        $leaveRequests = $leaveRequestsQuery
             ->latest()
             ->paginate(10, ['*'], 'requests_page')
             ->withQueryString();
@@ -39,10 +104,29 @@ class LeaveRequestController extends Controller
             ->limit(8)
             ->get();
 
+        $departments = $isCompanyAdmin
+            ? Department::query()->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))->orderBy('name')->get(['id', 'name'])
+            : collect();
+
+        $employees = $isCompanyAdmin
+            ? EmployeeOnboarding::query()
+                ->active()
+                ->where(function ($q) {
+                    $q->whereNull('portal_user_id')
+                        ->orWhereHas('portalUser', fn($pu) => $pu->where('is_active', true));
+                })
+                ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+                ->orderBy('name')
+                ->get(['id', 'name', 'employee_id'])
+            : collect();
+
         return view('pages.hrms.leave_requests.index', compact(
             'leaveRequests',
             'pendingApprovals',
-            'handledApprovals'
+            'handledApprovals',
+            'isCompanyAdmin',
+            'departments',
+            'employees'
         ));
     }
 
@@ -263,7 +347,7 @@ class LeaveRequestController extends Controller
 
     private function canViewLeaveRequest(LeaveRequest $leaveRequest, User $user): bool
     {
-        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
         }
 
@@ -296,6 +380,10 @@ class LeaveRequestController extends Controller
 
         if ($leaveRequest->user?->company_id && $user->company_id && (int) $leaveRequest->user->company_id !== (int) $user->company_id) {
             return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            return true;
         }
 
         return (int) $approval->approver_user_id === (int) $user->id;

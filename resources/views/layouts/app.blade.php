@@ -61,6 +61,7 @@
             flex-direction: column;
             overflow-y: auto;
             position: relative;
+            min-height: 100vh;
         }
         .main-content-scroll {
             flex-grow: 1;
@@ -162,10 +163,11 @@
         }
         .app-notify-fab {
             position: fixed;
-            right: 18px;
+            right: 20px;
             top: 50%;
+            bottom: auto;
             transform: translateY(-50%);
-            z-index: 4300;
+            z-index: 1200;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -208,8 +210,13 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
         .app-notify-panel {
+            position: absolute;
+            top: 50%;
+            bottom: auto;
+            right: 56px;
+            transform: translateY(-50%);
             width: 360px;
-            max-width: calc(100vw - 88px);
+            max-width: calc(100vw - 80px);
             max-height: min(72vh, 620px);
             overflow: hidden;
             border-radius: 18px;
@@ -320,9 +327,9 @@
         @media (max-width: 768px) {
             .app-notify-fab {
                 right: 14px;
-                top: auto;
-                bottom: 18px;
-                transform: none;
+                top: 50%;
+                bottom: auto;
+                transform: translateY(-50%);
             }
             .app-notify-toggle {
                 width: 40px;
@@ -331,7 +338,11 @@
                 font-size: 16px;
             }
             .app-notify-panel {
-                width: min(360px, calc(100vw - 28px));
+                right: 48px;
+                top: 50%;
+                bottom: auto;
+                transform: translateY(-50%);
+                width: min(340px, calc(100vw - 68px));
             }
         }
         img, svg { display: block; max-width: 100%; }
@@ -426,7 +437,7 @@
             padding-top: 16px;
             border-top: 1px dashed rgba(225, 222, 227, 0.7);
         }
-        
+
         /* Support Card */
         .support-card {
             display: flex;
@@ -844,7 +855,7 @@ details[open].dropup > div[class*="dropdown-menu"] {
     box-shadow: 0 -16px 40px rgba(18, 18, 18, 0.18), 0 -4px 12px rgba(0, 0, 0, 0.08) !important;
 }
 
-/* Ensure table cards never clip dropdown menus */
+/* Ensure table cards never clip dropdown menus and maintain a spacious default height */
 .crm-table-card,
 .eob-table-card,
 .payroll-table-card,
@@ -863,18 +874,93 @@ details[open].dropup > div[class*="dropdown-menu"] {
 .rec-rem-table-card,
 [class*="table-card"] {
     overflow: visible !important;
+    min-height: 480px;
 }
 
-/* Safe min-height & overflow for table wrappers so single-row tables never clip dropdowns */
+/* Safe min-height & overflow for all table wrappers so single-row tables never clip dropdowns */
 .crm-table-wrap,
 .eob-table-wrap,
 .payroll-table-wrap,
 .table-wrap,
 .hk-table-wrap,
 .eob-list-wrap,
-[class*="table-wrap"] {
-    overflow: visible;
-    min-height: 240px;
+.task-table-wrap,
+.umap-table-wrap,
+.map-table-wrap,
+.att-table-wrap,
+.lpd-table-wrap,
+.st-table-wrap,
+.ds-table-wrap,
+.tlop-table-wrap,
+.al-table-wrap,
+.prj-table-wrap,
+.pjd-table-wrap,
+.pa-table-wrap,
+.ovp-table-wrap,
+.pm-table-wrap,
+.pts-table-wrap,
+.rec-rem-table-wrap,
+.fields-table-scroll,
+.fields-table-wrap,
+.table-responsive,
+[class*="table-wrap"],
+[class*="table-responsive"],
+[class*="table-container"],
+.table-container {
+    min-height: 420px;
+}
+
+/* Ensure open dropdowns and their parent row/cells are properly elevated within the table */
+details.crm-table-dropdown[open],
+details.eob-table-dropdown[open],
+details.payroll-table-dropdown[open],
+details[class*="table-dropdown"][open],
+details.action-dropdown[open],
+details[open] > summary {
+    position: relative;
+    z-index: 60;
+}
+
+details[open] > div[class*="dropdown-menu"],
+.crm-table-dropdown-menu,
+.eob-table-dropdown-menu,
+.payroll-table-dropdown-menu,
+.table-dropdown-menu {
+    z-index: 70;
+}
+
+tr:has(details[open]),
+td:has(details[open]) {
+    position: relative;
+    z-index: 60;
+}
+
+/* Ensure table content and page bodies have safe spacing so floating FABs never cover action buttons */
+.eob-body,
+.crm-page-body,
+.att-page,
+.ld-body,
+.task-page,
+.al-page,
+.prj-page,
+.cmp-page,
+.usr-page,
+.main-content,
+.main-content-scroll,
+main {
+    {{--  padding-bottom: 90px !important;  --}}
+}
+
+/* Safe right padding on table Actions column */
+table th:last-child,
+table td:last-child,
+.crm-table th:last-child,
+.crm-table td:last-child,
+.eob-list-table th:last-child,
+.eob-list-table td:last-child,
+.ld-tbl th:last-child,
+.ld-tbl td:last-child {
+    padding-right: 24px !important;
 }
 
 /* On small screens, keep horizontal scroll with safe padding */
@@ -885,7 +971,29 @@ details[open].dropup > div[class*="dropdown-menu"] {
     .table-wrap,
     .hk-table-wrap,
     .eob-list-wrap,
-    [class*="table-wrap"] {
+    .task-table-wrap,
+    .umap-table-wrap,
+    .map-table-wrap,
+    .att-table-wrap,
+    .lpd-table-wrap,
+    .st-table-wrap,
+    .ds-table-wrap,
+    .tlop-table-wrap,
+    .al-table-wrap,
+    .prj-table-wrap,
+    .pjd-table-wrap,
+    .pa-table-wrap,
+    .ovp-table-wrap,
+    .pm-table-wrap,
+    .pts-table-wrap,
+    .rec-rem-table-wrap,
+    .fields-table-scroll,
+    .fields-table-wrap,
+    .table-responsive,
+    [class*="table-wrap"],
+    [class*="table-responsive"],
+    [class*="table-container"],
+    .table-container {
         overflow-x: auto;
         padding-bottom: 90px;
     }
@@ -936,7 +1044,7 @@ details[open].dropup > div[class*="dropdown-menu"] {
         .module-overlay {
             position: fixed;
             inset: 0;
-            z-index: 1190;
+            z-index: 100000 !important;
             background: rgba(18, 18, 18, 0.38);
             opacity: 0;
             pointer-events: none;
@@ -950,7 +1058,7 @@ details[open].dropup > div[class*="dropdown-menu"] {
             position: fixed;
             top: 0;
             right: 0;
-            z-index: 1195;
+            z-index: 100001 !important;
             width: min(380px, calc(100vw - 24px));
             height: 100vh;
             padding: 24px;
@@ -1386,13 +1494,14 @@ function toggleDropdown(element) {
         const tbody = details.closest('tbody');
         const table = details.closest('table');
         const card = details.closest('[class*="table-card"], [class*="card"]');
-        const wrap = details.closest('[class*="table-wrap"], [class*="table-responsive"], .table-responsive');
+        const wrap = details.closest('[class*="table-wrap"], [class*="table-responsive"], .table-responsive') || (table ? table.parentElement : null);
 
-        if (td) { td.style.position = 'relative'; td.style.zIndex = '1050'; }
-        if (tr) { tr.style.position = 'relative'; tr.style.zIndex = '1050'; }
-        if (tbody) { tbody.style.position = 'relative'; tbody.style.zIndex = '1050'; }
-        if (table) { table.style.position = 'relative'; table.style.zIndex = '1050'; }
+        if (td) { td.style.position = 'relative'; td.style.zIndex = '60'; }
+        if (tr) { tr.style.position = 'relative'; tr.style.zIndex = '60'; }
+        if (tbody) { tbody.style.position = 'relative'; tbody.style.zIndex = '60'; }
+        if (table) { table.style.position = 'relative'; table.style.zIndex = '60'; }
         if (card) { card.style.overflow = 'visible'; }
+        if (wrap) { wrap.style.minHeight = '420px'; }
 
         const triggerRect = trigger.getBoundingClientRect();
         const menuHeight = menu.offsetHeight || 180;

@@ -50,7 +50,7 @@
 .fields-table-scroll {
     overflow:auto;
     max-height:calc(100vh - 320px);
-    min-height:200px;
+    min-height:480px;
     border-radius:0 0 12px 12px;
     /* Custom thin scrollbar */
     scrollbar-width:thin;

@@ -279,7 +279,7 @@
                 </a>
                 @endif
 
-                <a href="{{ route('hrms.calendar.index') }}" class="nav-item {{ request()->routeIs('hrms.calendar.*') ? 'active' : '' }}">
+                {{--  <a href="{{ route('hrms.calendar.index') }}" class="nav-item {{ request()->routeIs('hrms.calendar.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.calendar.*'))
                         <div class="active-indicator"></div>
                     @endif
@@ -292,7 +292,7 @@
                         </svg>
                         <span>Calendar</span>
                     </div>
-                </a>
+                </a>  --}}
 
                 @if(! $hrmsSelfService)
                 @can('masters.menuview')

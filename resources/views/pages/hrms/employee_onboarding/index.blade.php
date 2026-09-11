@@ -96,7 +96,7 @@
             @if($employees->isEmpty())
                 <div class="eob-empty">No onboarding records found.</div>
             @else
-                <div style="overflow-x:auto;">
+                <div class="eob-table-wrap">
                     <table class="eob-list-table">
                         <thead>
                             <tr>

@@ -41,6 +41,26 @@ class Role extends SpatieRole
         return $this->hasMany(RoleHierarchyMapping::class, 'parent_role_id');
     }
 
+    public static function formatRoleName(?string $name, ?string $displayName = null): string
+    {
+        if (!empty($displayName)) {
+            return $displayName;
+        }
+
+        if (empty($name)) {
+            return 'No role mapped';
+        }
+
+        $clean = preg_replace('/^company_\d+__/', '', $name);
+
+        return ucwords(str_replace(['_', '-'], ' ', $clean));
+    }
+
+    public function getFormattedNameAttribute(): string
+    {
+        return static::formatRoleName($this->name, $this->display_name);
+    }
+
     public static function tenantRoleName(string $name, ?int $companyId): string
     {
         $slug = str($name)->slug('_')->value();

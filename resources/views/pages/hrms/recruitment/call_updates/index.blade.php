@@ -142,7 +142,6 @@
     <div class="rcu-body">
         @php
             $todayStr = now()->toDateString();
-            $tomorrowStr = now()->addDay()->toDateString();
             $yesterdayStr = now()->subDay()->toDateString();
             $startOfWeekStr = now()->startOfWeek()->toDateString();
             $endOfWeekStr = now()->endOfWeek()->toDateString();
@@ -154,7 +153,6 @@
             $quick = request('quick_range');
 
             $isToday = $quick === 'today' || ($reqFrom === $todayStr && $reqTo === $todayStr);
-            $isTomorrow = $quick === 'tomorrow' || ($reqFrom === $tomorrowStr && $reqTo === $tomorrowStr);
             $isYesterday = $quick === 'yesterday' || ($reqFrom === $yesterdayStr && $reqTo === $yesterdayStr);
             $isThisWeek = $quick === 'this_week' || ($reqFrom === $startOfWeekStr && ($reqTo === $todayStr || $reqTo === $endOfWeekStr));
             $isThisMonth = $quick === 'this_month' || ($reqFrom === $startOfMonthStr && $reqTo === $endOfMonthStr);
@@ -175,7 +173,6 @@
                 {{-- Quick Date Range Buttons --}}
                 <div class="rcu-quick-filters">
                     <button type="button" class="rcu-qbtn {{ $isToday ? 'is-active' : '' }}" onclick="setDateRange('today')">Today</button>
-                    <button type="button" class="rcu-qbtn {{ $isTomorrow ? 'is-active' : '' }}" onclick="setDateRange('tomorrow')">Tomorrow</button>
                     <button type="button" class="rcu-qbtn {{ $isYesterday ? 'is-active' : '' }}" onclick="setDateRange('yesterday')">Yesterday</button>
                     <button type="button" class="rcu-qbtn {{ $isThisWeek ? 'is-active' : '' }}" onclick="setDateRange('this_week')">This Week</button>
                     <button type="button" class="rcu-qbtn {{ $isThisMonth ? 'is-active' : '' }}" onclick="setDateRange('this_month')">This Month</button>
@@ -470,11 +467,6 @@ function setDateRange(range) {
     if (range === 'today') {
         fromInput.value = formatDate(today);
         toInput.value = formatDate(today);
-    } else if (range === 'tomorrow') {
-        const tom = new Date(today);
-        tom.setDate(tom.getDate() + 1);
-        fromInput.value = formatDate(tom);
-        toInput.value = formatDate(tom);
     } else if (range === 'yesterday') {
         const yest = new Date(today);
         yest.setDate(yest.getDate() - 1);

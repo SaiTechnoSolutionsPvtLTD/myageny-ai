@@ -12,6 +12,7 @@ use App\Models\LeadProductPayment;
 use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\ProductionCountReport;
+use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
 use App\Services\ProductionUpdateRecorder;
 use Illuminate\Http\JsonResponse;
@@ -951,7 +952,11 @@ class LeadProductController extends Controller
             return $p;
         });
 
-        $payment->load('recordedBy');
+        $payment->load(['recordedBy', 'leadProduct']);
+
+        ActivityLogger::logPayment('create', $payment, $lp->lead, $request->user(), [
+            'product_name' => $lp->product_name,
+        ]);
 
         return response()->json([
             'message'  => 'Payment recorded.',
@@ -970,22 +975,19 @@ class LeadProductController extends Controller
         $lp      = $payment->leadProduct()->with('lead')->first();
         // abort_unless($lp && $lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
+        $payment->load('leadProduct');
+        ActivityLogger::logPayment('delete', $payment, $lp?->lead, request()->user(), [
+            'product_name' => $lp?->product_name,
+        ]);
+
         DB::transaction(function () use ($payment, $lp) {
-            if ($payment->attachment_path) {
-                $publicFile = public_path($payment->attachment_path);
-                if (file_exists($publicFile)) {
-                    @unlink($publicFile);
-                } elseif (Storage::disk('public')->exists($payment->attachment_path)) {
-                    Storage::disk('public')->delete($payment->attachment_path);
-                }
-            }
             $payment->delete();
-            $lp->recalcPaid();
+            $lp?->recalcPaid();
         });
 
         return response()->json([
             'message' => 'Payment removed.',
-            'product' => $lp->fresh()->toJsPayload(),
+            'product' => $lp ? $lp->fresh()->toJsPayload() : null,
         ]);
     }
 
