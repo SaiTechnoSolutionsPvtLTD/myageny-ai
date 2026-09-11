@@ -114,7 +114,8 @@ class HrmsApprovalHierarchyService
 
                 // 2. If no UserMapping manager matches this role, fallback to active users in branch/company
                 if (! $approver) {
-                    $users = User::query()
+                    $users = User::withoutGlobalScopes()
+                        ->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()])
                         ->where(function ($q) use ($roleId, $targetRoleName) {
                             $q->whereIn('id', function ($sub) use ($roleId) {
                                 $sub->select('model_id')
@@ -123,7 +124,7 @@ class HrmsApprovalHierarchyService
                                     ->where('model_type', User::class);
                             });
                             if ($targetRoleName) {
-                                $q->orWhereHas('roles', fn($rq) => $rq->where('name', 'like', "%{$targetRoleName}"));
+                                $q->orWhereHas('roles', fn($rq) => $rq->withoutGlobalScopes()->where('name', 'like', "%{$targetRoleName}"));
                             }
                         })
                         ->when($companyId, fn($q) => $q->where('company_id', $companyId))
@@ -156,11 +157,12 @@ class HrmsApprovalHierarchyService
         $currentUser = $requester;
 
         for ($depth = 0; $depth < 15; $depth++) {
-            $manager = UserMapping::query()
-                ->with('manager.roles')
+            $mapping = UserMapping::withoutGlobalScopes()
                 ->when($requester->company_id, fn ($query) => $query->where('company_id', $requester->company_id))
                 ->where('user_id', $currentUser->id)
-                ->first()?->manager;
+                ->first();
+
+            $manager = $mapping ? User::withoutGlobalScopes()->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()])->find($mapping->manager_user_id) : null;
 
             if (! $manager || $visitedUserIds->contains((int) $manager->id) || ! $manager->is_active) {
                 break;
@@ -179,8 +181,8 @@ class HrmsApprovalHierarchyService
         $referenceUser ??= $requester;
         $excludedIds = ($excludedUserIds ?? collect())->map(fn ($id) => (int) $id)->all();
 
-        return User::query()
-            ->with('roles.department')
+        return User::withoutGlobalScopes()
+            ->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()->with('department')])
             ->where('is_active', true)
             ->when($requester->company_id, fn ($query) => $query->where('company_id', $requester->company_id))
             ->when($excludedIds !== [], fn ($query) => $query->whereNotIn('id', $excludedIds))
@@ -203,11 +205,12 @@ class HrmsApprovalHierarchyService
 
     private function mappedManagerFor(User $currentUser, User $requester, Collection $visitedUserIds): ?User
     {
-        $manager = UserMapping::query()
-            ->with('manager.roles.roleParentMapping.parentRole')
+        $mapping = UserMapping::withoutGlobalScopes()
             ->when($requester->company_id, fn ($query) => $query->where('company_id', $requester->company_id))
             ->where('user_id', $currentUser->id)
-            ->first()?->manager;
+            ->first();
+
+        $manager = $mapping ? User::withoutGlobalScopes()->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()])->find($mapping->manager_user_id) : null;
 
         return $this->isEligibleApprover($manager, $requester, $visitedUserIds) ? $manager : null;
     }
@@ -237,12 +240,12 @@ class HrmsApprovalHierarchyService
 
     private function userForParentRole(Role $parentRole, User $currentUser, User $requester, Collection $visitedUserIds): ?User
     {
-        return User::query()
-            ->with('roles.roleParentMapping.parentRole')
+        return User::withoutGlobalScopes()
+            ->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()->with('roleParentMapping.parentRole')])
             ->where('is_active', true)
             ->when($requester->company_id, fn ($query) => $query->where('company_id', $requester->company_id))
             ->whereNotIn('id', $visitedUserIds->all())
-            ->whereHas('roles', fn ($query) => $query->where('roles.id', $parentRole->id))
+            ->whereHas('roles', fn ($query) => $query->withoutGlobalScopes()->where('roles.id', $parentRole->id))
             ->get()
             ->sortBy(function (User $candidate) use ($currentUser) {
                 return [
