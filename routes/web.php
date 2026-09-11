@@ -325,6 +325,8 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.timesheets.update-status');
         Route::get('/projects-details', [ProjectController::class, 'index'])
             ->name('projects.index');
+        Route::post('/projects-details/bulk-allocate', [ProjectController::class, 'bulkAllocate'])
+            ->name('projects.bulk-allocate');
         Route::get('/projects-details/{productionInitiation}', [ProjectController::class, 'show'])
             ->name('projects.show');
         Route::post('/projects-details/{productionInitiation}/allocate', [ProjectController::class, 'allocate'])
