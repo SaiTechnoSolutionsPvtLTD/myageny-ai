@@ -19,6 +19,7 @@ use App\Models\LeadProductPriceRequest;
 use App\Models\Quotation;
 use App\Models\QuotationSetting;
 use App\Models\QuotationItem;
+use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -109,6 +110,9 @@ class LeadShowController extends Controller
         $data['company_id']          = $lead->company_id;
 
         $call = LeadCallUpdate::create($data);
+        $call->load(['outCome', 'outComeSubCategory']);
+
+        ActivityLogger::logCallUpdate('create', $call, $lead, $request->user());
 
         if (! empty($request->next_follow_up)) {
             $reminderTitle = trim((string) $request->reminder_remarks);
@@ -193,6 +197,9 @@ class LeadShowController extends Controller
             'next_follow_up'      => $data['next_follow_up'] ?: null,
             'followup_time'       => $data['followup_time'] ?: null,
         ]);
+        $call->load(['outCome', 'outComeSubCategory']);
+
+        ActivityLogger::logCallUpdate('update', $call, $lead, $request->user());
 
         // Mirrors web's updateCall(): editing a call can also raise a new
         // follow-up reminder, same as creating one does, when a follow-up
@@ -244,6 +251,10 @@ class LeadShowController extends Controller
         abort_unless($this->visibility->canAccessLead($lead, request()->user()), 403);
 
         abort_if($call->lead_id !== $lead->id, 403, 'Call does not belong to this lead.');
+
+        $call->load(['outCome', 'outComeSubCategory']);
+        ActivityLogger::logCallUpdate('delete', $call, $lead, request()->user());
+
         $call->delete();
 
         return response()->json([
@@ -804,9 +815,14 @@ class LeadShowController extends Controller
         $data['recorded_by']     = auth()->id();
 
         $payment = \App\Models\LeadProductPayment::create($data);
+        $payment->load('leadProduct');
 
         // Sync payment status on product
         $product->syncPaymentStatus();
+
+        ActivityLogger::logPayment('create', $payment, $lead, $request->user(), [
+            'product_name' => $product->product_name,
+        ]);
 
         return response()->json([
             'status'  => true,
@@ -863,6 +879,11 @@ class LeadShowController extends Controller
         abort_unless($this->visibility->canAccessLead($lead, request()->user()), 403);
 
         abort_if($payment->lead_product_id !== $product->id, 403, 'Payment does not belong to this product.');
+
+        $payment->load('leadProduct');
+        ActivityLogger::logPayment('delete', $payment, $lead, request()->user(), [
+            'product_name' => $product->product_name,
+        ]);
 
         $payment->delete();
         $product->syncPaymentStatus();

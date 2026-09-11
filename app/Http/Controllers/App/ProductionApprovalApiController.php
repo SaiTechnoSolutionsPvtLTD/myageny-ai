@@ -147,14 +147,18 @@ class ProductionApprovalApiController extends Controller
                     ->get(['id', 'name'])
                     ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
                     ->all(),
-                'users' => \App\Models\User::where('user_status', 'active')
+                'users' => \App\Models\User::with(['roles.department'])
+                    ->where('user_status', 'active')
                     ->orderBy('name')
-                    ->get(['id', 'name'])
+                    ->get()
+                    ->filter(function ($user) {
+                        return $user->belongsToSalesDepartment()
+                            || $user->hasSalesLikeRole()
+                            || $user->belongsToCustomerSupportDepartment()
+                            || $user->hasCustomerSupportLikeRole();
+                    })
+                    ->values()
                     ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
-                    ->all(),
-                'companies' => \App\Models\Company::orderBy('company_name')
-                    ->get(['id', 'company_name'])
-                    ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
                     ->all(),
             ],
         ]);

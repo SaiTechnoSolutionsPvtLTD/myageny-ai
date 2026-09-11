@@ -661,6 +661,10 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if($selectedCard['items']->hasPages())
+                    @include('partials.table-pagination', ['paginator' => $selectedCard['items']])
+                @endif
             @else
                 <div class="ovp-empty">No products are available in this status right now.</div>
             @endif

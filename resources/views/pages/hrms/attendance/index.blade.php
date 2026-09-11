@@ -786,9 +786,6 @@ details[open] summary.att-accordion-header {
                                             <div class="att-cell-title">{{ $attendance['employee_name'] }}</div>
                                             <div class="att-cell-sub">
                                                 <span class="att-chip att-chip-{{ $attendance['attendee_type'] }}">{{ ucfirst($attendance['attendee_type']) }}</span>
-                                                @if($attendance['branch_name'] ?? null)
-                                                    <span style="font-size:11px;color:#64748b;margin-left:4px;">• {{ $attendance['branch_name'] }}</span>
-                                                @endif
                                             </div>
                                         </div>
                                     </div>

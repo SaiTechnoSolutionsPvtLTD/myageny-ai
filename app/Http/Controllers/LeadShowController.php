@@ -16,6 +16,7 @@ use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -68,7 +69,10 @@ class LeadShowController extends Controller
         $data['user_id'] = auth()->id();
         $data['company_id'] = $lead->company_id;
 
-        LeadCallUpdate::create($data);
+        $call = LeadCallUpdate::create($data);
+        $call->load(['outCome', 'outComeSubCategory']);
+
+        ActivityLogger::logCallUpdate('create', $call, $lead, auth()->user());
 
         // Auto-create Reminder in Reminders Tab / Tasks whenever next_follow_up date is set
         if (! $isNoFollowupNeeded && ! empty($request->next_follow_up)) {
@@ -133,6 +137,9 @@ class LeadShowController extends Controller
             'next_follow_up' => $request->next_follow_up ?: null,
             'followup_time' => $request->followup_time ?: null,
         ]);
+        $call->load(['outCome', 'outComeSubCategory']);
+
+        ActivityLogger::logCallUpdate('update', $call, $lead, auth()->user());
 
         // Auto-create/update Reminder in Reminders Tab / Tasks whenever next_follow_up date is set and requested
         if (! $isNoFollowupNeeded && ! empty($request->next_follow_up) && ! empty($request->reminder_remarks)) {
@@ -157,6 +164,10 @@ class LeadShowController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead), 403);
         abort_if($call->lead_id !== $lead->id, 403);
+
+        $call->load(['outCome', 'outComeSubCategory']);
+        ActivityLogger::logCallUpdate('delete', $call, $lead, auth()->user());
+
         $call->delete();
         return back()->with('success', 'Call record removed.');
     }
@@ -292,10 +303,15 @@ class LeadShowController extends Controller
         $data['lead_id']         = $lead->id;
         $data['recorded_by']     = auth()->id();
 
-        \App\Models\LeadProductPayment::create($data);
+        $payment = \App\Models\LeadProductPayment::create($data);
+        $payment->load('leadProduct');
 
         // Sync payment status on product
         $product->syncPaymentStatus();
+
+        ActivityLogger::logPayment('create', $payment, $lead, auth()->user(), [
+            'product_name' => $product->product_name,
+        ]);
 
         return back()->with('success', "Payment of ₹" . number_format($data['amount'], 2) . " recorded.");
     }
@@ -307,6 +323,11 @@ class LeadShowController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead), 403);
         abort_if($payment->lead_product_id !== $product->id, 403);
+
+        $payment->load('leadProduct');
+        ActivityLogger::logPayment('delete', $payment, $lead, auth()->user(), [
+            'product_name' => $product->product_name,
+        ]);
 
         $payment->delete();
         $product->syncPaymentStatus();

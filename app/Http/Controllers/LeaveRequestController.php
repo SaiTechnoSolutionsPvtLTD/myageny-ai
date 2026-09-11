@@ -24,9 +24,15 @@ class LeaveRequestController extends Controller
     public function index(): View
     {
         $user = auth()->user();
+        $isCompanyAdmin = $user && ($user->isCompanyAdmin() || $user->isSuperAdmin() || $user->isSystemAdmin());
 
-        $leaveRequests = LeaveRequest::with(['leaveType', 'employee', 'approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
+        $leaveRequestsQuery = LeaveRequest::with(['leaveType', 'user', 'employee', 'approvals.approver', 'approvals.actionedBy']);
+
+        if (! $isCompanyAdmin) {
+            $leaveRequestsQuery->where('user_id', $user->id);
+        }
+
+        $leaveRequests = $leaveRequestsQuery
             ->latest()
             ->paginate(10, ['*'], 'requests_page')
             ->withQueryString();
@@ -42,7 +48,8 @@ class LeaveRequestController extends Controller
         return view('pages.hrms.leave_requests.index', compact(
             'leaveRequests',
             'pendingApprovals',
-            'handledApprovals'
+            'handledApprovals',
+            'isCompanyAdmin'
         ));
     }
 
@@ -263,7 +270,7 @@ class LeaveRequestController extends Controller
 
     private function canViewLeaveRequest(LeaveRequest $leaveRequest, User $user): bool
     {
-        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+        if ((int) $leaveRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
         }
 
@@ -296,6 +303,10 @@ class LeaveRequestController extends Controller
 
         if ($leaveRequest->user?->company_id && $user->company_id && (int) $leaveRequest->user->company_id !== (int) $user->company_id) {
             return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            return true;
         }
 
         return (int) $approval->approver_user_id === (int) $user->id;

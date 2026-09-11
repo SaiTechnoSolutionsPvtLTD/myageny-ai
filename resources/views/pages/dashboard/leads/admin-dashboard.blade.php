@@ -418,9 +418,6 @@
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
                 Refresh
             </button>
-            <a href="/product-dashboard/admin" class="da-refresh-btn" id="daRefreshBtn" >
-                Goto Product Dashboard
-            </a>
             <div style="font-size:12px;color:var(--da-muted);font-weight:600">
                 {{ $userName ?? auth()->user()->name }}
                 <span style="background:#f5f4f6;padding:2px 8px;border-radius:20px;margin-left:4px;font-size:11px">{{ $userRole ?? 'Admin' }}</span>

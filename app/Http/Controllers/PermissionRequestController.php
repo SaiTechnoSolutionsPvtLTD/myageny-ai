@@ -23,9 +23,15 @@ class PermissionRequestController extends Controller
     public function index(): View
     {
         $user = auth()->user();
+        $isCompanyAdmin = $user && ($user->isCompanyAdmin() || $user->isSuperAdmin() || $user->isSystemAdmin());
 
-        $permissionRequests = PermissionRequest::with(['employee', 'approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
+        $permissionRequestsQuery = PermissionRequest::with(['user', 'employee', 'approvals.approver', 'approvals.actionedBy']);
+
+        if (! $isCompanyAdmin) {
+            $permissionRequestsQuery->where('user_id', $user->id);
+        }
+
+        $permissionRequests = $permissionRequestsQuery
             ->latest()
             ->paginate(10, ['*'], 'requests_page')
             ->withQueryString();
@@ -41,7 +47,8 @@ class PermissionRequestController extends Controller
         return view('pages.hrms.permission_requests.index', compact(
             'permissionRequests',
             'pendingApprovals',
-            'handledApprovals'
+            'handledApprovals',
+            'isCompanyAdmin'
         ));
     }
 
@@ -246,7 +253,7 @@ class PermissionRequestController extends Controller
 
     private function canViewPermissionRequest(PermissionRequest $permissionRequest, User $user): bool
     {
-        if ((int) $permissionRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+        if ((int) $permissionRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
         }
 
@@ -279,6 +286,10 @@ class PermissionRequestController extends Controller
 
         if ($permissionRequest->user?->company_id && $user->company_id && (int) $permissionRequest->user->company_id !== (int) $user->company_id) {
             return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            return true;
         }
 
         return (int) $approval->approver_user_id === (int) $user->id;

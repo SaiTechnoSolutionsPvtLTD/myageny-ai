@@ -143,9 +143,9 @@
                 </div>
                 @endif
                 <div class="pr-summary-card" data-tab="permission-my-requests" onclick="switchPermissionTab('permission-my-requests')">
-                    <div class="pr-summary-label">My Requests</div>
+                    <div class="pr-summary-label">{{ ($isCompanyAdmin ?? false) ? 'All Requests' : 'My Requests' }}</div>
                     <div class="pr-summary-value" style="color: #0d9488;">{{ $permissionRequests->total() }}</div>
-                    <div class="pr-summary-sub">All permission requests you have raised across dates and slots.</div>
+                    <div class="pr-summary-sub">{{ ($isCompanyAdmin ?? false) ? 'All employee permission requests across the company.' : 'All permission requests you have raised across dates and slots.' }}</div>
                 </div>
                 @if(auth()->user()->can('permission_requests.approve') || $handledApprovals->isNotEmpty())
                 <div class="pr-summary-card" data-tab="permission-decisions" onclick="switchPermissionTab('permission-decisions')">
@@ -165,7 +165,7 @@
                 </button>
                 @endif
                 <button type="button" class="pr-nav-link" data-tab="permission-my-requests" onclick="switchPermissionTab('permission-my-requests')">
-                    <span>My Permission Requests</span>
+                    <span>{{ ($isCompanyAdmin ?? false) ? 'All Permission Requests' : 'My Permission Requests' }}</span>
                     <span class="pr-nav-count">{{ $permissionRequests->total() }}</span>
                 </button>
                 @if(auth()->user()->can('permission_requests.approve') || $handledApprovals->isNotEmpty())
@@ -234,8 +234,8 @@
             <div id="permission-my-requests" class="eob-table-card pr-tab-panel">
                 <div class="pr-section-head">
                     <div>
-                        <div class="pr-section-title">My Permission Requests</div>
-                        <div class="pr-section-sub">Track your permission request hierarchy approval status.</div>
+                        <div class="pr-section-title">{{ ($isCompanyAdmin ?? false) ? 'All Permission Requests' : 'My Permission Requests' }}</div>
+                        <div class="pr-section-sub">{{ ($isCompanyAdmin ?? false) ? 'Monitor all company permission requests and their hierarchy approval status.' : 'Track your permission request hierarchy approval status.' }}</div>
                     </div>
                     <div class="pr-section-badge">{{ $permissionRequests->total() }} request(s)</div>
                 </div>
@@ -248,6 +248,9 @@
                             <table class="eob-list-table">
                                 <thead>
                                     <tr>
+                                        @if($isCompanyAdmin ?? false)
+                                            <th>Employee</th>
+                                        @endif
                                         <th>Date</th>
                                         <th>Time</th>
                                         <th>Status</th>
@@ -260,6 +263,14 @@
                                     @foreach($permissionRequests as $permissionRequest)
                                         @php $currentApproval = $permissionRequest->approvals->firstWhere('step_key', $permissionRequest->current_step); @endphp
                                         <tr>
+                                            @if($isCompanyAdmin ?? false)
+                                                <td>
+                                                    <div class="pr-meta-stack">
+                                                        <div class="eob-cell-title">{{ $permissionRequest->employee?->name ?: $permissionRequest->user?->name }}</div>
+                                                        <div class="eob-cell-sub">{{ $permissionRequest->employee?->employee_id ?: $permissionRequest->user?->email }}</div>
+                                                    </div>
+                                                </td>
+                                            @endif
                                             <td>{{ $permissionRequest->permission_date->format('d M Y') }}</td>
                                             <td>
                                                 <div class="pr-meta-stack">

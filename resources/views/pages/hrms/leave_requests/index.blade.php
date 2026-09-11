@@ -144,9 +144,9 @@
                 </div>
                 @endif
                 <div class="lr-summary-card" data-tab="leave-my-requests" onclick="switchLeaveTab('leave-my-requests')">
-                    <div class="lr-summary-label">My Requests</div>
+                    <div class="lr-summary-label">{{ ($isCompanyAdmin ?? false) ? 'All Requests' : 'My Requests' }}</div>
                     <div class="lr-summary-value" style="color: #0d9488;">{{ $leaveRequests->total() }}</div>
-                    <div class="lr-summary-sub">Your leave requests with current approval status.</div>
+                    <div class="lr-summary-sub">{{ ($isCompanyAdmin ?? false) ? 'All employee leave requests across the company.' : 'Your leave requests with current approval status.' }}</div>
                 </div>
                 @if(auth()->user()->can('leave_requests.approve') || $handledApprovals->isNotEmpty())
                 <div class="lr-summary-card" data-tab="leave-decisions" onclick="switchLeaveTab('leave-decisions')">
@@ -166,7 +166,7 @@
                 </button>
                 @endif
                 <button type="button" class="lr-nav-link" data-tab="leave-my-requests" onclick="switchLeaveTab('leave-my-requests')">
-                    <span>My Leave Requests</span>
+                    <span>{{ ($isCompanyAdmin ?? false) ? 'All Leave Requests' : 'My Leave Requests' }}</span>
                     <span class="lr-nav-count">{{ $leaveRequests->total() }}</span>
                 </button>
                 @if(auth()->user()->can('leave_requests.approve') || $handledApprovals->isNotEmpty())
@@ -239,8 +239,8 @@
             <div id="leave-my-requests" class="eob-table-card lr-tab-panel">
                 <div class="lr-section-head">
                     <div>
-                        <div class="lr-section-title">My Leave Requests</div>
-                        <div class="lr-section-sub">Check whether your leave request is pending, approved, or rejected.</div>
+                        <div class="lr-section-title">{{ ($isCompanyAdmin ?? false) ? 'All Leave Requests' : 'My Leave Requests' }}</div>
+                        <div class="lr-section-sub">{{ ($isCompanyAdmin ?? false) ? 'Monitor all company leave requests and their hierarchy approval status.' : 'Check whether your leave request is pending, approved, or rejected.' }}</div>
                     </div>
                     <div class="lr-section-badge">{{ $leaveRequests->total() }} request(s)</div>
                 </div>
@@ -253,6 +253,9 @@
                             <table class="eob-list-table">
                                 <thead>
                                     <tr>
+                                        @if($isCompanyAdmin ?? false)
+                                            <th>Employee</th>
+                                        @endif
                                         <th>Leave Type</th>
                                         <th>Dates</th>
                                         <th>Status</th>
@@ -267,6 +270,14 @@
                                             $currentApproval = $leaveRequest->approvals->firstWhere('step_key', $leaveRequest->current_step);
                                         @endphp
                                         <tr>
+                                            @if($isCompanyAdmin ?? false)
+                                                <td>
+                                                    <div class="lr-meta-stack">
+                                                        <div class="eob-cell-title">{{ $leaveRequest->employee?->name ?: $leaveRequest->user?->name }}</div>
+                                                        <div class="eob-cell-sub">{{ $leaveRequest->employee?->employee_id ?: $leaveRequest->user?->email }}</div>
+                                                    </div>
+                                                </td>
+                                            @endif
                                             <td>{{ $leaveRequest->leaveType?->name }}</td>
                                             <td>
                                                 <div class="lr-meta-stack">
