@@ -92,21 +92,30 @@ class InternJoiningFormController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $departments = Department::orderBy('name')->get(['id', 'name']);
-        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
-        $roles = Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get();
+        $companyId = $this->currentCompanyId();
+        $departments = Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(['id', 'name']);
+        $branches = Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(['id', 'name', 'code']);
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where('company_id', $companyId)
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
 
         return view('pages.hrms.Interns.intern_joining_forms.index', compact('forms', 'departments', 'branches', 'roles'));
     }
 
     public function create(): View
     {
+        $companyId = $this->currentCompanyId();
+
         return view('pages.hrms.Interns.intern_joining_forms.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-            'departments' => Department::orderBy('name')->get(),
-            'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-            'tlUsers' => $this->teamLeadUsers(),
+            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])
+                ->where('company_id', $companyId)
+                ->orderByRaw('COALESCE(display_name, name)')
+                ->get(),
+            'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'tlUsers' => $this->teamLeadUsers($companyId),
         ]);
     }
 
@@ -179,13 +188,25 @@ class InternJoiningFormController extends Controller
             'portalUser.managerMappings.manager',
         ]);
 
+        $companyId = $this->currentCompanyId($intern);
+
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where(function ($q) use ($companyId, $intern) {
+                $q->where('company_id', $companyId);
+                if ($intern->role_id) {
+                    $q->orWhere('id', $intern->role_id);
+                }
+            })
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
+
         return view('pages.hrms.Interns.intern_joining_forms.edit', [
             'form' => $intern,
             'documentLabels' => self::DOCUMENT_LABELS,
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-            'departments' => Department::orderBy('name')->get(),
-            'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-            'tlUsers' => $this->teamLeadUsers(),
+            'roles' => $roles,
+            'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'tlUsers' => $this->teamLeadUsers($companyId),
         ]);
     }
 
@@ -290,25 +311,31 @@ class InternJoiningFormController extends Controller
     public function showConvertToEmployeeForm(InternJoiningForm $intern): View
     {
         $intern->loadMissing('convertedEmployee');
+        $companyId = $this->currentCompanyId($intern);
+
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where('company_id', $companyId)
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
 
         if ($intern->convertedEmployee) {
             return view('pages.hrms.Interns.intern_joining_forms.convert_to_employee', [
                 'form' => $intern,
                 'generatedEmployeeId' => $intern->convertedEmployee->employee_id,
-                'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-                'departments' => Department::orderBy('name')->get(),
-                'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-                'tlUsers' => $this->teamLeadUsers(),
+                'roles' => $roles,
+                'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+                'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+                'tlUsers' => $this->teamLeadUsers($companyId),
             ]);
         }
 
         return view('pages.hrms.Interns.intern_joining_forms.convert_to_employee', [
             'form' => $intern,
             'generatedEmployeeId' => $this->generateNextEmployeeId($intern->portalUser?->branch_id ?? auth()->user()?->branch_id),
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-            'departments' => Department::orderBy('name')->get(),
-            'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-            'tlUsers' => $this->teamLeadUsers(),
+            'roles' => $roles,
+            'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'tlUsers' => $this->teamLeadUsers($companyId),
         ]);
     }
 
@@ -771,17 +798,28 @@ class InternJoiningFormController extends Controller
         return $prefix . str_pad((string) ($lastNumber + 1), 4, '0', STR_PAD_LEFT);
     }
 
-    private function teamLeadUsers(): Collection
+    private function currentCompanyId(?InternJoiningForm $intern = null): int
     {
+        return (int) (
+            $intern?->portalUser?->company_id
+            ?: ($intern?->portalUser?->branch?->company_id
+            ?: (auth()->user()?->company_id
+            ?: (\App\Models\Company::first()?->id ?: 1)))
+        );
+    }
+
+    private function teamLeadUsers(?int $companyId = null): Collection
+    {
+        $companyId = $companyId ?: $this->currentCompanyId();
         $companySuperAdminId = null;
 
-        if ($companyId = auth()->user()?->company_id) {
+        if ($companyId) {
             $companySuperAdminId = optional(\App\Models\Company::find($companyId))->super_admin_user_id;
         }
 
         return User::with(['roles.roleMapping', 'branch'])
             ->where('is_active', true)
-            ->when(auth()->user()?->company_id, fn ($query) => $query->where('company_id', auth()->user()->company_id))
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
             ->get()
             ->filter(fn (User $user) => $user->roles->isNotEmpty() || (int) $user->id === (int) $companySuperAdminId || $user->isSuperAdmin())

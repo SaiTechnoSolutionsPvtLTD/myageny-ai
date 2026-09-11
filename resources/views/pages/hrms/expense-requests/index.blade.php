@@ -137,22 +137,105 @@
     overflow: hidden;
 }
 .exp-req-filter-bar {
-    padding: 18px 24px;
+    padding: 20px 24px;
     border-bottom: 1px solid #f3f4f6;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
     background: #fafafa;
 }
-.exp-search-input {
+.exp-req-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    align-items: flex-end;
+}
+.exp-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.exp-filter-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.exp-filter-input {
+    width: 100%;
+    height: 42px;
     padding: 8px 14px;
     border-radius: 10px;
     border: 1px solid #d1d5db;
     font-size: 13px;
     outline: none;
     background: #fff;
+    font-family: inherit;
+    color: #1f2937;
+    transition: border-color .15s, box-shadow .15s;
+    box-sizing: border-box;
+}
+select.exp-filter-input {
+    cursor: pointer;
+}
+.exp-filter-input:focus {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.exp-filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+}
+.exp-btn-apply {
+    flex: 1;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #fe5f04, #ff7c30);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(254, 95, 4, 0.2);
+    transition: all .15s ease;
+}
+.exp-btn-apply:hover {
+    box-shadow: 0 6px 16px rgba(254, 95, 4, 0.3);
+    transform: translateY(-1px);
+    color: #fff;
+}
+.exp-btn-reset {
+    height: 42px;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all .15s ease;
+}
+.exp-btn-reset:hover {
+    background: #f3f4f6;
+    color: #374151;
+    border-color: #9ca3af;
+}
+@media (max-width: 1024px) {
+    .exp-req-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 640px) {
+    .exp-req-filter-grid {
+        grid-template-columns: 1fr;
+    }
 }
 .exp-table {
     width: 100%;
@@ -605,34 +688,52 @@
     <div class="exp-req-card">
         <form method="GET" action="{{ route('hrms.expense-requests.index') }}">
             <div class="exp-req-filter-bar">
-                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <input type="text" name="search" class="exp-search-input" style="width:220px;" placeholder="Search description, applicant…" value="{{ request('search') }}">
-                    
-                    <select name="expense_category_id" class="exp-search-input" style="width:170px;" onchange="this.form.submit()">
-                        <option value="">All Categories</option>
-                        @foreach($categories as $cat)
-                        <option value="{{ $cat->id }}" {{ request('expense_category_id') == $cat->id ? 'selected' : '' }}>
-                            {{ $cat->name }}
-                        </option>
-                        @endforeach
-                    </select>
+                <div class="exp-req-filter-grid">
+                    <div class="exp-filter-field">
+                        <label class="exp-filter-label">Search</label>
+                        <input type="text" name="search" class="exp-filter-input" placeholder="Search description, applicant…" value="{{ request('search') }}">
+                    </div>
 
-                    <select name="status" class="exp-search-input" style="width:130px;" onchange="this.form.submit()">
-                        <option value="">All Status</option>
-                        <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
-                        <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
-                        <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
-                    </select>
+                    <div class="exp-filter-field">
+                        <label class="exp-filter-label">Category</label>
+                        <select name="expense_category_id" class="exp-filter-input">
+                            <option value="">All Categories</option>
+                            @foreach($categories as $cat)
+                            <option value="{{ $cat->id }}" {{ request('expense_category_id') == $cat->id ? 'selected' : '' }}>
+                                {{ $cat->name }}
+                            </option>
+                            @endforeach
+                        </select>
+                    </div>
 
-                    <button type="submit" class="exp-req-btn exp-req-btn-primary" style="padding:7px 16px; font-size:12px; height:34px; border-radius:9px;">Filter</button>
+                    <div class="exp-filter-field">
+                        <label class="exp-filter-label">Status</label>
+                        <select name="status" class="exp-filter-input">
+                            <option value="">All Status</option>
+                            <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                            <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                            <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                        </select>
+                    </div>
 
-                    @if(request()->hasAny(['search', 'status', 'expense_category_id']))
-                    <a href="{{ route('hrms.expense-requests.index') }}" style="font-size:12px; color:#6b7280; text-decoration:none; font-weight:600;">Reset</a>
-                    @endif
+                    <div class="exp-filter-field">
+                        <label class="exp-filter-label">&nbsp;</label>
+                        <div class="exp-filter-actions">
+                            <button type="submit" class="exp-btn-apply">
+                                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                                Filter
+                            </button>
+                            @if(request()->hasAny(['search', 'status', 'expense_category_id']))
+                            <a href="{{ route('hrms.expense-requests.index') }}" class="exp-btn-reset">Reset</a>
+                            @endif
+                        </div>
+                    </div>
                 </div>
 
-                <div style="font-size:12px; font-weight:700; color:#6b7280;">
-                    Showing {{ $requests->total() }} Requests
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:12px; font-weight:700; color:#6b7280;">
+                    <div>
+                        Showing <strong>{{ $requests->firstItem() ?? 0 }}-{{ $requests->lastItem() ?? 0 }}</strong> of <strong>{{ $requests->total() }}</strong> Requests
+                    </div>
                 </div>
             </div>
         </form>

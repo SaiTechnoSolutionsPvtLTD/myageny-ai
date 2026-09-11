@@ -35,7 +35,8 @@ class PettyCashController extends Controller
             ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
             ->orderBy('entry_date', 'desc')
             ->orderBy('id', 'desc')
-            ->get();
+            ->paginate(10, ['*'], 'rani_page')
+            ->withQueryString();
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([

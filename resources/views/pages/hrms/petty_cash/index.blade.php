@@ -267,6 +267,12 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if($raniEntries->hasPages())
+                    <div style="margin-top: 14px; border-top: 1px solid #f1f5f9; padding-top: 10px;">
+                        @include('partials.table-pagination', ['paginator' => $raniEntries])
+                    </div>
+                @endif
             </div>
         </div>
 

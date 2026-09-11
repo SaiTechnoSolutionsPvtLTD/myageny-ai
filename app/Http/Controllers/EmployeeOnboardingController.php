@@ -95,9 +95,13 @@ class EmployeeOnboardingController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $departments = Department::orderBy('name')->get(['id', 'name']);
-        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
-        $roles = Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get();
+        $companyId = $this->currentCompanyId();
+        $departments = Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(['id', 'name']);
+        $branches = Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(['id', 'name', 'code']);
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where('company_id', $companyId)
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
 
         return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments', 'branches', 'roles'));
     }
@@ -140,13 +144,18 @@ class EmployeeOnboardingController extends Controller
     {
         abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
+        $companyId = $this->currentCompanyId();
+
         return view('pages.hrms.employee_onboarding.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
             'generatedEmployeeId' => $this->generateNextEmployeeId(old('branch_id', auth()->user()?->branch_id)),
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-            'departments' => Department::orderBy('name')->get(),
-            'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-            'tlUsers' => $this->teamLeadUsers(),
+            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])
+                ->where('company_id', $companyId)
+                ->orderByRaw('COALESCE(display_name, name)')
+                ->get(),
+            'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'tlUsers' => $this->teamLeadUsers($companyId),
         ]);
     }
 
@@ -223,14 +232,26 @@ class EmployeeOnboardingController extends Controller
             'portalUser.managerMappings.manager',
         ]);
 
+        $companyId = $this->currentCompanyId($employee_onboarding);
+
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where(function ($q) use ($companyId, $employee_onboarding) {
+                $q->where('company_id', $companyId);
+                if ($employee_onboarding->role_id) {
+                    $q->orWhere('id', $employee_onboarding->role_id);
+                }
+            })
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
+
         return view('pages.hrms.employee_onboarding.edit', [
             'employee' => $employee_onboarding,
             'documentLabels' => self::DOCUMENT_LABELS,
             'generatedEmployeeId' => $employee_onboarding->employee_id,
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])->orderByRaw('COALESCE(display_name, name)')->get(),
-            'departments' => Department::orderBy('name')->get(),
-            'branches' => Branch::where('is_active', true)->orderBy('name')->get(),
-            'tlUsers' => $this->teamLeadUsers(),
+            'roles' => $roles,
+            'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
+            'tlUsers' => $this->teamLeadUsers($companyId),
         ]);
     }
 
@@ -567,9 +588,19 @@ class EmployeeOnboardingController extends Controller
         return self::FILE_DIRECTORY . '/' . $filename;
     }
 
-    private function teamLeadUsers(): Collection
+    private function currentCompanyId(?EmployeeOnboarding $employee = null): int
     {
-        $companyId = auth()->user()?->company_id;
+        return (int) (
+            $employee?->portalUser?->company_id
+            ?: ($employee?->portalUser?->branch?->company_id
+            ?: (auth()->user()?->company_id
+            ?: (\App\Models\Company::first()?->id ?: 1)))
+        );
+    }
+
+    private function teamLeadUsers(?int $companyId = null): Collection
+    {
+        $companyId = $companyId ?: $this->currentCompanyId();
         $companySuperAdminId = null;
 
         if ($companyId) {

@@ -246,6 +246,15 @@ class EmployeeOnboarding extends Model
         return $this->branch?->name ?? '—';
     }
 
+    public function getRoleNameAttribute(): string
+    {
+        if (! $this->role) {
+            return 'No role mapped';
+        }
+
+        return Role::formatRoleName($this->role->name, $this->role->display_name);
+    }
+
     public function getFileUrl(?string $field = 'photograph'): ?string
     {
         $path = $field ? ($this->{$field} ?? null) : null;

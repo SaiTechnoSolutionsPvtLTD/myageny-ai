@@ -462,7 +462,7 @@ class CrmReportController extends Controller
                 'Outstanding Amount' => number_format($outstandingAmount, 2, '.', ''),
                 'Payment Mode' => LeadProduct::PAYMENT_MODES[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                 'Transaction Reference' => $row->transaction_reference ?: '-',
-                'Received By' => $row->received_by ?: '-',
+                'Received By' => $row->received_by ? ($row->received_by . ($row->received_by_department ? " ({$row->received_by_department})" : '')) : '-',
             ];
         });
 
@@ -674,6 +674,13 @@ class CrmReportController extends Controller
                 DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
+                DB::raw('(
+                    SELECT COALESCE(
+                        (SELECT d.name FROM departments d JOIN employee_onboardings eo ON eo.department_id = d.id WHERE eo.portal_user_id = collectors.id LIMIT 1),
+                        (SELECT d.name FROM departments d JOIN intern_joining_forms ijf ON ijf.department_id = d.id WHERE ijf.portal_user_id = collectors.id LIMIT 1),
+                        (SELECT d.name FROM departments d JOIN roles r ON r.department_id = d.id JOIN model_has_roles mhr ON mhr.role_id = r.id WHERE mhr.model_id = collectors.id AND mhr.model_type = "App\\\\Models\\\\User" LIMIT 1)
+                    )
+                ) as received_by_department'),
             ])
             ->orderByDesc('lead_product_payments.payment_date')
             ->orderByDesc('lead_product_payments.id');
