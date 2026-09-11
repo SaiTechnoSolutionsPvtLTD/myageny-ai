@@ -59,6 +59,7 @@ use App\Http\Controllers\RecruitmentController;
 use App\Http\Controllers\RecruitmentReminderController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SalesTargetSettingController;
+use App\Http\Controllers\SmmSheetController;
 use App\Http\Controllers\SuperAdminDashboardController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VisitorManagementController;
@@ -262,6 +263,16 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.my-accounts');
         Route::get('/projects/my-accounts/{lead}', [ProjectController::class, 'showMyAccount'])
             ->name('projects.my-accounts.show');
+        Route::get('/projects/smm-sheet', [SmmSheetController::class, 'index'])
+            ->name('projects.smm-sheet');
+        Route::get('/projects/smm-sheet/export', [SmmSheetController::class, 'export'])
+            ->name('projects.smm-sheet.export');
+        Route::post('/projects/smm-sheet/entry', [SmmSheetController::class, 'storeEntry'])
+            ->name('projects.smm-sheet.entry');
+        Route::get('/projects/smm-sheet/{smmSheet}/history', [SmmSheetController::class, 'history'])
+            ->name('projects.smm-sheet.history');
+        Route::get('/projects/smm-sheet/active-accounts', [SmmSheetController::class, 'activeAccounts'])
+            ->name('projects.smm-sheet.active-accounts');
         Route::get('/projects/campaigns', [CustomerCampaignController::class, 'index'])
             ->name('projects.campaigns.index');
         Route::get('/projects/campaigns/{lead}', [CustomerCampaignController::class, 'show'])
