@@ -72,8 +72,20 @@
 .cmp-pulse-dot { width:7px; height:7px; border-radius:50%; background:#10b981; display:inline-block; margin-right:5px; box-shadow:0 0 0 0 rgba(16,185,129,0.7); animation:cmpPulse 2s infinite; }
 
 /* Pagination Footer */
-.cmp-pagination-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-top:1px solid #f2ede8; background:#fffdfb; flex-wrap:wrap; gap:12px; }
-.cmp-pagination-info { font-size:13px; color:#64748b; font-weight:600; }
+.cmp-pagination-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-top:1px solid #f2ede8; background:#fffdfb; flex-wrap:wrap; gap:16px; }
+.cmp-pagination-left { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.cmp-pagination-info { font-size:13px; color:#64748b; font-weight:600; display:flex; align-items:center; gap:6px; }
+.cmp-pagination-info strong { color:#0f172a; font-weight:800; }
+.cmp-pagination-per-page { display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b; font-weight:700; }
+.cmp-pagination-select { padding:4px 8px; border-radius:6px; border:1.5px solid #e2e8f0; font-size:12px; font-weight:700; color:#1e293b; background:#fff; outline:none; cursor:pointer; transition:border-color .15s; }
+.cmp-pagination-select:focus { border-color:#ea580c; }
+
+.cmp-pagination-nav { display:inline-flex; align-items:center; gap:4px; list-style:none; margin:0; padding:0; }
+.cmp-page-btn { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 10px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#475569; font-size:13px; font-weight:700; text-decoration:none; cursor:pointer; transition:all .15s ease; user-select:none; }
+.cmp-page-btn:hover:not(.is-disabled):not(.is-active) { border-color:#fb923c; background:#fff7ed; color:#c2410c; }
+.cmp-page-btn.is-active { background:linear-gradient(135deg, #ea580c, #f97316); border-color:#ea580c; color:#fff; box-shadow:0 3px 10px rgba(234,88,12,0.28); cursor:default; }
+.cmp-page-btn.is-disabled { opacity:0.4; cursor:not-allowed; background:#f8fafc; color:#94a3b8; border-color:#e2e8f0; }
+.cmp-page-ellipsis { display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:34px; color:#94a3b8; font-weight:800; font-size:13px; }
 
 @keyframes cmpPulse {
     0% { transform:scale(0.95); box-shadow:0 0 0 0 rgba(16,185,129,0.7); }
@@ -390,12 +402,84 @@
                 {{-- Pagination Footer --}}
                 @if($leads->hasPages() || $leads->total() > 0)
                     <div class="cmp-pagination-footer">
-                        <div class="cmp-pagination-info">
-                            Showing <strong>{{ $leads->firstItem() ?? 0 }}</strong> to <strong>{{ $leads->lastItem() ?? 0 }}</strong> of <strong>{{ $leads->total() }}</strong> leads
+                        <div class="cmp-pagination-left">
+                            <div class="cmp-pagination-info">
+                                <span>Showing</span>
+                                <strong>{{ $leads->firstItem() ?? 0 }}</strong>
+                                <span>to</span>
+                                <strong>{{ $leads->lastItem() ?? 0 }}</strong>
+                                <span>of</span>
+                                <strong>{{ $leads->total() }}</strong>
+                                <span>leads</span>
+                            </div>
+
+                            <div class="cmp-pagination-per-page">
+                                <span>Rows:</span>
+                                <select class="cmp-pagination-select" onchange="const url = new URL(window.location.href); url.searchParams.set('per_page', this.value); url.searchParams.set('page', 1); window.location.href = url.toString();">
+                                    @foreach([10, 25, 50, 100] as $size)
+                                        <option value="{{ $size }}" {{ (int)request('per_page', 10) === $size ? 'selected' : '' }}>{{ $size }} per page</option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            {{ $leads->links() }}
-                        </div>
+
+                        @if($leads->hasPages())
+                            @php
+                                $currentPage = $leads->currentPage();
+                                $lastPage = $leads->lastPage();
+                                $start = max(1, $currentPage - 2);
+                                $end = min($lastPage, $currentPage + 2);
+                            @endphp
+
+                            <nav class="cmp-pagination-nav">
+                                {{-- Previous Button --}}
+                                @if($leads->onFirstPage())
+                                    <span class="cmp-page-btn is-disabled" title="Previous Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </span>
+                                @else
+                                    <a href="{{ $leads->previousPageUrl() }}" class="cmp-page-btn" title="Previous Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </a>
+                                @endif
+
+                                {{-- First Page if out of range --}}
+                                @if($start > 1)
+                                    <a href="{{ $leads->url(1) }}" class="cmp-page-btn {{ $currentPage == 1 ? 'is-active' : '' }}">1</a>
+                                    @if($start > 2)
+                                        <span class="cmp-page-ellipsis">...</span>
+                                    @endif
+                                @endif
+
+                                {{-- Page Numbers --}}
+                                @for($page = $start; $page <= $end; $page++)
+                                    @if($page == $currentPage)
+                                        <span class="cmp-page-btn is-active">{{ $page }}</span>
+                                    @else
+                                        <a href="{{ $leads->url($page) }}" class="cmp-page-btn">{{ $page }}</a>
+                                    @endif
+                                @endfor
+
+                                {{-- Last Page if out of range --}}
+                                @if($end < $lastPage)
+                                    @if($end < $lastPage - 1)
+                                        <span class="cmp-page-ellipsis">...</span>
+                                    @endif
+                                    <a href="{{ $leads->url($lastPage) }}" class="cmp-page-btn {{ $currentPage == $lastPage ? 'is-active' : '' }}">{{ $lastPage }}</a>
+                                @endif
+
+                                {{-- Next Button --}}
+                                @if($leads->hasMorePages())
+                                    <a href="{{ $leads->nextPageUrl() }}" class="cmp-page-btn" title="Next Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </a>
+                                @else
+                                    <span class="cmp-page-btn is-disabled" title="Next Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </span>
+                                @endif
+                            </nav>
+                        @endif
                     </div>
                 @endif
             </div>

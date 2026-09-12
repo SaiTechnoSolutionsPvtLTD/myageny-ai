@@ -30,7 +30,35 @@ class ProductionTaskController extends Controller
                 ? array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all()))
                 : [$user->id]);
 
+        $quickDate = trim((string) $request->query('quick_date', ''));
+        $dateFrom = trim((string) $request->query('date_from', ''));
+        $dateTo = trim((string) $request->query('date_to', ''));
         $filterDate = trim((string) $request->query('filter_date', ''));
+
+        // Handle quick_date presets if dates not explicitly passed
+        if ($quickDate !== '' && $quickDate !== 'all' && $quickDate !== 'custom') {
+            $now = Carbon::now();
+            if ($quickDate === 'today') {
+                $dateFrom = $now->toDateString();
+                $dateTo = $now->toDateString();
+            } elseif (in_array($quickDate, ['week', 'this_week', 'weekly'], true)) {
+                $dateFrom = $now->copy()->startOfWeek()->toDateString();
+                $dateTo = $now->copy()->endOfWeek()->toDateString();
+            } elseif (in_array($quickDate, ['month', 'this_month', 'monthly'], true)) {
+                $dateFrom = $now->copy()->startOfMonth()->toDateString();
+                $dateTo = $now->copy()->endOfMonth()->toDateString();
+            } elseif (in_array($quickDate, ['quarter', 'this_quarter', 'quarterly'], true)) {
+                $dateFrom = $now->copy()->startOfQuarter()->toDateString();
+                $dateTo = $now->copy()->endOfQuarter()->toDateString();
+            } elseif (in_array($quickDate, ['year', 'this_year', 'yearly'], true)) {
+                $dateFrom = $now->copy()->startOfYear()->toDateString();
+                $dateTo = $now->copy()->endOfYear()->toDateString();
+            }
+        } elseif ($filterDate !== '' && $dateFrom === '' && $dateTo === '') {
+            $dateFrom = $filterDate;
+            $dateTo = $filterDate;
+        }
+
         $filterLeadId = trim((string) $request->query('filter_lead_id', ''));
         $filterProjectId = trim((string) $request->query('filter_project_id', ''));
         $filterUserId = trim((string) $request->query('filter_user_id', ''));
@@ -44,12 +72,22 @@ class ProductionTaskController extends Controller
                       ->orWhere('created_by', $user->id);
                 });
             })
-            ->when($filterDate !== '', function ($query) use ($filterDate) {
+            ->when($dateFrom !== '' && $dateTo !== '', function ($query) use ($dateFrom, $dateTo) {
                 try {
-                    $query->whereDate('task_date', Carbon::parse($filterDate)->toDateString());
-                } catch (\Throwable) {
-                    // Ignore invalid date
-                }
+                    $from = Carbon::parse($dateFrom)->startOfDay()->toDateString();
+                    $to = Carbon::parse($dateTo)->endOfDay()->toDateString();
+                    $query->whereBetween('task_date', [$from, $to]);
+                } catch (\Throwable) {}
+            })
+            ->when($dateFrom !== '' && $dateTo === '', function ($query) use ($dateFrom) {
+                try {
+                    $query->whereDate('task_date', '>=', Carbon::parse($dateFrom)->toDateString());
+                } catch (\Throwable) {}
+            })
+            ->when($dateFrom === '' && $dateTo !== '', function ($query) use ($dateTo) {
+                try {
+                    $query->whereDate('task_date', '<=', Carbon::parse($dateTo)->toDateString());
+                } catch (\Throwable) {}
             })
             ->when($filterLeadId !== '', function ($query) use ($filterLeadId) {
                 $query->where('lead_id', (int) $filterLeadId);
@@ -100,13 +138,26 @@ class ProductionTaskController extends Controller
 
         $mappedTeamMembers = $this->getMappedTeamMembers($user);
 
+        $hasActiveFilters = (!empty($quickDate) && !in_array($quickDate, ['all'], true))
+            || !empty($dateFrom)
+            || !empty($dateTo)
+            || !empty($filterDate)
+            || !empty($filterLeadId)
+            || !empty($filterProjectId)
+            || !empty($filterUserId)
+            || !empty($filterStatus);
+
         return view('pages.projects.tasks.index', [
             'groupedTasks' => $paginatedGroups,
             'assignedProjects' => $assignedProjects,
             'uniqueLeads' => $uniqueLeads,
             'mappedTeamMembers' => $mappedTeamMembers,
             'isAdminLike' => $isAdminLike,
+            'hasActiveFilters' => $hasActiveFilters,
             'filters' => [
+                'quick_date' => $quickDate,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
                 'filter_date' => $filterDate,
                 'filter_lead_id' => $filterLeadId,
                 'filter_project_id' => $filterProjectId,
@@ -411,10 +462,57 @@ class ProductionTaskController extends Controller
 
     private function getMappedTeamMembers(User $user): Collection
     {
+        $prodScope = function ($query) {
+            $query->where(function ($q) {
+                // 1. Via roles department
+                $q->whereHas('roles.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 2. Via employee onboarding department
+                ->orWhereHas('employeeOnboarding.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 3. Via intern joining form department
+                ->orWhereHas('internJoiningForm.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 4. Via role keywords
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%flutter%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%laravel%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%react%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%frontend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%backend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%fullstack%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%graphic%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ui%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ux%']);
+                });
+            });
+        };
+
         if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
             return User::where('is_active', true)
                 ->where('user_status', 'active')
                 ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->tap($prodScope)
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']);
         }
@@ -428,6 +526,7 @@ class ProductionTaskController extends Controller
             ->where('is_active', true)
             ->where('user_status', 'active')
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->tap($prodScope)
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
     }

@@ -758,15 +758,62 @@ class ProjectController extends Controller
         $directManagedIds = $user->managedUsers()->pluck('users.id');
         $allMappedIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values();
 
+        $prodScope = function ($query) {
+            $query->where(function ($q) {
+                // 1. Via roles department
+                $q->whereHas('roles.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 2. Via employee onboarding department
+                ->orWhereHas('employeeOnboarding.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 3. Via intern joining form department
+                ->orWhereHas('internJoiningForm.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 4. Via role keywords
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%flutter%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%laravel%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%react%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%frontend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%backend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%fullstack%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%graphic%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ui%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ux%']);
+                });
+            });
+        };
+
         $managedUsers = \App\Models\User::whereIn('id', $allMappedIds->reject(fn($id) => (int)$id === (int)$user->id))
             ->where('users.user_status', 'active')
+            ->tap($prodScope)
             ->orderBy('name')
             ->get(['users.id', 'users.name']);
         $hasMappedUsers = $managedUsers->isNotEmpty();
         $canViewTeamTimesheets = $isAdminLike || $hasMappedUsers || $user->hasTlLikeRole();
 
         $allUsers = $isAdminLike 
-            ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) 
+            ? \App\Models\User::where('user_status', 'active')->tap($prodScope)->orderBy('name')->get(['id', 'name']) 
             : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect([$user]));
 
         $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())

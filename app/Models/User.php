@@ -153,10 +153,14 @@ class User extends Authenticatable
             } catch (\Throwable $e) {
                 // Fail-safe if table doesn't exist
             }
-            if ($this->branch_id) {
+
+            // If additional branches are explicitly assigned, use ONLY those branches.
+            // If no additional branches are assigned, fall back to the primary main branch.
+            if (empty($ids) && $this->branch_id) {
                 $ids[] = (int) $this->branch_id;
             }
-            $this->memoizedBranchIds = array_unique($ids);
+
+            $this->memoizedBranchIds = array_values(array_unique($ids));
         }
         return $this->memoizedBranchIds;
     }

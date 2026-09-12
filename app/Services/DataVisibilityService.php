@@ -478,15 +478,7 @@ class DataVisibilityService
 
         if ($this->hasBranchAdminRole($user) || $user->isBranchAdmin()) {
             $branchIds = $user->getMyBranchIds();
-            if (!empty($branchIds)) {
-                return collect($branchIds)->filter()->unique()->values();
-            }
-
-            if ($user->branch_id) {
-                return collect([(int) $user->branch_id]);
-            }
-
-            return collect();
+            return collect($branchIds)->filter()->unique()->values();
         }
 
         if ($this->isCompanyWideUser($user)) {
@@ -500,15 +492,7 @@ class DataVisibilityService
 
         // For specific branch users, return only their assigned branch(es)
         $branchIds = $user->getMyBranchIds();
-        if (!empty($branchIds)) {
-            return collect($branchIds)->filter()->unique()->values();
-        }
-
-        if ($user->branch_id) {
-            return collect([(int) $user->branch_id]);
-        }
-
-        return collect();
+        return collect($branchIds)->filter()->unique()->values();
     }
 
     public function visibleBranches(?User $user = null): Collection
