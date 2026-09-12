@@ -178,6 +178,7 @@
 .crm-report-card.branch::after { background: #4f46e5; }
 .crm-report-card.smm::after { background: #0891b2; }
 .crm-report-card.sales-comparison::after { background: #10b981; }
+.crm-report-card.outstanding::after { background: #f59e0b; }
 .crm-report-card-icon {
     width: 54px;
     height: 54px;
@@ -226,6 +227,10 @@
 .crm-report-card-icon.sales-comparison {
     background: linear-gradient(135deg, #f0fdf4, #dcfce7);
     color: #16a34a;
+}
+.crm-report-card-icon.outstanding {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+    color: #d97706;
 }
 .crm-report-status {
     display: inline-flex;
@@ -441,6 +446,11 @@
                         <line x1="18" y1="20" x2="18" y2="10"/>
                         <line x1="12" y1="20" x2="12" y2="4"/>
                         <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    @elseif($report['theme'] === 'outstanding')
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
                     </svg>
                     @else
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

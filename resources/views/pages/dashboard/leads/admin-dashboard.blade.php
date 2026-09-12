@@ -109,7 +109,13 @@
 .da-kpi-sub  { font-size:12px; color:rgba(255,255,255,0.85); font-weight:500; margin-top:8px; }
 
 /* ─── Financial grid ─── */
-.da-fin-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; }
+.da-fin-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+@media (max-width: 991px) {
+    .da-fin-grid { grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+}
+@media (max-width: 640px) {
+    .da-fin-grid { grid-template-columns:1fr; }
+}
 .da-fin { background:var(--da-white); border:1px solid var(--da-border); border-radius:16px; padding:20px; border-left:4px solid transparent; box-shadow:0 10px 25px -5px rgba(15,23,42,.03); transition:all 0.3s cubic-bezier(0.4,0,0.2,1); }
 .da-fin:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.1),0 10px 10px -5px rgba(15,23,42,.05); }
 .da-fin-lbl { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--da-muted); margin-bottom:8px; }
@@ -538,7 +544,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 8; $i++)
+                @for($i = 0; $i < 9; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -661,7 +667,7 @@
                 <span class="da-badge">From Lead Products</span>
             </div>
             <div class="da-fin-grid" id="daFinGrid">
-                @for($i = 0; $i < 4; $i++)
+                @for($i = 0; $i < 3; $i++)
                 <div class="da-skel-card" style="border-left: 4px solid #e2dfe6; min-height: 135px; justify-content: space-between;">
                     <div class="da-skel" style="height:11px;width:60%;"></div>
                     <div class="da-skel" style="height:24px;width:70%;margin-top:8px;"></div>
@@ -694,20 +700,6 @@
             </div>
         </div>
 
-        {{-- ── 6-month Trend ── --}}
-        <div class="da-card">
-            <div class="da-card-head">
-                <div class="da-card-title">📈 6-Month Lead Trend</div>
-                <div style="display:flex;align-items:center;gap:12px;font-size:11px;font-weight:700">
-                    <span style="display:flex;align-items:center;gap:4px;color:#374151"><span style="width:10px;height:10px;border-radius:50%;background:var(--da-orange);display:inline-block"></span>Total</span>
-                    <span style="display:flex;align-items:center;gap:4px;color:var(--da-green)"><span style="width:10px;height:10px;border-radius:50%;background:var(--da-green);display:inline-block"></span>Convert</span>
-                    <span style="display:flex;align-items:center;gap:4px;color:var(--da-red)"><span style="width:10px;height:10px;border-radius:50%;background:#fca5a5;display:inline-block"></span>Lost</span>
-                </div>
-            </div>
-            <div class="da-card-body" id="daTrendBody">
-                <div class="da-skel" style="height:160px"></div>
-            </div>
-        </div>
 
         {{-- ── Branch + Team Performance ── --}}
         <div class="da-half">
@@ -1218,10 +1210,12 @@ function renderKpis(k, filters) {
         { accent:'green',  val:k.converted_products_count, label:'Converted Products', sub:'Total Converted Products',
           clickAction: "viewConvertedProducts()",
           svg:'<polyline points="20 6 9 17 4 12"/>' },
-        { accent:'purple', val:fmtL(k.upcoming_amount), label:'Upcoming Amount', sub:'Products without converted',
-          svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
         { accent:'teal',   val:fmtL(k.converted_value), label:'Converted Value',  sub:'Total products value',
+          clickAction: "viewConvertedProducts()",
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
+        { accent:'purple', val:fmtL(k.total_received_amount !== undefined ? k.total_received_amount : (k.amount_paid || 0)), label:'Total Received Amount', sub:'Total collected payments',
+          clickAction: "viewPaymentCollection()",
+          svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
         { accent:'amber',  val:k.converted_percentage + '%', label:'Converted Percentage', sub:'Converted ÷ Total Products',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
         { accent:'orange', val:(k.today_reminders_count !== undefined ? k.today_reminders_count : (k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0)), label:'Today Remainders', sub:'Reminders set for today',
@@ -1248,10 +1242,9 @@ function renderKpis(k, filters) {
 /* ── Financials ── */
 function renderFinancials(f) {
     var cards = [
-        { cls:'fc-total',   bc:'#fe5f04', label:'Total Product Value',  val:f.total_product_value,  sub:f.payment_percent + '% Total', bar:100 },
+        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : (f.converted_count > 0 ? 100 : 0), clickAction: "viewConvertedProducts()" },
         { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% Collected',  bar:f.payment_percent },
         { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
-        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : 0, clickAction: "viewConvertedProducts()" },
     ];
     var html = cards.map(function(c) {
         var clickAttr = c.clickAction ? ' onclick="' + c.clickAction + '" style="border-left-color:' + c.bc + ';cursor:pointer;" title="Click to view Converted Products"' : ' style="border-left-color:' + c.bc + '"';
@@ -1381,6 +1374,29 @@ window.viewConvertedProducts = function() {
     }
 
     window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
+};
+
+window.viewPaymentCollection = function() {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('sales_executive_id', state.user);
+        params.set('user_id', state.user);
+    }
+
+    window.location.href = '{{ route("reports.crm.payment-collection") }}?' + params.toString();
 };
 
 window.navigateToTasks = function(tab) {
@@ -1570,6 +1586,8 @@ function renderSources(sd, payModes) {
 
 /* ── 6-Month Trend ── */
 function renderTrend(months) {
+    var el = document.getElementById('daTrendBody');
+    if (!el || !months || !Array.isArray(months)) return;
     var maxVal = Math.max.apply(null, months.map(function(m) { return m.total; })) || 1;
     var cols   = months.map(function(m) {
         var bh = Math.round(m.total / maxVal * 100);

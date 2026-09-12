@@ -511,6 +511,17 @@ class LeadController extends Controller
             $query->where('product_id', $request->product_id);
         }
 
+        if ($request->boolean('is_renewal') || $request->query('type') === 'renewal') {
+            $query->whereHas('product', function ($q) {
+                $q->where('count_wise_report', true)->orWhere('is_this_renewal_product', true);
+            });
+        }
+
+        if ($request->filled('source') || $request->filled('lead_source')) {
+            $src = $request->source ?: $request->lead_source;
+            $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('lead_source', $src));
+        }
+
         if ($request->filled('search')) {
             $search = trim((string) $request->search);
             $cleanId = preg_replace('/[^0-9]/', '', $search);

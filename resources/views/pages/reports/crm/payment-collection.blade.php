@@ -253,7 +253,7 @@
                         <select id="sales_executive_id" name="sales_executive_id" class="crm-pay-select select2">
                             <option value="">All Sales Executives</option>
                             @foreach($salesExecutives as $exec)
-                                <option value="{{ $exec->id }}" @selected((string) request('sales_executive_id') === (string) $exec->id)>{{ $exec->name }}</option>
+                                <option value="{{ $exec->id }}" @selected((string) request('sales_executive_id', request('user_id')) === (string) $exec->id)>{{ $exec->name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -325,6 +325,7 @@
                                     <th>Payment Date</th>
                                     <th>Receipt No</th>
                                     <th>Customer ID</th>
+                                    <th>Branch</th>
                                     <th>Company Name</th>
                                     <th>Customer Name</th>
                                     <th>Total Amount</th>
@@ -350,6 +351,9 @@
                                             <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-code" style="color:#ea580c; font-weight:800; text-decoration:none;">
                                                 LD-{{ str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT) }}
                                             </a>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#334155;">{{ $row->branch_name ?: '-' }}</span>
                                         </td>
                                         <td>
                                             <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-name" style="color:#0f172a; font-weight:800; text-decoration:none;">

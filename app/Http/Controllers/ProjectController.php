@@ -1397,11 +1397,41 @@ class ProjectController extends Controller
 
         $products = Product::query()->orderBy('product_name')->get(['id', 'product_name']);
         $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+        $onboardingDepts = \App\Models\EmployeeOnboarding::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
+        $internDepts = \App\Models\InternJoiningForm::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
         $employees = User::query()
+            ->with(['roles:id,department_id'])
             ->where('is_active', true)
             ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name'])
+            ->map(function ($emp) use ($onboardingDepts, $internDepts) {
+                $roleDeptIds = $emp->roles->pluck('department_id')->filter()->map(fn($id) => (int) $id)->all();
+                $eoDeptIds = $onboardingDepts->get($emp->id, []);
+                $ijfDeptIds = $internDepts->get($emp->id, []);
+
+                $emp->department_ids = collect(array_merge($roleDeptIds, $eoDeptIds, $ijfDeptIds))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return $emp;
+            });
 
         $quickDate = trim((string) $request->query('quick_date', $request->query('quick_filter', 'all')));
         $dateType = trim((string) $request->query('date_type', 'delivery'));

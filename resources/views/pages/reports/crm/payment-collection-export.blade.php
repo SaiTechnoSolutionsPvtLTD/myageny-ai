@@ -1,7 +1,7 @@
 <table border="1">
     <thead>
         <tr>
-            <th colspan="11">CRM Payment Collection Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
+            <th colspan="13">CRM Payment Collection Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
         </tr>
         <tr>
             @foreach(array_keys($rows->first() ?? [
@@ -9,6 +9,8 @@
                 'Payment Date' => '',
                 'Receipt No' => '',
                 'Customer ID' => '',
+                'Branch' => '',
+                'Company Name' => '',
                 'Customer Name' => '',
                 'Total Amount' => '',
                 'Received Amount' => '',
@@ -30,7 +32,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="11">No payment collection records found for the selected filters.</td>
+                <td colspan="13">No payment collection records found for the selected filters.</td>
             </tr>
         @endforelse
     </tbody>

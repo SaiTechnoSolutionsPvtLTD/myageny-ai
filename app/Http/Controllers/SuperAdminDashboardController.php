@@ -194,6 +194,23 @@ class SuperAdminDashboardController extends ApiController
         $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
+        $paymentsQuery = LeadProductPayment::query()
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($dateFrom) {
+            $paymentsQuery->whereDate('payment_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+        }
+        $totalReceivedAmount = (float) $paymentsQuery->sum('amount');
+
         $leadProductIds = $allLpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
@@ -597,6 +614,7 @@ class SuperAdminDashboardController extends ApiController
                 'conversion_rate'            => $convRate,
                 'converted_products_count'  => $convertedProductsCount,
                 'upcoming_amount'            => $upcomingAmount,
+                'total_received_amount'      => $totalReceivedAmount,
                 'converted_value'            => $convertedValue,
                 'converted_percentage'       => $convertedPercentage,
                 'followups_count'            => $followupsCount,
@@ -1209,6 +1227,23 @@ class SuperAdminDashboardController extends ApiController
         $convertedCount    = $convertedProductsCount;
         $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
 
+        $paymentsQuery = LeadProductPayment::query()
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($dateFrom) {
+            $paymentsQuery->whereDate('payment_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+        }
+        $totalReceivedAmount = (float) $paymentsQuery->sum('amount');
+
         $leadProductIds = $allLpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
@@ -1641,6 +1676,7 @@ class SuperAdminDashboardController extends ApiController
                 'conversion_rate'   => $convRate,
                 'converted_products_count' => $convertedProductsCount,
                 'upcoming_amount'   => $upcomingAmount,
+                'total_received_amount' => $totalReceivedAmount,
                 'converted_value'   => $convertedValue,
                 'converted_percentage' => $convertedPercentage,
                 'scheduled_followups_count'  => $todayRemindersCount,
