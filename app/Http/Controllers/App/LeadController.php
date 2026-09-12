@@ -1774,8 +1774,41 @@ class LeadController extends Controller
             'approvedBy'
         ])->latest();
 
-        if ($request->filled('status'))       $query->where('status', $request->status);
-        if ($request->filled('lead_id'))      $query->where('lead_id', $request->lead_id);
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('product_id')) {
+            $query->where('product_id', $request->product_id);
+        }
+
+        $search = $request->query('search', $request->query('lead_id'));
+        if (!empty($search)) {
+            $term = trim($search);
+            $cleanLeadId = preg_replace('/^LD-0*/i', '', $term);
+
+            $query->where(function ($q) use ($term, $cleanLeadId) {
+                if (is_numeric($cleanLeadId)) {
+                    $q->orWhere('lead_id', (int) $cleanLeadId);
+                } elseif (is_numeric($term)) {
+                    $q->orWhere('lead_id', (int) $term);
+                }
+
+                if (is_numeric($term)) {
+                    $q->orWhere('requested_unit_price', $term)
+                      ->orWhere('original_unit_price', $term);
+                }
+
+                $q->orWhereHas('lead', function ($lq) use ($term) {
+                    $lq->where('contact_name', 'like', "%{$term}%")
+                      ->orWhere('company_name', 'like', "%{$term}%");
+                });
+
+                $q->orWhere('deal_name', 'like', "%{$term}%")
+                  ->orWhere('product_name', 'like', "%{$term}%");
+            });
+        }
+
         if ($request->filled('requested_by')) $query->where('requested_by', $request->requested_by);
         if ($request->filled('date_from'))    $query->whereDate('created_at', '>=', $request->date_from);
         if ($request->filled('date_to'))      $query->whereDate('created_at', '<=', $request->date_to);
@@ -1785,9 +1818,18 @@ class LeadController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $products = Product::orderBy('package_name')
+            ->get(['id', 'package_name', 'product_name'])
+            ->map(fn ($p) => [
+                'id'   => $p->id,
+                'name' => $p->package_name ?: ($p->product_name ?: 'Product #' . $p->id),
+            ])
+            ->values();
+
         return response()->json([
             'requests'   => $requests,
             'requesters' => $requesters,
+            'products'   => $products,
         ]);
     }
 

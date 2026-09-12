@@ -68,6 +68,9 @@ class ProductionApprovalApiController extends Controller
             if ($request->filled('product_id')) {
                 $query->where('product_id', $request->query('product_id'));
             }
+            if ($request->filled('status')) {
+                $query->where('production_approval_status', $request->query('status'));
+            }
             if ($request->filled('user_id')) {
                 $query->where('production_approval_reviewed_by', $request->query('user_id'));
             }
@@ -333,16 +336,45 @@ class ProductionApprovalApiController extends Controller
     private function formatItem(ProductionInitiation $i, ?\App\Models\User $user = null): array
     {
         $customFormData = [];
-        if (is_array($i->custom_form_data)) {
-            foreach ($i->custom_form_data as $field) {
+        $rawCustomData = $i->custom_form_data;
+        if (is_string($rawCustomData)) {
+            $rawCustomData = json_decode($rawCustomData, true) ?? [];
+        }
+        if (is_array($rawCustomData)) {
+            foreach ($rawCustomData as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
                 $label = $field['label'] ?? ($field['key'] ?? '');
+                $type = $field['type'] ?? '';
                 $value = $field['value'] ?? '';
+                $isFile = $type === 'file';
+                $fileUrl = null;
+                $fileName = null;
+
+                if ($isFile) {
+                    if (is_string($value) && !empty($value)) {
+                        $fileName = basename($value);
+                        $fileUrl = str_starts_with($value, 'http://') || str_starts_with($value, 'https://')
+                            ? $value
+                            : asset($value);
+                    } elseif (is_array($value)) {
+                        $path = $value['path'] ?? ($value['url'] ?? null);
+                        $fileName = $value['name'] ?? ($path ? basename($path) : 'Document');
+                        $fileUrl = $value['url'] ?? ($path ? asset($path) : null);
+                        if ($fileUrl && !str_starts_with($fileUrl, 'http://') && !str_starts_with($fileUrl, 'https://')) {
+                            $fileUrl = asset($fileUrl);
+                        }
+                    }
+                }
+
                 if ($label) {
                     $customFormData[] = [
-                        'label'    => $label,
-                        'value'    => is_array($value) ? implode(', ', $value) : (string) $value,
-                        'is_file'  => ($field['type'] ?? '') === 'file',
-                        'file_url' => ($field['type'] ?? '') === 'file' ? ($field['file_url'] ?? null) : null,
+                        'label'     => $label,
+                        'value'     => is_array($value) ? ($isFile ? ($fileName ?? '') : implode(', ', $value)) : (string) ($isFile ? ($fileName ?: $value) : $value),
+                        'is_file'   => $isFile,
+                        'file_name' => $fileName,
+                        'file_url'  => $fileUrl,
                     ];
                 }
             }

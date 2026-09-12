@@ -132,7 +132,7 @@ class DashboardController extends Controller
         // whenever a lead has zero or multiple products, which is why web's
         // funnel total and its "Overall Leads Count" KPI aren't the same
         // number. See buildProductStatusFunnel() below (ported from
-        // SuperAdminDashboardController).
+        // SuperAdminDashboardControlle
         $leadIds = (clone $base())->pluck('id');
         $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
         $stageTotal  = $productStatusFunnel['total'];
