@@ -128,27 +128,56 @@ class FaceAttendanceApiController extends Controller
             ->first();
 
         if ($employee) {
+            $today = Carbon::today()->toDateString();
+            $todayAttendance = DailyAttendance::query()
+                ->where('employee_id', $employee->id)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            $alreadyCheckedOut = (bool) ($todayAttendance && ! empty($todayAttendance->logout_time));
+
             return response()->json([
                 'status'  => true,
                 'message' => "Face recognized as {$employee->name}.",
                 'data'    => [
-                    'employee_id'   => $employee->id,
-                    'employee_code' => (string) $employee->employee_id,
-                    'employee_name' => $employee->name,
-                    'distance'      => $result['distance'] ?? null,
+                    'employee_id'         => $employee->id,
+                    'employee_code'       => (string) $employee->employee_id,
+                    'employee_name'       => $employee->name,
+                    'distance'            => $result['distance'] ?? null,
+                    'checked_in'          => (bool) $todayAttendance,
+                    'already_checked_out' => $alreadyCheckedOut,
+                    'current_logout_time' => $alreadyCheckedOut && $todayAttendance->logout_time
+                        ? Carbon::createFromFormat('H:i:s', $todayAttendance->logout_time)->format('h:i A')
+                        : null,
                 ],
             ]);
         }
 
         // Return recognized identity from Python even if exact DB row is pending sync
+        $empNumericId = is_numeric($userId) ? (int) $userId : null;
+        $todayAttendance = null;
+        if ($empNumericId) {
+            $today = Carbon::today()->toDateString();
+            $todayAttendance = DailyAttendance::query()
+                ->where('employee_id', $empNumericId)
+                ->whereDate('attendance_date', $today)
+                ->first();
+        }
+        $alreadyCheckedOut = (bool) ($todayAttendance && ! empty($todayAttendance->logout_time));
+
         return response()->json([
             'status'  => true,
             'message' => "Face recognized as {$name}.",
             'data'    => [
-                'employee_id'   => is_numeric($userId) ? (int) $userId : null,
-                'employee_code' => $userId,
-                'employee_name' => $name,
-                'distance'      => $result['distance'] ?? null,
+                'employee_id'         => $empNumericId,
+                'employee_code'       => $userId,
+                'employee_name'       => $name,
+                'distance'            => $result['distance'] ?? null,
+                'checked_in'          => (bool) $todayAttendance,
+                'already_checked_out' => $alreadyCheckedOut,
+                'current_logout_time' => $alreadyCheckedOut && $todayAttendance?->logout_time
+                    ? Carbon::createFromFormat('H:i:s', $todayAttendance->logout_time)->format('h:i A')
+                    : null,
             ],
         ]);
     }
@@ -299,15 +328,48 @@ class FaceAttendanceApiController extends Controller
             ]);
         }
 
-        // Case C: Already completed attendance today
+        // Case C: Already checked out previously today
+        $updateCheckout = $request->boolean('update_checkout');
+
+        if ($updateCheckout) {
+            $loginAt        = Carbon::parse($attendance->attendance_date->format('Y-m-d') . ' ' . $attendance->login_time);
+            $workingSeconds = max($loginAt->diffInSeconds($now, false), 0);
+
+            $attendance->update([
+                'logout_photo'          => $photoPath,
+                'logout_location'       => $request->input('location'),
+                'logout_latitude'       => $request->input('latitude'),
+                'logout_longitude'      => $request->input('longitude'),
+                'logout_time'           => $now->format('H:i:s'),
+                'overall_working_hours' => $this->formatSecondsAsTime($workingSeconds),
+                'attendance_status'     => 'present',
+            ]);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Checkout time updated successfully for {$employee->name}.",
+                'data'    => array_merge($this->formatAttendance($attendance->fresh()), [
+                    'employee_code' => (string) $employee->employee_id,
+                    'action'        => 'check_out',
+                    'is_updated'    => true,
+                ]),
+            ]);
+        }
+
         return response()->json([
-            'status'  => true,
-            'message' => "Attendance already completed today for {$employee->name}.",
-            'data'    => array_merge($this->formatAttendance($attendance), [
-                'employee_code' => (string) $employee->employee_id,
-                'action'        => 'completed',
+            'status'                => false,
+            'requires_confirmation' => true,
+            'already_checked_out'   => true,
+            'message'               => 'You have already checked out. Do you want to update your checkout time?',
+            'data'                  => array_merge($this->formatAttendance($attendance), [
+                'employee_code'       => (string) $employee->employee_id,
+                'action'              => 'already_checked_out',
+                'already_checked_out' => true,
+                'current_logout_time' => $attendance->logout_time
+                    ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('h:i A')
+                    : null,
             ]),
-        ]);
+        ], 409);
     }
 
     public function checkIn(Request $request): JsonResponse
@@ -433,11 +495,23 @@ class FaceAttendanceApiController extends Controller
             ], 422);
         }
 
-        if ($attendance->logout_time) {
+        $isUpdate = (bool) $attendance->logout_time;
+
+        if ($attendance->logout_time && ! $request->boolean('update_checkout')) {
             return response()->json([
-                'status'  => false,
-                'message' => 'You have already checked out for today.',
-            ], 422);
+                'status'                => false,
+                'requires_confirmation' => true,
+                'already_checked_out'   => true,
+                'message'               => 'You have already checked out. Do you want to update your checkout time?',
+                'data'                  => array_merge($this->formatAttendance($attendance), [
+                    'employee_code'       => (string) $employee->employee_id,
+                    'action'              => 'already_checked_out',
+                    'already_checked_out' => true,
+                    'current_logout_time' => $attendance->logout_time
+                        ? Carbon::createFromFormat('H:i:s', $attendance->logout_time)->format('h:i A')
+                        : null,
+                ]),
+            ], 409);
         }
 
         $verification = $this->verifyFace($employee, $request->file('photo'));
@@ -462,8 +536,12 @@ class FaceAttendanceApiController extends Controller
 
         return response()->json([
             'status'  => true,
-            'message' => 'Checked out successfully.',
-            'data'    => $this->formatAttendance($attendance->fresh()),
+            'message' => $isUpdate ? 'Checkout time updated successfully.' : 'Checked out successfully.',
+            'data'    => array_merge($this->formatAttendance($attendance->fresh()), [
+                'employee_code' => (string) $employee->employee_id,
+                'action'        => 'check_out',
+                'is_updated'    => $isUpdate,
+            ]),
         ]);
     }
 

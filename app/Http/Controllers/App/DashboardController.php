@@ -450,18 +450,32 @@ class DashboardController extends Controller
                 $lost   = (clone $q)->where('lead_status', 'lost')->count();
                 $wonVal = (float)(clone $q)->converted()->sum('deal_value');
 
+                $firstRole = $user->roles->first();
+                $roleDisplay = $firstRole?->display_name;
+                if (empty($roleDisplay) && !empty($firstRole?->name)) {
+                    $clean = preg_replace('/^company_\d+__/', '', $firstRole->name);
+                    $clean = str_replace(['_', '-'], ' ', $clean);
+                    $roleDisplay = ucwords($clean);
+                }
+                if (empty($roleDisplay) && !empty($user->role)) {
+                    $clean = preg_replace('/^company_\d+__/', '', $user->role);
+                    $clean = str_replace(['_', '-'], ' ', $clean);
+                    $roleDisplay = ucwords($clean);
+                }
+
                 return [
-                    'user_id'         => $user->id,
-                    'user_name'       => $user->name,
-                    'user_email'      => $user->email,
-                    'role'            => $user->roles->first()?->display_name,
-                    'role_name'       => $user->roles->first()?->name,
-                    'total_leads'     => $total,
-                    'won_leads'       => $won,
-                    'lost_leads'      => $lost,
-                    'active_leads'    => $total - $won - $lost,
-                    'won_value'       => $wonVal,
-                    'conversion_rate' => $total > 0 ? round($won / $total * 100, 1) : 0,
+                    'user_id'           => $user->id,
+                    'user_name'         => $user->name,
+                    'user_email'        => $user->email,
+                    'role'              => $roleDisplay ?: 'Staff',
+                    'role_name'         => $firstRole?->name,
+                    'role_display_name' => $roleDisplay ?: 'Staff',
+                    'total_leads'       => $total,
+                    'won_leads'         => $won,
+                    'lost_leads'        => $lost,
+                    'active_leads'      => $total - $won - $lost,
+                    'won_value'         => $wonVal,
+                    'conversion_rate'   => $total > 0 ? round($won / $total * 100, 1) : 0,
                 ];
             })
             ->filter(fn($u) => $u['total_leads'] > 0)
@@ -502,6 +516,37 @@ class DashboardController extends Controller
             'quick_date' => $request->quick_date,
         ]);
 
+        // ── Completed Calls & Scheduled Reminders scoped to active date filter ──
+        $completedCallsQuery = LeadCallUpdate::whereHas('lead', function ($leadQuery) use ($request, $branchId, $effectiveUserId, $stage, $source) {
+            $this->visibility->applyLeadVisibility($leadQuery, $request->user());
+            $leadQuery->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
+                      ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                      ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                      ->when($source, fn($q2) => $q2->where('lead_source', $source));
+        })
+        ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
+            $q->where(function ($sub) use ($effectiveUserId) {
+                $sub->where('user_id', $effectiveUserId)
+                    ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+            });
+        });
+
+        $hasDateFilter = $dateFrom || $dateTo || $request->quick_date === 'all';
+        $completedCallsCount = $hasDateFilter
+            ? (clone $completedCallsQuery)
+                ->when($dateFrom, fn($q) => $q->whereDate('called_at', '>=', $dateFrom))
+                ->when($dateTo,   fn($q) => $q->whereDate('called_at', '<=', $dateTo))
+                ->count()
+            : (clone $completedCallsQuery)->whereDate('called_at', today())->count();
+
+        $periodRemindersQuery = (clone $reminderQuery())
+            ->when($dateFrom, fn($q) => $q->whereDate('remind_at', '>=', $dateFrom))
+            ->when($dateTo,   fn($q) => $q->whereDate('remind_at', '<=', $dateTo));
+
+        $scheduledRemindersCount = $hasDateFilter
+            ? $periodRemindersQuery->count()
+            : (clone $reminderQuery())->whereDate('remind_at', today())->count();
+
         // ── Build response ────────────────────────────────────────
         return response()->json([
             'success' => true,
@@ -523,9 +568,11 @@ class DashboardController extends Controller
                     'upcoming_amount'            => $upcomingAmount,
                     'converted_value'            => $convertedValue,
                     'converted_percentage'       => $convertedPercentage,
-                    'scheduled_followups_count'  => $todayFollowups->count(),
+                    'scheduled_followups_count'  => $scheduledRemindersCount,
+                    'today_reminders_count'      => $scheduledRemindersCount,
+                    'completed_calls_count'      => $completedCallsCount,
+                    'today_completed_calls_count'=> $completedCallsCount,
                     'overdue_reminders_count'    => $overdueCount,
-                    'today_completed_calls_count' => LeadCallUpdate::whereHas('lead', fn($leadQuery) => $this->visibility->applyLeadVisibility($leadQuery, $request->user()))->whereDate('called_at', today())->count(),
                 ],
 
                 'financials' => [

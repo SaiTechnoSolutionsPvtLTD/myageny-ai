@@ -9,8 +9,10 @@ use App\Models\ExpenseRequest;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\NotificationService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -46,18 +48,35 @@ class ExpenseRequestApiController extends Controller
         try {
             $user = $request->user();
             $companyId = $user?->company_id;
-            $userRoleIds = $user->roles->pluck('id')->toArray();
+            $userRoleIds = DB::table('model_has_roles')
+                ->where('model_type', User::class)
+                ->where('model_id', $user->id)
+                ->pluck('role_id')
+                ->toArray();
+
+            if (empty($userRoleIds) && $user->relationLoaded('roles')) {
+                $userRoleIds = $user->roles->pluck('id')->toArray();
+            }
+
             $isHrOrAdmin = $user->isHrOrAdmin();
 
             $scopedQuery = ExpenseRequest::with(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole'])
                 ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
 
             if (! $isHrOrAdmin) {
-                $scopedQuery->where(function ($q) use ($user, $userRoleIds) {
+                $userRoleNames = Role::withoutGlobalScopes()->whereIn('id', $userRoleIds)->pluck('name')->map(fn($n) => preg_replace('/^company_\d+__/', '', $n))->toArray();
+                $matchingRoleIds = Role::withoutGlobalScopes()->where(function($q) use ($userRoleIds, $userRoleNames) {
+                    $q->whereIn('id', $userRoleIds);
+                    foreach ($userRoleNames as $rn) {
+                        $q->orWhere('name', 'like', "%{$rn}%");
+                    }
+                })->pluck('id')->toArray();
+
+                $scopedQuery->where(function ($q) use ($user, $matchingRoleIds) {
                     $q->where('user_id', $user->id)
                       ->orWhere('approver_id', $user->id)
-                      ->orWhere(function ($q2) use ($userRoleIds) {
-                          $q2->whereIn('current_approver_role_id', $userRoleIds)
+                      ->orWhere(function ($q2) use ($matchingRoleIds) {
+                          $q2->whereIn('current_approver_role_id', $matchingRoleIds)
                              ->where('status', 'pending');
                       });
                 });
@@ -460,22 +479,29 @@ class ExpenseRequestApiController extends Controller
     private function formatExpenseRequest(ExpenseRequest $r, User $currentUser): array
     {
         $applicant = $r->user;
-        $applicantCompanyId = $applicant?->company_id ?: $r->company_id;
-        $chain = $this->resolveApprovalChainForUser($applicant, $applicantCompanyId);
-
-        $roles = ! empty($chain)
-            ? \App\Models\Role::whereIn('id', $chain)->get()->keyBy('id')
-            : collect();
+        $rawStages = $r->approval_stages;
 
         $stages = [];
-        foreach ($chain as $index => $roleId) {
-            $stepNumber = $index + 1;
+        foreach ($rawStages as $stg) {
+            $actionedAt = $stg['actioned_at'] ?? null;
+            if ($actionedAt instanceof Carbon) {
+                $actionedAtStr = $actionedAt->toIso8601String();
+            } elseif (is_string($actionedAt) && !empty($actionedAt)) {
+                $actionedAtStr = Carbon::parse($actionedAt)->toIso8601String();
+            } else {
+                $actionedAtStr = null;
+            }
+
             $stages[] = [
-                'step'       => $stepNumber,
-                'role_id'    => (int) $roleId,
-                'role_label' => $this->roleLabel($roles->get($roleId)),
-                'is_current' => $r->status === 'pending' && $r->current_step === $stepNumber,
-                'is_completed' => $r->status === 'approved' || $r->current_step > $stepNumber,
+                'step'         => (int) $stg['step'],
+                'role_id'      => (int) $stg['role_id'],
+                'role_label'   => $stg['role_name'],
+                'status'       => $stg['status'], // 'completed' | 'current' | 'rejected' | 'upcoming'
+                'actioned_by'  => $stg['actioned_by'] ?? null,
+                'actioned_at'  => $actionedAtStr,
+                'remarks'      => $stg['remarks'] ?? null,
+                'is_current'   => $stg['status'] === 'current',
+                'is_completed' => $stg['status'] === 'completed',
             ];
         }
 
@@ -506,7 +532,7 @@ class ExpenseRequestApiController extends Controller
             'status' => $r->status,
             'status_label' => ucfirst($r->status),
             'current_step' => $r->current_step,
-            'total_steps' => count($chain) ?: null,
+            'total_steps' => count($stages) ?: null,
             'current_approver_role' => $r->currentApproverRole ? [
                 'id' => $r->currentApproverRole->id,
                 'label' => $this->roleLabel($r->currentApproverRole),

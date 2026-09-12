@@ -82,13 +82,19 @@ class ProductionInitiationApiController extends Controller
             ? $product->departments()->get(['departments.id', 'departments.name'])
             : collect();
 
+        $latest = $leadProduct->latestProductionInitiation;
+        $isRejected = $latest && in_array(strtolower((string) $latest->status), ['rejected', 'reject']);
+        $alreadyInitiated = $latest !== null && ! $isRejected;
+
         return response()->json([
             'success' => true,
             'data' => [
                 'lead_product_id'   => $leadProduct->id,
                 'product_name'      => $leadProduct->product_name ?? $leadProduct->product?->package_name ?? '',
                 'product_id'        => $productId,
-                'already_initiated' => $leadProduct->latestProductionInitiation !== null,
+                'already_initiated' => $alreadyInitiated,
+                'is_rejected'       => $isRejected,
+                'rejection_reason'  => $latest?->production_approval_remarks,
                 'fields'            => $fields,
                 'existing_data'     => (object) $existingData,
                 'departments'       => $departments->map(fn($d) => [
@@ -101,19 +107,10 @@ class ProductionInitiationApiController extends Controller
 
     public function store(Request $request, LeadProduct $leadProduct): JsonResponse
     {
+        $latest = $leadProduct->latestProductionInitiation;
+        $isRejected = $latest && in_array(strtolower((string) $latest->status), ['rejected', 'reject']);
 
-        // $validator = Validator::make($request->all(), [
-        //     'product_name'       => ['nullable', 'string', 'max:255'],
-        //     'total_working_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
-        //     'ui_available'       => ['nullable', 'boolean'],
-        //     'requirements'       => ['nullable', 'string', 'max:5000'],
-        //     'attachment'         => ['nullable', 'file', 'max:10240'],
-        // ]);
-        // if ($validator->fails()) {
-        //     return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
-        // }
-
-        if ($leadProduct->latestProductionInitiation) {
+        if ($latest && ! $isRejected) {
             return response()->json([
                 'success' => false,
                 'message' => 'Production already initiated for this product.',
@@ -157,7 +154,18 @@ class ProductionInitiationApiController extends Controller
 
             if ($field->field_type === 'file') {
                 if (! $request->hasFile($field->field_name)) {
-                    $errors[$field->field_name] = $field->label . ' is required.';
+                    $hasExistingFile = false;
+                    if ($latest && is_array($latest->custom_form_data)) {
+                        foreach ($latest->custom_form_data as $item) {
+                            if (($item['field_name'] ?? '') === $field->field_name && !empty($item['value'])) {
+                                $hasExistingFile = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (! $hasExistingFile) {
+                        $errors[$field->field_name] = $field->label . ' is required.';
+                    }
                 }
                 continue;
             }
@@ -189,6 +197,14 @@ class ProductionInitiationApiController extends Controller
 
             $uploadedFile = $request->file($field->field_name);
             if (! $uploadedFile) {
+                if ($latest && is_array($latest->custom_form_data)) {
+                    foreach ($latest->custom_form_data as $item) {
+                        if (($item['field_name'] ?? '') === $field->field_name && !empty($item['value'])) {
+                            $uploadedFilesByField[$field->field_name] = $item['value'];
+                            break;
+                        }
+                    }
+                }
                 continue;
             }
 
@@ -213,8 +229,8 @@ class ProductionInitiationApiController extends Controller
         // dynamic OVP fields, so this is kept populated from the first
         // dynamically uploaded file for backward compatibility with that view.
         $firstUploadedFile = $uploadedFilesByField ? reset($uploadedFilesByField) : null;
-        $attachmentPath = $firstUploadedFile['path'] ?? null;
-        $attachmentName = $firstUploadedFile['name'] ?? null;
+        $attachmentPath = $firstUploadedFile['path'] ?? ($latest?->attachment_path ?? null);
+        $attachmentName = $firstUploadedFile['name'] ?? ($latest?->attachment_name ?? null);
 
         // Build custom_form_data
         $customFormData = [];

@@ -68,6 +68,42 @@ class AttendanceApiController extends Controller
         return true;
     }
 
+    private function isCompanyAdminUser(?\App\Models\User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return (bool) ($user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin'));
+    }
+
+    private function resolveActingBranchId(?Request $request = null): ?int
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return null;
+        }
+
+        $request = $request ?? request();
+        $isCompanyAdmin = $this->isCompanyAdminUser($user);
+
+        if ($isCompanyAdmin) {
+            if ($request && $request->filled('branch_id')) {
+                $val = $request->input('branch_id');
+                if ($val === 'all') {
+                    return null;
+                }
+                return (int) $val;
+            }
+            return $user->branch_id ? (int) $user->branch_id : null;
+        }
+
+        return $user->branch_id ? (int) $user->branch_id : null;
+    }
+
     private function currentEmployee(): ?EmployeeOnboarding
     {
         $user = auth()->user();
@@ -111,7 +147,7 @@ class AttendanceApiController extends Controller
      * only the current employee for self-service users).
      * Each item: ['id', 'attendee_type', 'display_id', 'name', 'photo_url']
      */
-    private function accessibleAttendees(): \Illuminate\Support\Collection
+    private function accessibleAttendees(?int $actingBranchId = null): \Illuminate\Support\Collection
     {
         $employeeQuery = $this->withActivePortalAccount(
             EmployeeOnboarding::query()->active()
@@ -125,24 +161,14 @@ class AttendanceApiController extends Controller
             $employeeQuery->whereKey($currentEmployee->id);
         }
 
-        $user = auth()->user();
-        $isCompanyAdmin = (bool) ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin()));
+        $resolvedBranchId = func_num_args() > 0 ? $actingBranchId : $this->resolveActingBranchId();
 
-        $actingBranchId = null;
-        if ($isCompanyAdmin) {
-            if (request()->filled('branch_id') && request('branch_id') !== 'all') {
-                $actingBranchId = (int) request('branch_id');
-            }
-        } elseif ($this->shouldFilterByBranch()) {
-            $actingBranchId = $user?->branch_id;
-        }
-
-        if ($actingBranchId) {
-            $branch = Branch::find($actingBranchId);
+        if ($resolvedBranchId) {
+            $branch = Branch::find($resolvedBranchId);
             $branchCode = $branch?->code;
-            $employeeQuery->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
-                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $actingBranchId));
-                if ($branchCode && $branchCode !== 'STS') {
+            $employeeQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
+                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
+                if ($branchCode) {
                     $sub->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
                     });
@@ -170,12 +196,12 @@ class AttendanceApiController extends Controller
             InternJoiningForm::query()->active()
         )->whereNotNull('name');
 
-        if ($actingBranchId) {
-            $branch = Branch::find($actingBranchId);
+        if ($resolvedBranchId) {
+            $branch = Branch::find($resolvedBranchId);
             $branchCode = $branch?->code;
-            $internQuery->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
-                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $actingBranchId));
-                if ($branchCode && $branchCode !== 'STS') {
+            $internQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
+                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
+                if ($branchCode) {
                     $sub->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
                     });
@@ -383,7 +409,8 @@ class AttendanceApiController extends Controller
         $perPage            = (int) ($validated['per_page'] ?? 15);
         $page               = (int) ($validated['page']     ?? 1);
 
-        $accessibleAttendees = $this->accessibleAttendees();
+        $actingBranchId      = $this->resolveActingBranchId($request);
+        $accessibleAttendees = $this->accessibleAttendees($actingBranchId);
 
         if ($accessibleAttendees->isEmpty()) {
             return response()->json([
@@ -735,6 +762,7 @@ class AttendanceApiController extends Controller
 
             $attendanceAttributes = [
                 'company_id'             => $employee->company_id,
+                'branch_id'              => $employee->portalUser?->branch_id ?? $employee->branch?->id,
                 'employee_id'            => $employee->id,
                 'attendee_type'          => 'employee',
                 'intern_joining_form_id' => null,
@@ -760,6 +788,7 @@ class AttendanceApiController extends Controller
 
             $attendanceAttributes = [
                 'company_id'             => $intern->company_id,
+                'branch_id'              => $intern->portalUser?->branch_id ?? $intern->branch?->id,
                 'employee_id'            => null,
                 'attendee_type'          => 'intern',
                 'intern_joining_form_id' => $intern->id,

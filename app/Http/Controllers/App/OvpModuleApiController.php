@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
 use App\Services\NotificationService;
 use App\Services\ProductionUpdateRecorder;
 
@@ -282,6 +283,9 @@ class OvpModuleApiController extends Controller
 
         $validated = $request->validate([
             'decision' => ['required', 'in:approval,rejected'],
+            'remarks'  => ['required_if:decision,rejected', 'nullable', 'string', 'max:2000'],
+        ], [
+            'remarks.required_if' => 'Please provide a rejection reason when rejecting an OVP item.',
         ]);
 
         // Was missing entirely — mirrors web's prepareOvpCustomFormData() call.
@@ -300,10 +304,13 @@ class OvpModuleApiController extends Controller
             ], 422);
         }
 
+        $rejectionReason = trim((string) ($request->input('remarks') ?: $request->input('rejection_reason', '')));
+
         $productionInitiation->update([
             'status'                          => $validated['decision'] === 'approval' ? 'approved' : 'rejected',
             'ovp_allocation_status'           => 'submitted',
             'custom_form_data'                => $customFormData,
+            'production_approval_remarks'     => $validated['decision'] === 'rejected' ? $rejectionReason : $productionInitiation->production_approval_remarks,
             'reviewed_at'                     => Carbon::now(),
             'reviewed_by'                     => $user->id,
             'production_approval_status'      => $validated['decision'] === 'approval' ? 'pending' : null,
@@ -312,13 +319,35 @@ class OvpModuleApiController extends Controller
         ]);
 
         try {
-            $remarksForUpdate = $request->input('remarks') ?: $request->input('rejection_reason');
+            $remarksForUpdate = $validated['decision'] === 'rejected' ? $rejectionReason : ($request->input('remarks') ?: null);
             app(ProductionUpdateRecorder::class)->recordOvpReview($productionInitiation->fresh(), $validated['decision'], $remarksForUpdate, $user);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Failed to record OVP review update: ' . $e->getMessage());
         }
 
         if (($validated['decision'] ?? null) === 'approval') {
+            try {
+                $recipientEmail = 'tamilarasan@saitechnosolutions.net';
+                $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+                $reviewedBy = $user;
+
+                Mail::send('emails.ovp_approved', [
+                    'initiation' => $productionInitiation,
+                    'lead' => $productionInitiation->lead,
+                    'leadProduct' => $productionInitiation->leadProduct,
+                    'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                    'reviewedBy' => $reviewedBy,
+                ], function ($message) use ($recipientEmail, $productionInitiation) {
+                    $message->to($recipientEmail, 'Tamilarasan')
+                        ->subject('OVP Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                });
+            } catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::error('Failed to send OVP approval email via API.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+
             $companyId = $productionInitiation->company_id;
             $branchId = $productionInitiation->loadMissing('lead')->lead?->branch_id;
 
@@ -344,6 +373,34 @@ class OvpModuleApiController extends Controller
                 'actor_name' => auth()->user()?->name,
                 'status' => 'pending',
             ]);
+        } elseif (($validated['decision'] ?? null) === 'rejected') {
+            try {
+                $productionInitiation->loadMissing(['lead.assignedTo', 'lead.createdBy', 'leadProduct', 'department']);
+                $assignedUser = $productionInitiation->lead?->assignedTo ?: $productionInitiation->lead?->createdBy;
+                $recipientEmail = $assignedUser?->email;
+
+                if ($recipientEmail) {
+                    $reviewedBy = $user;
+
+                    Mail::send('emails.ovp_rejected', [
+                        'initiation' => $productionInitiation,
+                        'lead' => $productionInitiation->lead,
+                        'leadProduct' => $productionInitiation->leadProduct,
+                        'departmentName' => $productionInitiation->department?->name ?? 'Production',
+                        'reviewedBy' => $reviewedBy,
+                        'assignedUser' => $assignedUser,
+                        'rejectionReason' => $rejectionReason ?: 'No reason specified.',
+                    ], function ($message) use ($recipientEmail, $assignedUser, $productionInitiation) {
+                        $message->to($recipientEmail, $assignedUser?->name ?? 'Team Member')
+                            ->subject('OVP Rejected - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                    });
+                }
+            } catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::error('Failed to send OVP rejection email via API.', [
+                    'initiation_id' => $productionInitiation->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([
@@ -430,9 +487,60 @@ class OvpModuleApiController extends Controller
             'created_at'            => $i->created_at?->toIso8601String(),
             'is_overdue'            => $this->isOverdue($i),
             // New — the two fields the Flutter app was missing entirely.
-            'ovp_form_schema'       => $this->ovpFormSchemaFor($i),
-            'custom_form_data'      => $i->custom_form_data ?? [],
+            'ovp_form_schema'             => $this->ovpFormSchemaFor($i),
+            'custom_form_data'            => $this->formatCustomFormData($i),
+            'attachment_name'             => $i->attachment_name,
+            'attachment_path'             => $i->attachment_path,
+            'attachment_url'              => $i->attachment_path ? asset($i->attachment_path) : null,
+            'production_approval_remarks' => $i->production_approval_remarks,
         ];
+    }
+
+    /**
+     * Normalizes custom_form_data so that file fields always expose a valid,
+     * fully-qualified URL and proper file name for the mobile client.
+     */
+    private function formatCustomFormData(ProductionInitiation $i): array
+    {
+        $data = $i->custom_form_data;
+        if (is_string($data)) {
+            $data = json_decode($data, true) ?? [];
+        }
+        if (!is_array($data)) {
+            return [];
+        }
+
+        foreach ($data as &$entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $type = $entry['type'] ?? null;
+            if ($type === 'file') {
+                $val = $entry['value'] ?? null;
+                if (is_string($val) && !empty($val)) {
+                    $entry['value'] = [
+                        'path' => $val,
+                        'name' => basename($val),
+                        'url'  => str_starts_with($val, 'http://') || str_starts_with($val, 'https://') ? $val : asset($val),
+                    ];
+                } elseif (is_array($val)) {
+                    $path = $val['path'] ?? ($val['url'] ?? null);
+                    $name = $val['name'] ?? ($path ? basename($path) : 'Document');
+                    $url  = $val['url'] ?? ($path ? asset($path) : null);
+                    if ($url && !str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+                        $url = asset($url);
+                    }
+                    $entry['value'] = [
+                        'path' => $path,
+                        'name' => $name,
+                        'url'  => $url,
+                    ];
+                }
+            }
+        }
+        unset($entry);
+
+        return $data;
     }
 
     /**
