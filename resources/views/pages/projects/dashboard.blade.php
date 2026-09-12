@@ -79,14 +79,31 @@
 .ps-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid #d1d5db; background:#fff; color:#111827; font-size:13px; font-weight:800; text-decoration:none; cursor:pointer; }
 .ps-btn-primary { background:#166534; border-color:#166534; color:#fff; }
 .ps-allocate-note { margin-top:10px; font-size:12px; color:#475569; }
-.tox-tinymce { border-radius:16px !important; border-color:#dbe1e8 !important; }
+.pjd-filter-card { background:#fff; border:1px solid #eee7df; border-radius:18px; overflow:hidden; display:block; box-shadow:0 14px 34px rgba(15,23,42,.05); }
+.pjd-filter-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 20px; border:none; background:linear-gradient(180deg,#fffdfb 0%,#fff 100%); cursor:pointer; text-align:left; font-family:inherit; list-style:none; }
+.pjd-filter-toggle::-webkit-details-marker { display:none; }
+.pjd-filter-toggle:hover { background:linear-gradient(180deg,#fff7f1 0%,#fff 100%); }
+.pjd-filter-card[open] .pjd-filter-toggle { border-bottom:1px solid #f2ede8; }
+.pjd-filter-toggle-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.pjd-filter-title { font-size:15px; font-weight:900; color:#111827; }
+.pjd-filter-sub { font-size:12px; color:#7c7c7c; margin-top:2px; }
+.pjd-filter-pill { display:inline-flex; align-items:center; gap:6px; padding:7px 11px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa; color:#c2410c; font-size:11px; font-weight:800; }
+.pjd-filter-chevron { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #eee7df; background:#fff; color:#7c7c7c; transition:transform .18s ease, color .18s ease, border-color .18s ease; }
+.pjd-filter-card[open] .pjd-filter-chevron { transform:rotate(180deg); color:#ea580c; border-color:#fed7aa; }
+.pjd-filter-body { padding:20px; }
+.pjd-filter-form { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; align-items:flex-start; }
+.pjd-field-wide { grid-column: span 2; }
+.pjd-filter-actions-row { grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:10px; padding-top:14px; border-top:1px solid #f2ede8; margin-top:4px; }
 @media (max-width: 1200px) {
     .pjd-filters { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .pjd-filter-form { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
     .pjd-topbar { padding:18px 16px; flex-direction:column; }
     .pjd-body { padding:18px 16px 24px; }
     .pjd-filters, .pjd-kpis { grid-template-columns:1fr; }
+    .pjd-filter-form { grid-template-columns:1fr; }
+    .pjd-field-wide { grid-column: span 1; }
     .ps-form-grid { grid-template-columns:1fr; }
     .pjd-update-modal { width:min(100vw - 20px, 860px); max-height:calc(100vh - 20px); }
     .pjd-update-modal-head { padding:18px 16px; }
@@ -676,15 +693,140 @@
         </div>
 
         <div class="pjd-body">
-            <section class="pjd-card">
-                <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Filters</div>
-                        <div class="pjd-card-sub">Use dates, project, and team allocation filters to narrow this dashboard.</div>
-                    </div>
+        @php
+            $hasActiveFilters = !empty($dashboardFilters['search'])
+                || !empty($dashboardFilters['product_id'])
+                || !empty($dashboardFilters['department_id'])
+                || !empty($dashboardFilters['employee_id'])
+                || !empty($dashboardFilters['project_status'])
+                || !empty($dashboardFilters['allocation_status'])
+                || !empty($dashboardFilters['project_id'])
+                || (!empty($dashboardFilters['quick_date']) && !in_array($dashboardFilters['quick_date'], ['all', 'month'], true));
+        @endphp
+
+        <details class="pjd-filter-card" id="dashboardFilters" @if($hasActiveFilters) open @endif>
+            <summary class="pjd-filter-toggle" id="dashboardFiltersToggle">
+                <div>
+                    <div class="pjd-filter-title">Filter Projects</div>
+                    <div class="pjd-filter-sub">{{ ($isCompanyAdmin ?? false) ? 'Narrow results by product, department, employee, status, or quick dates.' : 'Use dates, project, and team allocation filters to narrow this dashboard.' }}</div>
                 </div>
-                <div class="pjd-card-body">
+                <div class="pjd-filter-toggle-right">
+                    <div class="pjd-filter-pill">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                        </svg>
+                        {{ number_format($stats['allocated_projects']) }} results
+                    </div>
+                    <span class="pjd-filter-chevron">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </span>
+                </div>
+            </summary>
+            <div class="pjd-filter-body" id="dashboardFiltersBody">
+                @if($isCompanyAdmin ?? false)
+                    <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filter-form" id="pjdFilterForm">
+                        @if(request('dashboard_type'))
+                            <input type="hidden" name="dashboard_type" value="{{ request('dashboard_type') }}">
+                        @endif
+
+                        <div class="pjd-field pjd-field-wide">
+                            <label class="pjd-label" for="search">Lead / Company Search</label>
+                            <input id="search" type="text" name="search" value="{{ $dashboardFilters['search'] ?? '' }}" class="pjd-input" placeholder="Search Lead ID, company, client, mobile, project name...">
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="product_id">Product</label>
+                            <select id="product_id" name="product_id" class="pjd-select">
+                                <option value="">All Products</option>
+                                @foreach($products as $product)
+                                    <option value="{{ $product->id }}" @selected(($dashboardFilters['product_id'] ?? '') === (string) $product->id)>
+                                        {{ $product->product_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="department_id">Department</label>
+                            <select id="department_id" name="department_id" class="pjd-select" onchange="onPjdDepartmentChange(this.value)">
+                                <option value="">All Departments</option>
+                                @foreach($departments as $dept)
+                                    <option value="{{ $dept->id }}" @selected(($dashboardFilters['department_id'] ?? '') === (string) $dept->id)>
+                                        {{ $dept->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="employee_id">Employee</label>
+                            <select id="employee_id" name="employee_id" class="pjd-select">
+                                <option value="">All Employees</option>
+                                @foreach($employees as $emp)
+                                    <option value="{{ $emp->id }}"
+                                        data-department-ids="{{ implode(',', $emp->department_ids ?? []) }}"
+                                        @selected(($dashboardFilters['employee_id'] ?? '') === (string) $emp->id)>
+                                        {{ $emp->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="project_status">Project Status</label>
+                            <select id="project_status" name="project_status" class="pjd-select">
+                                <option value="">All Status</option>
+                                <option value="ongoing" @selected(($dashboardFilters['project_status'] ?? '') === 'ongoing' || ($dashboardFilters['project_status'] ?? '') === 'ontrack')>Ongoing / Onboard</option>
+                                <option value="hold" @selected(($dashboardFilters['project_status'] ?? '') === 'hold')>Hold</option>
+                                <option value="delivered" @selected(($dashboardFilters['project_status'] ?? '') === 'delivered')>Delivered</option>
+                                <option value="lost" @selected(($dashboardFilters['project_status'] ?? '') === 'lost')>Lost</option>
+                            </select>
+                        </div>
+
+                        <input type="hidden" name="date_type" id="pjd_date_type" value="{{ $dashboardFilters['date_type'] ?? 'delivery' }}">
+
+                        <div class="pjd-field">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <label class="pjd-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
+                                <span id="pjdQuickDateRange" style="font-size:11px;font-weight:700;color:#ea580c;"></span>
+                            </div>
+                            <select id="quick_date_select" name="quick_date" class="pjd-select" onchange="onPjdQuickDateChange(this.value)">
+                                <option value="today" {{ ($dashboardFilters['quick_date'] ?? '') === 'today' ? 'selected' : '' }}>Today</option>
+                                <option value="week" {{ in_array($dashboardFilters['quick_date'] ?? '', ['week', 'this_week', 'weekly'], true) ? 'selected' : '' }}>This Week</option>
+                                <option value="month" {{ in_array($dashboardFilters['quick_date'] ?? '', ['month', 'this_month', 'monthly'], true) ? 'selected' : '' }}>This Month</option>
+                                <option value="quarter" {{ in_array($dashboardFilters['quick_date'] ?? '', ['quarter', 'this_quarter', 'quarterly'], true) ? 'selected' : '' }}>This Quarter</option>
+                                <option value="year" {{ in_array($dashboardFilters['quick_date'] ?? '', ['year', 'this_year', 'yearly'], true) ? 'selected' : '' }}>This Year</option>
+                                <option value="all" {{ ($dashboardFilters['quick_date'] ?? '') === 'all' ? 'selected' : '' }}>Show All</option>
+                                <option value="custom_onboarding" {{ in_array($dashboardFilters['quick_date'] ?? '', ['custom_onboarding', 'onboard', 'onboarding'], true) ? 'selected' : '' }}>Custom Dates (Onboarding)</option>
+                                <option value="custom_delivery" {{ in_array($dashboardFilters['quick_date'] ?? '', ['custom_delivery', 'delivery'], true) || (($dashboardFilters['quick_date'] ?? '') === 'custom' && ($dashboardFilters['date_type'] ?? '') !== 'onboarding') ? 'selected' : '' }}>Custom Dates (Delivery)</option>
+                            </select>
+                        </div>
+
+                        @php
+                            $isCustomDate = in_array($dashboardFilters['quick_date'] ?? '', ['custom_onboarding', 'custom_delivery', 'custom', 'onboard', 'onboarding', 'delivery'], true);
+                        @endphp
+                        <div class="pjd-field" id="pjdFromField" style="display: {{ $isCustomDate ? 'flex' : 'none' }};">
+                            <label class="pjd-label" for="date_from">From Date</label>
+                            <input id="date_from" type="date" name="date_from" value="{{ $dashboardFilters['date_from'] ?? '' }}" class="pjd-input">
+                        </div>
+
+                        <div class="pjd-field" id="pjdToField" style="display: {{ $isCustomDate ? 'flex' : 'none' }};">
+                            <label class="pjd-label" for="date_to">To Date</label>
+                            <input id="date_to" type="date" name="date_to" value="{{ $dashboardFilters['date_to'] ?? '' }}" class="pjd-input">
+                        </div>
+
+                        <div class="pjd-filter-actions-row">
+                            <button type="submit" class="pjd-btn pjd-btn-primary">Apply Filter</button>
+                            <a href="{{ route('projects.dashboard', request('dashboard_type') ? ['dashboard_type' => request('dashboard_type')] : []) }}" class="pjd-btn">Reset</a>
+                        </div>
+                    </form>
+                @else
                     <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters">
+                        @if(request('dashboard_type'))
+                            <input type="hidden" name="dashboard_type" value="{{ request('dashboard_type') }}">
+                        @endif
                         <div class="pjd-field">
                             <label class="pjd-label">From Date</label>
                             <input type="date" name="date_from" value="{{ $dashboardFilters['date_from'] ?? '' }}" class="pjd-input">
@@ -727,11 +869,12 @@
                         @endif
                         <div class="pjd-field pjd-filter-actions">
                             <button type="submit" class="pjd-btn pjd-btn-primary">Apply Filter</button>
-                            <a href="{{ route('projects.dashboard') }}" class="pjd-btn">Reset</a>
+                            <a href="{{ route('projects.dashboard', request('dashboard_type') ? ['dashboard_type' => request('dashboard_type')] : []) }}" class="pjd-btn">Reset</a>
                         </div>
                     </form>
-                </div>
-            </section>
+                @endif
+            </div>
+        </details>
 
             <section class="pjd-stats">
                 <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
@@ -840,74 +983,20 @@
                 </div>
             </section>
 
-            <!-- Charts Section -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 18px;">
-                <!-- Chart 1: Development Product Delivery & Ongoing Status -->
-                <div class="pjd-card" style="display: flex; flex-direction: column;">
-                    <div class="pjd-card-head">
-                        <div>
-                            <div class="pjd-card-title">Development Product Delivery Status</div>
-                            <div class="pjd-card-sub">Delivered vs Ongoing projects for the selected period.</div>
-                        </div>
-                    </div>
-                    <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative;">
-                        @if($developmentProductWiseStats->isEmpty())
-                            <div class="pjd-empty" style="padding-top: 80px;">No development projects scheduled for delivery in this period.</div>
-                        @else
-                            <div id="devProductChart"></div>
-                        @endif
-                    </div>
-                </div>
-
-                <!-- Chart 2: Payment Status -->
-                <div class="pjd-card" style="display: flex; flex-direction: column;">
-                    <div class="pjd-card-head">
-                        <div>
-                            <div class="pjd-card-title">Payment Status</div>
-                            <div class="pjd-card-sub">Overview of received collections and outstanding balance.</div>
-                        </div>
-                    </div>
-                    <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative; display: flex; justify-content: center; align-items: center;">
-                        @if($paymentStats['received'] == 0 && $paymentStats['pending'] == 0)
-                            <div class="pjd-empty">No payment data recorded in this period.</div>
-                        @else
-                            <div style="width: 100%; height: 100%; max-height: 240px; display: flex; justify-content: center; align-items: center;">
-                                <div id="paymentChart" style="width: 100%;"></div>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chart 3: Last 6 Months Revenue (Full Width) -->
-            <div class="pjd-card" style="margin-top: 18px; display: flex; flex-direction: column;">
-                <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Last 6 Months Revenue</div>
-                        <div class="pjd-card-sub">Monthly trend of payment collections received.</div>
-                    </div>
-                </div>
-                <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative;">
-                    @if(collect($sixMonthsRevenue)->sum('revenue') == 0)
-                        <div class="pjd-empty" style="padding-top: 80px;">No revenue recorded over the last six months.</div>
-                    @else
-                        <div id="revenueChart"></div>
-                    @endif
-                </div>
-            </div>
-
-            <div class="pjd-split">
-                <section class="pjd-card">
+            <!-- Row: Recent Allocated Projects & Payment Status -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; margin-top: 18px;">
+                <!-- Recent Allocated Projects -->
+                <section class="pjd-card" style="display: flex; flex-direction: column;">
                     <div class="pjd-card-head">
                         <div>
                             <div class="pjd-card-title">Recent Allocated Projects</div>
                             <div class="pjd-card-sub">Active projects and their allocated teams.</div>
                         </div>
                     </div>
-                    <div class="pjd-card-body" style="padding:0;">
+                    <div class="pjd-card-body" style="padding:0; flex: 1;">
                         @if($recentProjects->isNotEmpty())
                             <div class="pjd-table-wrap">
-                                <table class="pjd-table">
+                                <table class="pjd-table" style="min-width: 100%;">
                                     <thead>
                                         <tr>
                                             <th>Project</th>
@@ -946,46 +1035,66 @@
                     </div>
                 </section>
 
-                <section class="pjd-card">
+                <!-- Payment Status -->
+                <section class="pjd-card" style="display: flex; flex-direction: column;">
                     <div class="pjd-card-head">
                         <div>
-                            <div class="pjd-card-title">Timesheet & Activity Summary</div>
-                            <div class="pjd-card-sub">Logs from daily timesheet entries.</div>
+                            <div class="pjd-card-title">Payment Status</div>
+                            <div class="pjd-card-sub">Overview of received collections and outstanding balance.</div>
                         </div>
                     </div>
-                    <div class="pjd-card-body" style="padding:0;">
-                        @if(!empty($timesheetSummary))
-                            <div class="pjd-table-wrap">
-                                <table class="pjd-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Project Name</th>
-                                            <th>Submissions</th>
-                                            <th>Total Posters</th>
-                                            <th>Total Videos</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($timesheetSummary as $row)
-                                            <tr>
-                                                <td>
-                                                    <div class="pjd-product">{{ $row['project_name'] }}</div>
-                                                    <div class="pjd-meta">{{ $row['company_name'] }}</div>
-                                                </td>
-                                                <td>{{ $row['entries_count'] }} logs</td>
-                                                <td>{{ $row['total_posters'] }}</td>
-                                                <td>{{ $row['total_videos'] }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
+                    <div class="pjd-card-body" style="flex: 1; min-height: 280px; position: relative; display: flex; justify-content: center; align-items: center;">
+                        @if($paymentStats['received'] == 0 && $paymentStats['pending'] == 0)
+                            <div class="pjd-empty">No payment data recorded in this period.</div>
                         @else
-                            <div class="pjd-empty">No active timesheet submissions found.</div>
+                            <div style="width: 100%; height: 100%; max-height: 240px; display: flex; justify-content: center; align-items: center;">
+                                <div id="paymentChart" style="width: 100%;"></div>
+                            </div>
                         @endif
                     </div>
                 </section>
             </div>
+
+            <!-- Timesheet & Activity Summary -->
+            <section class="pjd-card" style="margin-top: 18px;">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title">Timesheet & Activity Summary</div>
+                        <div class="pjd-card-sub">Logs from daily timesheet entries.</div>
+                    </div>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
+                    @if(!empty($timesheetSummary))
+                        <div class="pjd-table-wrap">
+                            <table class="pjd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Project Name</th>
+                                        <th>Submissions</th>
+                                        <th>Total Posters</th>
+                                        <th>Total Videos</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($timesheetSummary as $row)
+                                        <tr>
+                                            <td>
+                                                <div class="pjd-product">{{ $row['project_name'] }}</div>
+                                                <div class="pjd-meta">{{ $row['company_name'] }}</div>
+                                            </td>
+                                            <td>{{ $row['entries_count'] }} logs</td>
+                                            <td>{{ $row['total_posters'] }}</td>
+                                            <td>{{ $row['total_videos'] }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="pjd-empty">No active timesheet submissions found.</div>
+                    @endif
+                </div>
+            </section>
 
             @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
                 <div class="pjd-update-modal-overlay {{ $hasUpdateErrors ? 'is-open' : '' }}" data-update-modal-overlay></div>
@@ -1318,55 +1427,177 @@
 @if(!($isDesigningDashboard ?? false))
     @push('scripts')
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const devProductStats = @json($developmentProductWiseStats);
-        const paymentStats = @json($paymentStats);
-        const sixMonthsRevenue = @json($sixMonthsRevenue);
+    function calcPjdPresetDates(val) {
+        const today = new Date();
+        const fmt = d => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
 
-        // 1. Development Product Chart
-        const devCanvas = document.getElementById('devProductChart');
-        if (devCanvas && typeof ApexCharts !== 'undefined') {
-            const devLabels = Object.keys(devProductStats);
-            const devDeliveredData = devLabels.map(k => devProductStats[k].delivered);
-            const devOngoingData = devLabels.map(k => devProductStats[k].ongoing);
+        if (val === 'today') {
+            const s = fmt(today);
+            return { from: s, to: s };
+        }
+        if (val === 'week') {
+            const day = today.getDay();
+            const diffToMon = (day === 0 ? -6 : 1) - day;
+            const mon = new Date(today);
+            mon.setDate(today.getDate() + diffToMon);
+            const sun = new Date(mon);
+            sun.setDate(mon.getDate() + 6);
+            return { from: fmt(mon), to: fmt(sun) };
+        }
+        if (val === 'month') {
+            const first = new Date(today.getFullYear(), today.getMonth(), 1);
+            const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            return { from: fmt(first), to: fmt(last) };
+        }
+        if (val === 'quarter') {
+            const qStartMonth = Math.floor(today.getMonth() / 3) * 3;
+            const firstQ = new Date(today.getFullYear(), qStartMonth, 1);
+            const lastQ = new Date(today.getFullYear(), qStartMonth + 3, 0);
+            return { from: fmt(firstQ), to: fmt(lastQ) };
+        }
+        if (val === 'year') {
+            return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+        }
+        return { from: '', to: '' };
+    }
 
-            const options = {
-                series: [{
-                    name: 'Delivered',
-                    data: devDeliveredData
-                }, {
-                    name: 'Ongoing',
-                    data: devOngoingData
-                }],
-                chart: {
-                    type: 'bar',
-                    height: 280,
-                    stacked: true,
-                    toolbar: { show: false }
-                },
-                colors: ['#10b981', '#f59e0b'],
-                plotOptions: {
-                    bar: {
-                        horizontal: false,
-                        borderRadius: 6
-                    },
-                },
-                xaxis: {
-                    categories: devLabels,
-                },
-                legend: {
-                    position: 'bottom'
-                },
-                fill: {
-                    opacity: 1
+    function formatPjdDisplayDate(dStr) {
+        if (!dStr) return '';
+        const parts = dStr.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+        return dStr;
+    }
+
+    function updatePjdQuickDateRangeSpan(val) {
+        const span = document.getElementById('pjdQuickDateRange');
+        if (!span) return;
+        if (val === 'all' || !val) {
+            span.textContent = '';
+            return;
+        }
+        if (val === 'custom_onboarding' || val === 'custom_delivery' || val === 'custom') {
+            const f = document.getElementById('date_from')?.value;
+            const t = document.getElementById('date_to')?.value;
+            const prefix = (val === 'custom_onboarding') ? 'Onboard: ' : 'Delivery: ';
+            span.textContent = (f && t) ? `${prefix}${formatPjdDisplayDate(f)} - ${formatPjdDisplayDate(t)}` : (val === 'custom_onboarding' ? 'Onboard Date' : 'Delivery Date');
+            return;
+        }
+        const dates = calcPjdPresetDates(val);
+        if (dates.from && dates.to) {
+            span.textContent = `${formatPjdDisplayDate(dates.from)} - ${formatPjdDisplayDate(dates.to)}`;
+        } else {
+            span.textContent = '';
+        }
+    }
+
+    function onPjdQuickDateChange(val) {
+        const fromField = document.getElementById('pjdFromField');
+        const toField = document.getElementById('pjdToField');
+        const f = document.getElementById('date_from');
+        const t = document.getElementById('date_to');
+        const dateTypeInput = document.getElementById('pjd_date_type');
+
+        if (val === 'custom_onboarding' || val === 'custom_delivery' || val === 'custom') {
+            if (fromField) fromField.style.display = 'flex';
+            if (toField) toField.style.display = 'flex';
+            if (dateTypeInput) {
+                dateTypeInput.value = (val === 'custom_onboarding') ? 'onboarding' : 'delivery';
+            }
+        } else {
+            if (fromField) fromField.style.display = 'none';
+            if (toField) toField.style.display = 'none';
+            if (dateTypeInput) {
+                dateTypeInput.value = 'delivery';
+            }
+            if (val === 'all') {
+                if (f) f.value = '';
+                if (t) t.value = '';
+            } else {
+                const dates = calcPjdPresetDates(val);
+                if (f) f.value = dates.from;
+                if (t) t.value = dates.to;
+            }
+        }
+        updatePjdQuickDateRangeSpan(val);
+    }
+
+    function filterEmployeesByDepartment(deptId, preserveSelection) {
+        const empSelect = document.getElementById('employee_id');
+        if (!empSelect) return;
+
+        const currentVal = empSelect.value;
+        const options = empSelect.querySelectorAll('option');
+        let hasValidSelection = false;
+
+        options.forEach(function (opt) {
+            if (!opt.value) {
+                opt.hidden = false;
+                opt.disabled = false;
+                return;
+            }
+
+            const deptIdsStr = opt.getAttribute('data-department-ids') || '';
+            const deptIds = deptIdsStr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+            if (!deptId || deptIds.length === 0 || deptIds.includes(String(deptId))) {
+                opt.hidden = false;
+                opt.disabled = false;
+                if (opt.value === currentVal) {
+                    hasValidSelection = true;
                 }
-            };
+            } else {
+                opt.hidden = true;
+                opt.disabled = true;
+            }
+        });
 
-            const chart = new ApexCharts(devCanvas, options);
-            chart.render();
+        if (!preserveSelection && !hasValidSelection && currentVal !== '') {
+            empSelect.value = '';
+        }
+    }
+
+    function onPjdDepartmentChange(deptId) {
+        filterEmployeesByDepartment(deptId, false);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const f = document.getElementById('date_from');
+        const t = document.getElementById('date_to');
+        const q = document.getElementById('quick_date_select');
+        const deptSelect = document.getElementById('department_id');
+        const fromField = document.getElementById('pjdFromField');
+        const toField = document.getElementById('pjdToField');
+
+        if (deptSelect && deptSelect.value) {
+            filterEmployeesByDepartment(deptSelect.value, true);
         }
 
-        // 2. Payment Chart
+        function handlePjdDateInput() {
+            if (q && q.value !== 'custom_onboarding' && q.value !== 'custom_delivery') {
+                q.value = 'custom_delivery';
+            }
+            if (fromField) fromField.style.display = 'flex';
+            if (toField) toField.style.display = 'flex';
+            updatePjdQuickDateRangeSpan(q?.value || 'custom_delivery');
+        }
+
+        if (f) f.addEventListener('change', handlePjdDateInput);
+        if (t) t.addEventListener('change', handlePjdDateInput);
+
+        if (q) {
+            updatePjdQuickDateRangeSpan(q.value);
+        }
+
+        const paymentStats = @json($paymentStats);
+
+        // Payment Chart
         const paymentCanvas = document.getElementById('paymentChart');
         if (paymentCanvas && typeof ApexCharts !== 'undefined') {
             const options = {
@@ -1393,55 +1624,6 @@
             };
 
             const chart = new ApexCharts(paymentCanvas, options);
-            chart.render();
-        }
-
-        // 3. Last 6 Months Revenue Chart
-        const revCanvas = document.getElementById('revenueChart');
-        if (revCanvas && typeof ApexCharts !== 'undefined') {
-            const revLabels = sixMonthsRevenue.map(item => item.month_name);
-            const revData = sixMonthsRevenue.map(item => item.revenue);
-
-            const options = {
-                series: [{
-                    name: 'Revenue Billed',
-                    data: revData
-                }],
-                colors: ['#ea580c'],
-                chart: {
-                    type: 'area',
-                    height: 280,
-                    toolbar: { show: false }
-                },
-                stroke: {
-                    curve: 'smooth',
-                    width: 3
-                },
-                fill: {
-                    type: 'gradient',
-                    gradient: {
-                        shadeIntensity: 1,
-                        opacityFrom: 0.4,
-                        opacityTo: 0.05,
-                        stops: [0, 90, 100]
-                    }
-                },
-                xaxis: {
-                    categories: revLabels,
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function (value) {
-                            return 'Rs ' + value.toLocaleString();
-                        }
-                    }
-                },
-                dataLabels: {
-                    enabled: false
-                }
-            };
-
-            const chart = new ApexCharts(revCanvas, options);
             chart.render();
         }
     });

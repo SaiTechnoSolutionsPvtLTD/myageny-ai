@@ -447,17 +447,136 @@ class ProjectController extends Controller
             ->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
+        $products = Product::query()->orderBy('product_name')->get(['id', 'product_name']);
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+
+        $onboardingDepts = \App\Models\EmployeeOnboarding::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
+        $internDepts = \App\Models\InternJoiningForm::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
+        $employees = User::query()
+            ->with(['roles:id,department_id'])
+            ->where('is_active', true)
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function ($emp) use ($onboardingDepts, $internDepts) {
+                $roleDeptIds = $emp->roles->pluck('department_id')->filter()->map(fn($id) => (int) $id)->all();
+                $eoDeptIds = $onboardingDepts->get($emp->id, []);
+                $ijfDeptIds = $internDepts->get($emp->id, []);
+
+                $emp->department_ids = collect(array_merge($roleDeptIds, $eoDeptIds, $ijfDeptIds))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return $emp;
+            });
+
+        $isCompanyAdmin = $user->isCompanyAdmin() || $user->hasRole('company_admin') || $user->hasAdminLikeRole();
+
+        $quickDate = trim((string) $request->query('quick_date', ''));
+        $dateType = trim((string) $request->query('date_type', 'delivery'));
+
+        if (in_array($quickDate, ['custom_onboarding', 'onboarding', 'onboard'], true)) {
+            $dateType = 'onboarding';
+        } elseif (in_array($quickDate, ['custom_delivery', 'delivery'], true)) {
+            $dateType = 'delivery';
+        }
+
+        $search = trim((string) $request->query('search', ''));
+        $productId = trim((string) $request->query('product_id', ''));
+        $departmentId = trim((string) $request->query('department_id', ''));
+        $employeeId = trim((string) $request->query('employee_id', $request->query('team_member_id', '')));
+        $projectStatus = trim((string) $request->query('project_status', ''));
+        $allocationStatus = trim((string) $request->query('allocation_status', ''));
+        $projectId = trim((string) $request->query('project_id', ''));
+
         $defaultDateFrom = Carbon::now()->startOfMonth()->toDateString();
         $defaultDateTo = Carbon::now()->endOfMonth()->toDateString();
 
+        $dateFromStr = trim((string) $request->query('date_from', ''));
+        $dateToStr = trim((string) $request->query('date_to', ''));
+
+        $hasAnyFilterParam = $request->has('quick_date')
+            || $request->has('date_from')
+            || $request->has('date_to')
+            || $request->has('search')
+            || $request->has('product_id')
+            || $request->has('department_id')
+            || $request->has('employee_id')
+            || $request->has('team_member_id')
+            || $request->has('project_status')
+            || $request->has('allocation_status')
+            || $request->has('project_id');
+
+        if (!$hasAnyFilterParam) {
+            $quickDate = 'month';
+            $dateFromStr = $defaultDateFrom;
+            $dateToStr = $defaultDateTo;
+        } elseif ($quickDate !== '' && !in_array($quickDate, ['all', 'custom', 'custom_onboarding', 'custom_delivery'], true)) {
+            $now = Carbon::today();
+            switch ($quickDate) {
+                case 'today':
+                    $dateFromStr = $now->toDateString();
+                    $dateToStr = $now->toDateString();
+                    break;
+                case 'week':
+                case 'this_week':
+                case 'weekly':
+                    $dateFromStr = $now->copy()->startOfWeek()->toDateString();
+                    $dateToStr = $now->copy()->endOfWeek()->toDateString();
+                    break;
+                case 'month':
+                case 'this_month':
+                case 'monthly':
+                    $dateFromStr = $now->copy()->startOfMonth()->toDateString();
+                    $dateToStr = $now->copy()->endOfMonth()->toDateString();
+                    break;
+                case 'quarter':
+                case 'this_quarter':
+                case 'quarterly':
+                    $dateFromStr = $now->copy()->startOfQuarter()->toDateString();
+                    $dateToStr = $now->copy()->endOfQuarter()->toDateString();
+                    break;
+                case 'year':
+                case 'this_year':
+                case 'yearly':
+                    $dateFromStr = $now->copy()->startOfYear()->toDateString();
+                    $dateToStr = $now->copy()->endOfYear()->toDateString();
+                    break;
+            }
+        } elseif ($quickDate === 'all') {
+            $dateFromStr = '';
+            $dateToStr = '';
+        }
+
         $dashboardFilters = [
-            'date_from' => $request->has('date_from') ? trim((string) $request->query('date_from', '')) : $defaultDateFrom,
-            'date_to' => $request->has('date_to') ? trim((string) $request->query('date_to', '')) : $defaultDateTo,
-            'project_id' => trim((string) $request->query('project_id', '')),
-            'team_member_id' => $this->shouldAllowDashboardUserFilter($user)
-                ? trim((string) $request->query('team_member_id', ''))
-                : '',
-            'allocation_status' => trim((string) $request->query('allocation_status', '')),
+            'search' => $search,
+            'product_id' => $productId,
+            'department_id' => $departmentId,
+            'employee_id' => $employeeId,
+            'team_member_id' => $employeeId,
+            'project_id' => $projectId,
+            'project_status' => $projectStatus,
+            'allocation_status' => $allocationStatus,
+            'quick_date' => $quickDate,
+            'date_type' => $dateType,
+            'date_from' => $dateFromStr,
+            'date_to' => $dateToStr,
         ];
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
@@ -533,7 +652,11 @@ class ProjectController extends Controller
         $sixMonthsRevenue = array_values($lastSixMonths);
 
         return view('pages.projects.dashboard', [
+            'isCompanyAdmin' => $isCompanyAdmin,
             'isAdminLike' => $isAdminLike,
+            'products' => $products,
+            'departments' => $departments,
+            'employees' => $employees,
             'selectedDashboard' => $selectedDashboard,
             'stats' => $stats,
             'allocationPendingCount' => $allocationPendingProjects,
@@ -2495,43 +2618,119 @@ class ProjectController extends Controller
     {
         $dateFrom = $this->parseFilterDate($filters['date_from'] ?? '');
         $dateTo = $this->parseFilterDate($filters['date_to'] ?? '')?->endOfDay();
+        $dateType = trim((string) ($filters['date_type'] ?? 'delivery'));
         $selectedProjectId = (int) ($filters['project_id'] ?? 0);
-        $selectedTeamMemberId = (int) ($filters['team_member_id'] ?? 0);
+        $selectedProductId = trim((string) ($filters['product_id'] ?? ''));
+        $selectedDepartmentId = trim((string) ($filters['department_id'] ?? ''));
+        $selectedEmployeeId = (int) ($filters['employee_id'] ?? ($filters['team_member_id'] ?? 0));
+        $selectedProjectStatus = trim((string) ($filters['project_status'] ?? ''));
         $selectedAllocationStatus = trim((string) ($filters['allocation_status'] ?? ''));
+        $search = Str::lower(trim((string) ($filters['search'] ?? '')));
 
         return $projects
-            ->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedTeamMemberId, $selectedAllocationStatus, $user) {
+            ->filter(function (ProductionInitiation $project) use (
+                $dateFrom,
+                $dateTo,
+                $dateType,
+                $selectedProjectId,
+                $selectedProductId,
+                $selectedDepartmentId,
+                $selectedEmployeeId,
+                $selectedProjectStatus,
+                $selectedAllocationStatus,
+                $search,
+                $user
+            ) {
                 if ($selectedProjectId > 0 && (int) $project->id !== $selectedProjectId) {
                     return false;
                 }
 
-                if ($dateFrom || $dateTo) {
-                    $deliveryDate = $project->project_delivery_date;
-
-                    if (! $deliveryDate) {
-                        return false;
-                    }
-
-                    if ($dateFrom && $deliveryDate->lt($dateFrom)) {
-                        return false;
-                    }
-
-                    if ($dateTo && $deliveryDate->gt($dateTo)) {
+                if ($selectedProductId !== '') {
+                    if ((string) $project->product_id !== $selectedProductId) {
                         return false;
                     }
                 }
 
-                if ($selectedTeamMemberId > 0 && $this->shouldAllowDashboardUserFilter($user)) {
-                    $employeeIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))
+                if ($selectedDepartmentId !== '') {
+                    if ((string) $project->department_id !== $selectedDepartmentId) {
+                        return false;
+                    }
+                }
+
+                if ($selectedEmployeeId > 0) {
+                    $allocatedIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))
                         ->map(fn ($id) => (int) $id);
 
-                    if (! $employeeIds->contains($selectedTeamMemberId)) {
+                    if (is_array($project->tl_employee_allocations)) {
+                        foreach ($project->tl_employee_allocations as $alloc) {
+                            if (!empty($alloc['employee_user_ids']) && is_array($alloc['employee_user_ids'])) {
+                                foreach ($alloc['employee_user_ids'] as $euId) {
+                                    $allocatedIds->push((int) $euId);
+                                }
+                            }
+                        }
+                    }
+
+                    if (! $allocatedIds->contains($selectedEmployeeId)) {
+                        return false;
+                    }
+                }
+
+                if ($selectedProjectStatus !== '') {
+                    $currentStatus = strtolower(trim((string) ($project->project_execution_status ?: 'ontrack')));
+                    $targetStatus = strtolower(trim($selectedProjectStatus));
+
+                    if ($targetStatus === 'ongoing' || $targetStatus === 'ontrack') {
+                        if (! in_array($currentStatus, ['ontrack', 'ongoing'], true)) {
+                            return false;
+                        }
+                    } elseif ($currentStatus !== $targetStatus) {
                         return false;
                     }
                 }
 
                 if ($selectedAllocationStatus !== '') {
                     if ($project->project_allocation_status !== $selectedAllocationStatus) {
+                        return false;
+                    }
+                }
+
+                if ($dateFrom || $dateTo) {
+                    if ($dateType === 'onboarding') {
+                        $rawDate = $project->production_approval_reviewed_at
+                            ?: ($project->project_allocated_at ?: $project->created_at);
+                    } else {
+                        $rawDate = $project->project_delivery_date ?: $this->projectDeliveryDate($project);
+                    }
+
+                    if (! $rawDate) {
+                        return false;
+                    }
+
+                    $evalDate = Carbon::parse($rawDate)->startOfDay();
+
+                    if ($dateFrom && $evalDate->lt($dateFrom->copy()->startOfDay())) {
+                        return false;
+                    }
+
+                    if ($dateTo && $evalDate->gt($dateTo->copy()->endOfDay())) {
+                        return false;
+                    }
+                }
+
+                if ($search !== '') {
+                    $haystack = Str::lower(implode(' ', [
+                        $project->product_name,
+                        $project->client_name,
+                        $project->company_name,
+                        $project->lead?->contact_name,
+                        $project->lead?->company_name,
+                        $project->lead?->mobile_number,
+                        $project->lead_id ? 'LD-' . $project->lead_id : '',
+                        $project->lead_id ? (string) $project->lead_id : '',
+                    ]));
+
+                    if (! Str::contains($haystack, $search)) {
                         return false;
                     }
                 }
