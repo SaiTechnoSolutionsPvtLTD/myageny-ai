@@ -257,36 +257,75 @@
     });
 
     function openPettyCashModal() {
-        document.getElementById('addPettyCashModal').style.display = 'flex';
+        const modal = document.getElementById('addPettyCashModal');
+        if (modal) modal.style.display = 'flex';
     }
 
     function closePettyCashModal() {
-        document.getElementById('addPettyCashModal').style.display = 'none';
+        const modal = document.getElementById('addPettyCashModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    window.pettyCashTxMap = {};
+
+    function openEditPettyCashModalById(id) {
+        const tx = window.pettyCashTxMap ? window.pettyCashTxMap[id] : null;
+        if (!tx) {
+            console.error('Transaction not found in pettyCashTxMap:', id);
+            return;
+        }
+
+        const form = document.getElementById('editPettyCashForm');
+        if (!form) return;
+        form.action = '/hrms/petty-cash/' + tx.id;
+
+        const dateEl = document.getElementById('edit_pc_entry_date');
+        const typeEl = document.getElementById('edit_pc_type');
+        const nameEl = document.getElementById('edit_pc_name');
+        const voucherEl = document.getElementById('edit_pc_voucher_no');
+        const amountEl = document.getElementById('edit_pc_amount');
+        const particularsEl = document.getElementById('edit_pc_particulars');
+
+        if (dateEl) dateEl.value = tx.entry_date ? tx.entry_date.substring(0, 10) : '';
+        if (typeEl) typeEl.value = tx.type || 'debit';
+        if (nameEl) nameEl.value = (tx.name === '-' || !tx.name) ? '' : tx.name;
+        if (voucherEl) voucherEl.value = (tx.voucher_no === '-' || !tx.voucher_no) ? '' : tx.voucher_no;
+        if (amountEl) amountEl.value = tx.amount || '';
+        if (particularsEl) particularsEl.value = (tx.particulars === '-' || !tx.particulars) ? '' : tx.particulars;
+
+        const btn = document.getElementById('edit_pc_submit_btn');
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = 'Update Transaction';
+        }
+
+        const modal = document.getElementById('editPettyCashModal');
+        if (modal) modal.style.display = 'flex';
     }
 
     function openEditPettyCashModal(id, date, type, name, voucher, amount, particulars) {
-        const form = document.getElementById('editPettyCashForm');
-        form.action = '/hrms/petty-cash/' + id;
-        document.getElementById('edit_pc_entry_date').value = date || '';
-        document.getElementById('edit_pc_type').value = type || 'debit';
-        document.getElementById('edit_pc_name').value = (name === '-' || !name) ? '' : name;
-        document.getElementById('edit_pc_voucher_no').value = (voucher === '-' || !voucher) ? '' : voucher;
-        document.getElementById('edit_pc_amount').value = amount || '';
-        document.getElementById('edit_pc_particulars').value = particulars || '';
-        document.getElementById('editPettyCashModal').style.display = 'flex';
+        openEditPettyCashModalById(id);
     }
 
     function closeEditPettyCashModal() {
-        document.getElementById('editPettyCashModal').style.display = 'none';
+        const modal = document.getElementById('editPettyCashModal');
+        if (modal) modal.style.display = 'none';
     }
 
-    function escapeJs(str) {
-        if (!str || str === '-') return '';
-        return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     function formatINR(val) {
-        return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+        return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val || 0);
     }
 
     function loadPettyCashReport() {
@@ -321,12 +360,13 @@
             document.getElementById('pc_cr_val').innerText = '₹ ' + formatINR(data.totalCredit);
             document.getElementById('pc_cb_val').innerText = '₹ ' + formatINR(data.closingBalance);
 
+            window.pettyCashTxMap = {};
             let html = '';
 
             // Opening Balance Row
             html += `
                 <tr style="background: #f8fafc; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 16px;">${startDate}</td>
+                    <td style="padding: 12px 16px;">${escapeHtml(startDate)}</td>
                     <td style="padding: 12px 16px; text-align: center;">-</td>
                     <td style="padding: 12px 16px; text-align: center;">-</td>
                     <td style="padding: 12px 16px; color: #1d4ed8;">OPENING BALANCE B/F</td>
@@ -337,7 +377,7 @@
                 </tr>
             `;
 
-            if (data.transactions.length === 0) {
+            if (!data.transactions || data.transactions.length === 0) {
                 html += `
                     <tr>
                         <td colspan="8" style="padding: 30px; text-align: center; color: #94a3b8;">
@@ -347,15 +387,14 @@
                 `;
             } else {
                 data.transactions.forEach(tx => {
-                    const escName = escapeJs(tx.name);
-                    const escVoucher = escapeJs(tx.voucher_no);
-                    const escParticulars = escapeJs(tx.particulars);
+                    window.pettyCashTxMap[tx.id] = tx;
+
                     html += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 12px 16px; color: #334155;">${tx.entry_date_formatted}</td>
-                            <td style="padding: 12px 16px; color: #475569; font-family: monospace;">${tx.voucher_no}</td>
-                            <td style="padding: 12px 16px; color: #0f172a; font-weight: 600;">${tx.name}</td>
-                            <td style="padding: 12px 16px; color: #334155;">${tx.particulars}</td>
+                            <td style="padding: 12px 16px; color: #334155;">${escapeHtml(tx.entry_date_formatted)}</td>
+                            <td style="padding: 12px 16px; color: #475569; font-family: monospace;">${escapeHtml(tx.voucher_no)}</td>
+                            <td style="padding: 12px 16px; color: #0f172a; font-weight: 600;">${escapeHtml(tx.name)}</td>
+                            <td style="padding: 12px 16px; color: #334155;">${escapeHtml(tx.particulars)}</td>
                             <td style="padding: 12px 16px; text-align: right; color: #b91c1c; font-weight: 700;">
                                 ${tx.debit > 0 ? '₹ ' + formatINR(tx.debit) : '-'}
                             </td>
@@ -366,7 +405,7 @@
                                 ₹ ${formatINR(tx.running_balance)}
                             </td>
                             <td style="padding: 12px 16px; text-align: center;">
-                                <button type="button" onclick="openEditPettyCashModal(${tx.id}, '${tx.entry_date}', '${tx.type}', '${escName}', '${escVoucher}', ${tx.amount}, '${escParticulars}')" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 6px; cursor: pointer;" title="Edit Transaction">
+                                <button type="button" onclick="openEditPettyCashModalById(${tx.id})" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 6px; cursor: pointer;" title="Edit Transaction">
                                     <i class="bi bi-pencil-square"></i> Edit
                                 </button>
                             </td>
@@ -419,6 +458,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        const addModal = document.getElementById('addPettyCashModal');
+        if (addModal) {
+            addModal.addEventListener('click', function(e) {
+                if (e.target === this) closePettyCashModal();
+            });
+        }
+
+        const editModal = document.getElementById('editPettyCashModal');
+        if (editModal) {
+            editModal.addEventListener('click', function(e) {
+                if (e.target === this) closeEditPettyCashModal();
+            });
+        }
+
         loadPettyCashReport();
     });
 </script>
