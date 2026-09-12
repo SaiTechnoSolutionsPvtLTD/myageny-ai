@@ -366,7 +366,14 @@
                                         <td class="crm-pay-money" style="color:#dc2626;">Rs {{ number_format($rowOutstandingAmount, 2) }}</td>
                                         <td><span class="crm-pay-mode">{{ $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)) }}</span></td>
                                         <td class="crm-pay-muted">{{ $row->transaction_reference ?: '-' }}</td>
-                                        <td>{{ $row->received_by ?: '-' }}</td>
+                                        <td>
+                                            <div style="display:flex; flex-direction:column; gap:2px;">
+                                                <span style="font-weight:700; color:#111827;">{{ $row->received_by ?: '-' }}</span>
+                                                @if($row->received_by_department)
+                                                    <span style="font-size:11px; color:#6b7280; font-weight:600;">{{ $row->received_by_department }}</span>
+                                                @endif
+                                            </div>
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>

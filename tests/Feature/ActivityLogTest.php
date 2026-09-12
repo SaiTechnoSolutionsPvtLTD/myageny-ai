@@ -121,4 +121,72 @@ class ActivityLogTest extends TestCase
         $this->assertEquals(1, ActivityLog::forModule('Settings')->count());
         $this->assertEquals(2, ActivityLog::forAction('create')->count());
     }
+
+    public function test_activity_logger_can_record_call_update_actions()
+    {
+        $user = User::create([
+            'name' => 'Support Rep',
+            'email' => 'support@example.com',
+        ]);
+
+        $callData = [
+            'id' => 10,
+            'lead_id' => 50,
+            'outcome' => 'interested',
+            'outcome_label' => 'Interested',
+            'call_type' => 'outgoing',
+            'call_type_label' => 'Outgoing',
+            'next_follow_up' => '2026-09-20',
+            'followup_time' => '11:00:00',
+            'notes' => 'Client expressed interest',
+        ];
+
+        $log = ActivityLogger::logCallUpdate('create', $callData, 50, $user);
+        $this->assertNotNull($log);
+        $this->assertEquals('Call Updates', $log->module);
+        $this->assertEquals('created', $log->action);
+        $this->assertEquals(50, $log->lead_id);
+        $this->assertEquals($user->id, $log->user_id);
+        $this->assertStringContainsString('Support Rep', $log->description);
+        $this->assertStringContainsString('Interested', $log->description);
+
+        $deleteLog = ActivityLogger::logCallUpdate('delete', $callData, 50, $user);
+        $this->assertNotNull($deleteLog);
+        $this->assertEquals('deleted', $deleteLog->action);
+        $this->assertStringContainsString('deleted', $deleteLog->description);
+    }
+
+    public function test_activity_logger_can_record_payment_actions()
+    {
+        $user = User::create([
+            'name' => 'Accountant',
+            'email' => 'accounts@example.com',
+        ]);
+
+        $paymentData = [
+            'id' => 25,
+            'lead_id' => 50,
+            'lead_product_id' => 5,
+            'product_name' => 'ERP Software',
+            'amount' => 50000,
+            'payment_mode' => 'UPI',
+            'payment_date' => '2026-09-11',
+            'reference_number' => 'UPI123456',
+            'notes' => 'First installment',
+        ];
+
+        $log = ActivityLogger::logPayment('create', $paymentData, 50, $user);
+        $this->assertNotNull($log);
+        $this->assertEquals('Payments', $log->module);
+        $this->assertEquals('created', $log->action);
+        $this->assertEquals(50, $log->lead_id);
+        $this->assertEquals($user->id, $log->user_id);
+        $this->assertStringContainsString('50,000.00', $log->description);
+        $this->assertStringContainsString('UPI', $log->description);
+
+        $deleteLog = ActivityLogger::logPayment('delete', $paymentData, 50, $user);
+        $this->assertNotNull($deleteLog);
+        $this->assertEquals('deleted', $deleteLog->action);
+        $this->assertStringContainsString('deleted payment of ₹50,000.00', $deleteLog->description);
+    }
 }

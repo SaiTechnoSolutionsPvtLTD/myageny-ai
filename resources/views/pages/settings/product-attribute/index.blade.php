@@ -76,7 +76,7 @@
                 @csrf
                 <div class="crm-modal-body">
                     <label class="crm-label">Product Category <span class="req">*</span></label>
-                    <select name="category_id" class="crm-input" required>
+                    <select name="category_id" class="crm-input no-select2" required>
                         <option value="">— Select Category —</option>
                         @foreach($categories as $cat)
                             <option value="{{ $cat->id }}">{{ $cat->name }}</option>
@@ -100,8 +100,8 @@
             <form id="editForm" method="POST">
                 @csrf @method('PUT')
                 <div class="crm-modal-body">
-                    <label class="crm-label">Outcome Category <span class="req">*</span></label>
-                    <select id="editCatId" name="category_id" class="crm-input" required>
+                    <label class="crm-label">Product Category <span class="req">*</span></label>
+                    <select id="editCatId" name="category_id" class="crm-input no-select2" required>
                         <option value="">— Select Category —</option>
                         @foreach($categories as $cat)
                             <option value="{{ $cat->id }}">{{ $cat->name }}</option>
@@ -123,11 +123,17 @@
 @push('scripts')
 @include('pages.settings.partials.modal-scripts')
 <script>
-function openEdit(id, name, catId, id) {
-    document.getElementById('editName').value   = name;
-    document.getElementById('editCatId').value  = catId;
-    document.getElementById('id').value  = id;
-    document.getElementById('editForm').action  = `/masters/product-attribute/${id}`;
+function openEdit(id, name, catId) {
+    document.getElementById('editName').value = name;
+    const catSelect = document.getElementById('editCatId');
+    if (catSelect) {
+        catSelect.value = catId;
+    }
+    if (window.jQuery) {
+        $('#editCatId').val(catId).trigger('change');
+    }
+    document.getElementById('id').value = id;
+    document.getElementById('editForm').action = `/masters/product-attribute/${id}`;
     openModal('editModal');
 }
 </script>

@@ -109,6 +109,97 @@
         @media (max-width: 1100px) {
             .lr-summary-grid { grid-template-columns:1fr; }
         }
+
+        /* Filter Panel & Quick Filters */
+        .lr-filter-card {
+            background: #ffffff;
+            border: 1px solid #f1e5d7;
+            border-radius: 18px;
+            padding: 20px 24px;
+            box-shadow: 0 10px 30px rgba(18, 18, 18, 0.04);
+            margin-bottom: 6px;
+        }
+        .lr-qfilter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 999px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: inherit;
+        }
+        .lr-qfilter-btn:hover {
+            border-color: #fb923c;
+            background: #fff7ed;
+            color: #c2410c;
+        }
+        .lr-qfilter-btn.active {
+            border-color: #ea580c;
+            background: #ea580c;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
+        }
+        .lr-filter-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1.2fr 1fr 1fr 1fr auto;
+            gap: 14px;
+            align-items: flex-end;
+        }
+        .lr-filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .lr-filter-label {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #4b5563;
+        }
+        .lr-filter-input {
+            width: 100%;
+            height: 42px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            font-size: 13px;
+            outline: none;
+            background: #fff;
+            font-family: inherit;
+            color: #1f2937;
+            transition: border-color .15s, box-shadow .15s;
+            box-sizing: border-box;
+        }
+        select.lr-filter-input {
+            cursor: pointer;
+        }
+        .lr-filter-input:focus {
+            border-color: #ea580c;
+            box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
+        }
+        @media (max-width: 1200px) {
+            .lr-filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .lr-filter-actions-field {
+                grid-column: span 2;
+            }
+        }
+        @media (max-width: 640px) {
+            .lr-filter-grid {
+                grid-template-columns: 1fr;
+            }
+            .lr-filter-actions-field {
+                grid-column: span 1;
+            }
+        }
     </style>
 @endpush
 
@@ -134,6 +225,93 @@
         @endif
 
         <div class="lr-page">
+            @if($isCompanyAdmin ?? false)
+            {{-- Filter Panel for Admin / HR --}}
+            <div class="lr-filter-card">
+                <form method="GET" action="{{ route('leave-requests.index') }}" id="leaveFilterForm">
+                    <input type="hidden" name="quick_filter" id="leave_quick_filter_input" value="{{ request('quick_filter') }}">
+                    
+                    {{-- Quick Filters Row --}}
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid #f1f5f9;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#9a6b39; margin-right:4px;">Quick Filters:</span>
+                            <button type="button" class="lr-qfilter-btn {{ !request('quick_filter') && !request('date_from') && !request('date_to') ? 'active' : '' }}" onclick="applyLeaveQuickFilter('')">All</button>
+                            <button type="button" class="lr-qfilter-btn {{ request('quick_filter') === 'today' ? 'active' : '' }}" onclick="applyLeaveQuickFilter('today')">Today</button>
+                            <button type="button" class="lr-qfilter-btn {{ request('quick_filter') === 'tomorrow' ? 'active' : '' }}" onclick="applyLeaveQuickFilter('tomorrow')">Tomorrow</button>
+                            <button type="button" class="lr-qfilter-btn {{ request('quick_filter') === 'weekly' ? 'active' : '' }}" onclick="applyLeaveQuickFilter('weekly')">Weekly</button>
+                            <button type="button" class="lr-qfilter-btn {{ request('quick_filter') === 'monthly' ? 'active' : '' }}" onclick="applyLeaveQuickFilter('monthly')">Monthly</button>
+                            <button type="button" class="lr-qfilter-btn {{ request('quick_filter') === 'year' ? 'active' : '' }}" onclick="applyLeaveQuickFilter('year')">Year</button>
+                        </div>
+                        @if(request()->hasAny(['quick_filter', 'employee_id', 'department_id', 'date_from', 'date_to', 'status']))
+                            <a href="{{ route('leave-requests.index') }}" style="font-size:12px; font-weight:700; color:#ea580c; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                                ✕ Clear All Filters
+                            </a>
+                        @endif
+                    </div>
+
+                    {{-- Detailed Filters Grid --}}
+                    <div class="lr-filter-grid">
+                        <div class="lr-filter-field">
+                            <label class="lr-filter-label">Employee</label>
+                            <select name="employee_id" class="lr-filter-input">
+                                <option value="">All Employees</option>
+                                @foreach($employees as $emp)
+                                <option value="{{ $emp->id }}" {{ request('employee_id') == $emp->id ? 'selected' : '' }}>
+                                    {{ $emp->name }} {{ $emp->employee_id ? "({$emp->employee_id})" : '' }}
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="lr-filter-field">
+                            <label class="lr-filter-label">Department</label>
+                            <select name="department_id" class="lr-filter-input">
+                                <option value="">All Departments</option>
+                                @foreach($departments as $dept)
+                                <option value="{{ $dept->id }}" {{ request('department_id') == $dept->id ? 'selected' : '' }}>
+                                    {{ $dept->name }}
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="lr-filter-field">
+                            <label class="lr-filter-label">Status</label>
+                            <select name="status" class="lr-filter-input">
+                                <option value="">All Status</option>
+                                <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                                <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                                <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                            </select>
+                        </div>
+
+                        <div class="lr-filter-field">
+                            <label class="lr-filter-label">From Date</label>
+                            <input type="date" name="date_from" class="lr-filter-input" value="{{ request('date_from') }}">
+                        </div>
+
+                        <div class="lr-filter-field">
+                            <label class="lr-filter-label">To Date</label>
+                            <input type="date" name="date_to" class="lr-filter-input" value="{{ request('date_to') }}">
+                        </div>
+
+                        <div class="lr-filter-field lr-filter-actions-field">
+                            <label class="lr-filter-label">&nbsp;</label>
+                            <div style="display:flex; gap:8px;">
+                                <button type="submit" class="eob-btn eob-btn-primary" style="flex:1; height:42px; justify-content:center; border-radius:10px; font-size:13px; font-weight:700;">
+                                    Apply Filter
+                                </button>
+                                @if(request()->hasAny(['employee_id', 'department_id', 'date_from', 'date_to', 'status', 'quick_filter']))
+                                <a href="{{ route('leave-requests.index') }}" class="eob-btn" style="height:42px; padding:0 14px; background:#f8fafc; border:1px solid #d1d5db; color:#6b7280; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                                    Reset
+                                </a>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            @else
             {{-- Summary Cards (Clickable Tabs) --}}
             <div class="lr-summary-grid">
                 @if(auth()->user()->can('leave_requests.approve') || $pendingApprovals->isNotEmpty())
@@ -144,9 +322,9 @@
                 </div>
                 @endif
                 <div class="lr-summary-card" data-tab="leave-my-requests" onclick="switchLeaveTab('leave-my-requests')">
-                    <div class="lr-summary-label">My Requests</div>
+                    <div class="lr-summary-label">{{ ($isCompanyAdmin ?? false) ? 'All Requests' : 'My Requests' }}</div>
                     <div class="lr-summary-value" style="color: #0d9488;">{{ $leaveRequests->total() }}</div>
-                    <div class="lr-summary-sub">Your leave requests with current approval status.</div>
+                    <div class="lr-summary-sub">{{ ($isCompanyAdmin ?? false) ? 'All employee leave requests across the company.' : 'Your leave requests with current approval status.' }}</div>
                 </div>
                 @if(auth()->user()->can('leave_requests.approve') || $handledApprovals->isNotEmpty())
                 <div class="lr-summary-card" data-tab="leave-decisions" onclick="switchLeaveTab('leave-decisions')">
@@ -156,8 +334,10 @@
                 </div>
                 @endif
             </div>
+            @endif
 
             {{-- Nav Tabs --}}
+            @if(! ($isCompanyAdmin ?? false))
             <div class="lr-nav" role="tablist">
                 @if(auth()->user()->can('leave_requests.approve') || $pendingApprovals->isNotEmpty())
                 <button type="button" class="lr-nav-link" data-tab="leave-approvals" onclick="switchLeaveTab('leave-approvals')">
@@ -234,13 +414,14 @@
                 @endif
             </div>
             @endif
+            @endif
 
-            {{-- Tab 2: My Leave Requests --}}
-            <div id="leave-my-requests" class="eob-table-card lr-tab-panel">
+            {{-- Tab 2: Leave Requests Table --}}
+            <div id="leave-my-requests" class="eob-table-card @if(! ($isCompanyAdmin ?? false)) lr-tab-panel @endif">
                 <div class="lr-section-head">
                     <div>
-                        <div class="lr-section-title">My Leave Requests</div>
-                        <div class="lr-section-sub">Check whether your leave request is pending, approved, or rejected.</div>
+                        <div class="lr-section-title">{{ ($isCompanyAdmin ?? false) ? 'All Leave Requests' : 'My Leave Requests' }}</div>
+                        <div class="lr-section-sub">{{ ($isCompanyAdmin ?? false) ? 'Monitor all company leave requests and their hierarchy approval status.' : 'Check whether your leave request is pending, approved, or rejected.' }}</div>
                     </div>
                     <div class="lr-section-badge">{{ $leaveRequests->total() }} request(s)</div>
                 </div>
@@ -253,6 +434,9 @@
                             <table class="eob-list-table">
                                 <thead>
                                     <tr>
+                                        @if($isCompanyAdmin ?? false)
+                                            <th>Employee</th>
+                                        @endif
                                         <th>Leave Type</th>
                                         <th>Dates</th>
                                         <th>Status</th>
@@ -267,6 +451,14 @@
                                             $currentApproval = $leaveRequest->approvals->firstWhere('step_key', $leaveRequest->current_step);
                                         @endphp
                                         <tr>
+                                            @if($isCompanyAdmin ?? false)
+                                                <td>
+                                                    <div class="lr-meta-stack">
+                                                        <div class="eob-cell-title">{{ $leaveRequest->employee?->name ?: $leaveRequest->user?->name }}</div>
+                                                        <div class="eob-cell-sub">{{ $leaveRequest->employee?->employee_id ?: $leaveRequest->user?->email }}</div>
+                                                    </div>
+                                                </td>
+                                            @endif
                                             <td>{{ $leaveRequest->leaveType?->name }}</td>
                                             <td>
                                                 <div class="lr-meta-stack">
@@ -302,7 +494,7 @@
             </div>
 
             {{-- Tab 3: My Recent Decisions --}}
-            @if(auth()->user()->can('leave_requests.approve') || $handledApprovals->isNotEmpty())
+            @if(! ($isCompanyAdmin ?? false) && (auth()->user()->can('leave_requests.approve') || $handledApprovals->isNotEmpty()))
             <div id="leave-decisions" class="eob-table-card lr-tab-panel">
                 <div class="lr-section-head">
                     <div>
@@ -358,6 +550,23 @@
 
 @push('scripts')
 <script>
+function applyLeaveQuickFilter(val) {
+    var input = document.getElementById('leave_quick_filter_input');
+    if (input) {
+        input.value = val;
+    }
+    if (val) {
+        var fromEl = document.querySelector('input[name="date_from"]');
+        var toEl = document.querySelector('input[name="date_to"]');
+        if (fromEl) fromEl.value = '';
+        if (toEl) toEl.value = '';
+    }
+    var form = document.getElementById('leaveFilterForm');
+    if (form) {
+        form.submit();
+    }
+}
+
 function switchLeaveTab(tabId) {
     var targetPanel = document.getElementById(tabId);
     if (!targetPanel) return;
@@ -396,12 +605,19 @@ function switchLeaveTab(tabId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    var isCompanyAdmin = {{ ($isCompanyAdmin ?? false) ? 'true' : 'false' }};
+    if (isCompanyAdmin) {
+        return;
+    }
+
     var hash = window.location.hash ? window.location.hash.substring(1) : '';
     var initialTab = null;
+    var params = new URLSearchParams(window.location.search);
+    var hasFilterParams = params.has('requests_page') || params.has('quick_filter') || params.has('employee_id') || params.has('department_id') || params.has('date_from') || params.has('date_to') || params.has('status');
 
     if (hash && document.getElementById(hash)) {
         initialTab = hash;
-    } else if (new URLSearchParams(window.location.search).has('requests_page')) {
+    } else if (hasFilterParams) {
         initialTab = 'leave-my-requests';
     } else {
         @if(auth()->user()->can('leave_requests.approve') || $pendingApprovals->isNotEmpty())

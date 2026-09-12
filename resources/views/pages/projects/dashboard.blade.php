@@ -805,8 +805,8 @@
                                     @foreach($currentMonthDeliveryProjects as $project)
                                         <tr>
                                             <td>
-                                                <div class="pjd-product">{{ $project->product_name }}</div>
-                                                <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                <div class="pjd-product">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                <div class="pjd-meta">{{ $project->product_name }}</div>
                                             </td>
                                             <td>{{ optional($project->project_delivery_date)->format('d M Y') ?: 'Not available' }}</td>
                                             <td>
@@ -919,8 +919,8 @@
                                         @foreach($recentProjects as $project)
                                             <tr>
                                                 <td>
-                                                    <div class="pjd-product">{{ $project->product_name }}</div>
-                                                    <div class="pjd-meta">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                    <div class="pjd-product">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                    <div class="pjd-meta">{{ $project->product_name }}</div>
                                                 </td>
                                                 <td>{{ $project->allocated_person_label }}</td>
                                                 <td>

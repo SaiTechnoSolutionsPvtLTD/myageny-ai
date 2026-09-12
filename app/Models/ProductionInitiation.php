@@ -78,6 +78,17 @@ class ProductionInitiation extends Model
         'lead_budget_amount' => 'float',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $model) {
+            try {
+                \App\Models\SmmSheet::syncFromInitiation($model);
+            } catch (\Throwable $e) {
+                \Log::warning('SmmSheet syncFromInitiation error: ' . $e->getMessage());
+            }
+        });
+    }
+
     protected $appends = [
         'attachment_url',
     ];
@@ -113,6 +124,11 @@ class ProductionInitiation extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function smmSheet(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(SmmSheet::class);
     }
 
     public function initiatedBy(): BelongsTo

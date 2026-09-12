@@ -23,17 +23,19 @@
 .usr-btn-outline:hover { border-color:#fe5f04; color:#fe5f04; }
 
 /* ── Filter Bar ── */
-.usr-filter-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 28px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:60px; z-index:25; }
-.usr-search-wrap { position:relative; flex:1; min-width:220px; max-width:320px; }
+.usr-filter-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 28px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:60px; z-index:25; }
+.usr-search-wrap { position:relative; flex:1; min-width:280px; max-width:400px; }
 .usr-search-ico { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#9e9e9e; width:14px; height:14px; pointer-events:none; }
 .usr-search-input { width:100%; padding:8px 12px 8px 34px; border:1px solid #e1dee3; border-radius:9px; font-size:13px; font-family:inherit; outline:none; background:#f8f8f8; color:#121212; transition:all .15s; }
 .usr-search-input:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
 .usr-filter-wrap { position:relative; }
-.usr-filter-ico { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#9e9e9e; pointer-events:none; width:12px; height:12px; }
-.usr-filter-select { appearance:none; -webkit-appearance:none; padding:7px 28px 7px 28px; background:#f8f8f8; border:1px solid #e1dee3; border-radius:9px; font-size:12px; font-weight:600; color:#2e2e2e; cursor:pointer; outline:none; transition:all .15s; font-family:inherit; min-width:130px; }
+.usr-filter-ico { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9e9e9e; pointer-events:none; width:13px; height:13px; }
+.usr-filter-select { appearance:none; -webkit-appearance:none; padding:8px 30px 8px 32px; background:#f8f8f8; border:1px solid #e1dee3; border-radius:9px; font-size:12px; font-weight:600; color:#2e2e2e; cursor:pointer; outline:none; transition:all .15s; font-family:inherit; min-width:180px; }
+.usr-filter-select.wide { min-width:240px; }
+.usr-filter-select.status { min-width:150px; }
 .usr-filter-select:focus { border-color:#fe5f04; background:#fff; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
-.usr-filter-caret { position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; color:#9e9e9e; width:11px; height:11px; }
-.usr-filter-reset { display:flex; align-items:center; gap:5px; padding:7px 12px; border-radius:9px; background:none; border:1px solid #e1dee3; font-size:12px; font-weight:600; color:#9e9e9e; cursor:pointer; font-family:inherit; transition:all .15s; }
+.usr-filter-caret { position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none; color:#9e9e9e; width:12px; height:12px; }
+.usr-filter-reset { display:flex; align-items:center; gap:5px; padding:8px 14px; border-radius:9px; background:none; border:1px solid #e1dee3; font-size:12px; font-weight:600; color:#9e9e9e; cursor:pointer; font-family:inherit; transition:all .15s; }
 .usr-filter-reset:hover { border-color:#dc2626; color:#dc2626; }
 
 /* ── Body ── */
@@ -208,7 +210,7 @@
 
         <div class="usr-filter-wrap">
             <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-            <select name="role" class="usr-filter-select">
+            <select name="role" class="usr-filter-select wide">
                 <option value="">All Roles</option>
                 @foreach($roles as $role)
                 <option value="{{ $role->name }}" {{ request('role') == $role->name ? 'selected' : '' }}>
@@ -221,7 +223,7 @@
 
         <div class="usr-filter-wrap">
             <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 14 14"/></svg>
-            <select name="status" class="usr-filter-select">
+            <select name="status" class="usr-filter-select status">
                 <option value="">All Status</option>
                 <option value="1" {{ request('status') === '1' ? 'selected' : '' }}>Active</option>
                 <option value="0" {{ request('status') === '0' ? 'selected' : '' }}>Inactive</option>
@@ -231,7 +233,7 @@
 
         <div class="usr-filter-wrap">
             <svg class="usr-filter-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 16 14"/></svg>
-            <select name="activity" class="usr-filter-select">
+            <select name="activity" class="usr-filter-select wide">
                 <option value="">All Activity</option>
                 <option value="last_seen" {{ request('activity') === 'last_seen' ? 'selected' : '' }}>🕒 Last Seen (Recent First)</option>
                 <option value="recent_login" {{ request('activity') === 'recent_login' ? 'selected' : '' }}>⚡ Recent Login (24h)</option>

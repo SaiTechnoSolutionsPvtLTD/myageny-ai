@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
+use Illuminate\Pagination\LengthAwarePaginator;
+
 class OvpModuleController extends Controller
 {
     private const OVP_TL_ROLE_KEYS = [
@@ -85,7 +87,8 @@ class OvpModuleController extends Controller
             ->when($isExecutiveScopedView, function ($query) use ($user) {
                 $query->where('ovp_allocated_to', $user->id);
             })
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         $buckets = [
@@ -141,6 +144,21 @@ class OvpModuleController extends Controller
         if (! array_key_exists($selectedBucket, $buckets)) {
             $selectedBucket = 'new';
         }
+
+        $currentPage = LengthAwarePaginator::resolveCurrentPage() ?: 1;
+        $perPage = 15;
+        $bucketItems = $buckets[$selectedBucket]['items'];
+        $paginatedItems = new LengthAwarePaginator(
+            $bucketItems->forPage($currentPage, $perPage)->values(),
+            $bucketItems->count(),
+            $perPage,
+            $currentPage,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => $request->query(),
+            ]
+        );
+        $buckets[$selectedBucket]['items'] = $paginatedItems;
 
         $products = \App\Models\Product::orderBy('product_name')->get(['id', 'product_name']);
         $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);

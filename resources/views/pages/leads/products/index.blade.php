@@ -392,17 +392,13 @@
                                     <td>
                                         <div class="lpd-product-cell">
                                             <div class="lpd-product-name">{{ $productName ?: 'Unnamed Product' }}</div>
-                                            <div class="lpd-product-meta">
-                                                Product ID: {{ $leadProduct->product_id ?: 'N/A' }}
-                                                @if($lead?->branch?->name)
-                                                    | {{ $lead->branch->name }}
-                                                @endif
-                                            </div>
+                                            @if($lead?->branch?->name)
+                                                <div class="lpd-product-meta">{{ $lead->branch->name }}</div>
+                                            @endif
                                         </div>
                                     </td>
                                     <td>
                                         <span class="lpd-money">Rs {{ number_format((float) $leadProduct->total_price, 2) }}</span>
-                                        <span class="lpd-money-sub">Qty {{ $leadProduct->quantity ?? 1 }}</span>
                                     </td>
                                     <td>
                                         <span class="lpd-badge" style="background:{{ $productStatus['bg'] }};color:{{ $productStatus['text'] }};border-color:{{ $productStatus['border'] }};">

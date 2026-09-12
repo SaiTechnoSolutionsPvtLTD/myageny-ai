@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PermissionRequestFormRequest;
+use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
@@ -20,12 +21,69 @@ class PermissionRequestController extends Controller
 {
     public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
 
-    public function index(): View
+    public function index(Request $request): View
     {
         $user = auth()->user();
+        $isCompanyAdmin = $user && ($user->isHrOrAdmin() || $user->isCompanyAdmin() || $user->isSuperAdmin() || $user->isSystemAdmin());
 
-        $permissionRequests = PermissionRequest::with(['employee', 'approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
+        $permissionRequestsQuery = PermissionRequest::with(['user', 'employee.department', 'employee.role', 'approvals.approver', 'approvals.actionedBy']);
+
+        if (! $isCompanyAdmin) {
+            $permissionRequestsQuery->where('user_id', $user->id);
+        } else {
+            if ($user->company_id) {
+                $permissionRequestsQuery->where('company_id', $user->company_id);
+            }
+
+            // Quick Filters
+            $quickFilter = $request->query('quick_filter');
+            $today = Carbon::today();
+
+            if ($quickFilter === 'today') {
+                $permissionRequestsQuery->whereDate('permission_date', $today->toDateString());
+            } elseif ($quickFilter === 'tomorrow') {
+                $permissionRequestsQuery->whereDate('permission_date', $today->copy()->addDay()->toDateString());
+            } elseif ($quickFilter === 'weekly') {
+                $weekStart = $today->copy()->startOfWeek()->toDateString();
+                $weekEnd = $today->copy()->endOfWeek()->toDateString();
+                $permissionRequestsQuery->whereBetween('permission_date', [$weekStart, $weekEnd]);
+            } elseif ($quickFilter === 'monthly') {
+                $monthStart = $today->copy()->startOfMonth()->toDateString();
+                $monthEnd = $today->copy()->endOfMonth()->toDateString();
+                $permissionRequestsQuery->whereBetween('permission_date', [$monthStart, $monthEnd]);
+            } elseif ($quickFilter === 'year') {
+                $yearStart = $today->copy()->startOfYear()->toDateString();
+                $yearEnd = $today->copy()->endOfYear()->toDateString();
+                $permissionRequestsQuery->whereBetween('permission_date', [$yearStart, $yearEnd]);
+            }
+
+            // Employee filter
+            if ($request->filled('employee_id')) {
+                $permissionRequestsQuery->where('employee_id', $request->employee_id);
+            }
+
+            // Department filter
+            if ($request->filled('department_id')) {
+                $permissionRequestsQuery->whereHas('employee', function ($q) use ($request) {
+                    $q->where('department_id', $request->department_id);
+                });
+            }
+
+            // Date Range filter
+            if ($request->filled('date_from')) {
+                $permissionRequestsQuery->whereDate('permission_date', '>=', $request->date_from);
+            }
+            if ($request->filled('date_to')) {
+                $permissionRequestsQuery->whereDate('permission_date', '<=', $request->date_to);
+            }
+
+            // Status filter
+            if ($request->filled('status')) {
+                $permissionRequestsQuery->where('status', $request->status);
+            }
+        }
+
+        $permissionRequests = $permissionRequestsQuery
             ->latest()
             ->paginate(10, ['*'], 'requests_page')
             ->withQueryString();
@@ -38,10 +96,29 @@ class PermissionRequestController extends Controller
             ->limit(8)
             ->get();
 
+        $departments = $isCompanyAdmin
+            ? Department::query()->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))->orderBy('name')->get(['id', 'name'])
+            : collect();
+
+        $employees = $isCompanyAdmin
+            ? EmployeeOnboarding::query()
+                ->active()
+                ->where(function ($q) {
+                    $q->whereNull('portal_user_id')
+                        ->orWhereHas('portalUser', fn($pu) => $pu->where('is_active', true));
+                })
+                ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+                ->orderBy('name')
+                ->get(['id', 'name', 'employee_id'])
+            : collect();
+
         return view('pages.hrms.permission_requests.index', compact(
             'permissionRequests',
             'pendingApprovals',
-            'handledApprovals'
+            'handledApprovals',
+            'isCompanyAdmin',
+            'departments',
+            'employees'
         ));
     }
 
@@ -246,7 +323,7 @@ class PermissionRequestController extends Controller
 
     private function canViewPermissionRequest(PermissionRequest $permissionRequest, User $user): bool
     {
-        if ((int) $permissionRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+        if ((int) $permissionRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
         }
 
@@ -279,6 +356,10 @@ class PermissionRequestController extends Controller
 
         if ($permissionRequest->user?->company_id && $user->company_id && (int) $permissionRequest->user->company_id !== (int) $user->company_id) {
             return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin()) {
+            return true;
         }
 
         return (int) $approval->approver_user_id === (int) $user->id;

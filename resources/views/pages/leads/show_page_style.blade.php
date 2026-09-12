@@ -20,7 +20,7 @@
     --soft:    #fafafa;
 }
 
-.lsp { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg); font-family:'Inter',sans-serif; color:var(--text); }
+.lsp { display:flex; flex-direction:column; min-height:100vh; flex:1; background:var(--bg); font-family:'Inter',sans-serif; color:var(--text); }
 
 /* ── Topbar ── */
 .lsp-topbar { display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:60px; flex-shrink:0; background:#fff; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; }
@@ -68,12 +68,12 @@
 .lsp-tab-count.urgent { background:#fef2f2; color:var(--red); }
 
 /* ── Body ── */
-.lsp-body { flex:1; overflow-y:auto; }
+.lsp-body { flex:1; display:flex; flex-direction:column; overflow-y:auto; }
 .lsp-body::-webkit-scrollbar { width:5px; }
 .lsp-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
 
 /* ── Tab panels ── */
-.lsp-panel { display:none; padding:22px 28px 40px; }
+.lsp-panel { display:none; padding:20px 28px 24px; flex:1; }
 .lsp-panel.active { display:block; }
 
 @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }

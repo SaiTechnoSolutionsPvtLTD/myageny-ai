@@ -376,47 +376,6 @@
     </div>
 
     <div class="tlop-body">
-        {{-- Policy Notice Banner --}}
-        <div style="padding: 14px 18px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 12px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <div>
-                <strong>Timesheet LOP Rule:</strong> Applicable to <strong>Development, Designing, and Digital Marketing</strong> departments. Every month <strong>1st &amp; 3rd Saturday</strong> are Holidays, and <strong>2nd, 4th &amp; 5th Saturday</strong> are Working Days. For every <strong>2 days</strong> marked Present without submitting a Timesheet, <strong>0.5 Day LOP</strong> is marked (4 days = 1.0 Day LOP, 6 days = 1.5 Days LOP). Employees on approved Leave are exempt.
-            </div>
-        </div>
-
-        {{-- Stat Cards --}}
-        <div class="tlop-stats-grid">
-            <div class="tlop-stat-card primary">
-                <div class="tlop-stat-title">Target Employees</div>
-                <div class="tlop-stat-val">{{ $stats['total_employees'] }}</div>
-                <div class="tlop-stat-sub">Dev, Design &amp; DM Departments</div>
-            </div>
-            <div class="tlop-stat-card info">
-                <div class="tlop-stat-title">Total Present Days</div>
-                <div class="tlop-stat-val">{{ $stats['total_present_days'] }}</div>
-                <div class="tlop-stat-sub">Across selected period</div>
-            </div>
-            <div class="tlop-stat-card success">
-                <div class="tlop-stat-title">Timesheets Submitted</div>
-                <div class="tlop-stat-val">{{ $stats['total_submitted_timesheets'] }}</div>
-                <div class="tlop-stat-sub">Days timesheet recorded</div>
-            </div>
-            <div class="tlop-stat-card warning">
-                <div class="tlop-stat-title">Missing Timesheet Days</div>
-                <div class="tlop-stat-val">{{ $stats['total_missing_days'] }}</div>
-                <div class="tlop-stat-sub">Present but no timesheet</div>
-            </div>
-            <div class="tlop-stat-card danger">
-                <div class="tlop-stat-title">Total Timesheet LOP Days</div>
-                <div class="tlop-stat-val" style="color: #dc2626;">{{ $stats['total_lop_days'] }} <span style="font-size: 15px; font-weight: 600;">Days</span></div>
-                <div class="tlop-stat-sub">Calculated salary penalty days</div>
-            </div>
-        </div>
-
         {{-- Filter Card --}}
         <div class="tlop-card">
             <div class="tlop-card-head">

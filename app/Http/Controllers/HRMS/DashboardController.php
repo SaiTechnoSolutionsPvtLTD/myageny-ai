@@ -742,7 +742,7 @@ class DashboardController extends Controller
                     'person_key' => 'employee:' . $leaveRequest->employee_id,
                     'employee_name' => $leaveRequest->employee?->name ?: ($leaveRequest->user?->name ?: 'Employee'),
                     'department_name' => $leaveRequest->employee?->department?->name ?: 'No department mapped',
-                    'role_name' => $leaveRequest->employee?->role?->name ?: 'No role mapped',
+                    'role_name' => $leaveRequest->employee?->role_name ?: 'No role mapped',
                     'leave_label' => $leaveRequest->leaveType?->name ?: 'Approved Leave',
                     'source' => 'leave_request',
                 ];
@@ -774,7 +774,7 @@ class DashboardController extends Controller
                         : ($attendance->employee?->department?->name ?: 'No department mapped'),
                     'role_name' => $isIntern
                         ? 'Intern'
-                        : ($attendance->employee?->role?->name ?: 'No role mapped'),
+                        : ($attendance->employee?->role_name ?: 'No role mapped'),
                     'leave_label' => $this->manualLeaveLabel($attendance),
                     'source' => 'attendance',
                 ];

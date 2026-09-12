@@ -102,6 +102,11 @@ class Product extends Model
         return $query->where('count_wise_report', true);
     }
 
+    public function scopeRenewalCountWise($query)
+    {
+        return $query->where('count_wise_report', true)->where('is_this_renewal_product', true);
+    }
+
     // ── Price Logic ───────────────────────────────────────────────────
     public function computeFinalPrice(): float
     {

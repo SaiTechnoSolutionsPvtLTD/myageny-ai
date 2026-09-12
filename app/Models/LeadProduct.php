@@ -302,7 +302,7 @@ class LeadProduct extends Model
             'id'       => $this->id,
             'product_id' => $this->product_id,
             'deal_name' => $this->deal_name,
-            'name'     => $productName . ($product ? ' (Base Price : ' . number_format((float) $product->final_price, 2) . ')' : ''),
+            'name'     => $productName,
             'description' => $this->description,
             'unit_price' => (float) $this->unit_price,
             'quantity' => (int) $this->quantity,

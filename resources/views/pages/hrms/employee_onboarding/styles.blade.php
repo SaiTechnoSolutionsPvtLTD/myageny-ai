@@ -60,8 +60,8 @@
 .eob-status-trigger:active { transform:translateY(0); }
 .eob-badge-branch { font-weight:600; font-size:12px; color:#334155; display:inline-flex; align-items:center; gap:5px; padding:3px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; }
 .eob-filter-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:hidden; }
-.eob-table-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:visible !important; }
-.eob-table-wrap { overflow:visible; min-height:240px; }
+.eob-table-card { background:#fff; border:1px solid #e1dee3; border-radius:16px; overflow:visible !important; min-height:480px; }
+.eob-table-wrap { overflow-x:auto; min-height:420px; }
 .eob-filter-form { display:flex; gap:12px; flex-wrap:wrap; padding:16px; align-items:flex-end; }
 .eob-field { display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1; }
 .eob-results { font-size:12px; color:#9e9e9e; }

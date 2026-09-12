@@ -102,14 +102,14 @@ class ActivityLog extends Model
         return match (strtolower($this->action)) {
             'login' => 'badge-login',
             'logout' => 'badge-logout',
-            'create', 'store', 'add' => 'badge-create',
-            'update', 'edit', 'change' => 'badge-update',
-            'delete', 'destroy', 'remove' => 'badge-delete',
+            'create', 'store', 'add', 'created', 'payment_added', 'payment_created', 'call_update_created' => 'badge-create',
+            'update', 'edit', 'change', 'updated', 'call_update_updated', 'payment_updated' => 'badge-update',
+            'delete', 'destroy', 'remove', 'deleted', 'call_update_deleted', 'payment_deleted' => 'badge-delete',
             'status_change' => 'badge-status',
-            'approve', 'approval' => 'badge-approve',
-            'reject' => 'badge-reject',
-            'view' => 'badge-view',
-            'export' => 'badge-export',
+            'approve', 'approval', 'approved' => 'badge-approve',
+            'reject', 'rejected' => 'badge-reject',
+            'view', 'viewed', 'viewed_details' => 'badge-view',
+            'export', 'exported' => 'badge-export',
             default => 'badge-general',
         };
     }

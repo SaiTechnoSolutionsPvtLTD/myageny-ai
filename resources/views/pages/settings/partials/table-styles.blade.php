@@ -14,7 +14,7 @@
 .crm-btn-ghost:hover { background:#f8f8f8; }
 
 /* Table */
-.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; min-height: 220px; }
+.crm-table-wrap     { background:#fff; border:1px solid #e1dee3; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; min-height: 480px; }
 .crm-table          { width:100%; border-collapse:collapse; font-size:14px; }
 .crm-table thead tr { background:#f8f8f8; }
 .crm-table th       { padding:12px 16px; text-align:left; font-size:12px; color:#9e9e9e; font-weight:600; border-bottom:1px solid #f1f1f1; }
@@ -62,22 +62,117 @@
 
 /* Modal */
 .crm-modal-overlay  {
-    position:fixed; inset:0; background:rgba(0,0,0,.4);
-    display:flex; align-items:center; justify-content:center;
-    z-index:1000; animation:fadeIn .15s ease;
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    z-index: 999999 !important;
+    animation: crmFadeIn .18s ease forwards;
 }
-.crm-modal          { background:#fff; border-radius:16px; width:420px; max-width:95vw; box-shadow:0 8px 40px rgba(0,0,0,.18); }
-.crm-modal-header   { display:flex; justify-content:space-between; align-items:center; padding:20px 24px 0; }
-.crm-modal-header h3 { font-size:16px; font-weight:700; }
-.crm-modal-header button { background:none; border:none; font-size:18px; cursor:pointer; color:#9e9e9e; }
-.crm-modal-body     { padding:20px 24px; }
-.crm-modal-footer   { display:flex; justify-content:flex-end; gap:10px; padding:0 24px 20px; }
+.crm-modal          {
+    background: #ffffff;
+    border-radius: 18px;
+    width: 480px;
+    max-width: min(94vw, 500px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    animation: crmModalIn .2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    overflow: hidden;
+    margin: auto;
+}
+.crm-modal-header   {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #f1f5f9;
+    background: #ffffff;
+}
+.crm-modal-header h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+.crm-modal-header button,
+.crm-modal-close {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s ease;
+}
+.crm-modal-header button:hover,
+.crm-modal-close:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+.crm-modal-body     {
+    padding: 24px;
+    background: #ffffff;
+}
+.crm-modal-footer   {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+}
 
 /* Form */
-.crm-label          { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#444; }
-.crm-input          { width:100%; padding:10px 14px; border:1px solid #e1dee3; border-radius:10px; font-size:14px; outline:none; font-family:inherit; }
-.crm-input:focus    { border-color:#fe5f04; box-shadow:0 0 0 3px rgba(254,95,4,.1); }
-.req                { color:#fe5f04; }
+.crm-label          {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #334155;
+}
+.crm-input          {
+    width: 100%;
+    height: 42px;
+    padding: 0 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #0f172a;
+    background: #ffffff;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: all .15s ease;
+}
+select.crm-input    {
+    appearance: auto;
+    cursor: pointer;
+}
+.crm-input:focus    {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3.5px rgba(254, 95, 4, 0.12);
+}
+.req                { color: #fe5f04; font-weight: 700; }
 
-@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes crmFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes crmModalIn { from { opacity: 0; transform: scale(0.95) translateY(-8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 </style>
