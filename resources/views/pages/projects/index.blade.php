@@ -238,6 +238,7 @@
     visibility: hidden;
     pointer-events: none;
     transition: opacity .2s ease, visibility .2s ease;
+    overflow-y: auto;
 }
 .prj-modal-backdrop.is-open,
 .prj-modal-backdrop.active {
@@ -251,7 +252,7 @@
     border-radius: 20px;
     width: 100%;
     max-width: 640px;
-    max-height: 90vh;
+    max-height: calc(100vh - 40px);
     display: flex;
     flex-direction: column;
     box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
@@ -259,10 +260,19 @@
     transform: scale(0.96);
     transition: transform .2s ease;
     overflow: hidden;
+    margin: auto;
 }
 .prj-modal-backdrop.is-open .prj-modal-dialog,
 .prj-modal-backdrop.active .prj-modal-dialog {
     transform: scale(1);
+}
+.prj-modal-dialog form,
+#bulkAllocationForm {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 .prj-modal-header {
     padding: 18px 24px;
@@ -271,6 +281,7 @@
     align-items: center;
     justify-content: space-between;
     background: linear-gradient(180deg, #faf5ff 0%, #ffffff 100%);
+    flex-shrink: 0;
 }
 .prj-modal-title {
     font-size: 16px;
@@ -302,9 +313,26 @@
 .prj-modal-body {
     padding: 24px;
     overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(100vh - 200px);
     display: flex;
     flex-direction: column;
     gap: 18px;
+    overscroll-behavior: contain;
+}
+.prj-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.prj-modal-body::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+.prj-modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.prj-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 .prj-modal-footer {
     padding: 16px 24px;
@@ -314,6 +342,7 @@
     justify-content: flex-end;
     gap: 10px;
     background: #fafafa;
+    flex-shrink: 0;
 }
 .bulk-preview-wrap {
     border: 1px solid #e2e8f0;

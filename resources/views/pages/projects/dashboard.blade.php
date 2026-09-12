@@ -125,16 +125,6 @@
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                @if(auth()->user()?->canViewProjectsDashboardSwitcher())
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
-                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:170px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
-                            <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
-                            <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
-                            <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
-                        </select>
-                    </div>
-                @endif
                 <div class="pjd-chip" style="background:#f0fdf4; border-color:#bbf7d0; color:#166534;">Designing Team</div>
             </div>
         </div>
@@ -160,23 +150,110 @@
                     </ul>
                 </div>
             @endif
-            {{-- Metrics Cards --}}
+            @php
+                $hasActiveDesignFilters = !empty($filters['search'])
+                    || !empty($filters['project_id'])
+                    || !empty($filters['employee_id'])
+                    || !empty($filters['status'])
+                    || (!empty($filters['quick_date']) && !in_array($filters['quick_date'], ['all'], true))
+                    || !empty($filters['date_from'])
+                    || !empty($filters['date_to']);
+            @endphp
+
+            {{-- Filters Card First --}}
+            <details class="pjd-filter-card" id="designDashboardFilters" @if($hasActiveDesignFilters) open @endif>
+                <summary class="pjd-filter-toggle" id="designDashboardFiltersToggle">
+                    <div>
+                        <div class="pjd-filter-title">Filter Projects</div>
+                        <div class="pjd-filter-sub">Narrow results by search, account, team member, status, or date range.</div>
+                    </div>
+                    <div class="pjd-filter-toggle-right">
+                        <div class="pjd-filter-pill">
+                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                            </svg>
+                            {{ number_format($designProjects->count()) }} accounts
+                        </div>
+                        <span class="pjd-filter-chevron">
+                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </span>
+                    </div>
+                </summary>
+                <div class="pjd-filter-body" id="designDashboardFiltersBody">
+                    <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filter-form" id="pjdDesignFilterForm">
+                        @if(auth()->user()?->canViewProjectsDashboardSwitcher())
+                            <div class="pjd-field">
+                                <label class="pjd-label" for="design_dashboard_type">Dashboard View</label>
+                                <select id="design_dashboard_type" name="dashboard_type" class="pjd-select" onchange="this.form.submit()">
+                                    <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
+                                    <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
+                                    <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
+                                </select>
+                            </div>
+                        @elseif(request('dashboard_type'))
+                            <input type="hidden" name="dashboard_type" value="{{ request('dashboard_type') }}">
+                        @endif
+
+                        <div class="pjd-field pjd-field-wide">
+                            <label class="pjd-label" for="design_search">Lead / Account Search</label>
+                            <input id="design_search" type="text" name="search" value="{{ $filters['search'] ?? '' }}" class="pjd-input" placeholder="Search Lead ID, company, client, account name...">
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="design_project_id">Allocated Account</label>
+                            <select id="design_project_id" name="project_id" class="pjd-select">
+                                <option value="">All Accounts</option>
+                                @foreach($designProjects as $proj)
+                                    <option value="{{ $proj->id }}" @selected(($filters['project_id'] ?? '') == (string) $proj->id)>
+                                        {{ $proj->product_name }} | {{ $proj->company_name ?: ($proj->lead?->company_name ?: 'No Company') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        @if(!empty($designTeamMembers) && $designTeamMembers->isNotEmpty())
+                            <div class="pjd-field">
+                                <label class="pjd-label" for="design_employee_id">Team Member</label>
+                                <select id="design_employee_id" name="employee_id" class="pjd-select">
+                                    <option value="">All Team Members</option>
+                                    @foreach($designTeamMembers as $member)
+                                        <option value="{{ $member->id }}" @selected(($filters['employee_id'] ?? '') == (string) $member->id)>
+                                            {{ $member->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="design_status">Status</label>
+                            <select id="design_status" name="status" class="pjd-select">
+                                <option value="">All Status</option>
+                                <option value="waiting_approval" @selected(($filters['status'] ?? '') === 'waiting_approval')>Waiting for content approval</option>
+                                <option value="inprogress" @selected(($filters['status'] ?? '') === 'inprogress')>In Progress</option>
+                                <option value="waiting_review" @selected(($filters['status'] ?? '') === 'waiting_review')>Waiting for Review</option>
+                                <option value="completed" @selected(($filters['status'] ?? '') === 'completed')>Completed</option>
+                                <option value="overdue" @selected(($filters['status'] ?? '') === 'overdue')>Overdue</option>
+                            </select>
+                        </div>
+
+                        <div class="pjd-field">
+                            <label class="pjd-label" for="design_date">Target Date</label>
+                            <input id="design_date" type="date" name="date" value="{{ $filters['date'] ?? '' }}" class="pjd-input">
+                        </div>
+
+                        <div class="pjd-filter-actions-row">
+                            <button type="submit" class="pjd-btn pjd-btn-primary">Apply Filter</button>
+                            <a href="{{ route('projects.dashboard', ['dashboard_type' => 'design']) }}" class="pjd-btn">Reset</a>
+                        </div>
+                    </form>
+                </div>
+            </details>
+
+            {{-- Metrics Cards Second --}}
             <div class="pjd-stats" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-                {{-- Daily Task Goal Card --}}
-                {{--  <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Daily Task Goal</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-bullseye"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>P: {{ $stats['daily_target_posters'] }}</span>
-                        <span>V: {{ $stats['daily_target_videos'] }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Today's target posters/videos</div>
-                </div>  --}}
-
-
-
                 {{-- Total Accounts Card --}}
                 <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
                     <div class="pjd-stat-header">
@@ -241,50 +318,6 @@
                     <div class="pjd-stat-sub">Pending assets past delivery date</div>
                 </div>
             </div>
-
-            {{-- Filters Card --}}
-            <section class="pjd-card">
-                <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Filters</div>
-                        <div class="pjd-card-sub">Narrow down planned tasks by account, date, and status.</div>
-                    </div>
-                </div>
-                <div class="pjd-card-body">
-                    <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
-                        <div class="pjd-field">
-                            <label class="pjd-label">Allocated Account</label>
-                            <select name="project_id" class="pjd-select">
-                                <option value="">All Accounts</option>
-                                @foreach($designProjects as $proj)
-                                    <option value="{{ $proj->id }}" @selected($filters['project_id'] == $proj->id)>
-                                        {{ $proj->product_name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="pjd-field">
-                            <label class="pjd-label">Date</label>
-                            <input type="date" name="date" value="{{ $filters['date'] }}" class="pjd-input">
-                        </div>
-                        <div class="pjd-field">
-                            <label class="pjd-label">Status</label>
-                            <select name="status" class="pjd-select">
-                                <option value="">All Status</option>
-                                <option value="waiting_approval" @selected($filters['status'] === 'waiting_approval')>Waiting for content approval</option>
-                                <option value="inprogress" @selected($filters['status'] === 'inprogress')>In Progress</option>
-                                <option value="waiting_review" @selected($filters['status'] === 'waiting_review')>Waiting for Review</option>
-                                <option value="completed" @selected($filters['status'] === 'completed')>Completed</option>
-                                <option value="overdue" @selected($filters['status'] === 'overdue')>Overdue</option>
-                            </select>
-                        </div>
-                        <div class="pjd-field pjd-filter-actions" style="margin-top: auto;">
-                            <button type="submit" class="pjd-btn pjd-btn-primary" style="flex-grow:1; height:40px;">Filter</button>
-                            <a href="{{ route('projects.dashboard') }}" class="pjd-btn" style="flex-grow:1; height:40px; text-align:center; line-height:22px;">Reset</a>
-                        </div>
-                    </form>
-                </div>
-            </section>
 
             {{-- Planned Tasks Table --}}
             <section class="pjd-card">
@@ -675,16 +708,6 @@
                 <div class="pjd-breadcrumb">{{ $pageCrumb }}</div>
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                @if(auth()->user()?->canViewProjectsDashboardSwitcher())
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="pjd-label" style="font-weight:800; font-size:11px; color:#7c7c7c;">Dashboard View:</span>
-                        <select onchange="window.location.href = '{{ route('projects.dashboard') }}?dashboard_type=' + this.value" class="pjd-select" style="min-height:36px; padding:6px 12px; border-radius:8px; width:170px; font-size:13px; font-weight:800; border:1px solid #eee7df;">
-                            <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
-                            <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
-                            <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
-                        </select>
-                    </div>
-                @endif
                 @if($isContributorScopedView && ($canQuickAddProductionUpdate ?? false))
                     <button type="button" class="pjd-btn pjd-btn-primary" data-open-update-modal>Add Production Update</button>
                 @endif
@@ -727,7 +750,16 @@
             <div class="pjd-filter-body" id="dashboardFiltersBody">
                 @if($isCompanyAdmin ?? false)
                     <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filter-form" id="pjdFilterForm">
-                        @if(request('dashboard_type'))
+                        @if(auth()->user()?->canViewProjectsDashboardSwitcher())
+                            <div class="pjd-field">
+                                <label class="pjd-label" for="dashboard_type">Dashboard View</label>
+                                <select id="dashboard_type" name="dashboard_type" class="pjd-select" onchange="this.form.submit()">
+                                    <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
+                                    <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
+                                    <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
+                                </select>
+                            </div>
+                        @elseif(request('dashboard_type'))
                             <input type="hidden" name="dashboard_type" value="{{ request('dashboard_type') }}">
                         @endif
 
@@ -824,7 +856,16 @@
                     </form>
                 @else
                     <form method="GET" action="{{ route('projects.dashboard') }}" class="pjd-filters">
-                        @if(request('dashboard_type'))
+                        @if(auth()->user()?->canViewProjectsDashboardSwitcher())
+                            <div class="pjd-field">
+                                <label class="pjd-label">Dashboard View</label>
+                                <select name="dashboard_type" class="pjd-select" onchange="this.form.submit()">
+                                    <option value="development" @selected(in_array(($selectedDashboard ?? 'development'), ['development', 'production'], true))>Development</option>
+                                    <option value="dm" @selected(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))>Digital Marketing</option>
+                                    <option value="design" @selected(in_array(($selectedDashboard ?? ''), ['design', 'designing'], true))>Designing</option>
+                                </select>
+                            </div>
+                        @elseif(request('dashboard_type'))
                             <input type="hidden" name="dashboard_type" value="{{ request('dashboard_type') }}">
                         @endif
                         <div class="pjd-field">

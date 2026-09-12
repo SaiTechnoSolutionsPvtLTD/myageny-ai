@@ -215,15 +215,79 @@ class ProjectController extends Controller
             ];
 
             // Filters
-            $filterAccountId = $request->query('project_id', '');
+            $filterSearch = trim((string) $request->query('search', ''));
+            $filterAccountId = trim((string) $request->query('project_id', ''));
+            $filterEmployeeId = trim((string) $request->query('employee_id', $request->query('team_member_id', '')));
+            $filterStatus = trim((string) $request->query('status', ''));
+            $filterQuickDate = trim((string) $request->query('quick_date', ''));
+            $filterDateFrom = trim((string) $request->query('date_from', ''));
+            $filterDateTo = trim((string) $request->query('date_to', ''));
             $filterDate = $request->query('date', Carbon::today()->toDateString());
-            $filterStatus = $request->query('status', '');
+
+            if ($filterQuickDate !== '' && !in_array($filterQuickDate, ['all', 'custom', 'custom_onboarding', 'custom_delivery'], true)) {
+                $now = Carbon::today();
+                switch ($filterQuickDate) {
+                    case 'today':
+                        $filterDate = $now->toDateString();
+                        $filterDateFrom = $now->toDateString();
+                        $filterDateTo = $now->toDateString();
+                        break;
+                    case 'week':
+                    case 'this_week':
+                    case 'weekly':
+                        $filterDateFrom = $now->copy()->startOfWeek()->toDateString();
+                        $filterDateTo = $now->copy()->endOfWeek()->toDateString();
+                        break;
+                    case 'month':
+                    case 'this_month':
+                    case 'monthly':
+                        $filterDateFrom = $now->copy()->startOfMonth()->toDateString();
+                        $filterDateTo = $now->copy()->endOfMonth()->toDateString();
+                        break;
+                    case 'quarter':
+                    case 'this_quarter':
+                    case 'quarterly':
+                        $filterDateFrom = $now->copy()->startOfQuarter()->toDateString();
+                        $filterDateTo = $now->copy()->endOfQuarter()->toDateString();
+                        break;
+                    case 'year':
+                    case 'this_year':
+                    case 'yearly':
+                        $filterDateFrom = $now->copy()->startOfYear()->toDateString();
+                        $filterDateTo = $now->copy()->endOfYear()->toDateString();
+                        break;
+                }
+            }
 
             // Filter the projects for the Today Planned Tasks table
             $filteredProjects = $designProjects;
 
+            if ($filterSearch !== '') {
+                $needle = strtolower($filterSearch);
+                $filteredProjects = $filteredProjects->filter(function ($project) use ($needle) {
+                    $searchable = implode(' ', array_filter([
+                        $project->product_name,
+                        $project->company_name,
+                        $project->client_name,
+                        $project->lead_id,
+                        $project->lead?->company_name,
+                        $project->lead?->client_name,
+                    ]));
+                    return str_contains(strtolower($searchable), $needle);
+                });
+            }
+
             if ($filterAccountId !== '') {
                 $filteredProjects = $filteredProjects->where('id', (int) $filterAccountId);
+            }
+
+            if ($filterEmployeeId !== '') {
+                $empId = (int) $filterEmployeeId;
+                $filteredProjects = $filteredProjects->filter(function ($project) use ($empId) {
+                    $allocEmps = array_map('intval', Arr::wrap($project->project_allocated_employee_user_ids));
+                    $hasTimesheet = $project->timesheets->contains('user_id', $empId);
+                    return in_array($empId, $allocEmps, true) || $hasTimesheet;
+                });
             }
 
             if ($filterStatus !== '') {
@@ -241,7 +305,6 @@ class ProjectController extends Controller
                     };
                 });
             }
-
 
             // TL flag and team members for Add Task feature
             $isTl = $this->shouldLimitToAssignedProjects($user);
@@ -388,10 +451,16 @@ class ProjectController extends Controller
                 'overdueTasksList'    => $overdueTasksList,
                 'isTl'                => $isTl,
                 'teamMembers'         => $teamMembers,
+                'designTeamMembers'   => $allDesigningUsers,
                 'userTargetsMap'      => $userTargetsMap,
                 'filters'             => [
+                    'search'     => $filterSearch,
                     'project_id' => $filterAccountId,
+                    'employee_id'=> $filterEmployeeId,
                     'date'       => $filterDate,
+                    'quick_date' => $filterQuickDate,
+                    'date_from'  => $filterDateFrom,
+                    'date_to'    => $filterDateTo,
                     'status'     => $filterStatus,
                 ],
             ]);
