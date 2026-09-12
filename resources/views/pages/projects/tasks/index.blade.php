@@ -63,12 +63,26 @@
 .pts-status-select.in_progress { color:#1d4ed8; background-color:#eff6ff; border-color:#bfdbfe; }
 .pts-status-select.pending { color:#b45309; background-color:#fff7ed; border-color:#fed7aa; }
 
-.pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; padding:16px 20px; box-shadow:0 10px 28px rgba(15,23,42,.04); }
-.pts-filter-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; align-items:end; }
+.pts-filter-card { background:#fff; border:1px solid #e6edf5; border-radius:16px; overflow:hidden; display:block; box-shadow:0 10px 28px rgba(15,23,42,.04); }
+.pts-filter-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 20px; border:none; background:linear-gradient(180deg,#fffdfb 0%,#fff 100%); cursor:pointer; text-align:left; font-family:inherit; list-style:none; }
+.pts-filter-toggle::-webkit-details-marker { display:none; }
+.pts-filter-toggle:hover { background:linear-gradient(180deg,#fff7f1 0%,#fff 100%); }
+.pts-filter-card[open] .pts-filter-toggle { border-bottom:1px solid #f2ede8; }
+.pts-filter-toggle-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.pts-filter-title { font-size:15px; font-weight:900; color:#111827; }
+.pts-filter-sub { font-size:12px; color:#7c7c7c; margin-top:2px; }
+.pts-filter-pill { display:inline-flex; align-items:center; gap:6px; padding:7px 11px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa; color:#c2410c; font-size:11px; font-weight:800; }
+.pts-filter-chevron { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid #eee7df; background:#fff; color:#7c7c7c; transition:transform .18s ease, color .18s ease, border-color .18s ease; }
+.pts-filter-card[open] .pts-filter-chevron { transform:rotate(180deg); color:#ea580c; border-color:#fed7aa; }
+.pts-filter-body { padding:20px; }
+.pts-filter-form { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:14px; align-items:start; }
+.pts-filter-actions-row { grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:10px; padding-top:14px; border-top:1px solid #f2ede8; margin-top:4px; }
 .pts-filter-group { display:grid; gap:6px; }
 .pts-label { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b; }
 .pts-input, .pts-select { width:100%; min-height:44px; padding:10px 12px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; font-size:13px; color:#111827; }
+.pts-input:focus, .pts-select:focus { outline:none; border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.12); }
 .pts-reset-btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:13px; font-weight:800; text-decoration:none; }
+.pts-reset-btn:hover { background:#f1f5f9; color:#0f172a; }
 
 .pts-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.48); z-index:1200; display:none; }
 .pts-modal-overlay.is-open { display:block; }
@@ -91,6 +105,9 @@
 .select2-dropdown { border:1px solid #dbe2ea; border-radius:10px; overflow:hidden; box-shadow:0 16px 36px rgba(15,23,42,.12); }
 .select2-results__option { font-size:13px; padding:8px 12px; }
 
+@media (max-width: 1200px) {
+    .pts-filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 768px) {
     .pts-topbar { padding:18px 16px; flex-direction:column; }
     .pts-body { padding:16px 12px 24px; }
@@ -126,66 +143,125 @@
             <div class="pts-flash error">{{ session('error') }}</div>
         @endif
 
-        <!-- Filter Card -->
-        <section class="pts-filter-card">
-            <form method="GET" action="{{ route('projects.tasks.index') }}" class="pts-filter-form">
-                <div class="pts-filter-group">
-                    <label class="pts-label">Date</label>
-                    <input type="date" name="filter_date" value="{{ $filters['filter_date'] }}" class="pts-input">
+        <!-- Filter Accordion Card -->
+        <details class="pts-filter-card" id="taskFiltersAccordion" @if($hasActiveFilters ?? false) open @endif>
+            <summary class="pts-filter-toggle">
+                <div>
+                    <div class="pts-filter-title">Filter Tasks</div>
+                    <div class="pts-filter-sub">Narrow results by quick dates, date range, client, project, member, or status.</div>
                 </div>
+                <div class="pts-filter-toggle-right">
+                    <div class="pts-filter-pill">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                        </svg>
+                        <span>Filter Options</span>
+                        @if($hasActiveFilters ?? false)
+                            <span class="pts-badge count" style="background:#ea580c; color:#fff; border:none; margin-left:4px;">Active</span>
+                        @endif
+                    </div>
+                    <span class="pts-filter-chevron">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </span>
+                </div>
+            </summary>
 
-                <div class="pts-filter-group">
-                    <label class="pts-label">Lead (Client)</label>
-                    <select name="filter_lead_id" class="pts-select select2 filter-lead-select" data-placeholder="All Leads">
-                        <option value="">All Leads</option>
-                        @foreach($uniqueLeads as $lead)
-                            <option value="{{ $lead['lead_id'] }}" @selected($filters['filter_lead_id'] === (string) $lead['lead_id'])>
-                                LD-{{ str_pad($lead['lead_id'], 4, '0', STR_PAD_LEFT) }} | {{ $lead['company_name'] }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+            <div class="pts-filter-body">
+                <form method="GET" action="{{ route('projects.tasks.index') }}" class="pts-filter-form" id="ptsTaskFilterForm">
+                    {{-- 1. Quick Dates Select --}}
+                    <div class="pts-filter-group">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+                            <label class="pts-label" for="quick_date_select" style="margin-bottom:0;">Quick Dates</label>
+                            <span id="ptsQuickDateRange" style="font-size:11px;font-weight:700;color:#ea580c;"></span>
+                        </div>
+                        <select id="quick_date_select" name="quick_date" class="pts-select" onchange="onPtsQuickDateChange(this.value)">
+                            <option value="today" {{ ($filters['quick_date'] ?? '') === 'today' ? 'selected' : '' }}>Today</option>
+                            <option value="week" {{ in_array($filters['quick_date'] ?? '', ['week', 'this_week', 'weekly'], true) ? 'selected' : '' }}>This Week</option>
+                            <option value="month" {{ in_array($filters['quick_date'] ?? '', ['month', 'this_month', 'monthly'], true) ? 'selected' : '' }}>This Month</option>
+                            <option value="quarter" {{ in_array($filters['quick_date'] ?? '', ['quarter', 'this_quarter', 'quarterly'], true) ? 'selected' : '' }}>This Quarter</option>
+                            <option value="year" {{ in_array($filters['quick_date'] ?? '', ['year', 'this_year', 'yearly'], true) ? 'selected' : '' }}>This Year</option>
+                            <option value="all" {{ ($filters['quick_date'] ?? '') === 'all' ? 'selected' : '' }}>Show All</option>
+                            <option value="custom" {{ in_array($filters['quick_date'] ?? '', ['custom'], true) ? 'selected' : '' }}>Custom Dates</option>
+                        </select>
+                    </div>
 
-                <div class="pts-filter-group">
-                    <label class="pts-label">Product / Project</label>
-                    <select name="filter_project_id" class="pts-select select2 filter-project-select" data-placeholder="All Projects">
-                        <option value="">All Projects</option>
-                        @foreach($assignedProjects as $project)
-                            <option value="{{ $project->id }}" @selected($filters['filter_project_id'] === (string) $project->id)>
-                                {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+                    {{-- 2. From Date & To Date --}}
+                    @php
+                        $isCustomDate = in_array($filters['quick_date'] ?? '', ['custom'], true);
+                    @endphp
+                    <div class="pts-filter-group" id="ptsFromField" style="display: {{ $isCustomDate ? 'grid' : 'none' }};">
+                        <label class="pts-label" for="date_from">From Date</label>
+                        <input id="date_from" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="pts-input">
+                    </div>
 
-                <div class="pts-filter-group">
-                    <label class="pts-label">Assigned Member</label>
-                    <select name="filter_user_id" class="pts-select select2 filter-user-select" data-placeholder="All Members">
-                        <option value="">All Members</option>
-                        @foreach($mappedTeamMembers as $member)
-                            <option value="{{ $member->id }}" @selected($filters['filter_user_id'] === (string) $member->id)>
-                                {{ $member->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+                    <div class="pts-filter-group" id="ptsToField" style="display: {{ $isCustomDate ? 'grid' : 'none' }};">
+                        <label class="pts-label" for="date_to">To Date</label>
+                        <input id="date_to" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="pts-input">
+                    </div>
 
-                <div class="pts-filter-group">
-                    <label class="pts-label">Status</label>
-                    <select name="filter_status" class="pts-select">
-                        <option value="">All Statuses</option>
-                        <option value="pending" @selected($filters['filter_status'] === 'pending')>Pending</option>
-                        <option value="in_progress" @selected($filters['filter_status'] === 'in_progress')>In Progress</option>
-                        <option value="completed" @selected($filters['filter_status'] === 'completed')>Completed</option>
-                    </select>
-                </div>
+                    {{-- 3. Lead (Client) --}}
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Lead (Client)</label>
+                        <select name="filter_lead_id" class="pts-select select2 filter-lead-select" data-placeholder="All Leads">
+                            <option value="">All Leads</option>
+                            @foreach($uniqueLeads as $lead)
+                                <option value="{{ $lead['lead_id'] }}" @selected($filters['filter_lead_id'] === (string) $lead['lead_id'])>
+                                    LD-{{ str_pad($lead['lead_id'], 4, '0', STR_PAD_LEFT) }} | {{ $lead['company_name'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
 
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <button type="submit" class="pts-btn pts-btn-primary" style="min-height:44px;">Filter</button>
-                    <a href="{{ route('projects.tasks.index') }}" class="pts-reset-btn">Reset</a>
-                </div>
-            </form>
-        </section>
+                    {{-- 4. Product / Project --}}
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Product / Project</label>
+                        <select name="filter_project_id" class="pts-select select2 filter-project-select" data-placeholder="All Projects">
+                            <option value="">All Projects</option>
+                            @foreach($assignedProjects as $project)
+                                <option value="{{ $project->id }}" @selected($filters['filter_project_id'] === (string) $project->id)>
+                                    {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- 5. Assigned Member --}}
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Assigned Member</label>
+                        <select name="filter_user_id" class="pts-select select2 filter-user-select" data-placeholder="All Members">
+                            <option value="">All Members</option>
+                            @foreach($mappedTeamMembers as $member)
+                                <option value="{{ $member->id }}" @selected($filters['filter_user_id'] === (string) $member->id)>
+                                    {{ $member->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- 6. Status --}}
+                    <div class="pts-filter-group">
+                        <label class="pts-label">Status</label>
+                        <select name="filter_status" class="pts-select">
+                            <option value="">All Statuses</option>
+                            <option value="pending" @selected($filters['filter_status'] === 'pending')>Pending</option>
+                            <option value="in_progress" @selected($filters['filter_status'] === 'in_progress')>In Progress</option>
+                            <option value="completed" @selected($filters['filter_status'] === 'completed')>Completed</option>
+                        </select>
+                    </div>
+
+                    {{-- 7. Action buttons row --}}
+                    <div class="pts-filter-actions-row">
+                        <button type="submit" class="pts-btn pts-btn-primary">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <span>Apply Filter</span>
+                        </button>
+                        <a href="{{ route('projects.tasks.index') }}" class="pts-reset-btn">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </details>
 
         <!-- Tasks Grouped Table Section -->
         <section class="pts-card">
@@ -382,7 +458,121 @@
 
 @push('scripts')
 <script>
+function calcPtsPresetDates(val) {
+    const today = new Date();
+    const fmt = d => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    if (val === 'today') {
+        const str = fmt(today);
+        return { from: str, to: str };
+    }
+    if (val === 'week') {
+        const d = new Date(today);
+        const day = d.getDay();
+        const diffToMon = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.setDate(diffToMon));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        return { from: fmt(monday), to: fmt(sunday) };
+    }
+    if (val === 'month') {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { from: fmt(firstDay), to: fmt(lastDay) };
+    }
+    if (val === 'quarter') {
+        const qMonth = Math.floor(today.getMonth() / 3) * 3;
+        const firstQ = new Date(today.getFullYear(), qMonth, 1);
+        const lastQ = new Date(today.getFullYear(), qMonth + 3, 0);
+        return { from: fmt(firstQ), to: fmt(lastQ) };
+    }
+    if (val === 'year') {
+        return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+    }
+    return { from: '', to: '' };
+}
+
+function formatPtsDisplayDate(dStr) {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+}
+
+function updatePtsQuickDateRangeSpan(val) {
+    const span = document.getElementById('ptsQuickDateRange');
+    if (!span) return;
+    if (val === 'all' || !val) {
+        span.textContent = '';
+        return;
+    }
+    if (val === 'custom') {
+        const f = document.getElementById('date_from')?.value;
+        const t = document.getElementById('date_to')?.value;
+        span.textContent = (f && t) ? `${formatPtsDisplayDate(f)} - ${formatPtsDisplayDate(t)}` : 'Custom Range';
+        return;
+    }
+    const dates = calcPtsPresetDates(val);
+    if (dates.from && dates.to) {
+        span.textContent = `${formatPtsDisplayDate(dates.from)} - ${formatPtsDisplayDate(dates.to)}`;
+    } else {
+        span.textContent = '';
+    }
+}
+
+function onPtsQuickDateChange(val) {
+    const fromField = document.getElementById('ptsFromField');
+    const toField = document.getElementById('ptsToField');
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+
+    if (val === 'custom') {
+        if (fromField) fromField.style.display = 'grid';
+        if (toField) toField.style.display = 'grid';
+    } else {
+        if (fromField) fromField.style.display = 'none';
+        if (toField) toField.style.display = 'none';
+        if (val === 'all') {
+            if (f) f.value = '';
+            if (t) t.value = '';
+        } else {
+            const dates = calcPtsPresetDates(val);
+            if (f) f.value = dates.from;
+            if (t) t.value = dates.to;
+        }
+    }
+    updatePtsQuickDateRangeSpan(val);
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+    const qSelect = document.getElementById('quick_date_select');
+    const f = document.getElementById('date_from');
+    const t = document.getElementById('date_to');
+    const fromField = document.getElementById('ptsFromField');
+    const toField = document.getElementById('ptsToField');
+
+    function handleCustomDateInput() {
+        if (qSelect && qSelect.value !== 'custom') {
+            qSelect.value = 'custom';
+        }
+        if (fromField) fromField.style.display = 'grid';
+        if (toField) toField.style.display = 'grid';
+        updatePtsQuickDateRangeSpan('custom');
+    }
+
+    if (f) f.addEventListener('change', handleCustomDateInput);
+    if (t) t.addEventListener('change', handleCustomDateInput);
+
+    if (qSelect) {
+        updatePtsQuickDateRangeSpan(qSelect.value);
+    }
     // Select2 Init
     if (window.jQuery && window.jQuery.fn.select2) {
         window.jQuery('.select2').each(function () {

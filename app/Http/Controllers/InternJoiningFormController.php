@@ -677,6 +677,10 @@ class InternJoiningFormController extends Controller
 
         $user->syncRoles([$role->name]);
 
+        if (array_key_exists('branches', $validated)) {
+            $user->branches()->sync($validated['branches'] ?? []);
+        }
+
         return $user;
     }
 

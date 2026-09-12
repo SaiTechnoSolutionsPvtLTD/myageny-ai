@@ -35,6 +35,8 @@ class ConvertInternToEmployeeRequest extends FormRequest
             'portal_email' => $emailRules,
             'portal_password' => ['required', 'string', 'min:8', 'max:255'],
             'branch_id' => ['required', 'exists:branches,id'],
+            'branches' => ['nullable', 'array'],
+            'branches.*' => ['exists:branches,id'],
             'department_id' => ['required', 'exists:departments,id'],
             'role_id' => ['required', 'exists:roles,id', $this->roleMatchesDepartmentRule()],
             'tl_user_id' => ['required', 'exists:users,id', $this->validTeamLeadRule()],

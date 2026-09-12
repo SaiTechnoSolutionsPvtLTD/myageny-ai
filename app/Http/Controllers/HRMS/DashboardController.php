@@ -446,15 +446,7 @@ class DashboardController extends Controller
         }
 
         $branchIds = $user->getMyBranchIds();
-        if (!empty($branchIds)) {
-            return array_values(array_unique(array_filter($branchIds)));
-        }
-
-        if ($user->branch_id) {
-            return [(int) $user->branch_id];
-        }
-
-        return [];
+        return array_values(array_unique(array_filter($branchIds)));
     }
 
     private function employeeQueryForDashboard(): Builder

@@ -21,19 +21,31 @@
 .cmp-stat-value { font-size:30px; font-weight:900; color:#fff; line-height:1.2; text-shadow:0 2px 4px rgba(0,0,0,0.1); }
 .cmp-stat-footer { margin-top:12px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.25); font-size:12px; color:rgba(255,255,255,0.92); font-weight:600; text-shadow:0 1px 2px rgba(0,0,0,0.1); }
 
+/* Filter Card */
+.cmp-filter-card { background:#fff; border:1px solid #eee7df; border-radius:14px; overflow:hidden; box-shadow:0 6px 20px rgba(15,23,42,.03); }
+.cmp-filter-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid #f2ede8; background:#fffdfb; }
+.cmp-filter-title { font-size:14px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:8px; }
+.cmp-filter-badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 8px; border-radius:999px; background:#ea580c; color:#fff; font-size:11px; font-weight:800; }
+.cmp-filter-body { padding:18px 20px; }
+.cmp-filter-grid { display:grid; grid-template-columns:1.5fr 1.3fr 1.1fr 1fr 1fr auto; gap:12px; align-items:end; }
+.cmp-field { display:flex; flex-direction:column; gap:5px; }
+.cmp-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748b; }
+.cmp-input, .cmp-select { width:100%; min-height:40px; padding:8px 12px; border-radius:8px; border:1.5px solid #e2e8f0; font-size:13px; color:#1e293b; background:#f8fafc; outline:none; transition:all .15s; font-family:inherit; }
+.cmp-input:focus, .cmp-select:focus { border-color:#ea580c; background:#fff; box-shadow:0 0 0 3px rgba(234,88,12,.12); }
+.cmp-filter-actions { display:flex; align-items:center; gap:8px; }
+
+/* Buttons */
+.cmp-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:40px; padding:8px 16px; border-radius:8px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:700; cursor:pointer; transition:all .15s ease; white-space:nowrap; }
+.cmp-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
+.cmp-btn-primary:hover { background:#c2410c; border-color:#c2410c; color:#fff; }
+.cmp-btn-outline { border:1px solid #cbd5e1; background:#fff; color:#64748b; }
+.cmp-btn-outline:hover { background:#f1f5f9; color:#0f172a; border-color:#94a3b8; }
+
 /* Card & Table */
 .cmp-card { background:#fff; border:1px solid #eee7df; border-radius:14px; overflow:hidden; box-shadow:0 10px 30px rgba(15,23,42,.04); }
 .cmp-card-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 24px; border-bottom:1px solid #f2ede8; background:#fffdfb; flex-wrap:wrap; }
 .cmp-card-title { font-size:16px; font-weight:900; color:#111827; display:flex; align-items:center; gap:8px; }
 .cmp-card-sub { margin-top:3px; font-size:12px; color:#7c7c7c; }
-
-/* Filter / Search */
-.cmp-search-box { display:flex; align-items:center; gap:10px; }
-.cmp-input { min-height:38px; padding:6px 14px; border-radius:8px; border:1px solid #e2e8f0; font-size:13px; color:#1e293b; background:#fff; outline:none; transition:border-color .15s; }
-.cmp-input:focus { border-color:#ea580c; }
-.cmp-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:38px; padding:6px 16px; border-radius:8px; border:1px solid #d7dce2; background:#fff; color:#111827; text-decoration:none; font-size:13px; font-weight:700; cursor:pointer; transition:all .15s ease; }
-.cmp-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
-.cmp-btn-primary:hover { background:#c2410c; border-color:#c2410c; color:#fff; }
 
 .cmp-table-wrap { overflow-x:auto; }
 .cmp-table { width:100%; border-collapse:collapse; min-width:980px; }
@@ -59,18 +71,43 @@
 .cmp-count-active { background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; }
 .cmp-pulse-dot { width:7px; height:7px; border-radius:50%; background:#10b981; display:inline-block; margin-right:5px; box-shadow:0 0 0 0 rgba(16,185,129,0.7); animation:cmpPulse 2s infinite; }
 
+/* Pagination Footer */
+.cmp-pagination-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-top:1px solid #f2ede8; background:#fffdfb; flex-wrap:wrap; gap:16px; }
+.cmp-pagination-left { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.cmp-pagination-info { font-size:13px; color:#64748b; font-weight:600; display:flex; align-items:center; gap:6px; }
+.cmp-pagination-info strong { color:#0f172a; font-weight:800; }
+.cmp-pagination-per-page { display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b; font-weight:700; }
+.cmp-pagination-select { padding:4px 8px; border-radius:6px; border:1.5px solid #e2e8f0; font-size:12px; font-weight:700; color:#1e293b; background:#fff; outline:none; cursor:pointer; transition:border-color .15s; }
+.cmp-pagination-select:focus { border-color:#ea580c; }
+
+.cmp-pagination-nav { display:inline-flex; align-items:center; gap:4px; list-style:none; margin:0; padding:0; }
+.cmp-page-btn { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 10px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#475569; font-size:13px; font-weight:700; text-decoration:none; cursor:pointer; transition:all .15s ease; user-select:none; }
+.cmp-page-btn:hover:not(.is-disabled):not(.is-active) { border-color:#fb923c; background:#fff7ed; color:#c2410c; }
+.cmp-page-btn.is-active { background:linear-gradient(135deg, #ea580c, #f97316); border-color:#ea580c; color:#fff; box-shadow:0 3px 10px rgba(234,88,12,0.28); cursor:default; }
+.cmp-page-btn.is-disabled { opacity:0.4; cursor:not-allowed; background:#f8fafc; color:#94a3b8; border-color:#e2e8f0; }
+.cmp-page-ellipsis { display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:34px; color:#94a3b8; font-weight:800; font-size:13px; }
+
 @keyframes cmpPulse {
     0% { transform:scale(0.95); box-shadow:0 0 0 0 rgba(16,185,129,0.7); }
     70% { transform:scale(1); box-shadow:0 0 0 6px rgba(16,185,129,0); }
     100% { transform:scale(0.95); box-shadow:0 0 0 0 rgba(16,185,129,0); }
 }
 
+@media (max-width: 1200px) {
+    .cmp-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cmp-filter-actions { grid-column: span 3; justify-content: flex-end; }
+}
 @media (max-width: 1024px) {
     .cmp-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .cmp-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cmp-filter-actions { grid-column: span 2; }
 }
 @media (max-width: 640px) {
     .cmp-stats { grid-template-columns:1fr; }
+    .cmp-filter-grid { grid-template-columns: 1fr; }
+    .cmp-filter-actions { grid-column: 1; }
     .cmp-topbar, .cmp-body { padding:16px; }
+    .cmp-pagination-footer { flex-direction:column; align-items:flex-start; }
 }
 </style>
 @endpush
@@ -131,38 +168,122 @@
             </div>
         </section>
 
+        {{-- Filters Section --}}
+        <section class="cmp-filter-card">
+            <div class="cmp-filter-head">
+                <div class="cmp-filter-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:#ea580c;">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                    <span>Filter Campaigns</span>
+                    @if($hasActiveFilters)
+                        <span class="cmp-filter-badge">Active Filters</span>
+                    @endif
+                </div>
+                @if($hasActiveFilters)
+                    <a href="{{ route('projects.campaigns.index') }}" class="cmp-btn cmp-btn-outline" style="min-height:32px; padding:4px 12px; font-size:12px;">
+                        ✕ Clear All Filters
+                    </a>
+                @endif
+            </div>
+
+            <div class="cmp-filter-body">
+                <form method="GET" action="{{ route('projects.campaigns.index') }}">
+                    <div class="cmp-filter-grid">
+                        {{-- 1. Company Name Textbox --}}
+                        <div class="cmp-field">
+                            <label class="cmp-label" for="filter_company_name">Company / Client Name</label>
+                            <input
+                                type="text"
+                                id="filter_company_name"
+                                name="company_name"
+                                value="{{ $filters['company_name'] ?? '' }}"
+                                placeholder="Search company or client..."
+                                class="cmp-input"
+                            >
+                        </div>
+
+                        {{-- 2. Employee Wise Dropdown --}}
+                        <div class="cmp-field">
+                            <label class="cmp-label" for="filter_employee_id">Employee Wise</label>
+                            <select id="filter_employee_id" name="employee_id" class="cmp-select">
+                                <option value="">All Employees / TLs</option>
+                                @foreach($employees as $emp)
+                                    <option value="{{ $emp->id }}" {{ (string)($filters['employee_id'] ?? '') === (string)$emp->id ? 'selected' : '' }}>
+                                        {{ $emp->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        {{-- 3. Status (Active / Inactive) Dropdown --}}
+                        <div class="cmp-field">
+                            <label class="cmp-label" for="filter_status">Status</label>
+                            <select id="filter_status" name="status" class="cmp-select">
+                                <option value="">All Statuses</option>
+                                <option value="active" {{ ($filters['status'] ?? '') === 'active' ? 'selected' : '' }}>🟢 Active Campaigns</option>
+                                <option value="inactive" {{ ($filters['status'] ?? '') === 'inactive' ? 'selected' : '' }}>⚪ Inactive / No Active</option>
+                            </select>
+                        </div>
+
+                        {{-- 4. Start Date --}}
+                        <div class="cmp-field">
+                            <label class="cmp-label" for="filter_start_date">Start Date</label>
+                            <input
+                                type="date"
+                                id="filter_start_date"
+                                name="start_date"
+                                value="{{ $filters['start_date'] ?? '' }}"
+                                class="cmp-input"
+                            >
+                        </div>
+
+                        {{-- 5. End Date --}}
+                        <div class="cmp-field">
+                            <label class="cmp-label" for="filter_end_date">End Date</label>
+                            <input
+                                type="date"
+                                id="filter_end_date"
+                                name="end_date"
+                                value="{{ $filters['end_date'] ?? '' }}"
+                                class="cmp-input"
+                            >
+                        </div>
+
+                        {{-- Action Buttons --}}
+                        <div class="cmp-filter-actions">
+                            <button type="submit" class="cmp-btn cmp-btn-primary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                Filter
+                            </button>
+                            @if($hasActiveFilters)
+                                <a href="{{ route('projects.campaigns.index') }}" class="cmp-btn cmp-btn-outline" title="Reset Filters">
+                                    Reset
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
         {{-- Main Table Card --}}
         <section class="cmp-card">
             <div class="cmp-card-head">
                 <div>
                     <div class="cmp-card-title">
                         <span>Campaigns by Customer / Lead</span>
+                        <span style="font-size:12px; font-weight:700; color:#ea580c; background:#fff7ed; padding:3px 10px; border-radius:999px; border:1px solid #fed7aa;">
+                            {{ $leads->total() }} {{ \Illuminate\Support\Str::plural('Lead', $leads->total()) }}
+                        </span>
                     </div>
                     <div class="cmp-card-sub">
-                        Showing all leads whose Digital Marketing products are moved to production with budget approval required.
+                        Showing leads whose Digital Marketing products are moved to production with budget approval required.
                     </div>
                 </div>
-
-                <form method="GET" action="{{ route('projects.campaigns.index') }}" class="cmp-search-box">
-                    <input
-                        type="text"
-                        name="search"
-                        value="{{ $search }}"
-                        placeholder="Search company, customer, mobile..."
-                        class="cmp-input"
-                        style="width: 260px;"
-                    >
-                    <button type="submit" class="cmp-btn cmp-btn-primary">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        Search
-                    </button>
-                    @if($search)
-                        <a href="{{ route('projects.campaigns.index') }}" class="cmp-btn">Clear</a>
-                    @endif
-                </form>
             </div>
 
             <div class="cmp-card-body" style="padding:0;">
@@ -265,7 +386,11 @@
                                         <div style="font-size: 36px; margin-bottom: 8px;">📢</div>
                                         <div style="font-size: 16px; font-weight: 700; color: #1e293b;">No Digital Marketing Products Found</div>
                                         <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">
-                                            There are currently no products moved to production in the Digital Marketing department with Budget Approval needed.
+                                            @if($hasActiveFilters)
+                                                No leads match your active filter criteria. Try clearing or modifying the filters above.
+                                            @else
+                                                There are currently no products moved to production in the Digital Marketing department with Budget Approval needed.
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>
@@ -273,8 +398,93 @@
                         </tbody>
                     </table>
                 </div>
+
+                {{-- Pagination Footer --}}
+                @if($leads->hasPages() || $leads->total() > 0)
+                    <div class="cmp-pagination-footer">
+                        <div class="cmp-pagination-left">
+                            <div class="cmp-pagination-info">
+                                <span>Showing</span>
+                                <strong>{{ $leads->firstItem() ?? 0 }}</strong>
+                                <span>to</span>
+                                <strong>{{ $leads->lastItem() ?? 0 }}</strong>
+                                <span>of</span>
+                                <strong>{{ $leads->total() }}</strong>
+                                <span>leads</span>
+                            </div>
+
+                            <div class="cmp-pagination-per-page">
+                                <span>Rows:</span>
+                                <select class="cmp-pagination-select" onchange="const url = new URL(window.location.href); url.searchParams.set('per_page', this.value); url.searchParams.set('page', 1); window.location.href = url.toString();">
+                                    @foreach([10, 25, 50, 100] as $size)
+                                        <option value="{{ $size }}" {{ (int)request('per_page', 10) === $size ? 'selected' : '' }}>{{ $size }} per page</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        @if($leads->hasPages())
+                            @php
+                                $currentPage = $leads->currentPage();
+                                $lastPage = $leads->lastPage();
+                                $start = max(1, $currentPage - 2);
+                                $end = min($lastPage, $currentPage + 2);
+                            @endphp
+
+                            <nav class="cmp-pagination-nav">
+                                {{-- Previous Button --}}
+                                @if($leads->onFirstPage())
+                                    <span class="cmp-page-btn is-disabled" title="Previous Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </span>
+                                @else
+                                    <a href="{{ $leads->previousPageUrl() }}" class="cmp-page-btn" title="Previous Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </a>
+                                @endif
+
+                                {{-- First Page if out of range --}}
+                                @if($start > 1)
+                                    <a href="{{ $leads->url(1) }}" class="cmp-page-btn {{ $currentPage == 1 ? 'is-active' : '' }}">1</a>
+                                    @if($start > 2)
+                                        <span class="cmp-page-ellipsis">...</span>
+                                    @endif
+                                @endif
+
+                                {{-- Page Numbers --}}
+                                @for($page = $start; $page <= $end; $page++)
+                                    @if($page == $currentPage)
+                                        <span class="cmp-page-btn is-active">{{ $page }}</span>
+                                    @else
+                                        <a href="{{ $leads->url($page) }}" class="cmp-page-btn">{{ $page }}</a>
+                                    @endif
+                                @endfor
+
+                                {{-- Last Page if out of range --}}
+                                @if($end < $lastPage)
+                                    @if($end < $lastPage - 1)
+                                        <span class="cmp-page-ellipsis">...</span>
+                                    @endif
+                                    <a href="{{ $leads->url($lastPage) }}" class="cmp-page-btn {{ $currentPage == $lastPage ? 'is-active' : '' }}">{{ $lastPage }}</a>
+                                @endif
+
+                                {{-- Next Button --}}
+                                @if($leads->hasMorePages())
+                                    <a href="{{ $leads->nextPageUrl() }}" class="cmp-page-btn" title="Next Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </a>
+                                @else
+                                    <span class="cmp-page-btn is-disabled" title="Next Page">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </span>
+                                @endif
+                            </nav>
+                        @endif
+                    </div>
+                @endif
             </div>
         </section>
     </div>
 </div>
 @endsection
+

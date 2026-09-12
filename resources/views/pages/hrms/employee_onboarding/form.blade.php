@@ -3,6 +3,7 @@
     $portalUser = $employee?->portalUser;
     $selectedTlUserId = old('tl_user_id', $portalUser?->managerMappings?->first()?->manager_id);
     $portalBranchId = old('branch_id', $portalUser?->branch_id ?? $employee?->branch?->id ?? ((($method ?? 'POST') === 'POST') ? auth()->user()?->branch_id : null));
+    $portalUserBranchIds = $portalUser?->branches?->pluck('id')->toArray() ?? [];
     $portalEmail = old('portal_email', $portalUser?->email ?? '');
     $portalPasswordRequired = ($method ?? 'POST') === 'POST';
     $portalAccountRequired = $portalPasswordRequired || (bool) $portalUser;
@@ -382,6 +383,22 @@
                                     @endforeach
                                 </select>
                                 @error('branch_id')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            {{-- Additional Branches (Multi-Select) --}}
+                            <div class="eob-group" style="grid-column: 1 / -1;">
+                                <label class="eob-label">Additional Branches (Multiple Select)</label>
+                                <div style="max-height: 130px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; background: #fafafa; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
+                                    @foreach($branches as $branch)
+                                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; font-weight: 500; cursor: pointer; margin: 0;">
+                                            <input type="checkbox" name="branches[]" value="{{ $branch->id }}" 
+                                                {{ (is_array(old('branches')) && in_array($branch->id, old('branches'))) || (old('branches') === null && in_array($branch->id, $portalUserBranchIds)) ? 'checked' : '' }} 
+                                                style="width: 16px; height: 16px; accent-color: #fe5f04;">
+                                            {{ $branch->name }}
+                                        </label>
+                                    @endforeach
+                                </div>
+                                <div class="eob-help">Select additional branches this employee/user can access (e.g. for Regional Managers, Area TLs, etc.).</div>
+                                @error('branches')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Employee ID</label>

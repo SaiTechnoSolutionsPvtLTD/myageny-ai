@@ -215,15 +215,79 @@ class ProjectController extends Controller
             ];
 
             // Filters
-            $filterAccountId = $request->query('project_id', '');
+            $filterSearch = trim((string) $request->query('search', ''));
+            $filterAccountId = trim((string) $request->query('project_id', ''));
+            $filterEmployeeId = trim((string) $request->query('employee_id', $request->query('team_member_id', '')));
+            $filterStatus = trim((string) $request->query('status', ''));
+            $filterQuickDate = trim((string) $request->query('quick_date', ''));
+            $filterDateFrom = trim((string) $request->query('date_from', ''));
+            $filterDateTo = trim((string) $request->query('date_to', ''));
             $filterDate = $request->query('date', Carbon::today()->toDateString());
-            $filterStatus = $request->query('status', '');
+
+            if ($filterQuickDate !== '' && !in_array($filterQuickDate, ['all', 'custom', 'custom_onboarding', 'custom_delivery'], true)) {
+                $now = Carbon::today();
+                switch ($filterQuickDate) {
+                    case 'today':
+                        $filterDate = $now->toDateString();
+                        $filterDateFrom = $now->toDateString();
+                        $filterDateTo = $now->toDateString();
+                        break;
+                    case 'week':
+                    case 'this_week':
+                    case 'weekly':
+                        $filterDateFrom = $now->copy()->startOfWeek()->toDateString();
+                        $filterDateTo = $now->copy()->endOfWeek()->toDateString();
+                        break;
+                    case 'month':
+                    case 'this_month':
+                    case 'monthly':
+                        $filterDateFrom = $now->copy()->startOfMonth()->toDateString();
+                        $filterDateTo = $now->copy()->endOfMonth()->toDateString();
+                        break;
+                    case 'quarter':
+                    case 'this_quarter':
+                    case 'quarterly':
+                        $filterDateFrom = $now->copy()->startOfQuarter()->toDateString();
+                        $filterDateTo = $now->copy()->endOfQuarter()->toDateString();
+                        break;
+                    case 'year':
+                    case 'this_year':
+                    case 'yearly':
+                        $filterDateFrom = $now->copy()->startOfYear()->toDateString();
+                        $filterDateTo = $now->copy()->endOfYear()->toDateString();
+                        break;
+                }
+            }
 
             // Filter the projects for the Today Planned Tasks table
             $filteredProjects = $designProjects;
 
+            if ($filterSearch !== '') {
+                $needle = strtolower($filterSearch);
+                $filteredProjects = $filteredProjects->filter(function ($project) use ($needle) {
+                    $searchable = implode(' ', array_filter([
+                        $project->product_name,
+                        $project->company_name,
+                        $project->client_name,
+                        $project->lead_id,
+                        $project->lead?->company_name,
+                        $project->lead?->client_name,
+                    ]));
+                    return str_contains(strtolower($searchable), $needle);
+                });
+            }
+
             if ($filterAccountId !== '') {
                 $filteredProjects = $filteredProjects->where('id', (int) $filterAccountId);
+            }
+
+            if ($filterEmployeeId !== '') {
+                $empId = (int) $filterEmployeeId;
+                $filteredProjects = $filteredProjects->filter(function ($project) use ($empId) {
+                    $allocEmps = array_map('intval', Arr::wrap($project->project_allocated_employee_user_ids));
+                    $hasTimesheet = $project->timesheets->contains('user_id', $empId);
+                    return in_array($empId, $allocEmps, true) || $hasTimesheet;
+                });
             }
 
             if ($filterStatus !== '') {
@@ -241,7 +305,6 @@ class ProjectController extends Controller
                     };
                 });
             }
-
 
             // TL flag and team members for Add Task feature
             $isTl = $this->shouldLimitToAssignedProjects($user);
@@ -388,10 +451,16 @@ class ProjectController extends Controller
                 'overdueTasksList'    => $overdueTasksList,
                 'isTl'                => $isTl,
                 'teamMembers'         => $teamMembers,
+                'designTeamMembers'   => $allDesigningUsers,
                 'userTargetsMap'      => $userTargetsMap,
                 'filters'             => [
+                    'search'     => $filterSearch,
                     'project_id' => $filterAccountId,
+                    'employee_id'=> $filterEmployeeId,
                     'date'       => $filterDate,
+                    'quick_date' => $filterQuickDate,
+                    'date_from'  => $filterDateFrom,
+                    'date_to'    => $filterDateTo,
                     'status'     => $filterStatus,
                 ],
             ]);
@@ -447,17 +516,136 @@ class ProjectController extends Controller
             ->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
+        $products = Product::query()->orderBy('product_name')->get(['id', 'product_name']);
+        $departments = Department::query()->orderBy('name')->get(['id', 'name']);
+
+        $onboardingDepts = \App\Models\EmployeeOnboarding::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
+        $internDepts = \App\Models\InternJoiningForm::query()
+            ->whereNotNull('portal_user_id')
+            ->whereNotNull('department_id')
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->get(['portal_user_id', 'department_id'])
+            ->groupBy('portal_user_id')
+            ->map(fn($group) => $group->pluck('department_id')->filter()->unique()->values()->all());
+
+        $employees = User::query()
+            ->with(['roles:id,department_id'])
+            ->where('is_active', true)
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function ($emp) use ($onboardingDepts, $internDepts) {
+                $roleDeptIds = $emp->roles->pluck('department_id')->filter()->map(fn($id) => (int) $id)->all();
+                $eoDeptIds = $onboardingDepts->get($emp->id, []);
+                $ijfDeptIds = $internDepts->get($emp->id, []);
+
+                $emp->department_ids = collect(array_merge($roleDeptIds, $eoDeptIds, $ijfDeptIds))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return $emp;
+            });
+
+        $isCompanyAdmin = $user->isCompanyAdmin() || $user->hasRole('company_admin') || $user->hasAdminLikeRole();
+
+        $quickDate = trim((string) $request->query('quick_date', ''));
+        $dateType = trim((string) $request->query('date_type', 'delivery'));
+
+        if (in_array($quickDate, ['custom_onboarding', 'onboarding', 'onboard'], true)) {
+            $dateType = 'onboarding';
+        } elseif (in_array($quickDate, ['custom_delivery', 'delivery'], true)) {
+            $dateType = 'delivery';
+        }
+
+        $search = trim((string) $request->query('search', ''));
+        $productId = trim((string) $request->query('product_id', ''));
+        $departmentId = trim((string) $request->query('department_id', ''));
+        $employeeId = trim((string) $request->query('employee_id', $request->query('team_member_id', '')));
+        $projectStatus = trim((string) $request->query('project_status', ''));
+        $allocationStatus = trim((string) $request->query('allocation_status', ''));
+        $projectId = trim((string) $request->query('project_id', ''));
+
         $defaultDateFrom = Carbon::now()->startOfMonth()->toDateString();
         $defaultDateTo = Carbon::now()->endOfMonth()->toDateString();
 
+        $dateFromStr = trim((string) $request->query('date_from', ''));
+        $dateToStr = trim((string) $request->query('date_to', ''));
+
+        $hasAnyFilterParam = $request->has('quick_date')
+            || $request->has('date_from')
+            || $request->has('date_to')
+            || $request->has('search')
+            || $request->has('product_id')
+            || $request->has('department_id')
+            || $request->has('employee_id')
+            || $request->has('team_member_id')
+            || $request->has('project_status')
+            || $request->has('allocation_status')
+            || $request->has('project_id');
+
+        if (!$hasAnyFilterParam) {
+            $quickDate = 'month';
+            $dateFromStr = $defaultDateFrom;
+            $dateToStr = $defaultDateTo;
+        } elseif ($quickDate !== '' && !in_array($quickDate, ['all', 'custom', 'custom_onboarding', 'custom_delivery'], true)) {
+            $now = Carbon::today();
+            switch ($quickDate) {
+                case 'today':
+                    $dateFromStr = $now->toDateString();
+                    $dateToStr = $now->toDateString();
+                    break;
+                case 'week':
+                case 'this_week':
+                case 'weekly':
+                    $dateFromStr = $now->copy()->startOfWeek()->toDateString();
+                    $dateToStr = $now->copy()->endOfWeek()->toDateString();
+                    break;
+                case 'month':
+                case 'this_month':
+                case 'monthly':
+                    $dateFromStr = $now->copy()->startOfMonth()->toDateString();
+                    $dateToStr = $now->copy()->endOfMonth()->toDateString();
+                    break;
+                case 'quarter':
+                case 'this_quarter':
+                case 'quarterly':
+                    $dateFromStr = $now->copy()->startOfQuarter()->toDateString();
+                    $dateToStr = $now->copy()->endOfQuarter()->toDateString();
+                    break;
+                case 'year':
+                case 'this_year':
+                case 'yearly':
+                    $dateFromStr = $now->copy()->startOfYear()->toDateString();
+                    $dateToStr = $now->copy()->endOfYear()->toDateString();
+                    break;
+            }
+        } elseif ($quickDate === 'all') {
+            $dateFromStr = '';
+            $dateToStr = '';
+        }
+
         $dashboardFilters = [
-            'date_from' => $request->has('date_from') ? trim((string) $request->query('date_from', '')) : $defaultDateFrom,
-            'date_to' => $request->has('date_to') ? trim((string) $request->query('date_to', '')) : $defaultDateTo,
-            'project_id' => trim((string) $request->query('project_id', '')),
-            'team_member_id' => $this->shouldAllowDashboardUserFilter($user)
-                ? trim((string) $request->query('team_member_id', ''))
-                : '',
-            'allocation_status' => trim((string) $request->query('allocation_status', '')),
+            'search' => $search,
+            'product_id' => $productId,
+            'department_id' => $departmentId,
+            'employee_id' => $employeeId,
+            'team_member_id' => $employeeId,
+            'project_id' => $projectId,
+            'project_status' => $projectStatus,
+            'allocation_status' => $allocationStatus,
+            'quick_date' => $quickDate,
+            'date_type' => $dateType,
+            'date_from' => $dateFromStr,
+            'date_to' => $dateToStr,
         ];
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
@@ -533,7 +721,11 @@ class ProjectController extends Controller
         $sixMonthsRevenue = array_values($lastSixMonths);
 
         return view('pages.projects.dashboard', [
+            'isCompanyAdmin' => $isCompanyAdmin,
             'isAdminLike' => $isAdminLike,
+            'products' => $products,
+            'departments' => $departments,
+            'employees' => $employees,
             'selectedDashboard' => $selectedDashboard,
             'stats' => $stats,
             'allocationPendingCount' => $allocationPendingProjects,
@@ -566,15 +758,62 @@ class ProjectController extends Controller
         $directManagedIds = $user->managedUsers()->pluck('users.id');
         $allMappedIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values();
 
+        $prodScope = function ($query) {
+            $query->where(function ($q) {
+                // 1. Via roles department
+                $q->whereHas('roles.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 2. Via employee onboarding department
+                ->orWhereHas('employeeOnboarding.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 3. Via intern joining form department
+                ->orWhereHas('internJoiningForm.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                // 4. Via role keywords
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%flutter%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%laravel%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%react%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%frontend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%backend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%fullstack%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%graphic%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ui%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ux%']);
+                });
+            });
+        };
+
         $managedUsers = \App\Models\User::whereIn('id', $allMappedIds->reject(fn($id) => (int)$id === (int)$user->id))
             ->where('users.user_status', 'active')
+            ->tap($prodScope)
             ->orderBy('name')
             ->get(['users.id', 'users.name']);
         $hasMappedUsers = $managedUsers->isNotEmpty();
         $canViewTeamTimesheets = $isAdminLike || $hasMappedUsers || $user->hasTlLikeRole();
 
         $allUsers = $isAdminLike 
-            ? \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']) 
+            ? \App\Models\User::where('user_status', 'active')->tap($prodScope)->orderBy('name')->get(['id', 'name']) 
             : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect([$user]));
 
         $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
@@ -2495,43 +2734,119 @@ class ProjectController extends Controller
     {
         $dateFrom = $this->parseFilterDate($filters['date_from'] ?? '');
         $dateTo = $this->parseFilterDate($filters['date_to'] ?? '')?->endOfDay();
+        $dateType = trim((string) ($filters['date_type'] ?? 'delivery'));
         $selectedProjectId = (int) ($filters['project_id'] ?? 0);
-        $selectedTeamMemberId = (int) ($filters['team_member_id'] ?? 0);
+        $selectedProductId = trim((string) ($filters['product_id'] ?? ''));
+        $selectedDepartmentId = trim((string) ($filters['department_id'] ?? ''));
+        $selectedEmployeeId = (int) ($filters['employee_id'] ?? ($filters['team_member_id'] ?? 0));
+        $selectedProjectStatus = trim((string) ($filters['project_status'] ?? ''));
         $selectedAllocationStatus = trim((string) ($filters['allocation_status'] ?? ''));
+        $search = Str::lower(trim((string) ($filters['search'] ?? '')));
 
         return $projects
-            ->filter(function (ProductionInitiation $project) use ($dateFrom, $dateTo, $selectedProjectId, $selectedTeamMemberId, $selectedAllocationStatus, $user) {
+            ->filter(function (ProductionInitiation $project) use (
+                $dateFrom,
+                $dateTo,
+                $dateType,
+                $selectedProjectId,
+                $selectedProductId,
+                $selectedDepartmentId,
+                $selectedEmployeeId,
+                $selectedProjectStatus,
+                $selectedAllocationStatus,
+                $search,
+                $user
+            ) {
                 if ($selectedProjectId > 0 && (int) $project->id !== $selectedProjectId) {
                     return false;
                 }
 
-                if ($dateFrom || $dateTo) {
-                    $deliveryDate = $project->project_delivery_date;
-
-                    if (! $deliveryDate) {
-                        return false;
-                    }
-
-                    if ($dateFrom && $deliveryDate->lt($dateFrom)) {
-                        return false;
-                    }
-
-                    if ($dateTo && $deliveryDate->gt($dateTo)) {
+                if ($selectedProductId !== '') {
+                    if ((string) $project->product_id !== $selectedProductId) {
                         return false;
                     }
                 }
 
-                if ($selectedTeamMemberId > 0 && $this->shouldAllowDashboardUserFilter($user)) {
-                    $employeeIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))
+                if ($selectedDepartmentId !== '') {
+                    if ((string) $project->department_id !== $selectedDepartmentId) {
+                        return false;
+                    }
+                }
+
+                if ($selectedEmployeeId > 0) {
+                    $allocatedIds = collect(Arr::wrap($project->project_allocated_employee_user_ids))
                         ->map(fn ($id) => (int) $id);
 
-                    if (! $employeeIds->contains($selectedTeamMemberId)) {
+                    if (is_array($project->tl_employee_allocations)) {
+                        foreach ($project->tl_employee_allocations as $alloc) {
+                            if (!empty($alloc['employee_user_ids']) && is_array($alloc['employee_user_ids'])) {
+                                foreach ($alloc['employee_user_ids'] as $euId) {
+                                    $allocatedIds->push((int) $euId);
+                                }
+                            }
+                        }
+                    }
+
+                    if (! $allocatedIds->contains($selectedEmployeeId)) {
+                        return false;
+                    }
+                }
+
+                if ($selectedProjectStatus !== '') {
+                    $currentStatus = strtolower(trim((string) ($project->project_execution_status ?: 'ontrack')));
+                    $targetStatus = strtolower(trim($selectedProjectStatus));
+
+                    if ($targetStatus === 'ongoing' || $targetStatus === 'ontrack') {
+                        if (! in_array($currentStatus, ['ontrack', 'ongoing'], true)) {
+                            return false;
+                        }
+                    } elseif ($currentStatus !== $targetStatus) {
                         return false;
                     }
                 }
 
                 if ($selectedAllocationStatus !== '') {
                     if ($project->project_allocation_status !== $selectedAllocationStatus) {
+                        return false;
+                    }
+                }
+
+                if ($dateFrom || $dateTo) {
+                    if ($dateType === 'onboarding') {
+                        $rawDate = $project->production_approval_reviewed_at
+                            ?: ($project->project_allocated_at ?: $project->created_at);
+                    } else {
+                        $rawDate = $project->project_delivery_date ?: $this->projectDeliveryDate($project);
+                    }
+
+                    if (! $rawDate) {
+                        return false;
+                    }
+
+                    $evalDate = Carbon::parse($rawDate)->startOfDay();
+
+                    if ($dateFrom && $evalDate->lt($dateFrom->copy()->startOfDay())) {
+                        return false;
+                    }
+
+                    if ($dateTo && $evalDate->gt($dateTo->copy()->endOfDay())) {
+                        return false;
+                    }
+                }
+
+                if ($search !== '') {
+                    $haystack = Str::lower(implode(' ', [
+                        $project->product_name,
+                        $project->client_name,
+                        $project->company_name,
+                        $project->lead?->contact_name,
+                        $project->lead?->company_name,
+                        $project->lead?->mobile_number,
+                        $project->lead_id ? 'LD-' . $project->lead_id : '',
+                        $project->lead_id ? (string) $project->lead_id : '',
+                    ]));
+
+                    if (! Str::contains($haystack, $search)) {
                         return false;
                     }
                 }

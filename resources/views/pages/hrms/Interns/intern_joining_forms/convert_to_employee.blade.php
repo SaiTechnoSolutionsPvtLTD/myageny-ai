@@ -106,6 +106,22 @@
                                         </select>
                                         @error('branch_id')<div class="eob-error">{{ $message }}</div>@enderror
                                     </div>
+                                    {{-- Additional Branches (Multi-Select) --}}
+                                    <div class="eob-group" style="grid-column: 1 / -1;">
+                                        <label class="eob-label">Additional Branches (Multiple Select)</label>
+                                        <div style="max-height: 130px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px; background: #fafafa; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
+                                            @foreach($branches as $branch)
+                                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; font-weight: 500; cursor: pointer; margin: 0;">
+                                                    <input type="checkbox" name="branches[]" value="{{ $branch->id }}" 
+                                                        {{ is_array(old('branches')) && in_array($branch->id, old('branches')) ? 'checked' : '' }} 
+                                                        style="width: 16px; height: 16px; accent-color: #fe5f04;">
+                                                    {{ $branch->name }}
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                        <div class="eob-help">Select additional branches this converted employee/user can access.</div>
+                                        @error('branches')<div class="eob-error">{{ $message }}</div>@enderror
+                                    </div>
                                     <div class="eob-group">
                                         <label class="eob-label">Department <span class="eob-label-required">*</span></label>
                                         <select name="department_id" class="eob-select" id="convertDepartmentSelect" required>
