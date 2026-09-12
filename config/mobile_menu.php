@@ -51,6 +51,20 @@ return [
         'items' => [
             ['key' => 'projects.dashboard', 'label' => 'Dashboard',          'section' => 'PROJECTS', 'order' => 10],
             ['key' => 'projects.list',      'label' => 'Projects Details',   'section' => 'PROJECTS', 'order' => 20],
+            [
+                'key' => 'projects.smm_sheet',
+                'label' => 'SMM Sheet',
+                'section' => 'PROJECTS',
+                'order' => 21,
+                'require_any_method' => ['belongsToDesigningDepartment', 'belongsToDigitalMarketingDepartment', 'hasAdminLikeRole', 'canViewProjectsDashboardSwitcher'],
+            ],
+            [
+                'key' => 'projects.campaigns',
+                'label' => 'Campaigns',
+                'section' => 'PROJECTS',
+                'order' => 22,
+                'require_any_method' => ['belongsToDigitalMarketingDepartment', 'hasAdminLikeRole'],
+            ],
             // Mobile mirror of the web sidebar's "Tasks" link under Projects
             // (App\Http\Controllers\ProductionTaskController, gated
             // @can('tasks.menuview') there) — same permission here.

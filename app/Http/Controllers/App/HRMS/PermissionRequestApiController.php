@@ -7,38 +7,102 @@ use App\Models\EmployeeOnboarding;
 use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
 use App\Models\User;
-use App\Models\UserMapping;
-use App\Services\HrmsApprovalNotificationService;
+use App\Services\DataVisibilityService;
 use App\Services\HrmsApprovalHierarchyService;
+use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Mobile API — Permission Requests
+ *
+ * Scoped by role hierarchy and UserMapping manager chain:
+ *   - Approval chain = UserMapping hierarchy (manager chain).
+ *   - Team member visibility = DataVisibilityService::descendantUserIds().
+ *   - Supports scope parameter: 'my' (own requests) vs 'team' (direct reports/descendants) vs 'all'.
+ *   - canActOnApproval, canViewPermissionRequest are role-hierarchy aware.
+ */
 class PermissionRequestApiController extends Controller
 {
     public function __construct(private readonly HrmsApprovalHierarchyService $approvalHierarchy) {}
+
     // ── GET /api/mobile/hrms/permission-requests ──────────────────────────────
     public function index(Request $request): JsonResponse
     {
         $user  = $request->user();
-        $query = PermissionRequest::with(['approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
-            ->latest();
+        $vis   = $this->resolveVisibility($user);
+        $scope = $request->query('scope', 'my'); // 'my' (default), 'team', or 'all'
+
+        $query = PermissionRequest::with([
+            'user.branch',
+            'employee.department',
+            'approvals.approver',
+            'approvals.actionedBy',
+        ]);
+
+        if ($scope === 'team') {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $query->where('user_id', '!=', $user->id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $query->whereIn('user_id', $vis['descendant_ids']);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds));
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $allowed = array_merge([$user->id], $vis['descendant_ids']);
+                $query->whereIn('user_id', $allowed);
+            }
+        } else {
+            // Default to user's own requests
+            $query->where('user_id', $user->id);
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        $perPage            = (int) ($request->per_page ?? 15);
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('permission_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('permission_date', '<=', $request->date_to);
+        }
+
+        $query->latest('id');
+
+        $perPage            = min((int) ($request->per_page ?? 15), 50);
         $permissionRequests = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'data'    => [
                 'permission_requests' => $permissionRequests->map(
-                    fn($pr) => $this->mapPermissionRequest($pr)
+                    fn ($pr) => $this->mapPermissionRequest($pr, false, $user)
                 ),
                 'pagination' => [
                     'current_page' => $permissionRequests->currentPage(),
@@ -47,6 +111,10 @@ class PermissionRequestApiController extends Controller
                     'total'        => $permissionRequests->total(),
                     'has_more'     => $permissionRequests->hasMorePages(),
                 ],
+                'scope'            => $scope,
+                'has_team_members' => $vis['has_team_members'],
+                'is_admin_or_hr'   => $vis['is_admin_or_hr'],
+                'is_tl_or_manager' => $vis['is_tl_or_manager'],
             ],
         ]);
     }
@@ -55,6 +123,7 @@ class PermissionRequestApiController extends Controller
     public function meta(Request $request): JsonResponse
     {
         $user = $request->user();
+        $vis  = $this->resolveVisibility($user);
 
         $pendingApprovals = PermissionApproval::with([
             'permissionRequest.user',
@@ -65,14 +134,13 @@ class PermissionRequestApiController extends Controller
             ->where('status', PermissionApproval::STATUS_PENDING)
             ->whereHas(
                 'permissionRequest',
-                fn($q) =>
-                $q->where('status', PermissionRequest::STATUS_PENDING)
+                fn ($q) => $q->where('status', PermissionRequest::STATUS_PENDING)
             )
             ->oldest()
             ->get()
-            ->filter(fn(PermissionApproval $a) => $this->canActOnApproval($a, $user))
+            ->filter(fn (PermissionApproval $a) => $this->canActOnApproval($a, $user))
             ->values()
-            ->map(fn($a) => $this->mapPendingApproval($a));
+            ->map(fn ($a) => $this->mapPendingApproval($a));
 
         $myStats = [
             'total'    => PermissionRequest::where('user_id', $user->id)->count(),
@@ -81,9 +149,35 @@ class PermissionRequestApiController extends Controller
             'rejected' => PermissionRequest::where('user_id', $user->id)->where('status', 'rejected')->count(),
         ];
 
+        $teamStats = null;
+        if ($vis['has_team_members'] || $vis['is_admin_or_hr']) {
+            $teamQuery = PermissionRequest::query();
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $teamQuery->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $teamQuery->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $teamQuery->where('user_id', '!=', $user->id);
+                }
+            } else {
+                $teamQuery->whereIn('user_id', $vis['descendant_ids']);
+            }
+
+            $teamStats = [
+                'total'    => (clone $teamQuery)->count(),
+                'pending'  => (clone $teamQuery)->where('status', 'pending')->count(),
+                'approved' => (clone $teamQuery)->where('status', 'approved')->count(),
+                'rejected' => (clone $teamQuery)->where('status', 'rejected')->count(),
+            ];
+        }
+
         $approvalChain = $this->approvalChainFor($user)
             ->values()
-            ->map(fn(User $u, int $i) => [
+            ->map(fn (User $u, int $i) => [
                 'order' => $i + 1,
                 'name'  => $u->name,
                 'email' => $u->email,
@@ -95,6 +189,10 @@ class PermissionRequestApiController extends Controller
                 'pending_approvals'       => $pendingApprovals,
                 'pending_approvals_count' => $pendingApprovals->count(),
                 'my_stats'                => $myStats,
+                'team_stats'              => $teamStats,
+                'has_team_members'        => $vis['has_team_members'],
+                'is_admin_or_hr'          => $vis['is_admin_or_hr'],
+                'is_tl_or_manager'        => $vis['is_tl_or_manager'],
                 'approval_chain'          => $approvalChain,
             ],
         ]);
@@ -114,14 +212,13 @@ class PermissionRequestApiController extends Controller
             ->where('status', PermissionApproval::STATUS_PENDING)
             ->whereHas(
                 'permissionRequest',
-                fn($q) =>
-                $q->where('status', PermissionRequest::STATUS_PENDING)
+                fn ($q) => $q->where('status', PermissionRequest::STATUS_PENDING)
             )
             ->oldest()
             ->get()
-            ->filter(fn(PermissionApproval $a) => $this->canActOnApproval($a, $user))
+            ->filter(fn (PermissionApproval $a) => $this->canActOnApproval($a, $user))
             ->values()
-            ->map(fn($a) => $this->mapPendingApproval($a));
+            ->map(fn ($a) => $this->mapPendingApproval($a));
 
         return response()->json([
             'success' => true,
@@ -145,7 +242,7 @@ class PermissionRequestApiController extends Controller
             ->latest('actioned_at')
             ->limit(20)
             ->get()
-            ->map(fn($a) => $this->mapHandledApproval($a));
+            ->map(fn ($a) => $this->mapHandledApproval($a));
 
         return response()->json([
             'success' => true,
@@ -170,14 +267,14 @@ class PermissionRequestApiController extends Controller
 
         $user            = $request->user();
         $approvalActions = $permissionRequest->approvals
-            ->mapWithKeys(fn(PermissionApproval $a) => [
+            ->mapWithKeys(fn (PermissionApproval $a) => [
                 $a->id => $this->canActOnApproval($a, $user),
             ]);
 
         return response()->json([
             'success' => true,
             'data'    => [
-                'permission_request' => $this->mapPermissionRequest($permissionRequest, true),
+                'permission_request' => $this->mapPermissionRequest($permissionRequest, true, $user),
                 'approval_actions'   => $approvalActions,
             ],
         ]);
@@ -205,6 +302,7 @@ class PermissionRequestApiController extends Controller
 
         $permissionRequest = DB::transaction(function () use ($user, $validated, $approvalRows) {
             $pr = PermissionRequest::create([
+                'company_id'      => $user->company_id,
                 'user_id'         => $user->id,
                 'employee_id'     => $this->resolveEmployee($user)?->id,
                 'permission_date' => $validated['permission_date'],
@@ -231,7 +329,7 @@ class PermissionRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Permission request submitted successfully. Awaiting manager approval.',
-            'data'    => $this->mapPermissionRequest($permissionRequest, true),
+            'data'    => $this->mapPermissionRequest($permissionRequest, true, $user),
         ], 201);
     }
 
@@ -340,18 +438,61 @@ class PermissionRequestApiController extends Controller
         ]);
     }
 
+    /**
+     * Resolves role hierarchy visibility flags and descendant user IDs for the user.
+     */
+    private function resolveVisibility(User $user): array
+    {
+        $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCompanyAdmin = $user->isCompanyAdmin();
+        $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
+        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+
+        /** @var DataVisibilityService $visibility */
+        $visibility     = app(DataVisibilityService::class);
+        $descendantIds  = $visibility->descendantUserIds($user);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
+
+        return [
+            'is_super_admin'   => $isSuperAdmin,
+            'is_company_admin' => $isCompanyAdmin,
+            'is_hr'            => $isHr,
+            'is_branch_admin'  => $isBranchAdmin,
+            'is_tl_or_manager' => $isTlOrManager,
+            'has_team_members' => $hasTeamMembers,
+            'is_admin_or_hr'   => $isAdminOrHr,
+            'descendant_ids'   => $descendantIds->all(),
+        ];
+    }
+
     // ── Mappers ───────────────────────────────────────────────────────────────
     private function mapPermissionRequest(
         PermissionRequest $pr,
-        bool $withApprovals = false
+        bool $withApprovals = false,
+        ?User $currentUser = null
     ): array {
+        $employee = $pr->employee;
+        $user     = $pr->user;
+
         $data = [
             'id'              => $pr->id,
+            'user_id'         => $pr->user_id,
+            'user_name'       => $user?->name ?? 'Unknown',
+            'user_email'      => $user?->email,
+            'employee_id'     => $pr->employee_id,
+            'employee_name'   => $employee?->name ?? $user?->name ?? 'Unknown',
+            'employee_code'   => $employee?->employee_id ?? '',
+            'department_id'   => $employee?->department_id,
+            'department_name' => $employee?->department?->name ?? '',
+            'branch_name'     => $employee?->branch_name ?? $user?->branch_name ?? '',
+            'is_own_request'  => $currentUser ? ((int) $pr->user_id === (int) $currentUser->id) : false,
             'permission_date' => $pr->permission_date instanceof Carbon
                 ? $pr->permission_date->format('Y-m-d')
-                : $pr->permission_date,
-            'from_time'       => $pr->from_time,
-            'to_time'         => $pr->to_time,
+                : (is_string($pr->permission_date) ? substr($pr->permission_date, 0, 10) : $pr->permission_date),
+            'from_time'       => is_string($pr->from_time) ? substr($pr->from_time, 0, 5) : $pr->from_time,
+            'to_time'         => is_string($pr->to_time) ? substr($pr->to_time, 0, 5) : $pr->to_time,
             'total_minutes'   => $pr->total_minutes,
             'reason'          => $pr->reason ?? '',
             'status'          => $pr->status,
@@ -363,7 +504,7 @@ class PermissionRequestApiController extends Controller
 
         if ($withApprovals && $pr->relationLoaded('approvals')) {
             $data['approvals'] = $pr->approvals
-                ->map(fn($a) => $this->mapApproval($a))
+                ->map(fn ($a) => $this->mapApproval($a))
                 ->values();
         }
 
@@ -392,13 +533,14 @@ class PermissionRequestApiController extends Controller
     {
         $pr = $a->permissionRequest;
         return [
-            'id'              => $a->id,
-            'step_key'        => $a->step_key,
-            'step_name'       => $a->step_name,
-            'step_order'      => $a->step_order,
-            'employee_name'   => $pr->user?->name ?? $pr->employee?->name ?? 'Unknown',
-            'employee_code'   => $pr->employee?->employee_id ?? '',
-            'submitted_at'    => $pr->submitted_at?->format('Y-m-d H:i:s'),
+            'id'                 => $a->id,
+            'step_key'           => $a->step_key,
+            'step_name'          => $a->step_name,
+            'step_order'         => $a->step_order,
+            'employee_name'      => $pr->user?->name ?? $pr->employee?->name ?? 'Unknown',
+            'employee_code'      => $pr->employee?->employee_id ?? '',
+            'department_name'    => $pr->employee?->department?->name ?? '',
+            'submitted_at'       => $pr->submitted_at?->format('Y-m-d H:i:s'),
             'permission_request' => $this->mapPermissionRequest($pr),
         ];
     }
@@ -412,12 +554,13 @@ class PermissionRequestApiController extends Controller
             'status'             => $a->status,
             'actioned_at'        => $a->actioned_at?->format('Y-m-d H:i:s'),
             'remarks'            => $a->remarks ?? '',
-            'employee_name'      => $pr?->user?->name ?? 'Unknown',
+            'employee_name'      => $pr?->user?->name ?? $pr?->employee?->name ?? 'Unknown',
+            'employee_code'      => $pr?->employee?->employee_id ?? '',
             'permission_request' => $pr ? $this->mapPermissionRequest($pr) : null,
         ];
     }
 
-    // ── Helpers (mirrors web controller) ──────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
     private function approvalRowsFor(User $requester): array
     {
         return $this->approvalChainFor($requester)
@@ -445,8 +588,28 @@ class PermissionRequestApiController extends Controller
             return true;
         }
 
+        $vis = $this->resolveVisibility($user);
+        if ($vis['is_super_admin']) return true;
+
+        if ($vis['is_company_admin']) {
+            return ! $user->company_id || ! $pr->company_id || (int) $pr->company_id === (int) $user->company_id;
+        }
+
+        if ($vis['is_hr']) {
+            return ! $user->company_id || ! $pr->company_id || (int) $pr->company_id === (int) $user->company_id;
+        }
+
+        if ($vis['is_branch_admin']) {
+            $branchIds = $user->getMyBranchIds();
+            return in_array((int) $pr->user?->branch_id, $branchIds, true);
+        }
+
+        if ($vis['has_team_members'] && in_array((int) $pr->user_id, $vis['descendant_ids'], true)) {
+            return true;
+        }
+
         return $pr->approvals->contains(
-            fn(PermissionApproval $a) =>
+            fn (PermissionApproval $a) =>
             (int) $a->approver_user_id === (int) $user->id
                 || (int) $a->actioned_by   === (int) $user->id
                 || $this->canActOnApproval($a, $user)
@@ -456,16 +619,11 @@ class PermissionRequestApiController extends Controller
     private function canActOnApproval(PermissionApproval $approval, User $user): bool
     {
         $pr = $approval->permissionRequest;
-        if (! $pr || ! $pr->isPending())                                              return false;
-        if (
-            $approval->status !== PermissionApproval::STATUS_PENDING
-            || $pr->current_step !== $approval->step_key
-        )                             return false;
-        if ((int) $pr->user_id === (int) $user->id)                                  return false;
-        if ($user->isSystemAdmin())                                                    return true;
+        if (! $pr || ! $pr->isPending()) return false;
+        if ($approval->status !== PermissionApproval::STATUS_PENDING || $pr->current_step !== $approval->step_key) return false;
+        if ((int) $pr->user_id === (int) $user->id) return false;
+        if ($user->isSystemAdmin()) return true;
 
-        // Was missing — matches web PermissionRequestController::canActOnApproval()
-        // and mobile's own LeaveRequestApiController::canActOnApproval().
         if (
             $pr->user?->company_id && $user->company_id
             && (int) $pr->user->company_id !== (int) $user->company_id
@@ -480,7 +638,7 @@ class PermissionRequestApiController extends Controller
     {
         return EmployeeOnboarding::query()
             ->where(
-                fn($q) => $q
+                fn ($q) => $q
                     ->where('portal_user_id', $user->id)
                     ->orWhere('email', $user->email)
             )

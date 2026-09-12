@@ -39,6 +39,8 @@ use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
 use App\Http\Controllers\App\ProjectApiController;
 use App\Http\Controllers\App\ProductionTaskApiController;
+use App\Http\Controllers\App\CampaignApiController;
+use App\Http\Controllers\App\SmmSheetApiController;
 use App\Http\Controllers\App\ReportApiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\App\AppMenuController;
@@ -441,6 +443,38 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('mobile.projects.tasks.update-status');
         Route::delete('tasks/{task}', [ProductionTaskApiController::class, 'destroy'])
             ->name('mobile.projects.tasks.destroy');
+
+        // ── Production Campaigns (mirrors web CustomerCampaignController) ──
+        Route::get('campaigns/meta', [CampaignApiController::class, 'meta'])
+            ->name('mobile.projects.campaigns.meta');
+        Route::get('campaigns', [CampaignApiController::class, 'index'])
+            ->name('mobile.projects.campaigns.index');
+        Route::get('campaigns/{lead}', [CampaignApiController::class, 'show'])
+            ->name('mobile.projects.campaigns.show');
+        Route::post('campaigns/{lead}', [CampaignApiController::class, 'store'])
+            ->name('mobile.projects.campaigns.store');
+        Route::put('campaigns/{campaign}', [CampaignApiController::class, 'update'])
+            ->name('mobile.projects.campaigns.update');
+        Route::delete('campaigns/{campaign}', [CampaignApiController::class, 'destroy'])
+            ->name('mobile.projects.campaigns.destroy');
+        Route::post('campaigns/{campaign}/pause', [CampaignApiController::class, 'pause'])
+            ->name('mobile.projects.campaigns.pause');
+        Route::post('campaigns/{campaign}/resume', [CampaignApiController::class, 'resume'])
+            ->name('mobile.projects.campaigns.resume');
+        Route::post('campaigns/{campaign}/extend', [CampaignApiController::class, 'extend'])
+            ->name('mobile.projects.campaigns.extend');
+        Route::post('campaigns/{campaign}/stop', [CampaignApiController::class, 'stop'])
+            ->name('mobile.projects.campaigns.stop');
+
+        // ── Production SMM Sheet (mirrors web SmmSheetController) ──
+        Route::get('smm-sheet', [SmmSheetApiController::class, 'index'])
+            ->name('mobile.projects.smm-sheet.index');
+        Route::post('smm-sheet/entry', [SmmSheetApiController::class, 'storeEntry'])
+            ->name('mobile.projects.smm-sheet.entry');
+        Route::get('smm-sheet/{id}/history', [SmmSheetApiController::class, 'history'])
+            ->name('mobile.projects.smm-sheet.history');
+        Route::get('smm-sheet/active-accounts', [SmmSheetApiController::class, 'activeAccounts'])
+            ->name('mobile.projects.smm-sheet.active-accounts');
 
         // ── {productionInitiation} wildcard LAST ────────────────────────────
         Route::get('/{productionInitiation}', [ProjectApiController::class, 'show'])

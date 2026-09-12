@@ -8,6 +8,7 @@ use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use App\Services\HrmsApprovalHierarchyService;
 use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
@@ -19,10 +20,11 @@ use Illuminate\Support\Facades\DB;
 /**
  * Mobile API — Leave Requests
  *
- * Mirrors LeaveRequestController (web) exactly:
- *   - Approval chain = UserMapping hierarchy (manager chain), NOT fixed roles.
- *   - canActOnApproval, canViewLeaveRequest are identical.
- *   - approvalRowsFor walks the manager chain (same as web).
+ * Scoped by role hierarchy and UserMapping manager chain:
+ *   - Approval chain = UserMapping hierarchy (manager chain).
+ *   - Team member visibility = DataVisibilityService::descendantUserIds().
+ *   - Supports scope parameter: 'my' (own requests) vs 'team' (direct reports/descendants) vs 'all'.
+ *   - canActOnApproval, canViewLeaveRequest are role-hierarchy aware.
  */
 class LeaveRequestApiController extends Controller
 {
@@ -32,21 +34,76 @@ class LeaveRequestApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user  = $request->user();
-        $query = LeaveRequest::with(['leaveType', 'approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
-            ->latest();
+        $vis   = $this->resolveVisibility($user);
+        $scope = $request->query('scope', 'my'); // 'my' (default), 'team', or 'all'
+
+        $query = LeaveRequest::with([
+            'user.branch',
+            'employee.department',
+            'leaveType',
+            'approvals.approver',
+            'approvals.actionedBy',
+        ]);
+
+        if ($scope === 'team') {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $query->where('user_id', '!=', $user->id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $query->whereIn('user_id', $vis['descendant_ids']);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds));
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $allowed = array_merge([$user->id], $vis['descendant_ids']);
+                $query->whereIn('user_id', $allowed);
+            }
+        } else {
+            // Default to user's own requests
+            $query->where('user_id', $user->id);
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        $perPage      = min((int) ($request->per_page ?? 15), 50);
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('end_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('start_date', '<=', $request->date_to);
+        }
+
+        $query->latest('id');
+
+        $perPage       = min((int) ($request->per_page ?? 15), 50);
         $leaveRequests = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'data'    => [
-                'leave_requests' => $leaveRequests->map(fn ($lr) => $this->mapLeaveRequest($lr)),
+                'leave_requests' => $leaveRequests->map(fn ($lr) => $this->mapLeaveRequest($lr, false, $user)),
                 'pagination'     => [
                     'current_page' => $leaveRequests->currentPage(),
                     'last_page'    => $leaveRequests->lastPage(),
@@ -54,6 +111,10 @@ class LeaveRequestApiController extends Controller
                     'total'        => $leaveRequests->total(),
                     'has_more'     => $leaveRequests->hasMorePages(),
                 ],
+                'scope'          => $scope,
+                'has_team_members' => $vis['has_team_members'],
+                'is_admin_or_hr'   => $vis['is_admin_or_hr'],
+                'is_tl_or_manager' => $vis['is_tl_or_manager'],
             ],
         ]);
     }
@@ -62,6 +123,7 @@ class LeaveRequestApiController extends Controller
     public function meta(Request $request): JsonResponse
     {
         $user = $request->user();
+        $vis  = $this->resolveVisibility($user);
 
         $pendingApprovals = $this->pendingApprovalsFor($user)
             ->map(fn ($a) => $this->mapPendingApproval($a));
@@ -75,6 +137,32 @@ class LeaveRequestApiController extends Controller
             'approved' => LeaveRequest::where('user_id', $user->id)->where('status', 'approved')->count(),
             'rejected' => LeaveRequest::where('user_id', $user->id)->where('status', 'rejected')->count(),
         ];
+
+        $teamStats = null;
+        if ($vis['has_team_members'] || $vis['is_admin_or_hr']) {
+            $teamQuery = LeaveRequest::query();
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $teamQuery->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $teamQuery->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $teamQuery->where('user_id', '!=', $user->id);
+                }
+            } else {
+                $teamQuery->whereIn('user_id', $vis['descendant_ids']);
+            }
+
+            $teamStats = [
+                'total'    => (clone $teamQuery)->count(),
+                'pending'  => (clone $teamQuery)->where('status', 'pending')->count(),
+                'approved' => (clone $teamQuery)->where('status', 'approved')->count(),
+                'rejected' => (clone $teamQuery)->where('status', 'rejected')->count(),
+            ];
+        }
 
         // Approval chain preview (so app can show who will approve)
         $approvalChain = $this->approvalChainFor($user)
@@ -96,6 +184,10 @@ class LeaveRequestApiController extends Controller
                 'pending_approvals_count' => $pendingApprovals->count(),
                 'leave_types'             => $leaveTypes,
                 'my_stats'                => $myStats,
+                'team_stats'              => $teamStats,
+                'has_team_members'        => $vis['has_team_members'],
+                'is_admin_or_hr'          => $vis['is_admin_or_hr'],
+                'is_tl_or_manager'        => $vis['is_tl_or_manager'],
                 'approval_chain'          => $approvalChain,
                 'has_approval_chain'      => $hasApprovalChain,
             ],
@@ -165,7 +257,7 @@ class LeaveRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'leave_request'    => $this->mapLeaveRequest($leaveRequest, true),
+                'leave_request'    => $this->mapLeaveRequest($leaveRequest, true, $user),
                 'approval_actions' => $approvalActions,
             ],
         ]);
@@ -181,7 +273,7 @@ class LeaveRequestApiController extends Controller
             'reason'        => ['required', 'string', 'max:2000'],
         ]);
 
-        $user        = $request->user();
+        $user         = $request->user();
         $approvalRows = $this->approvalRowsFor($user);
 
         // Mirror web: block if no approval hierarchy
@@ -194,6 +286,7 @@ class LeaveRequestApiController extends Controller
 
         $leaveRequest = DB::transaction(function () use ($user, $validated, $approvalRows) {
             $lr = LeaveRequest::create([
+                'company_id'    => $user->company_id,
                 'user_id'       => $user->id,
                 'employee_id'   => $this->resolveEmployee($user)?->id,
                 'leave_type_id' => $validated['leave_type_id'],
@@ -214,13 +307,13 @@ class LeaveRequestApiController extends Controller
             return $lr;
         });
 
-        $leaveRequest->load(['leaveType', 'approvals.approver']);
+        $leaveRequest->load(['user', 'leaveType', 'approvals.approver']);
         app(HrmsApprovalNotificationService::class)->sendLeaveSubmitted($leaveRequest);
 
         return response()->json([
             'success' => true,
             'message' => 'Leave request submitted successfully. Approval started with your hierarchy.',
-            'data'    => $this->mapLeaveRequest($leaveRequest, true),
+            'data'    => $this->mapLeaveRequest($leaveRequest, true, $user),
         ], 201);
     }
 
@@ -251,7 +344,7 @@ class LeaveRequestApiController extends Controller
                 'remarks'     => $request->input('remarks'),
             ]);
 
-            // Identical to web: advance to next pending step
+            // Advance to next pending step
             $next = $leaveRequest->approvals()
                 ->where('status', LeaveApproval::STATUS_PENDING)
                 ->where('step_order', '>', $approval->step_order)
@@ -332,6 +425,35 @@ class LeaveRequestApiController extends Controller
     }
 
     /**
+     * Resolves role hierarchy visibility flags and descendant user IDs for the user.
+     */
+    private function resolveVisibility(User $user): array
+    {
+        $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCompanyAdmin = $user->isCompanyAdmin();
+        $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
+        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+
+        /** @var DataVisibilityService $visibility */
+        $visibility     = app(DataVisibilityService::class);
+        $descendantIds  = $visibility->descendantUserIds($user);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
+
+        return [
+            'is_super_admin'   => $isSuperAdmin,
+            'is_company_admin' => $isCompanyAdmin,
+            'is_hr'            => $isHr,
+            'is_branch_admin'  => $isBranchAdmin,
+            'is_tl_or_manager' => $isTlOrManager,
+            'has_team_members' => $hasTeamMembers,
+            'is_admin_or_hr'   => $isAdminOrHr,
+            'descendant_ids'   => $descendantIds->all(),
+        ];
+    }
+
+    /**
      * Returns all pending approvals that this user can act on.
      * Mirrors web pendingApprovalsFor() exactly.
      */
@@ -375,27 +497,40 @@ class LeaveRequestApiController extends Controller
     // MAPPERS
     // =========================================================================
 
-    private function mapLeaveRequest(LeaveRequest $lr, bool $withApprovals = false): array
+    private function mapLeaveRequest(LeaveRequest $lr, bool $withApprovals = false, ?User $currentUser = null): array
     {
+        $employee = $lr->employee;
+        $user     = $lr->user;
+
         $data = [
-            'id'           => $lr->id,
-            'leave_type_id' => $lr->leave_type_id,
-            'leave_type'   => $lr->leaveType
+            'id'              => $lr->id,
+            'user_id'         => $lr->user_id,
+            'user_name'       => $user?->name ?? 'Unknown',
+            'user_email'      => $user?->email,
+            'employee_id'     => $lr->employee_id,
+            'employee_name'   => $employee?->name ?? $user?->name ?? 'Unknown',
+            'employee_code'   => $employee?->employee_id ?? '',
+            'department_id'   => $employee?->department_id,
+            'department_name' => $employee?->department?->name ?? '',
+            'branch_name'     => $employee?->branch_name ?? $user?->branch_name ?? '',
+            'is_own_request'  => $currentUser ? ((int) $lr->user_id === (int) $currentUser->id) : false,
+            'leave_type_id'   => $lr->leave_type_id,
+            'leave_type'      => $lr->leaveType
                 ? ['id' => $lr->leaveType->id, 'name' => $lr->leaveType->name]
                 : null,
-            'start_date'   => $lr->start_date instanceof Carbon
+            'start_date'      => $lr->start_date instanceof Carbon
                 ? $lr->start_date->format('Y-m-d')
-                : $lr->start_date,
-            'end_date'     => $lr->end_date instanceof Carbon
+                : (is_string($lr->start_date) ? substr($lr->start_date, 0, 10) : $lr->start_date),
+            'end_date'        => $lr->end_date instanceof Carbon
                 ? $lr->end_date->format('Y-m-d')
-                : $lr->end_date,
-            'total_days'   => $lr->total_days,
-            'reason'       => $lr->reason ?? '',
-            'status'       => $lr->status,
-            'current_step' => $lr->current_step,
-            'submitted_at' => $lr->submitted_at?->format('Y-m-d H:i:s'),
-            'approved_at'  => $lr->approved_at?->format('Y-m-d H:i:s'),
-            'rejected_at'  => $lr->rejected_at?->format('Y-m-d H:i:s'),
+                : (is_string($lr->end_date) ? substr($lr->end_date, 0, 10) : $lr->end_date),
+            'total_days'      => $lr->total_days,
+            'reason'          => $lr->reason ?? '',
+            'status'          => $lr->status,
+            'current_step'    => $lr->current_step,
+            'submitted_at'    => $lr->submitted_at?->format('Y-m-d H:i:s'),
+            'approved_at'     => $lr->approved_at?->format('Y-m-d H:i:s'),
+            'rejected_at'     => $lr->rejected_at?->format('Y-m-d H:i:s'),
         ];
 
         if ($withApprovals && $lr->relationLoaded('approvals')) {
@@ -435,6 +570,7 @@ class LeaveRequestApiController extends Controller
             'step_order'      => $a->step_order,
             'employee_name'   => $lr->user?->name ?? $lr->employee?->name ?? 'Unknown',
             'employee_code'   => $lr->employee?->employee_id ?? '',
+            'department_name' => $lr->employee?->department?->name ?? '',
             'leave_type_name' => $lr->leaveType?->name ?? '',
             'submitted_at'    => $lr->submitted_at?->format('Y-m-d H:i:s'),
             'leave_request'   => $this->mapLeaveRequest($lr),
@@ -450,24 +586,25 @@ class LeaveRequestApiController extends Controller
             'status'          => $a->status,
             'actioned_at'     => $a->actioned_at?->format('Y-m-d H:i:s'),
             'remarks'         => $a->remarks ?? '',
-            'employee_name'   => $lr?->user?->name ?? 'Unknown',
+            'employee_name'   => $lr?->user?->name ?? $lr?->employee?->name ?? 'Unknown',
+            'employee_code'   => $lr?->employee?->employee_id ?? '',
             'leave_type_name' => $lr?->leaveType?->name ?? '',
             'leave_request'   => $lr ? $this->mapLeaveRequest($lr) : null,
         ];
     }
 
-    // ── Helpers (mirrored from web controller) ────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
     private function approvalRowsFor(User $requester): array
     {
         return $this->approvalChainFor($requester)
             ->values()
             ->map(function (User $approver, int $index) {
                 return [
-                    'step_order' => $index + 1,
-                    'step_key' => 'user_' . $approver->id,
-                    'step_name' => 'Level ' . ($index + 1) . ' - ' . $approver->name,
+                    'step_order'       => $index + 1,
+                    'step_key'         => 'user_' . $approver->id,
+                    'step_name'        => 'Level ' . ($index + 1) . ' - ' . $approver->name,
                     'approver_user_id' => $approver->id,
-                    'status' => LeaveApproval::STATUS_PENDING,
+                    'status'           => LeaveApproval::STATUS_PENDING,
                 ];
             })
             ->all();
@@ -476,6 +613,26 @@ class LeaveRequestApiController extends Controller
     private function canViewLeaveRequest(LeaveRequest $lr, User $user): bool
     {
         if ((int) $lr->user_id === (int) $user->id || $user->isSystemAdmin()) return true;
+
+        $vis = $this->resolveVisibility($user);
+        if ($vis['is_super_admin']) return true;
+
+        if ($vis['is_company_admin']) {
+            return ! $user->company_id || ! $lr->company_id || (int) $lr->company_id === (int) $user->company_id;
+        }
+
+        if ($vis['is_hr']) {
+            return ! $user->company_id || ! $lr->company_id || (int) $lr->company_id === (int) $user->company_id;
+        }
+
+        if ($vis['is_branch_admin']) {
+            $branchIds = $user->getMyBranchIds();
+            return in_array((int) $lr->user?->branch_id, $branchIds, true);
+        }
+
+        if ($vis['has_team_members'] && in_array((int) $lr->user_id, $vis['descendant_ids'], true)) {
+            return true;
+        }
 
         return $lr->approvals->contains(fn (LeaveApproval $a) =>
             (int) $a->approver_user_id === (int) $user->id
