@@ -162,7 +162,7 @@ class HrmsApprovalHierarchyService
                 ->where('user_id', $currentUser->id)
                 ->first();
 
-            $manager = $mapping ? User::withoutGlobalScopes()->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()])->find($mapping->manager_user_id) : null;
+            $manager = $mapping ? User::withoutGlobalScopes()->with(['roles' => fn($rq) => $rq->withoutGlobalScopes()])->find($mapping->manager_id ?? $mapping->manager_user_id) : null;
 
             if (! $manager || $visitedUserIds->contains((int) $manager->id) || ! $manager->is_active) {
                 break;
