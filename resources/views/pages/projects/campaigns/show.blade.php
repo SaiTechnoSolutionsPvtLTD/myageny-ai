@@ -49,10 +49,10 @@
 .cmp-btn-stop { background:#fff1f2; border-color:#fecdd3; color:#be123c; }
 .cmp-btn-stop:hover { background:#ffe4e6; color:#9f1239; }
 
-.cmp-table-wrap { overflow-x:auto; min-height:220px; }
+.cmp-table-wrap { overflow-x:auto; min-height:480px; }
 .cmp-table { width:100%; border-collapse:collapse; min-width:980px; }
-.cmp-table th { padding:14px 16px; text-align:left; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#64748b; background:#fafaf9; border-bottom:1px solid #f2ede8; }
-.cmp-table td { padding:14px 16px; border-bottom:1px solid #f6f2ee; font-size:13px; color:#111827; vertical-align:middle; }
+.cmp-table th { padding:16px 18px; text-align:left; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#64748b; background:#fafaf9; border-bottom:1px solid #f2ede8; }
+.cmp-table td { padding:16px 18px; border-bottom:1px solid #f6f2ee; font-size:13px; color:#111827; vertical-align:middle; }
 .cmp-table tbody tr:hover td { background:#fffaf5; }
 
 /* Status Badges */
@@ -487,7 +487,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 40px 20px; color: #64748b;">
+                                <td colspan="6" style="text-align: center; padding: 80px 20px; color: #64748b;">
                                     <div style="font-size: 28px; margin-bottom: 6px;">📢</div>
                                     <div style="font-weight: 700; color: #1e293b;">No Campaigns Created Yet</div>
                                     <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">

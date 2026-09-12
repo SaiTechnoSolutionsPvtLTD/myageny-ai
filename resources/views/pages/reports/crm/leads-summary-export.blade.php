@@ -1,11 +1,12 @@
 <table border="1">
     <thead>
         <tr>
-            <th colspan="14">CRM Leads Summary Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
+            <th colspan="15">CRM Leads Summary Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
         </tr>
         <tr>
             @foreach(array_keys($rows->first() ?? [
                 'Lead ID' => '',
+                'Branch' => '',
                 'Name' => '',
                 'Email' => '',
                 'Mobile Number' => '',
@@ -33,7 +34,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="14">No lead summary records found for the selected filters.</td>
+                <td colspan="15">No lead summary records found for the selected filters.</td>
             </tr>
         @endforelse
     </tbody>

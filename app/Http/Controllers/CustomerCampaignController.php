@@ -17,11 +17,15 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Services\DataVisibilityService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class CustomerCampaignController extends Controller
 {
+    public function __construct(
+        protected DataVisibilityService $visibility
+    ) {}
     /**
      * Display a Lead-wise list of Digital Marketing products moved to production
      * where product budget approval is needed (is_budget_approval_needed = true).
@@ -181,10 +185,23 @@ class CustomerCampaignController extends Controller
                 $tls = $allocatedUsers->whereIn('id', $tlUserIds)->values();
                 $employees = $allocatedUsers->whereIn('id', $empUserIds)->values();
 
-                // Calculate campaigns count
+                // Calculate campaigns breakdown
                 $campaigns = $lead->customerCampaigns ?? collect();
                 $totalCampaigns = $campaigns->count();
-                $activeCampaigns = $campaigns->where('status', 'active')->count();
+
+                $activeCampaigns = $campaigns->filter(function ($c) {
+                    return $c->status === 'active' && ! $c->isExpired() && ! $c->isStopped();
+                })->count();
+
+                $pausedCampaigns = $campaigns->where('status', 'paused')->count();
+
+                $expiredCampaigns = $campaigns->filter(function ($c) {
+                    return $c->status === 'expired' || $c->isExpired();
+                })->count();
+
+                $inactiveCampaigns = $campaigns->filter(function ($c) {
+                    return in_array($c->status, ['inactive', 'stopped'], true) || (! $c->isExpired() && $c->status !== 'active' && $c->status !== 'paused');
+                })->count();
 
                 // Budget information
                 $budgetAmounts = $initiations->pluck('lead_budget_amount')->filter(fn ($b) => (float) $b > 0);
@@ -197,6 +214,9 @@ class CustomerCampaignController extends Controller
                 $lead->allocated_users = $allocatedUsers;
                 $lead->no_of_campaigns = $totalCampaigns;
                 $lead->no_of_active_campaigns = $activeCampaigns;
+                $lead->no_of_paused_campaigns = $pausedCampaigns;
+                $lead->no_of_expired_campaigns = $expiredCampaigns;
+                $lead->no_of_inactive_campaigns = $inactiveCampaigns;
                 $lead->lead_budget_amount = $latestBudget;
                 $lead->budget_amount_type = $latestBudgetType;
 
@@ -205,6 +225,17 @@ class CustomerCampaignController extends Controller
             ->sortBy('company_name')
             ->values();
 
+        $nowDate = Carbon::today()->toDateString();
+        $cmStart = Carbon::today()->startOfMonth()->toDateString();
+        $cmEnd = Carbon::today()->endOfMonth()->toDateString();
+        $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')->pluck('extended_from_id')->unique()->toArray();
+
+        $viewMode = $request->query('view', 'campaign'); // default to 'campaign'
+        $renewalFilter = $request->query('renewal_filter') ?: $request->query('type');
+        if (in_array($status, ['cm_renewed', 'cm_not_renewed'], true)) {
+            $renewalFilter = $status;
+        }
+
         // Filter by Employee if specified
         if ($employeeId) {
             $leads = $leads->filter(function ($lead) use ($employeeId) {
@@ -212,11 +243,43 @@ class CustomerCampaignController extends Controller
             })->values();
         }
 
-        // Filter by Status (Active / Inactive)
-        if ($status === 'active') {
+        // Filter by Branch if specified
+        $branchId = $request->query('branch_id');
+        if ($branchId) {
+            $leads = $leads->filter(fn ($lead) => (int) ($lead->branch_id ?? 0) === (int) $branchId)->values();
+        }
+
+        // Filter by Source if specified
+        $source = $request->query('source') ?: $request->query('lead_source');
+        if ($source) {
+            $leads = $leads->filter(fn ($lead) => ($lead->lead_source ?? '') === $source)->values();
+        }
+
+        // Filter by Status & Renewal Filters (Active, Paused, Inactive, Expired, CM Renewed, CM Not Renewed)
+        if ($renewalFilter === 'cm_not_renewed') {
+            $leads = $leads->filter(function ($lead) use ($extendedParentIds, $cmStart, $cmEnd) {
+                return $lead->customerCampaigns->contains(function ($c) use ($extendedParentIds, $cmStart, $cmEnd) {
+                    $endDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+                    return $endDate && $endDate >= $cmStart && $endDate <= $cmEnd && !in_array($c->id, $extendedParentIds, true);
+                });
+            })->values();
+        } elseif ($renewalFilter === 'cm_renewed') {
+            $leads = $leads->filter(function ($lead) use ($extendedParentIds, $cmStart, $cmEnd) {
+                return $lead->customerCampaigns->contains(function ($c) use ($extendedParentIds, $cmStart, $cmEnd) {
+                    $endDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+                    $createdAt = Carbon::parse($c->created_at)->toDateString();
+                    return (in_array($c->id, $extendedParentIds, true) && $endDate && $endDate >= $cmStart && $endDate <= $cmEnd)
+                        || (!empty($c->extended_from_id) && $createdAt >= $cmStart && $createdAt <= $cmEnd);
+                });
+            })->values();
+        } elseif ($renewalFilter === 'expired' || $status === 'expired') {
+            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_expired_campaigns > 0)->values();
+        } elseif ($status === 'active') {
             $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_active_campaigns > 0)->values();
+        } elseif ($status === 'paused') {
+            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_paused_campaigns > 0)->values();
         } elseif ($status === 'inactive') {
-            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_active_campaigns === 0)->values();
+            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_inactive_campaigns > 0 || (int) $lead->no_of_campaigns === 0)->values();
         }
 
         // Filter by Date Range (Start Date / End Date)
@@ -255,6 +318,9 @@ class CustomerCampaignController extends Controller
             'total_leads' => $leads->count(),
             'total_campaigns' => $leads->sum('no_of_campaigns'),
             'total_active_campaigns' => $leads->sum('no_of_active_campaigns'),
+            'total_paused_campaigns' => $leads->sum('no_of_paused_campaigns'),
+            'total_expired_campaigns' => $leads->sum('no_of_expired_campaigns'),
+            'total_inactive_campaigns' => $leads->sum('no_of_inactive_campaigns'),
             'total_budget' => $leads->sum(fn ($l) => (float) ($l->lead_budget_amount ?? 0)),
         ];
 
@@ -265,21 +331,137 @@ class CustomerCampaignController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
 
+        $branches = $this->visibility->visibleBranches($user);
+
+        // ── Campaign-wise Query ──
+        $campaignsQuery = CustomerCampaign::query()
+            ->with(['lead', 'extensions:id,extended_from_id', 'extendedFrom:id,campaign_name'])
+            ->when($user->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $user->company_id));
+
+        if (! $user->hasAdminLikeRole() && ! $user->hasTlLikeRole()) {
+            $campaignsQuery->where(function ($q) use ($user) {
+                $q->where('customer_campaigns.created_by', $user->id)
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('assigned_to', $user->id)
+                        ->orWhere('customer_support_executive_id', $user->id)
+                        ->orWhere('customer_support_tl_id', $user->id)
+                  )->orWhereHas('productionInitiation', function ($piq) use ($user) {
+                        $piq->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                            ->orWhereJsonContains('project_allocated_tl_user_ids', $user->id)
+                            ->orWhere('initiated_by', $user->id);
+                  });
+            });
+        }
+
+        if ($companyName !== '') {
+            $campaignsQuery->where(function ($q) use ($companyName) {
+                $q->where('customer_campaigns.campaign_name', 'LIKE', "%{$companyName}%")
+                  ->orWhere('customer_campaigns.ad_account_name', 'LIKE', "%{$companyName}%")
+                  ->orWhere('customer_campaigns.platform', 'LIKE', "%{$companyName}%")
+                  ->orWhereHas('lead', function ($lq) use ($companyName) {
+                      $lq->where('company_name', 'LIKE', "%{$companyName}%")
+                         ->orWhere('contact_name', 'LIKE', "%{$companyName}%")
+                         ->orWhere('mobile_number', 'LIKE', "%{$companyName}%")
+                         ->orWhere('email', 'LIKE', "%{$companyName}%");
+                  });
+            });
+        }
+
+        if ($branchId) {
+            $campaignsQuery->whereHas('lead', fn ($lq) => $lq->where('branch_id', $branchId));
+        }
+
+        if ($source) {
+            $campaignsQuery->whereHas('lead', fn ($lq) => $lq->where('lead_source', $source));
+        }
+
+        if ($startDate) {
+            $campaignsQuery->whereDate('customer_campaigns.start_date', '>=', $startDate);
+        }
+
+        if ($endDate) {
+            $campaignsQuery->whereDate('customer_campaigns.end_date', '<=', $endDate);
+        }
+
+        if ($employeeId) {
+            $campaignsQuery->where(function ($q) use ($employeeId) {
+                $q->where('customer_campaigns.created_by', $employeeId)
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('assigned_to', $employeeId)
+                        ->orWhere('customer_support_executive_id', $employeeId)
+                        ->orWhere('customer_support_tl_id', $employeeId)
+                  );
+            });
+        }
+
+        // Apply Renewal & Status Filters
+        if ($renewalFilter === 'cm_not_renewed') {
+            $campaignsQuery->whereBetween('customer_campaigns.end_date', [$cmStart, $cmEnd])
+                ->whereNotIn('customer_campaigns.id', $extendedParentIds);
+        } elseif ($renewalFilter === 'cm_renewed') {
+            $campaignsQuery->where(function ($q) use ($extendedParentIds, $cmStart, $cmEnd) {
+                $q->where(function ($sub) use ($extendedParentIds, $cmStart, $cmEnd) {
+                    $sub->whereIn('customer_campaigns.id', $extendedParentIds)->whereBetween('customer_campaigns.end_date', [$cmStart, $cmEnd]);
+                })->orWhere(function ($sub) use ($cmStart, $cmEnd) {
+                    $sub->whereNotNull('customer_campaigns.extended_from_id')->whereBetween('customer_campaigns.created_at', [$cmStart, $cmEnd]);
+                });
+            });
+        } elseif ($renewalFilter === 'expired' || $status === 'expired') {
+            $campaignsQuery->where(function ($q) use ($nowDate) {
+                $q->whereIn('customer_campaigns.status', ['expired', 'completed'])
+                  ->orWhereDate('customer_campaigns.end_date', '<', $nowDate);
+            });
+        } elseif ($status === 'active') {
+            $campaignsQuery->where('customer_campaigns.status', 'active')
+                ->where(fn ($q) => $q->whereNull('customer_campaigns.end_date')->orWhereDate('customer_campaigns.end_date', '>=', $nowDate));
+        } elseif ($status === 'paused') {
+            $campaignsQuery->where('customer_campaigns.status', 'paused');
+        } elseif ($status === 'inactive') {
+            $campaignsQuery->whereIn('customer_campaigns.status', ['inactive', 'stopped']);
+        }
+
+        // Overall stats calculated on campaigns
+        $allCampaignsForStats = CustomerCampaign::query()
+            ->when($user->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $user->company_id))
+            ->get();
+
+        $stats['total_campaigns'] = $allCampaignsForStats->count();
+        $stats['total_active_campaigns'] = $allCampaignsForStats->filter(fn ($c) => $c->status === 'active' && !$c->isExpired() && !$c->isStopped())->count();
+        $stats['total_paused_campaigns'] = $allCampaignsForStats->where('status', 'paused')->count();
+        $stats['total_expired_campaigns'] = $allCampaignsForStats->filter(fn ($c) => $c->isExpired())->count();
+        $stats['total_cm_renewed'] = $allCampaignsForStats->filter(function ($c) use ($extendedParentIds, $cmStart, $cmEnd) {
+            $endDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+            $createdAt = Carbon::parse($c->created_at)->toDateString();
+            return (in_array($c->id, $extendedParentIds, true) && $endDate && $endDate >= $cmStart && $endDate <= $cmEnd)
+                || (!empty($c->extended_from_id) && $createdAt >= $cmStart && $createdAt <= $cmEnd);
+        })->count();
+        $stats['total_cm_not_renewed'] = $allCampaignsForStats->filter(function ($c) use ($extendedParentIds, $cmStart, $cmEnd) {
+            $endDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+            return $endDate && $endDate >= $cmStart && $endDate <= $cmEnd && !in_array($c->id, $extendedParentIds, true);
+        })->count();
+
         $filters = [
             'company_name' => $companyName,
             'employee_id' => $employeeId,
+            'branch_id' => $branchId,
+            'source' => $source,
             'status' => $status,
+            'renewal_filter' => $renewalFilter,
             'start_date' => $startDate,
             'end_date' => $endDate,
+            'view' => $viewMode,
         ];
 
-        $hasActiveFilters = !empty($companyName) || !empty($employeeId) || !empty($status) || !empty($startDate) || !empty($endDate);
+        $hasActiveFilters = !empty($companyName) || !empty($employeeId) || !empty($branchId) || !empty($source) || !empty($status) || !empty($renewalFilter) || !empty($startDate) || !empty($endDate);
 
         // Pagination
         $perPage = (int) $request->query('per_page', 10);
         if ($perPage < 5 || $perPage > 100) {
             $perPage = 10;
         }
+
+        // Paginate Campaigns (for campaign-wise view)
+        $paginatedCampaigns = $campaignsQuery->orderByDesc('customer_campaigns.created_at')->paginate($perPage)->withQueryString();
+
+        // Paginate Leads (for account-wise view)
         $currentPage = LengthAwarePaginator::resolveCurrentPage() ?: 1;
         $itemsForCurrentPage = $leads->slice(($currentPage - 1) * $perPage, $perPage)->values();
 
@@ -295,12 +477,20 @@ class CustomerCampaignController extends Controller
         );
 
         return view('pages.projects.campaigns.index', [
+            'campaigns' => $paginatedCampaigns,
             'leads' => $paginatedLeads,
             'stats' => $stats,
             'search' => $companyName,
             'employees' => $employees,
+            'branches' => $branches,
             'filters' => $filters,
             'hasActiveFilters' => $hasActiveFilters,
+            'viewMode' => $viewMode,
+            'renewalFilter' => $renewalFilter,
+            'extendedParentIds' => $extendedParentIds,
+            'cmStart' => $cmStart,
+            'cmEnd' => $cmEnd,
+            'nowDate' => $nowDate,
         ]);
     }
 

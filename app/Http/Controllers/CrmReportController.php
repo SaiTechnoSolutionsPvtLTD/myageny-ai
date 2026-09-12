@@ -64,18 +64,18 @@ class CrmReportController extends Controller
                 'route' => route('reports.crm.branch-comparison'),
             ],
             [
-                'title' => 'SMM Report',
-                'description' => 'Track Social Media Marketing deliverables — committed poster/video counts, Design & DM team completions, overdue items, and status per lead account.',
-                'theme' => 'smm',
-                'status' => 'Ready for setup',
-                'route' => route('reports.crm.smm'),
-            ],
-            [
                 'title' => 'Sales Comparison Report',
                 'description' => 'Compare actual sales collections against allocated targets branch-wise or user-wise for any selected period.',
                 'theme' => 'sales-comparison',
                 'status' => 'Ready for setup',
                 'route' => route('reports.crm.sales-comparison'),
+            ],
+            [
+                'title' => 'Outstanding Report',
+                'description' => 'Track lead-wise pending dues, collections, product values, and outstanding balances across branches and employees.',
+                'theme' => 'outstanding',
+                'status' => 'Ready for setup',
+                'route' => route('reports.crm.outstanding'),
             ],
         ];
 
@@ -211,6 +211,7 @@ class CrmReportController extends Controller
 
             return [
                 'Lead ID' => 'LD-' . str_pad((string) $row->lead_id, 4, '0', STR_PAD_LEFT),
+                'Branch' => $row->branch_name ?: '-',
                 'Name' => $row->contact_name ?: '-',
                 'Email' => $row->email ?: '-',
                 'Mobile Number' => $row->mobile_number ?: '-',
@@ -417,6 +418,7 @@ class CrmReportController extends Controller
             $request->filled('customer_id')
             || $request->filled('company_name')
             || $request->filled('sales_executive_id')
+            || $request->filled('user_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
             || ($request->filled('quick_date') && $request->quick_date !== 'month')
@@ -455,6 +457,7 @@ class CrmReportController extends Controller
                 'Payment Date' => $row->payment_date ? Carbon::parse($row->payment_date)->format('d-m-Y') : '-',
                 'Receipt No' => 'RCT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
                 'Customer ID' => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
+                'Branch' => $row->branch_name ?: '-',
                 'Company Name' => $row->company_name ?: '-',
                 'Customer Name' => $row->customer_name ?: '-',
                 'Total Amount' => number_format($totalAmount, 2, '.', ''),
@@ -510,6 +513,7 @@ class CrmReportController extends Controller
             ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
             ->leftJoin('lead_statuses as product_lead_statuses', 'product_lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->leftJoinSub($convertedSubquery, 'converted_products', function ($join) {
                 $join->on('converted_products.lead_product_id', '=', 'lead_products.id');
             })
@@ -524,6 +528,7 @@ class CrmReportController extends Controller
                 // Prefer FK-resolved name, fall back to legacy string column
                 DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
                 DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
+                'branches.name as branch_name',
                 'leads.lead_date',
                 'leads.created_at as lead_created_at',
                 'lead_products.id as lead_product_id',
@@ -659,6 +664,7 @@ class CrmReportController extends Controller
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
             ->select([
                 'lead_product_payments.id as payment_id',
@@ -670,6 +676,7 @@ class CrmReportController extends Controller
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
                 'leads.company_name',
+                'branches.name as branch_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
@@ -704,8 +711,9 @@ class CrmReportController extends Controller
             $query->where('leads.company_name', 'like', '%' . trim($request->company_name) . '%');
         }
 
-        if ($request->filled('sales_executive_id')) {
-            $query->where('leads.assigned_to', $request->sales_executive_id);
+        if ($request->filled('sales_executive_id') || $request->filled('user_id')) {
+            $salesExecId = $request->input('sales_executive_id') ?: $request->input('user_id');
+            $query->where('leads.assigned_to', $salesExecId);
         }
 
         if ($request->filled('payment_mode')) {
@@ -1357,8 +1365,8 @@ class CrmReportController extends Controller
             'year' => (int) $request->input('year', now()->year),
             'month' => (int) $request->input('month', now()->month),
             'quarter' => (int) $request->input('quarter', ceil(now()->month / 3)),
-            'date_from' => $request->input('date_from', now()->startOfMonth()->toDateString()),
-            'date_to' => $request->input('date_to', now()->endOfMonth()->toDateString()),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
         ];
 
         $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
@@ -1375,7 +1383,7 @@ class CrmReportController extends Controller
 
     public function exportBranchComparison(Request $request): Response
     {
-        [$dateFrom, $dateTo, $periodLabel] = $this->resolvePeriodRange($request);
+        [$dateFrom, $dateTo, $periodLabel, $periodType] = $this->resolvePeriodRange($request);
         $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
 
         $html = view('pages.reports.crm.branch-comparison-export', [
@@ -1396,15 +1404,37 @@ class CrmReportController extends Controller
     private function resolvePeriodRange(Request $request): array
     {
         $now = now();
-        $periodType = $request->input('period_type', 'month');
+        $periodType = (string) $request->input('period_type', 'month');
 
         if ($periodType === 'custom') {
-            $dateFrom = $request->input('date_from', $now->startOfMonth()->toDateString());
-            $dateTo = $request->input('date_to', $now->endOfMonth()->toDateString());
-            $label = Carbon::parse($dateFrom)->format('d M Y') . ' to ' . Carbon::parse($dateTo)->format('d M Y');
+            $rawFrom = $request->input('date_from');
+            $rawTo = $request->input('date_to');
+
+            $defaultFrom = $now->copy()->startOfMonth()->toDateString();
+            $defaultTo = $now->copy()->endOfMonth()->toDateString();
+
+            $dateFrom = (is_string($rawFrom) && trim($rawFrom) !== '') ? trim($rawFrom) : $defaultFrom;
+            $dateTo = (is_string($rawTo) && trim($rawTo) !== '') ? trim($rawTo) : $defaultTo;
+
+            try {
+                $carbonFrom = Carbon::parse($dateFrom)->startOfDay();
+                $carbonTo = Carbon::parse($dateTo)->endOfDay();
+                if ($carbonFrom->gt($carbonTo)) {
+                    $temp = $carbonFrom;
+                    $carbonFrom = $carbonTo->copy()->startOfDay();
+                    $carbonTo = $temp->copy()->endOfDay();
+                }
+                $dateFrom = $carbonFrom->toDateString();
+                $dateTo = $carbonTo->toDateString();
+                $label = $carbonFrom->format('d M Y') . ' to ' . $carbonTo->format('d M Y');
+            } catch (\Throwable $e) {
+                $dateFrom = $defaultFrom;
+                $dateTo = $defaultTo;
+                $label = Carbon::parse($dateFrom)->format('d M Y') . ' to ' . Carbon::parse($dateTo)->format('d M Y');
+            }
         } elseif ($periodType === 'quarter') {
             $year = (int) $request->input('year', $now->year);
-            $quarter = (int) $request->input('quarter', ceil($now->month / 3));
+            $quarter = max(1, min(4, (int) $request->input('quarter', (int) ceil($now->month / 3))));
             $startMonth = (($quarter - 1) * 3) + 1;
             $start = Carbon::create($year, $startMonth, 1)->startOfQuarter();
             $end = $start->copy()->endOfQuarter();
@@ -1419,8 +1449,9 @@ class CrmReportController extends Controller
             $dateTo = $end->toDateString();
             $label = (string) $year;
         } else {
+            $periodType = 'month';
             $year = (int) $request->input('year', $now->year);
-            $month = (int) $request->input('month', $now->month);
+            $month = max(1, min(12, (int) $request->input('month', $now->month)));
             $start = Carbon::create($year, $month, 1)->startOfMonth();
             $end = $start->copy()->endOfMonth();
             $dateFrom = $start->toDateString();
@@ -1440,21 +1471,40 @@ class CrmReportController extends Controller
         }
         $branches = $branchesQuery->get(['id', 'name']);
 
+        $startDateTime = $dateFrom . ' 00:00:00';
+        $endDateTime = $dateTo . ' 23:59:59';
+
         // 1. Total Leads count per branch
         $leadCounts = DB::table('leads')
-            ->select('branch_id', DB::raw('COUNT(*) as total_leads'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id')
+            ->select('leads.branch_id', DB::raw('COUNT(*) as total_leads'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id')
             ->pluck('total_leads', 'branch_id')
             ->toArray();
 
         // 2. Converted Leads count per branch
         $convertedCounts = DB::table('lead_products')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->leftJoin('lead_statuses', 'lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->select('leads.branch_id', DB::raw('COUNT(DISTINCT leads.id) as converted_leads'))
-            ->where('lead_products.product_status', 'converted')
-            ->whereBetween('lead_products.updated_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->where(function ($q) {
+                $q->where('lead_products.product_status', 'converted')
+                  ->orWhere(DB::raw('LOWER(lead_statuses.name)'), '=', 'converted');
+            })
+            ->where(function ($q) use ($startDateTime, $endDateTime) {
+                $q->whereBetween('lead_products.converted_at', [$startDateTime, $endDateTime])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('lead_products.converted_at')
+                         ->whereBetween('lead_products.updated_at', [$startDateTime, $endDateTime]);
+                  });
+            })
             ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
             ->groupBy('leads.branch_id')
             ->pluck('converted_leads', 'branch_id')
@@ -1464,7 +1514,7 @@ class CrmReportController extends Controller
         $revenueAmounts = DB::table('lead_products')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->select('leads.branch_id', DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as revenue'))
-            ->whereBetween('lead_products.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->whereBetween('lead_products.created_at', [$startDateTime, $endDateTime])
             ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
             ->groupBy('leads.branch_id')
             ->pluck('revenue', 'branch_id')
@@ -1482,18 +1532,32 @@ class CrmReportController extends Controller
 
         // 5. Lead Source distribution per branch
         $sourceStats = DB::table('leads')
-            ->select('branch_id', 'lead_source', DB::raw('COUNT(*) as count'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id', 'lead_source')
+            ->leftJoin('lead_sources as lead_source_table', 'lead_source_table.id', '=', 'leads.lead_source_id')
+            ->select('leads.branch_id', DB::raw('COALESCE(lead_source_table.name, NULLIF(leads.lead_source, ""), "Unknown") as source_name'), DB::raw('COUNT(*) as count'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id', DB::raw('COALESCE(lead_source_table.name, NULLIF(leads.lead_source, ""), "Unknown")'))
             ->get();
 
         // 6. Lead Status distribution per branch
         $statusStats = DB::table('leads')
-            ->select('branch_id', 'lead_status', DB::raw('COUNT(*) as count'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id', 'lead_status')
+            ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
+            ->select('leads.branch_id', DB::raw('COALESCE(lead_status_table.name, NULLIF(leads.lead_status, ""), "Unknown") as status_name'), DB::raw('COUNT(*) as count'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id', DB::raw('COALESCE(lead_status_table.name, NULLIF(leads.lead_status, ""), "Unknown")'))
             ->get();
 
         $rows = [];
@@ -1517,7 +1581,7 @@ class CrmReportController extends Controller
         foreach ($sourceStats as $stat) {
             $branchId = $stat->branch_id;
             if (isset($rows[$branchId])) {
-                $sourceName = $stat->lead_source ?: 'Unknown';
+                $sourceName = $stat->source_name ?: 'Unknown';
                 $rows[$branchId]['sources'][$sourceName] = (int) $stat->count;
                 $allSources[$sourceName] = true;
             }
@@ -1526,7 +1590,7 @@ class CrmReportController extends Controller
         foreach ($statusStats as $stat) {
             $branchId = $stat->branch_id;
             if (isset($rows[$branchId])) {
-                $statusName = $stat->lead_status ?: 'Unknown';
+                $statusName = $stat->status_name ?: 'Unknown';
                 $rows[$branchId]['statuses'][$statusName] = (int) $stat->count;
                 $allStatuses[$statusName] = true;
             }
@@ -2306,6 +2370,335 @@ class CrmReportController extends Controller
             'start' => $start,
             'end' => $end,
             'months' => $months
+        ];
+    }
+
+    public function outstandingReport(Request $request): View
+    {
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate = now()->endOfMonth()->toDateString();
+
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
+
+        $query = $this->buildOutstandingQuery($request);
+
+        $analyticsQuery = clone $query;
+        $analyticsRows = $analyticsQuery->get();
+
+        $totalLeads = $analyticsRows->count();
+        $totalDealValue = (float) $analyticsRows->sum('total_deal_value');
+        $totalReceivedValue = (float) $analyticsRows->sum('total_paid_value');
+        $totalOutstandingValue = (float) $analyticsRows->sum('outstanding_balance');
+
+        $summary = [
+            'total_leads'             => $totalLeads,
+            'total_deal_value'        => $totalDealValue,
+            'total_received_value'    => $totalReceivedValue,
+            'total_outstanding_value' => $totalOutstandingValue,
+        ];
+
+        $analytics = $this->buildOutstandingAnalytics($analyticsRows);
+
+        $perPage = (int) $request->input('per_page', 20);
+        if ($perPage < 1 || $perPage > 200) {
+            $perPage = 20;
+        }
+        $reportRows = (clone $query)->paginate($perPage)->withQueryString();
+
+        $companyId = $this->visibility->companyIdFor();
+        $branchesQuery = Branch::query()->orderBy('name');
+        if ($companyId) {
+            $branchesQuery->where('company_id', $companyId);
+        }
+        $branches = $branchesQuery->get(['id', 'name']);
+
+        $users = $this->visibility->visibleAssignableUsers();
+
+        $productOptions = Product::query()->orderBy('package_name');
+        $this->visibility->applyProductVisibility($productOptions);
+        $products = $productOptions->get(['id', 'package_name', 'product_name']);
+
+        $filterPanelOpen =
+            $request->filled('branch_id')
+            || $request->filled('assigned_to')
+            || $request->filled('payment_status')
+            || $request->filled('product_id')
+            || $request->filled('search')
+            || ($request->filled('quick_date') && $request->quick_date !== 'month')
+            || ($request->filled('date_from') && $request->date_from !== $defaultFromDate)
+            || ($request->filled('date_to') && $request->date_to !== $defaultToDate);
+
+        return view('pages.reports.crm.outstanding', compact(
+            'reportRows',
+            'summary',
+            'analytics',
+            'branches',
+            'users',
+            'products',
+            'filterPanelOpen',
+            'defaultFromDate',
+            'defaultToDate'
+        ));
+    }
+
+    public function exportOutstandingReport(Request $request): Response
+    {
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate = now()->endOfMonth()->toDateString();
+
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
+
+        $rows = $this->buildOutstandingQuery($request)->get()->map(function ($row) {
+            $dealValue = (float) ($row->total_deal_value ?? 0);
+            $paidValue = (float) ($row->total_paid_value ?? 0);
+            $outstanding = (float) ($row->outstanding_balance ?? max(0, $dealValue - $paidValue));
+
+            $statusText = 'Unpaid';
+            if ($dealValue > 0 && $paidValue >= $dealValue) {
+                $statusText = 'Cleared';
+            } elseif ($paidValue > 0) {
+                $statusText = 'Partially Paid';
+            }
+
+            return [
+                'Lead ID'             => 'LD-' . str_pad((string) $row->lead_id, 4, '0', STR_PAD_LEFT),
+                'Company Name'        => $row->company_name ?: '-',
+                'Customer / Contact'  => $row->contact_name ?: '-',
+                'Mobile Number'       => $row->mobile_number ?: '-',
+                'Email'               => $row->email ?: '-',
+                'Branch'              => $row->branch_name ?: '-',
+                'Assigned Employee'   => $row->assigned_to_name ?: '-',
+                'Products'            => $row->product_names ?: '-',
+                'Total Products'      => (int) ($row->total_products_count ?? 0),
+                'Total Deal Value'    => number_format($dealValue, 2, '.', ''),
+                'Amount Received'     => number_format($paidValue, 2, '.', ''),
+                'Outstanding Balance' => number_format($outstanding, 2, '.', ''),
+                'Payment Status'      => $statusText,
+                'Lead Date'           => $row->lead_date ? Carbon::parse($row->lead_date)->format('d-m-Y') : ($row->lead_created_at ? Carbon::parse($row->lead_created_at)->format('d-m-Y') : '-'),
+                'Last Payment Date'   => $row->last_payment_date ? Carbon::parse($row->last_payment_date)->format('d-m-Y') : '-',
+            ];
+        });
+
+        $html = view('pages.reports.crm.outstanding-export', [
+            'rows'             => $rows,
+            'selectedFromDate' => $request->input('date_from', $defaultFromDate),
+            'selectedToDate'   => $request->input('date_to', $defaultToDate),
+        ])->render();
+
+        $fileName = 'crm_lead_outstanding_report_' . now()->format('Y_m_d_His') . '.xls';
+
+        return response($html, 200, [
+            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+        ]);
+    }
+
+    private function buildOutstandingQuery(Request $request)
+    {
+        $productTotalsSubquery = DB::table('lead_products')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->whereNull('lead_products.deleted_at')
+            ->select([
+                'lead_products.lead_id',
+                DB::raw('COUNT(lead_products.id) as total_products_count'),
+                DB::raw('GROUP_CONCAT(DISTINCT COALESCE(lead_products.product_name, products.package_name, products.product_name) SEPARATOR ", ") as product_names'),
+                DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_deal_value'),
+                DB::raw('SUM(COALESCE((
+                    SELECT SUM(p.amount) FROM lead_product_payments p WHERE p.lead_product_id = lead_products.id
+                ), lead_products.amount_paid, 0)) as total_paid_value'),
+            ])
+            ->groupBy('lead_products.lead_id');
+
+        $lastPaymentSubquery = DB::table('lead_product_payments')
+            ->select([
+                'lead_id',
+                DB::raw('MAX(payment_date) as last_payment_date'),
+                DB::raw('COUNT(id) as payment_count')
+            ])
+            ->groupBy('lead_id');
+
+        $query = Lead::query()
+            ->joinSub($productTotalsSubquery, 'product_totals', function ($join) {
+                $join->on('product_totals.lead_id', '=', 'leads.id');
+            })
+            ->leftJoinSub($lastPaymentSubquery, 'payment_info', function ($join) {
+                $join->on('payment_info.lead_id', '=', 'leads.id');
+            })
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+            ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
+            ->select([
+                'leads.id as lead_id',
+                'leads.company_name',
+                'leads.contact_name',
+                'leads.mobile_number',
+                'leads.email',
+                'leads.lead_date',
+                'leads.created_at as lead_created_at',
+                'branches.id as branch_id',
+                'branches.name as branch_name',
+                'assigned_users.id as assigned_to_id',
+                'assigned_users.name as assigned_to_name',
+                'product_totals.total_products_count',
+                'product_totals.product_names',
+                'product_totals.total_deal_value',
+                'product_totals.total_paid_value',
+                DB::raw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0)) as outstanding_balance'),
+                'payment_info.last_payment_date',
+                'payment_info.payment_count',
+            ])
+            ->orderByDesc(DB::raw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0))'))
+            ->orderByDesc('leads.id');
+
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+
+        if ($companyId) {
+            $query->where('leads.company_id', $companyId);
+        }
+
+        if ($visibleUserIds !== null) {
+            $query->whereIn('leads.assigned_to', $visibleUserIds);
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('leads.branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('assigned_to')) {
+            $query->where('leads.assigned_to', $request->assigned_to);
+        }
+
+        if ($request->filled('search')) {
+            $s = trim((string) $request->search);
+            $query->where(function ($q) use ($s) {
+                $q->where('leads.company_name', 'like', "%{$s}%")
+                    ->orWhere('leads.contact_name', 'like', "%{$s}%")
+                    ->orWhere('leads.mobile_number', 'like', "%{$s}%")
+                    ->orWhere('leads.email', 'like', "%{$s}%")
+                    ->orWhere('product_totals.product_names', 'like', "%{$s}%");
+                if (is_numeric($s)) {
+                    $q->orWhere('leads.id', (int) $s);
+                }
+            });
+        }
+
+        if ($request->filled('payment_status')) {
+            $status = $request->payment_status;
+            if ($status === 'outstanding') {
+                $query->whereRaw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0)) > 0');
+            } elseif ($status === 'unpaid') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) = 0 AND COALESCE(product_totals.total_deal_value, 0) > 0');
+            } elseif ($status === 'partial') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) > 0 AND COALESCE(product_totals.total_paid_value, 0) < COALESCE(product_totals.total_deal_value, 0)');
+            } elseif ($status === 'paid') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) >= COALESCE(product_totals.total_deal_value, 0) AND COALESCE(product_totals.total_deal_value, 0) > 0');
+            }
+        }
+
+        if ($request->filled('product_id')) {
+            $productId = (int) $request->product_id;
+            $query->whereExists(function ($sub) use ($productId) {
+                $sub->select(DB::raw(1))
+                    ->from('lead_products')
+                    ->whereColumn('lead_products.lead_id', 'leads.id')
+                    ->where('lead_products.product_id', $productId)
+                    ->whereNull('lead_products.deleted_at');
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('leads.lead_date', '>=', $request->date_from)
+                    ->orWhere(function ($sq) use ($request) {
+                        $sq->whereNull('leads.lead_date')
+                            ->whereDate('leads.created_at', '>=', $request->date_from);
+                    });
+            });
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('leads.lead_date', '<=', $request->date_to)
+                    ->orWhere(function ($sq) use ($request) {
+                        $sq->whereNull('leads.lead_date')
+                            ->whereDate('leads.created_at', '<=', $request->date_to);
+                    });
+            });
+        }
+
+        return $query;
+    }
+
+    private function buildOutstandingAnalytics($rows): array
+    {
+        $collection = collect($rows);
+
+        $branchBreakdown = $collection
+            ->groupBy(fn($row) => $row->branch_name ?: 'Unassigned Branch')
+            ->map(function ($items, $branchName) {
+                return [
+                    'label'               => $branchName,
+                    'total_leads'         => $items->count(),
+                    'total_deal_value'    => round((float) $items->sum('total_deal_value'), 2),
+                    'total_paid_value'    => round((float) $items->sum('total_paid_value'), 2),
+                    'outstanding_balance' => round((float) $items->sum('outstanding_balance'), 2),
+                ];
+            })
+            ->sortByDesc('outstanding_balance')
+            ->take(8)
+            ->values()
+            ->all();
+
+        $employeeBreakdown = $collection
+            ->groupBy(fn($row) => $row->assigned_to_name ?: 'Unassigned')
+            ->map(function ($items, $userName) {
+                return [
+                    'label'               => $userName,
+                    'total_leads'         => $items->count(),
+                    'total_deal_value'    => round((float) $items->sum('total_deal_value'), 2),
+                    'total_paid_value'    => round((float) $items->sum('total_paid_value'), 2),
+                    'outstanding_balance' => round((float) $items->sum('outstanding_balance'), 2),
+                ];
+            })
+            ->sortByDesc('outstanding_balance')
+            ->take(8)
+            ->values()
+            ->all();
+
+        $unpaidCount = $collection->filter(fn($r) => (float)$r->total_paid_value == 0 && (float)$r->total_deal_value > 0)->count();
+        $unpaidAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value == 0 && (float)$r->total_deal_value > 0)->sum('outstanding_balance'), 2);
+
+        $partialCount = $collection->filter(fn($r) => (float)$r->total_paid_value > 0 && (float)$r->total_paid_value < (float)$r->total_deal_value)->count();
+        $partialAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value > 0 && (float)$r->total_paid_value < (float)$r->total_deal_value)->sum('outstanding_balance'), 2);
+
+        $clearedCount = $collection->filter(fn($r) => (float)$r->total_paid_value >= (float)$r->total_deal_value && (float)$r->total_deal_value > 0)->count();
+        $clearedAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value >= (float)$r->total_deal_value && (float)$r->total_deal_value > 0)->sum('total_deal_value'), 2);
+
+        $statusBreakdown = [
+            [
+                'label'  => 'Unpaid (0% Received)',
+                'count'  => $unpaidCount,
+                'amount' => $unpaidAmount,
+                'color'  => '#ef4444',
+            ],
+            [
+                'label'  => 'Partially Paid',
+                'count'  => $partialCount,
+                'amount' => $partialAmount,
+                'color'  => '#f59e0b',
+            ],
+            [
+                'label'  => 'Fully Cleared',
+                'count'  => $clearedCount,
+                'amount' => $clearedAmount,
+                'color'  => '#10b981',
+            ],
+        ];
+
+        return [
+            'branches'  => $branchBreakdown,
+            'employees' => $employeeBreakdown,
+            'statuses'  => $statusBreakdown,
         ];
     }
 }

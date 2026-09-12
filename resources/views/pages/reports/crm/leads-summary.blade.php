@@ -329,6 +329,7 @@
                             <thead>
                                 <tr>
                                     <th>Lead ID</th>
+                                    <th>Branch</th>
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Mobile Number</th>
@@ -366,6 +367,9 @@
                                     <tr>
                                         <td>
                                             <a href="{{ route('leads.show', $row->lead_id) }}" class="crm-summary-id">LD-{{ str_pad($row->lead_id, 4, '0', STR_PAD_LEFT) }}</a>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight:600; color:#334155;">{{ $row->branch_name ?: '-' }}</span>
                                         </td>
                                         <td>
                                             <div class="crm-summary-name">{{ $row->contact_name ?: '-' }}</div>

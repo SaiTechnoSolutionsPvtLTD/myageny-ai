@@ -679,7 +679,7 @@
 
                     <div class="prj-field">
                         <label class="prj-label" for="department_id">Department</label>
-                        <select id="department_id" name="department_id" class="prj-select">
+                        <select id="department_id" name="department_id" class="prj-select" onchange="onPrjDepartmentChange(this.value)">
                             <option value="">All Departments</option>
                             @foreach($departments as $dept)
                                 <option value="{{ $dept->id }}" @selected(($projectFilters['department_id'] ?? '') === (string) $dept->id)>
@@ -694,7 +694,9 @@
                         <select id="employee_id" name="employee_id" class="prj-select">
                             <option value="">All Employees</option>
                             @foreach($employees as $emp)
-                                <option value="{{ $emp->id }}" @selected(($projectFilters['employee_id'] ?? '') === (string) $emp->id)>
+                                <option value="{{ $emp->id }}"
+                                    data-department-ids="{{ implode(',', $emp->department_ids ?? []) }}"
+                                    @selected(($projectFilters['employee_id'] ?? '') === (string) $emp->id)>
                                     {{ $emp->name }}
                                 </option>
                             @endforeach
@@ -1048,7 +1050,51 @@ function onPrjQuickDateChange(val, suffix = '') {
     updatePrjQuickDateRangeSpan(val, suffix);
 }
 
+function filterEmployeesByDepartment(deptId, preserveSelection) {
+    const empSelect = document.getElementById('employee_id');
+    if (!empSelect) return;
+
+    const currentVal = empSelect.value;
+    const options = empSelect.querySelectorAll('option');
+    let hasValidSelection = false;
+
+    options.forEach(function (opt) {
+        if (!opt.value) {
+            opt.hidden = false;
+            opt.disabled = false;
+            return;
+        }
+
+        const deptIdsStr = opt.getAttribute('data-department-ids') || '';
+        const deptIds = deptIdsStr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+        if (!deptId || deptIds.length === 0 || deptIds.includes(String(deptId))) {
+            opt.hidden = false;
+            opt.disabled = false;
+            if (opt.value === currentVal) {
+                hasValidSelection = true;
+            }
+        } else {
+            opt.hidden = true;
+            opt.disabled = true;
+        }
+    });
+
+    if (!preserveSelection && !hasValidSelection && currentVal !== '') {
+        empSelect.value = '';
+    }
+}
+
+function onPrjDepartmentChange(deptId) {
+    filterEmployeesByDepartment(deptId, false);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    const deptSelect = document.getElementById('department_id');
+    if (deptSelect && deptSelect.value) {
+        filterEmployeesByDepartment(deptSelect.value, true);
+    }
+
     ['', 'contrib'].forEach(suffix => {
         const fromInputId = suffix ? `date_from_${suffix}` : 'date_from';
         const toInputId = suffix ? `date_to_${suffix}` : 'date_to';

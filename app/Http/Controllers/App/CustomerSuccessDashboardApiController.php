@@ -9,6 +9,7 @@ use App\Models\LeadProductPayment;
 use App\Models\User;
 use App\Models\Product;
 use App\Models\ProductionInitiation;
+use App\Models\CustomerCampaign;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -34,7 +35,10 @@ class CustomerSuccessDashboardApiController extends Controller
 
             $branches = $this->visibility->visibleBranches($currentUser);
 
-            $products = Product::query();
+            $products = Product::query()
+                ->where('is_this_renewal_product', true)
+                ->whereNotNull('product_name')
+                ->where('product_name', '!=', '');
             $this->visibility->applyProductVisibility($products, $currentUser);
             $products = $products->select('id', 'product_name')->orderBy('product_name')->get();
 
@@ -87,7 +91,10 @@ class CustomerSuccessDashboardApiController extends Controller
                     } elseif ($isSupportExec && !$isAdmin) {
                         $query->where('leads.customer_support_executive_id', $currentUser->id);
                     } else {
-                        $query->whereNotNull('leads.customer_support_tl_id');
+                        $comp = $currentUser->company_id;
+                        if ($comp) {
+                            $query->where('leads.company_id', $comp);
+                        }
                     }
                 }
             };
@@ -165,45 +172,69 @@ class CustomerSuccessDashboardApiController extends Controller
             }
 
             // 2. Department & Product wise pending payments
-            $pendingProducts = LeadProduct::query()
+            $pendingRows = LeadProduct::query()
                 ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
-                ->join('products', 'products.id', '=', 'lead_products.product_id')
-                ->select([
-                    'lead_products.id', 'lead_products.total_price', 'lead_products.amount_paid',
-                    'products.product_name', 'products.id as p_id', 'leads.company_name',
-                ])
+                ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+                ->leftJoin('production_initiations', 'production_initiations.lead_product_id', '=', 'lead_products.id')
+                ->leftJoin('departments as pi_dept', 'pi_dept.id', '=', 'production_initiations.department_id')
+                ->leftJoin('department_product', 'department_product.product_id', '=', 'products.id')
+                ->leftJoin('departments as prod_dept', 'prod_dept.id', '=', 'department_product.department_id')
+                ->selectRaw("
+                    COALESCE(NULLIF(products.product_name, ''), NULLIF(lead_products.product_name, ''), 'General Product') as resolved_product,
+                    COALESCE(pi_dept.name, prod_dept.name) as raw_dept,
+                    SUM(GREATEST(0, lead_products.total_price - lead_products.amount_paid)) as total_pending,
+                    COUNT(DISTINCT lead_products.id) as total_count
+                ")
                 ->where($applySupportScope)
                 ->where('lead_products.payment_status', '!=', 'paid')
+                ->whereRaw('(lead_products.total_price - lead_products.amount_paid) > 0')
                 ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
-                ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where(function($sub) use ($filters) {
+                    $sub->where('lead_products.product_id', $filters['product_id'])
+                        ->orWhere('products.id', $filters['product_id']);
+                }))
                 ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
-                ->with('product.departments')
+                ->groupBy('resolved_product', 'raw_dept')
                 ->get();
 
             $deptProductData = [];
-            foreach ($pendingProducts as $lp) {
-                $pending = (float) $lp->total_price - (float) $lp->amount_paid;
-                if ($pending <= 0) continue;
+            foreach ($pendingRows as $row) {
+                $productName = trim((string) $row->resolved_product) ?: 'General Product';
+                $deptName = $row->raw_dept;
 
-                $productName = $lp->product_name;
-                $departments = $lp->product?->departments ?? collect();
-
-                if ($departments->isEmpty()) {
-                    $deptName = 'Unassigned';
-                    $key = $deptName . '_' . $productName;
-                    $deptProductData[$key] ??= ['department' => $deptName, 'product' => $productName, 'pending_amount' => 0.0, 'count' => 0];
-                    $deptProductData[$key]['pending_amount'] += $pending;
-                    $deptProductData[$key]['count']++;
-                } else {
-                    foreach ($departments as $dept) {
-                        $deptName = $dept->name;
-                        $key = $deptName . '_' . $productName;
-                        $deptProductData[$key] ??= ['department' => $deptName, 'product' => $productName, 'pending_amount' => 0.0, 'count' => 0];
-                        $deptProductData[$key]['pending_amount'] += $pending;
-                        $deptProductData[$key]['count']++;
+                if (empty($deptName) || strtolower($deptName) === 'unassigned') {
+                    $pnameLower = strtolower($productName);
+                    if (preg_match('/(website|software|app|web|crm|erp|portal|e-commerce|ecommerce|dynamic|static|laravel|react|wordpress|shopify|matrimony|booking|server|domain|hosting|developer|development|inventory)/i', $pnameLower)) {
+                        $deptName = 'Development';
+                    } elseif (preg_match('/(design|logo|flyer|brochure|banner|graphic|ui|ux|card|business card)/i', $pnameLower)) {
+                        $deptName = 'Designing';
+                    } elseif (preg_match('/(marketing|seo|lead generation|ad|ads|facebook|meta|instagram|google|smm|smo|youtube|sms|sender|reel|boosting|promotion|campaign|digital)/i', $pnameLower)) {
+                        $deptName = 'Digital Marketing';
+                    } elseif (preg_match('/(support|amc|maintenance|service)/i', $pnameLower)) {
+                        $deptName = 'Customer Support Team';
+                    } elseif (preg_match('/(sales|partner|consultation)/i', $pnameLower)) {
+                        $deptName = 'Sales';
+                    } elseif (preg_match('/(account|hr|hrms)/i', $pnameLower)) {
+                        $deptName = 'HR & Accounts';
+                    } elseif (preg_match('/(test|qa)/i', $pnameLower)) {
+                        $deptName = 'Testing';
+                    } else {
+                        $deptName = 'General';
                     }
                 }
+
+                $key = $deptName . '_' . $productName;
+                $deptProductData[$key] ??= [
+                    'department'     => $deptName,
+                    'product'        => $productName,
+                    'pending_amount' => 0.0,
+                    'count'          => 0
+                ];
+                $deptProductData[$key]['pending_amount'] += (float) $row->total_pending;
+                $deptProductData[$key]['count'] += (int) $row->total_count;
             }
+
+            usort($deptProductData, fn($a, $b) => $b['pending_amount'] <=> $a['pending_amount']);
             $deptProductList = array_values($deptProductData);
 
             // 3. Payment Collections
@@ -337,17 +368,29 @@ class CustomerSuccessDashboardApiController extends Controller
                 ->get();
 
             $deliveryProjectsData = [];
+            $allUserIds = [];
+            foreach ($deliveryProjects as $dp) {
+                $employeeIds = is_array($dp->project_allocated_employee_user_ids) ? $dp->project_allocated_employee_user_ids : json_decode($dp->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+                $tlIds = is_array($dp->project_allocated_tl_user_ids) ? $dp->project_allocated_tl_user_ids : json_decode($dp->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+                foreach ($employeeIds as $eid) { if ($eid) $allUserIds[] = (int) $eid; }
+                foreach ($tlIds as $tid) { if ($tid) $allUserIds[] = (int) $tid; }
+            }
+            $allUserIds = array_unique($allUserIds);
+            $userMap = !empty($allUserIds)
+                ? User::whereIn('id', $allUserIds)->with('employeeOnboarding.department')->get()->keyBy('id')
+                : collect();
+
             foreach ($deliveryProjects as $dp) {
                 $employeeIds = is_array($dp->project_allocated_employee_user_ids) ? $dp->project_allocated_employee_user_ids : json_decode($dp->project_allocated_employee_user_ids ?? '[]', true) ?? [];
                 $tlIds = is_array($dp->project_allocated_tl_user_ids) ? $dp->project_allocated_tl_user_ids : json_decode($dp->project_allocated_tl_user_ids ?? '[]', true) ?? [];
 
                 $allocatedNames = []; $allocatedDept = '';
                 if (!empty($employeeIds)) {
-                    $employees = User::whereIn('id', $employeeIds)->with('employeeOnboarding.department')->get();
+                    $employees = collect($employeeIds)->map(fn($id) => $userMap->get($id))->filter();
                     $allocatedNames = $employees->pluck('name')->toArray();
                     $allocatedDept = implode(', ', $employees->map(fn($e) => $e->employeeOnboarding?->department?->name)->filter()->unique()->toArray());
                 } elseif (!empty($tlIds)) {
-                    $tls = User::whereIn('id', $tlIds)->with('employeeOnboarding.department')->get();
+                    $tls = collect($tlIds)->map(fn($id) => $userMap->get($id))->filter();
                     $allocatedNames = $tls->pluck('name')->toArray();
                     $allocatedDept = implode(', ', $tls->map(fn($t) => $t->employeeOnboarding?->department?->name)->filter()->unique()->toArray());
                 }
@@ -380,12 +423,113 @@ class CustomerSuccessDashboardApiController extends Controller
                 }
             }
 
+            // 7. Customer Campaigns (Expired, Current Month Renewed, Current Month Not Renewed)
+            $campaignsQuery = CustomerCampaign::query()
+                ->join('leads', 'leads.id', '=', 'customer_campaigns.lead_id')
+                ->select([
+                    'customer_campaigns.id',
+                    'customer_campaigns.lead_id',
+                    'customer_campaigns.campaign_name',
+                    'customer_campaigns.platform',
+                    'customer_campaigns.ad_account_name',
+                    'customer_campaigns.status',
+                    'customer_campaigns.budget_amount',
+                    'customer_campaigns.budget_type',
+                    'customer_campaigns.start_date',
+                    'customer_campaigns.end_date',
+                    'customer_campaigns.extended_from_id',
+                    'customer_campaigns.created_at',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'leads.mobile_number',
+                    'leads.customer_support_tl_id',
+                    'leads.customer_support_executive_id',
+                ])
+                ->where($applySupportScope)
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->with('extensions:id,extended_from_id')
+                ->get();
+
+            $extendedParentIds = $campaignsQuery->pluck('extended_from_id')->filter()->unique()->toArray();
+
+            $expiredCampaignItems = [];
+            $cmRenewedCampaignItems = [];
+            $cmNotRenewedCampaignItems = [];
+            $expiredCampaignValue = 0;
+            $cmRenewedCampaignValue = 0;
+            $cmNotRenewedCampaignValue = 0;
+
+            $nowDate = Carbon::today()->toDateString();
+            $cmStartStr = $cmStart->toDateString();
+            $cmEndStr = $cmEnd->toDateString();
+
+            foreach ($campaignsQuery as $c) {
+                $endDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+                $startDate = $c->start_date ? Carbon::parse($c->start_date)->toDateString() : null;
+                $createdAt = Carbon::parse($c->created_at)->toDateString();
+
+                $isExpired = in_array($c->status, ['expired', 'completed'], true) || ($endDate && $endDate < $nowDate);
+                $isExtended = in_array($c->id, $extendedParentIds, true) || $c->extensions->isNotEmpty();
+                $isAnExtension = !empty($c->extended_from_id);
+                $budget = (float) ($c->budget_amount ?? 0);
+
+                $item = [
+                    'id' => $c->id,
+                    'lead_id' => $c->lead_id,
+                    'campaign_name' => $c->campaign_name,
+                    'company_name' => $c->company_name ?: ($c->contact_name ?: 'N/A'),
+                    'mobile_number' => $c->mobile_number ?: '—',
+                    'platform' => $c->platform ?: 'Digital Marketing',
+                    'ad_account_name' => $c->ad_account_name ?: '—',
+                    'budget' => $budget,
+                    'budget_type' => $c->budget_type ?: 'Monthly',
+                    'start_date' => $startDate ? Carbon::parse($startDate)->format('d M Y') : '—',
+                    'end_date' => $endDate ? Carbon::parse($endDate)->format('d M Y') : '—',
+                    'status' => strtoupper((string) ($c->status ?: 'active')),
+                    'is_renewed' => $isExtended,
+                ];
+
+                if ($isExpired) {
+                    $expiredCampaignItems[] = $item;
+                    $expiredCampaignValue += $budget;
+                }
+
+                if (($isExtended && $endDate && $endDate >= $cmStartStr && $endDate <= $cmEndStr) ||
+                    ($isAnExtension && (($createdAt >= $cmStartStr && $createdAt <= $cmEndStr) || ($startDate && $startDate >= $cmStartStr && $startDate <= $cmEndStr)))) {
+                    $cmRenewedCampaignItems[] = $item;
+                    $cmRenewedCampaignValue += $budget;
+                }
+
+                if ($endDate && $endDate >= $cmStartStr && $endDate <= $cmEndStr && !$isExtended) {
+                    $cmNotRenewedCampaignItems[] = $item;
+                    $cmNotRenewedCampaignValue += $budget;
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'cmr' => ['count' => $cmrCount, 'value' => round($cmrValue, 2), 'items' => $cmrItems],
                     'cmr_plus' => ['count' => $nmrCount, 'value' => round($nmrValue, 2), 'items' => $nmrItems],
                     'cmr_minus' => ['count' => $lmrCount, 'value' => round($lmrValue, 2), 'items' => $lmrItems],
+                    'campaigns' => [
+                        'expired' => [
+                            'count' => count($expiredCampaignItems),
+                            'value' => round($expiredCampaignValue, 2),
+                            'items' => $expiredCampaignItems,
+                        ],
+                        'cm_renewed' => [
+                            'count' => count($cmRenewedCampaignItems),
+                            'value' => round($cmRenewedCampaignValue, 2),
+                            'items' => $cmRenewedCampaignItems,
+                        ],
+                        'cm_not_renewed' => [
+                            'count' => count($cmNotRenewedCampaignItems),
+                            'value' => round($cmNotRenewedCampaignValue, 2),
+                            'items' => $cmNotRenewedCampaignItems,
+                        ],
+                    ],
                     'dept_product_pending' => $deptProductList,
                     'today_payments' => round((float) $todayPayments, 2),
                     'month_payments' => round((float) $monthPayments, 2),
@@ -460,6 +604,11 @@ class CustomerSuccessDashboardApiController extends Controller
             'cmr' => ['count' => 0, 'value' => 0, 'items' => []],
             'cmr_plus' => ['count' => 0, 'value' => 0, 'items' => []],
             'cmr_minus' => ['count' => 0, 'value' => 0, 'items' => []],
+            'campaigns' => [
+                'expired' => ['count' => 0, 'value' => 0, 'items' => []],
+                'cm_renewed' => ['count' => 0, 'value' => 0, 'items' => []],
+                'cm_not_renewed' => ['count' => 0, 'value' => 0, 'items' => []],
+            ],
             'dept_product_pending' => [],
             'today_payments' => 0,
             'month_payments' => 0,
