@@ -12,6 +12,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -43,6 +44,13 @@ class CustomerCampaignController extends Controller
             })
             ->pluck('id')
             ->toArray();
+
+        // Filters
+        $companyName = trim((string) $request->query('company_name', $request->query('search', '')));
+        $employeeId = $request->filled('employee_id') ? (int) $request->query('employee_id') : null;
+        $status = trim((string) $request->query('status', ''));
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
 
         // Query ProductionInitiations for Digital Marketing products with budget approval needed
         $initiationsQuery = ProductionInitiation::query()
@@ -77,17 +85,27 @@ class CustomerCampaignController extends Controller
             });
         }
 
-        $search = trim((string) $request->query('search', ''));
-        if ($search !== '') {
-            $initiationsQuery->where(function ($q) use ($search) {
-                $q->where('company_name', 'LIKE', "%{$search}%")
-                    ->orWhere('client_name', 'LIKE', "%{$search}%")
-                    ->orWhereHas('lead', function ($lq) use ($search) {
-                        $lq->where('company_name', 'LIKE', "%{$search}%")
-                            ->orWhere('contact_name', 'LIKE', "%{$search}%")
-                            ->orWhere('mobile_number', 'LIKE', "%{$search}%")
-                            ->orWhere('email', 'LIKE', "%{$search}%");
+        // Apply Company Name search filter
+        if ($companyName !== '') {
+            $initiationsQuery->where(function ($q) use ($companyName) {
+                $q->where('company_name', 'LIKE', "%{$companyName}%")
+                    ->orWhere('client_name', 'LIKE', "%{$companyName}%")
+                    ->orWhereHas('lead', function ($lq) use ($companyName) {
+                        $lq->where('company_name', 'LIKE', "%{$companyName}%")
+                            ->orWhere('contact_name', 'LIKE', "%{$companyName}%")
+                            ->orWhere('mobile_number', 'LIKE', "%{$companyName}%")
+                            ->orWhere('email', 'LIKE', "%{$companyName}%");
                     });
+            });
+        }
+
+        // Apply Employee filter on initiations
+        if ($employeeId) {
+            $initiationsQuery->where(function ($q) use ($employeeId) {
+                $q->whereJsonContains('project_allocated_employee_user_ids', $employeeId)
+                    ->orWhereJsonContains('project_allocated_tl_user_ids', $employeeId)
+                    ->orWhere('initiated_by', $employeeId)
+                    ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $employeeId . '"%');
             });
         }
 
@@ -187,7 +205,52 @@ class CustomerCampaignController extends Controller
             ->sortBy('company_name')
             ->values();
 
-        // Overall statistics
+        // Filter by Employee if specified
+        if ($employeeId) {
+            $leads = $leads->filter(function ($lead) use ($employeeId) {
+                return $lead->allocated_users->pluck('id')->contains($employeeId);
+            })->values();
+        }
+
+        // Filter by Status (Active / Inactive)
+        if ($status === 'active') {
+            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_active_campaigns > 0)->values();
+        } elseif ($status === 'inactive') {
+            $leads = $leads->filter(fn ($lead) => (int) $lead->no_of_active_campaigns === 0)->values();
+        }
+
+        // Filter by Date Range (Start Date / End Date)
+        if ($startDate) {
+            $parsedStart = Carbon::parse($startDate)->startOfDay();
+            $leads = $leads->filter(function ($lead) use ($parsedStart) {
+                // Check if any campaign has start_date or created_at >= startDate, or initiation created_at >= startDate
+                $hasCampaign = $lead->customerCampaigns->contains(function ($c) use ($parsedStart) {
+                    $cDate = $c->start_date ? Carbon::parse($c->start_date)->startOfDay() : ($c->created_at ? Carbon::parse($c->created_at)->startOfDay() : null);
+                    return $cDate && $cDate->gte($parsedStart);
+                });
+                $hasInitiation = $lead->dm_initiations->contains(function ($init) use ($parsedStart) {
+                    return $init->created_at && Carbon::parse($init->created_at)->startOfDay()->gte($parsedStart);
+                });
+                return $hasCampaign || $hasInitiation;
+            })->values();
+        }
+
+        if ($endDate) {
+            $parsedEnd = Carbon::parse($endDate)->endOfDay();
+            $leads = $leads->filter(function ($lead) use ($parsedEnd) {
+                // Check if any campaign has start_date, end_date, or created_at <= endDate, or initiation created_at <= endDate
+                $hasCampaign = $lead->customerCampaigns->contains(function ($c) use ($parsedEnd) {
+                    $cDate = $c->start_date ? Carbon::parse($c->start_date)->startOfDay() : ($c->created_at ? Carbon::parse($c->created_at)->startOfDay() : null);
+                    return $cDate && $cDate->lte($parsedEnd);
+                });
+                $hasInitiation = $lead->dm_initiations->contains(function ($init) use ($parsedEnd) {
+                    return $init->created_at && Carbon::parse($init->created_at)->startOfDay()->lte($parsedEnd);
+                });
+                return $hasCampaign || $hasInitiation;
+            })->values();
+        }
+
+        // Overall statistics based on filtered leads
         $stats = [
             'total_leads' => $leads->count(),
             'total_campaigns' => $leads->sum('no_of_campaigns'),
@@ -195,10 +258,49 @@ class CustomerCampaignController extends Controller
             'total_budget' => $leads->sum(fn ($l) => (float) ($l->lead_budget_amount ?? 0)),
         ];
 
+        // Fetch Employees for Filter Dropdown
+        $employees = User::query()
+            ->where('is_active', true)
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        $filters = [
+            'company_name' => $companyName,
+            'employee_id' => $employeeId,
+            'status' => $status,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+        ];
+
+        $hasActiveFilters = !empty($companyName) || !empty($employeeId) || !empty($status) || !empty($startDate) || !empty($endDate);
+
+        // Pagination
+        $perPage = (int) $request->query('per_page', 10);
+        if ($perPage < 5 || $perPage > 100) {
+            $perPage = 10;
+        }
+        $currentPage = LengthAwarePaginator::resolveCurrentPage() ?: 1;
+        $itemsForCurrentPage = $leads->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
+        $paginatedLeads = new LengthAwarePaginator(
+            $itemsForCurrentPage,
+            $leads->count(),
+            $perPage,
+            $currentPage,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => $request->query(),
+            ]
+        );
+
         return view('pages.projects.campaigns.index', [
-            'leads' => $leads,
+            'leads' => $paginatedLeads,
             'stats' => $stats,
-            'search' => $search,
+            'search' => $companyName,
+            'employees' => $employees,
+            'filters' => $filters,
+            'hasActiveFilters' => $hasActiveFilters,
         ]);
     }
 

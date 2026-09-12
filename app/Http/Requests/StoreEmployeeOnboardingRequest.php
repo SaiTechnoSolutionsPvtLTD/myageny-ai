@@ -41,6 +41,8 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             'portal_email' => ['required', 'email', 'max:150', Rule::unique('users', 'email')],
             'portal_password' => ['required', 'string', 'min:8', 'max:255'],
             'branch_id' => ['required', 'exists:branches,id'],
+            'branches' => ['nullable', 'array'],
+            'branches.*' => ['exists:branches,id'],
             'tl_user_id' => ['required', 'exists:users,id', $this->validTeamLeadRule()],
             'name' => ['required', 'string', 'max:150'],
             'father_name' => ['nullable', 'string', 'max:150'],

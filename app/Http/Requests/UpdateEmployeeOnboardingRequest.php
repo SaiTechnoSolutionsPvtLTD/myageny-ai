@@ -31,6 +31,8 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'portal_email' => ['nullable', 'email', 'max:150', Rule::unique('users', 'email')->ignore($portalUserId)],
             'portal_password' => ['nullable', 'string', 'min:8', 'max:255'],
             'branch_id' => ['nullable', 'exists:branches,id'],
+            'branches' => ['nullable', 'array'],
+            'branches.*' => ['exists:branches,id'],
             'tl_user_id' => ['nullable', 'exists:users,id', $this->validTeamLeadRule()],
             'name' => ['required', 'string', 'max:150'],
             'father_name' => ['nullable', 'string', 'max:150'],

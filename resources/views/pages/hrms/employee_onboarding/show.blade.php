@@ -181,7 +181,26 @@
                     <div class="eob-card-body">
                         <div class="eob-show-grid">
                             <div class="eob-show-item"><div class="eob-show-label">User Email</div><div class="eob-show-value">{{ $employee->portalUser?->email ?: 'N/A' }}</div></div>
-                            <div class="eob-show-item"><div class="eob-show-label">Branch</div><div class="eob-show-value">{{ $employee->portalUser?->branch?->name ?: 'N/A' }}</div></div>
+                            <div class="eob-show-item">
+                                <div class="eob-show-label">Branch</div>
+                                <div class="eob-show-value">
+                                    {{ $employee->portalUser?->branch?->name ?: 'N/A' }}
+                                    @if($employee->portalUser && $employee->portalUser->branches->isNotEmpty())
+                                        @php
+                                            $addBranches = $employee->portalUser->branches->reject(fn($b) => $employee->portalUser->branch_id && $b->id == $employee->portalUser->branch_id);
+                                        @endphp
+                                        @if($addBranches->isNotEmpty())
+                                            <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                                                @foreach($addBranches as $ab)
+                                                    <span style="display:inline-block; font-size:11px; background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:6px; font-weight:600; border:1px solid #bfdbfe;">
+                                                        + {{ $ab->name }}
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    @endif
+                                </div>
+                            </div>
                             <div class="eob-show-item"><div class="eob-show-label">Department</div><div class="eob-show-value">{{ $employee->department?->name ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Role</div><div class="eob-show-value">{{ $employee->role?->display_name ?: ($employee->role?->name ?: 'N/A') }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">TL Mapping</div><div class="eob-show-value">{{ $portalManager?->name ?: 'N/A' }}</div></div>

@@ -206,6 +206,7 @@ class EmployeeOnboardingController extends Controller
             'role.department',
             'department',
             'portalUser.branch',
+            'portalUser.branches',
             'portalUser.roles',
             'portalUser.managerMappings.manager',
         ]);
@@ -228,6 +229,7 @@ class EmployeeOnboardingController extends Controller
             'role.department',
             'department',
             'portalUser.branch',
+            'portalUser.branches',
             'portalUser.roles',
             'portalUser.managerMappings.manager',
         ]);
@@ -324,6 +326,7 @@ class EmployeeOnboardingController extends Controller
             'portal_email',
             'portal_password',
             'branch_id',
+            'branches',
             'tl_user_id',
         ], EmployeeOnboarding::DOCUMENT_FIELDS));
 
@@ -443,6 +446,10 @@ class EmployeeOnboardingController extends Controller
 
         if ($role) {
             $user->syncRoles([$role->name]);
+        }
+
+        if (array_key_exists('branches', $validated)) {
+            $user->branches()->sync($validated['branches'] ?? []);
         }
 
         return $user;
