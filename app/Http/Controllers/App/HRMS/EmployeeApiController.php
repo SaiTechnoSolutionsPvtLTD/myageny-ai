@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeApiController extends Controller
 {
@@ -53,16 +54,18 @@ class EmployeeApiController extends Controller
 
         $actingBranchId = null;
         if ($isCompanyAdmin) {
-            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
-                $actingBranchId = (int) $request->branch_id;
+            if ($request->filled('branch_id')) {
+                $actingBranchId = ($request->branch_id === 'all') ? null : (int) $request->branch_id;
+            } else {
+                $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
             }
         } else {
             // Non-Company Admin is strictly scoped to their own branch_id
-            $actingBranchId = $user?->branch_id;
+            $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
         }
 
         $query = EmployeeOnboarding::query()
-            ->with(['role', 'department', 'sourceIntern'])
+            ->with(['role', 'department', 'sourceIntern', 'educations', 'familyDetails', 'portalUser.branch'])
             ->when($request->search, function ($q) use ($request) {
                 $s = trim((string) $request->search);
                 $q->where(function ($sub) use ($s) {
@@ -77,11 +80,11 @@ class EmployeeApiController extends Controller
             ->when($request->department_id, fn ($q) => $q->where('department_id', $request->department_id))
             ->when($request->role_id, fn ($q) => $q->where('role_id', $request->role_id))
             ->when($actingBranchId, function ($q, $branchId) {
-                $branch = Branch::find($branchId);
+                $branch = Branch::withoutGlobalScopes()->find($branchId);
                 $branchCode = $branch?->code;
                 $q->where(function (Builder $sub) use ($branchId, $branchCode) {
                     $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $branchId));
-                    if ($branchCode && $branchCode !== 'STS') {
+                    if ($branchCode) {
                         $sub->orWhere(function (Builder $q2) use ($branchCode) {
                             $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
                         });
@@ -135,7 +138,7 @@ class EmployeeApiController extends Controller
             $branchCode   = $branch?->code;
 
             $matchesBranch = ($userBranchId && $empBranchId === $userBranchId)
-                || ($branchCode && $branchCode !== 'STS' && is_null($employee->portal_user_id) && str_starts_with($employee->employee_id ?? '', $branchCode));
+                || ($branchCode && is_null($employee->portal_user_id) && str_starts_with($employee->employee_id ?? '', $branchCode));
 
             if (! $matchesBranch && $user?->id !== $employee->portal_user_id) {
                 return response()->json([
@@ -148,6 +151,50 @@ class EmployeeApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => $this->mapDetail($employee),
+        ]);
+    }
+
+    // ── PATCH /api/mobile/hrms/employees/{id}/status ─────────────────────────
+    public function updateStatus(Request $request, int $id): JsonResponse
+    {
+        $user = auth()->user();
+        if (! ($this->isCompanyAdmin($user) || ($user && $user->belongsToHrDepartment()) || ($user && $user->hasHrLikeRole()) || ($user && $user->isBranchAdmin()))) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,inactive,resigned'],
+        ]);
+
+        $employee = EmployeeOnboarding::with('portalUser')->findOrFail($id);
+
+        if (! $this->isCompanyAdmin($user)) {
+            $userBranchId = $user?->branch_id;
+            $empBranchId  = $employee->portalUser?->branch_id;
+            if ($userBranchId && $empBranchId && $empBranchId !== $userBranchId) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized for this branch.'], 403);
+            }
+        }
+
+        $newStatus = $validated['status'];
+        DB::transaction(function () use ($employee, $newStatus, $user) {
+            $employee->status = $newStatus;
+            $employee->updated_by = $user?->id;
+            $employee->save();
+
+            if ($employee->portalUser) {
+                $employee->portalUser->is_active = ($newStatus === EmployeeOnboarding::STATUS_ACTIVE);
+                $employee->portalUser->save();
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "Status for {$employee->name} updated to " . ucfirst($newStatus) . ".",
+            'data'    => [
+                'id'     => $employee->id,
+                'status' => $newStatus,
+            ],
         ]);
     }
 
@@ -192,6 +239,7 @@ class EmployeeApiController extends Controller
                 'branches'         => $branches,
                 'roles'            => $roles,
                 'is_company_admin' => $isCompanyAdmin,
+                'user_branch_id'   => $user?->branch_id ? (int) $user->branch_id : null,
             ],
         ]);
     }
@@ -207,6 +255,7 @@ class EmployeeApiController extends Controller
             'mobile'         => $e->mobile,
             'role'           => optional($e->role)->display_name ?? optional($e->role)->name,
             'department'     => optional($e->department)->name,
+            'branch_name'    => $e->portalUser?->branch?->name ?? '',
             'status'         => $e->status,
             'avatar_initial' => strtoupper(substr($e->name, 0, 1)),
             'created_at'     => optional($e->created_at)->format('d M Y'),
@@ -222,6 +271,7 @@ class EmployeeApiController extends Controller
                 ? ($e->sourceIntern->intern_id ?: $e->sourceIntern->name)
                 : null,
             'photograph_url' => $e->getFileUrl('photograph'),
+            'profile_completion_percentage' => (int) $e->profile_completion_percentage,
         ];
     }
 
@@ -244,6 +294,7 @@ class EmployeeApiController extends Controller
             'employee_type'            => $e->employee_type === 'non_billable' ? 'non_billable' : 'billable',
             'avatar_initial'           => strtoupper(substr($e->name, 0, 1)),
             'photograph_url'           => $e->getFileUrl('photograph'),
+            'profile_completion_percentage' => (int) $e->profile_completion_percentage,
 
             // Source — mirrors the "Source" row on employee-show.blade.php
             // (either "Direct Employee Onboarding" or a link to the intern

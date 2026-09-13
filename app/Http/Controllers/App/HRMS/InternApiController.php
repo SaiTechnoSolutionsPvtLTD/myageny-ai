@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InternApiController extends Controller
 {
@@ -52,16 +53,18 @@ class InternApiController extends Controller
 
         $actingBranchId = null;
         if ($isCompanyAdmin) {
-            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
-                $actingBranchId = (int) $request->branch_id;
+            if ($request->filled('branch_id')) {
+                $actingBranchId = ($request->branch_id === 'all') ? null : (int) $request->branch_id;
+            } else {
+                $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
             }
         } else {
             // Non-Company Admin is strictly scoped to their own branch_id
-            $actingBranchId = $user?->branch_id;
+            $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
         }
 
         $query = InternJoiningForm::query()
-            ->with(['department', 'convertedEmployee'])
+            ->with(['department', 'convertedEmployee', 'educationalDetails', 'familyDetails', 'portalUser.branch'])
             ->when($request->search, function ($q) use ($request) {
                 $s = trim((string) $request->search);
                 $q->where(function ($sub) use ($s) {
@@ -76,13 +79,13 @@ class InternApiController extends Controller
             ->when($request->filled('internship_status'), fn ($q) => $q->where('internship_status', $request->string('internship_status')->toString()))
             ->when($request->filled('role_id'), fn ($q) => $q->where('role_id', $request->integer('role_id')))
             ->when($actingBranchId, function ($q, $branchId) {
-                $branch = Branch::find($branchId);
+                $branch = Branch::withoutGlobalScopes()->find($branchId);
                 $branchCode = $branch?->code;
                 $q->where(function (Builder $sub) use ($branchId, $branchCode) {
                     $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $branchId));
-                    if ($branchCode && $branchCode !== 'STS') {
+                    if ($branchCode) {
                         $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                            $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                            $q2->whereNull('portal_user_id')->where('intern_id', 'like', '%' . $branchCode . '%');
                         });
                     }
                 });
@@ -131,7 +134,7 @@ class InternApiController extends Controller
             $branchCode     = $branch?->code;
 
             $matchesBranch = ($userBranchId && $internBranchId === $userBranchId)
-                || ($branchCode && $branchCode !== 'STS' && is_null($intern->portal_user_id) && str_starts_with($intern->intern_id ?? '', $branchCode));
+                || ($branchCode && is_null($intern->portal_user_id) && str_contains($intern->intern_id ?? '', $branchCode));
 
             if (! $matchesBranch && $user?->id !== $intern->portal_user_id) {
                 return response()->json([
@@ -147,6 +150,50 @@ class InternApiController extends Controller
         ]);
     }
 
+    // ── PATCH /api/mobile/hrms/interns/{id}/status ───────────────────────────
+    public function updateStatus(Request $request, int $id): JsonResponse
+    {
+        $user = auth()->user();
+        if (! ($this->isCompanyAdmin($user) || ($user && $user->belongsToHrDepartment()) || ($user && $user->hasHrLikeRole()) || ($user && $user->isBranchAdmin()))) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,inactive,resigned'],
+        ]);
+
+        $intern = InternJoiningForm::with('portalUser')->findOrFail($id);
+
+        if (! $this->isCompanyAdmin($user)) {
+            $userBranchId   = $user?->branch_id;
+            $internBranchId = $intern->portalUser?->branch_id;
+            if ($userBranchId && $internBranchId && $internBranchId !== $userBranchId) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized for this branch.'], 403);
+            }
+        }
+
+        $newStatus = $validated['status'];
+        DB::transaction(function () use ($intern, $newStatus) {
+            $intern->internship_status = $newStatus;
+            $intern->save();
+
+            $portalUser = User::withoutGlobalScopes()->find($intern->portal_user_id);
+            if ($portalUser) {
+                $portalUser->is_active = ($newStatus === InternJoiningForm::STATUS_ACTIVE);
+                $portalUser->save();
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "Status for {$intern->name} updated to " . ucfirst($newStatus) . ".",
+            'data'    => [
+                'id'     => $intern->id,
+                'status' => $newStatus,
+            ],
+        ]);
+    }
+
     // ── GET /api/mobile/hrms/interns/meta ─────────────────────────────────────
     public function meta(): JsonResponse
     {
@@ -154,9 +201,8 @@ class InternApiController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // Mirrors InternJoiningForm::STATUS_ACTIVE / STATUS_RESIGNED — same
-        // two values intern-index.blade.php's Status <select> offers.
-        $statuses = [InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_RESIGNED];
+        // Mirrors InternJoiningForm::STATUS_ACTIVE / STATUS_INACTIVE / STATUS_RESIGNED
+        $statuses = [InternJoiningForm::STATUS_ACTIVE, InternJoiningForm::STATUS_INACTIVE, InternJoiningForm::STATUS_RESIGNED];
 
         $user = auth()->user() ?? request()->user();
         $isCompanyAdmin = $this->isCompanyAdmin($user);
@@ -188,6 +234,7 @@ class InternApiController extends Controller
                 'branches'         => $branches,
                 'roles'            => $roles,
                 'is_company_admin' => $isCompanyAdmin,
+                'user_branch_id'   => $user?->branch_id ? (int) $user->branch_id : null,
             ],
         ]);
     }
@@ -214,12 +261,14 @@ class InternApiController extends Controller
             // "Converted to {employee_id}" note).
             'intern_id'                  => $i->intern_id ?: '',
             'department'                 => optional($i->department)->name ?? '',
+            'branch_name'                => $i->portalUser?->branch?->name ?? '',
             'internship_status'          => $i->internship_status ?: 'active',
             'internship_start_date'      => optional($i->internship_start_date)->format('d M Y') ?? '',
             'internship_end_date'        => optional($i->internship_end_date)->format('d M Y') ?? '',
             'internship_duration_months' => $i->internship_duration_months,
             'converted_to_employee'      => $i->convertedEmployee?->employee_id,
             'photograph_url'             => $i->photograph ? asset('storage/' . $i->photograph) : null,
+            'profile_completion_percentage' => $this->calculateInternCompletion($i),
         ];
     }
 
@@ -313,6 +362,36 @@ class InternApiController extends Controller
             ])->values(),
 
             'created_at' => optional($i->created_at)->format('d M Y'),
+            'profile_completion_percentage' => $this->calculateInternCompletion($i),
         ];
+    }
+
+    private function calculateInternCompletion(InternJoiningForm $i): int
+    {
+        $checks = [
+            !empty($i->name),
+            !empty($i->mobile),
+            !empty($i->email),
+            !empty($i->date_of_birth),
+            !empty($i->internship_start_date),
+            !empty($i->internship_end_date),
+            !empty($i->father_name),
+            !empty($i->correspondence_address) || !empty($i->permanent_address),
+            !empty($i->department_id),
+            !empty($i->role_id),
+            !empty($i->portal_user_id),
+            !empty($i->emergency_contact_name) && !empty($i->emergency_contact_no),
+            !empty($i->aadhaar_card_no),
+            !empty($i->pan_card_no),
+            !empty($i->internship_duration_months),
+            $i->relationLoaded('educationalDetails') ? $i->educationalDetails->isNotEmpty() : $i->educationalDetails()->exists(),
+            $i->relationLoaded('familyDetails') ? $i->familyDetails->isNotEmpty() : $i->familyDetails()->exists(),
+            !empty($i->photograph),
+            !empty($i->blood_group),
+            !empty($i->declaration_accepted) || !empty($i->declaration_date),
+        ];
+
+        $filledCount = count(array_filter($checks));
+        return (int) round(($filledCount / count($checks)) * 100);
     }
 }

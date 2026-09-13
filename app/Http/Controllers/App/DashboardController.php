@@ -45,7 +45,7 @@ class DashboardController extends Controller
             new OA\Parameter(name: "source",     in: "query", required: false, description: "Filter by lead source", schema: new OA\Schema(type: "string")),
             new OA\Parameter(name: "date_from",  in: "query", required: false, description: "Start date (Y-m-d)",    schema: new OA\Schema(type: "string", format: "date")),
             new OA\Parameter(name: "date_to",    in: "query", required: false, description: "End date (Y-m-d)",      schema: new OA\Schema(type: "string", format: "date")),
-            new OA\Parameter(name: "quick_date", in: "query", required: false, description: "Preset date range",     schema: new OA\Schema(type: "string", enum: ["today","week","month","quarter","year"])),
+            new OA\Parameter(name: "quick_date", in: "query", required: false, description: "Preset date range",     schema: new OA\Schema(type: "string", enum: ["today","yesterday","week","month","quarter","year"])),
         ],
         responses: [
             new OA\Response(
@@ -72,7 +72,7 @@ class DashboardController extends Controller
             'source'     => ['nullable', Rule::in(Lead::sourceKeys())],
             'date_from'  => ['nullable', 'date'],
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
-            'quick_date' => ['nullable', 'in:all,today,week,month,quarter,year,custom'],
+            'quick_date' => ['nullable', 'in:all,today,yesterday,week,month,quarter,year,custom'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -196,6 +196,25 @@ class DashboardController extends Controller
         $totalPaid    = (float) LeadProductPayment::whereIn('lead_product_id', $convertedProductIds)->sum('amount');
         $totalPending = max(0, $convertedValue - $totalPaid);
         $payPct       = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
+
+        // Total Received Amount (mirrors SuperAdminDashboardController) — sums
+        // all collected payments matching active filters and date range.
+        $paymentsQuery = LeadProductPayment::query()
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source', $source);
+            });
+
+        if ($dateFrom) {
+            $paymentsQuery->whereDate('payment_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+        }
+        $totalReceivedAmount = (float) $paymentsQuery->sum('amount');
 
         // Mirrors SuperAdminDashboardController's KPI block — these were
         // previously computed nowhere on the mobile side, so the "Converted
@@ -566,6 +585,7 @@ class DashboardController extends Controller
                     'conversion_rate'            => $convRate,
                     'converted_products_count'   => $convertedCount,
                     'upcoming_amount'            => $upcomingAmount,
+                    'total_received_amount'      => $totalReceivedAmount,
                     'converted_value'            => $convertedValue,
                     'converted_percentage'       => $convertedPercentage,
                     'scheduled_followups_count'  => $scheduledRemindersCount,
@@ -835,9 +855,10 @@ class DashboardController extends Controller
     {
         if ($request->filled('quick_date')) {
             return match ($request->quick_date) {
-                'all'     => [null, null],
-                'today'   => [today()->toDateString(), today()->toDateString()],
-                'week'    => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                'all'       => [null, null],
+                'today'     => [today()->toDateString(), today()->toDateString()],
+                'yesterday' => [now()->subDay()->toDateString(), now()->subDay()->toDateString()],
+                'week'      => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
                 'month'   => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
                 'quarter' => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
                 'year'    => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],

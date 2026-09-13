@@ -8,6 +8,7 @@ use App\Models\ExpensePipeline;
 use App\Models\ExpenseRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -48,6 +49,8 @@ class ExpenseRequestApiController extends Controller
         try {
             $user = $request->user();
             $companyId = $user?->company_id;
+            $vis = $this->resolveVisibility($user);
+
             $userRoleIds = DB::table('model_has_roles')
                 ->where('model_type', User::class)
                 ->where('model_id', $user->id)
@@ -58,29 +61,100 @@ class ExpenseRequestApiController extends Controller
                 $userRoleIds = $user->roles->pluck('id')->toArray();
             }
 
-            $isHrOrAdmin = $user->isHrOrAdmin();
+            $userRoleNames = Role::withoutGlobalScopes()->whereIn('id', $userRoleIds)->pluck('name')->map(fn($n) => preg_replace('/^company_\d+__/', '', $n))->toArray();
+            $matchingRoleIds = Role::withoutGlobalScopes()->where(function($q) use ($userRoleIds, $userRoleNames) {
+                $q->whereIn('id', $userRoleIds);
+                foreach ($userRoleNames as $rn) {
+                    $q->orWhere('name', 'like', "%{$rn}%");
+                }
+            })->pluck('id')->toArray();
 
-            $scopedQuery = ExpenseRequest::with(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole'])
+            $scopedQuery = ExpenseRequest::with(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole'])
                 ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
 
-            if (! $isHrOrAdmin) {
-                $userRoleNames = Role::withoutGlobalScopes()->whereIn('id', $userRoleIds)->pluck('name')->map(fn($n) => preg_replace('/^company_\d+__/', '', $n))->toArray();
-                $matchingRoleIds = Role::withoutGlobalScopes()->where(function($q) use ($userRoleIds, $userRoleNames) {
-                    $q->whereIn('id', $userRoleIds);
-                    foreach ($userRoleNames as $rn) {
-                        $q->orWhere('name', 'like', "%{$rn}%");
-                    }
-                })->pluck('id')->toArray();
-
-                $scopedQuery->where(function ($q) use ($user, $matchingRoleIds) {
-                    $q->where('user_id', $user->id)
-                      ->orWhere('approver_id', $user->id)
-                      ->orWhere(function ($q2) use ($matchingRoleIds) {
-                          $q2->whereIn('current_approver_role_id', $matchingRoleIds)
-                             ->where('status', 'pending');
-                      });
-                });
+            // Default scope determination
+            $scope = $request->query('scope');
+            if (! $scope) {
+                if ($vis['is_admin_or_hr']) {
+                    $scope = 'all';
+                } else {
+                    $scope = 'my';
+                }
             }
+
+            if ($scope === 'my') {
+                $scopedQuery->where('user_id', $user->id);
+            } elseif ($scope === 'team') {
+                if ($vis['is_admin_or_hr']) {
+                    if ($vis['is_branch_admin']) {
+                        $branchIds = $user->getMyBranchIds();
+                        $scopedQuery->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                            ->where('user_id', '!=', $user->id);
+                    } elseif ($companyId && ! $vis['is_super_admin']) {
+                        $scopedQuery->where('company_id', $companyId)
+                            ->where('user_id', '!=', $user->id);
+                    } else {
+                        $scopedQuery->where('user_id', '!=', $user->id);
+                    }
+                } elseif ($vis['has_team_members']) {
+                    $scopedQuery->whereIn('user_id', $vis['descendant_ids']);
+                } else {
+                    $scopedQuery->whereRaw('1 = 0');
+                }
+            } elseif ($scope === 'approvals') {
+                $scopedQuery->where('status', 'pending')->where(function ($q) use ($user, $matchingRoleIds) {
+                    $q->where('approver_id', $user->id)
+                      ->orWhereIn('current_approver_role_id', $matchingRoleIds);
+                });
+            } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+                if ($vis['is_admin_or_hr']) {
+                    if ($vis['is_branch_admin']) {
+                        $branchIds = $user->getMyBranchIds();
+                        $scopedQuery->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds));
+                    } elseif ($companyId && ! $vis['is_super_admin']) {
+                        $scopedQuery->where('company_id', $companyId);
+                    }
+                } elseif ($vis['has_team_members']) {
+                    $scopedQuery->whereIn('user_id', array_merge([$user->id], $vis['descendant_ids']));
+                }
+            } else {
+                // Backward-compatible fallback
+                if (! $vis['is_admin_or_hr']) {
+                    $scopedQuery->where(function ($q) use ($user, $matchingRoleIds) {
+                        $q->where('user_id', $user->id)
+                          ->orWhere('approver_id', $user->id)
+                          ->orWhere(function ($q2) use ($matchingRoleIds) {
+                              $q2->whereIn('current_approver_role_id', $matchingRoleIds)
+                                 ->where('status', 'pending');
+                          });
+                    });
+                }
+            }
+
+            // Tab counts for badge display
+            $myTotal = ExpenseRequest::where('user_id', $user->id)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->count();
+
+            $teamTotal = 0;
+            if ($vis['has_team_members']) {
+                $teamTotal = ExpenseRequest::whereIn('user_id', $vis['descendant_ids'])
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->count();
+            } elseif ($vis['is_admin_or_hr']) {
+                $teamTotal = ExpenseRequest::where('user_id', '!=', $user->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->when($vis['is_branch_admin'], fn ($q) => $q->whereHas('user', fn ($u) => $u->whereIn('branch_id', $user->getMyBranchIds())))
+                    ->count();
+            }
+
+            $approvalsTotal = ExpenseRequest::where('status', 'pending')
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->where(function ($q) use ($user, $matchingRoleIds) {
+                    $q->where('approver_id', $user->id)
+                      ->orWhereIn('current_approver_role_id', $matchingRoleIds);
+                })
+                ->count();
 
             $totalCount    = (clone $scopedQuery)->count();
             $pendingCount  = (clone $scopedQuery)->where('status', 'pending')->count();
@@ -99,7 +173,7 @@ class ExpenseRequestApiController extends Controller
                           ->orWhereHas('category', fn ($c) => $c->where('name', 'like', '%' . $search . '%'));
                     });
                 })
-                ->latest()
+                ->latest('id')
                 ->paginate(min((int) ($request->per_page ?? 20), 50));
 
             return response()->json([
@@ -107,17 +181,24 @@ class ExpenseRequestApiController extends Controller
                 'data' => [
                     'requests' => $requests->map(fn ($r) => $this->formatExpenseRequest($r, $user)),
                     'counts' => [
-                        'total' => $totalCount,
-                        'pending' => $pendingCount,
+                        'total'    => $totalCount,
+                        'pending'  => $pendingCount,
                         'approved' => $approvedCount,
                         'rejected' => $rejectedCount,
                     ],
+                    'my_total'         => $myTotal,
+                    'team_total'       => $teamTotal,
+                    'approvals_total'  => $approvalsTotal,
+                    'scope'            => $scope,
+                    'has_team_members' => $vis['has_team_members'],
+                    'is_admin_or_hr'   => $vis['is_admin_or_hr'],
+                    'is_tl_or_manager' => $vis['is_tl_or_manager'],
                     'pagination' => [
                         'current_page' => $requests->currentPage(),
-                        'last_page' => $requests->lastPage(),
-                        'per_page' => $requests->perPage(),
-                        'total' => $requests->total(),
-                        'has_more' => $requests->hasMorePages(),
+                        'last_page'    => $requests->lastPage(),
+                        'per_page'     => $requests->perPage(),
+                        'total'        => $requests->total(),
+                        'has_more'     => $requests->hasMorePages(),
                     ],
                 ],
             ]);
@@ -394,6 +475,35 @@ class ExpenseRequestApiController extends Controller
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
+     * Resolves role hierarchy visibility flags and descendant user IDs for the user.
+     */
+    private function resolveVisibility(User $user): array
+    {
+        $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCompanyAdmin = $user->isCompanyAdmin();
+        $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
+        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+
+        /** @var DataVisibilityService $visibility */
+        $visibility     = app(DataVisibilityService::class);
+        $descendantIds  = $visibility->descendantUserIds($user);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
+
+        return [
+            'is_super_admin'   => $isSuperAdmin,
+            'is_company_admin' => $isCompanyAdmin,
+            'is_hr'            => $isHr,
+            'is_branch_admin'  => $isBranchAdmin,
+            'is_tl_or_manager' => $isTlOrManager,
+            'has_team_members' => $hasTeamMembers,
+            'descendant_ids'   => $descendantIds->all(),
+            'user_branch_ids'  => method_exists($user, 'getMyBranchIds') ? $user->getMyBranchIds() : ($user->branch_id ? [(int) $user->branch_id] : []),
+        ];
+    }
+
+    /**
      * 1:1 mirror of web's inline pipeline resolution, duplicated identically
      * in both ExpenseRequestController::store() and ::approve() — exact
      * role-ID match (unscoped + same-company-or-null), then a normalized
@@ -518,11 +628,14 @@ class ExpenseRequestApiController extends Controller
 
         return [
             'id' => $r->id,
+            'is_owner' => (int) $r->user_id === (int) $currentUser->id,
             'applicant' => $applicant ? [
                 'id' => $applicant->id,
                 'name' => $applicant->name,
                 'role_label' => $this->roleLabel($applicant->roles->first()),
                 'branch_name' => $applicant->branch?->name,
+                'employee_code' => $applicant->employee?->employee_id ?? null,
+                'avatar' => $applicant->profile_photo_path ?? null,
             ] : null,
             'category' => $r->category ? ['id' => $r->category->id, 'name' => $r->category->name] : null,
             'amount' => (float) $r->amount,

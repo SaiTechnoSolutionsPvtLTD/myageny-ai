@@ -383,13 +383,14 @@ class ReportApiController extends Controller
             $defaultToDate = now()->endOfMonth()->toDateString();
 
             $request->validate([
-                'customer_id'  => 'nullable|integer',
-                'payment_mode' => 'nullable|string|max:100',
-                'branch_id'    => 'nullable|integer',
-                'date_from'    => 'nullable|date',
-                'date_to'      => 'nullable|date',
-                'page'         => 'nullable|integer|min:1',
-                'per_page'     => 'nullable|integer|min:1|max:200',
+                'customer_id'        => 'nullable|integer',
+                'sales_executive_id' => 'nullable|integer',
+                'payment_mode'       => 'nullable|string|max:100',
+                'branch_id'          => 'nullable|integer',
+                'date_from'          => 'nullable|date',
+                'date_to'            => 'nullable|date',
+                'page'               => 'nullable|integer|min:1',
+                'per_page'           => 'nullable|integer|min:1|max:200',
             ]);
 
             $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
@@ -413,6 +414,7 @@ class ReportApiController extends Controller
 
             $paymentModes = LeadProduct::PAYMENT_MODES; // [key => label]
             $customers = $this->paymentCollectionCustomerOptions();
+            $salesExecutives = $this->visibility->visibleAssignableUsers();
             $branches = Branch::query()
                 ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
                 ->orderBy('name')
@@ -453,6 +455,10 @@ class ReportApiController extends Controller
                     'customers' => collect($customers)->map(fn($c) => [
                         'id'   => $c->id,
                         'name' => 'LD-' . str_pad((string) $c->id, 4, '0', STR_PAD_LEFT) . ' - ' . $c->customer_name,
+                    ])->values(),
+                    'sales_executives' => $salesExecutives->map(fn($u) => [
+                        'id'   => $u->id,
+                        'name' => $u->name,
                     ])->values(),
                     'branches' => $branches->map(fn($b) => ['id' => $b->id, 'name' => $b->name])->values(),
                 ],
@@ -553,6 +559,10 @@ class ReportApiController extends Controller
 
         if ($request->filled('customer_id')) {
             $query->where('leads.id', $request->customer_id);
+        }
+
+        if ($request->filled('sales_executive_id')) {
+            $query->where('leads.assigned_to', $request->sales_executive_id);
         }
 
         if ($request->filled('payment_mode')) {
@@ -2240,5 +2250,373 @@ class ReportApiController extends Controller
                 'count' => $metrics['count'],
             ];
         })->values()->all();
+    }
+
+    public function outstandingReportApi(Request $request): JsonResponse
+    {
+        try {
+            $defaultFromDate = now()->startOfMonth()->toDateString();
+            $defaultToDate = now()->endOfMonth()->toDateString();
+
+            $request->validate([
+                'branch_id'      => 'nullable|integer',
+                'assigned_to'    => 'nullable|integer',
+                'payment_status' => 'nullable|string|in:outstanding,unpaid,partial,paid',
+                'product_id'     => 'nullable|integer',
+                'search'         => 'nullable|string|max:255',
+                'date_from'      => 'nullable|date',
+                'date_to'        => 'nullable|date',
+                'page'           => 'nullable|integer|min:1',
+                'per_page'       => 'nullable|integer|min:1|max:200',
+            ]);
+
+            $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
+
+            $query = $this->buildOutstandingQuery($request);
+
+            $analyticsQuery = clone $query;
+            $analyticsRows = $analyticsQuery->get();
+
+            $totalLeads = $analyticsRows->count();
+            $totalDealValue = (float) $analyticsRows->sum('total_deal_value');
+            $totalReceivedValue = (float) $analyticsRows->sum('total_paid_value');
+            $totalOutstandingValue = (float) $analyticsRows->sum('outstanding_balance');
+
+            $summary = [
+                'total_leads'             => $totalLeads,
+                'total_deal_value'        => round($totalDealValue, 2),
+                'total_received_value'    => round($totalReceivedValue, 2),
+                'total_outstanding_value' => round($totalOutstandingValue, 2),
+            ];
+
+            $analytics = $this->buildOutstandingAnalytics($analyticsRows);
+
+            $perPage = (int) $request->input('per_page', 20);
+            if ($perPage < 1 || $perPage > 200) {
+                $perPage = 20;
+            }
+            $reportRows = (clone $query)->paginate($perPage)->withQueryString();
+
+            $companyId = $this->visibility->companyIdFor();
+            $branchesQuery = Branch::query()->orderBy('name');
+            if ($companyId) {
+                $branchesQuery->where('company_id', $companyId);
+            }
+            $branches = $branchesQuery->get(['id', 'name']);
+
+            $users = $this->visibility->visibleAssignableUsers();
+
+            $productOptions = Product::query()->orderBy('package_name');
+            $this->visibility->applyProductVisibility($productOptions);
+            $products = $productOptions->get(['id', 'package_name', 'product_name']);
+
+            $paymentStatuses = [
+                ['key' => 'outstanding', 'label' => 'Outstanding Only (> 0)'],
+                ['key' => 'unpaid',      'label' => 'Unpaid (0% Received)'],
+                ['key' => 'partial',     'label' => 'Partially Paid'],
+                ['key' => 'paid',        'label' => 'Fully Cleared'],
+            ];
+
+            $rowsData = $reportRows->getCollection()->map(function ($row) {
+                $dealValue = (float) ($row->total_deal_value ?? 0);
+                $paidValue = (float) ($row->total_paid_value ?? 0);
+                $outstanding = (float) ($row->outstanding_balance ?? max(0, $dealValue - $paidValue));
+
+                $statusText = 'Unpaid';
+                $statusKey = 'unpaid';
+                if ($dealValue > 0 && $paidValue >= $dealValue) {
+                    $statusText = 'Fully Cleared';
+                    $statusKey = 'paid';
+                } elseif ($paidValue > 0) {
+                    $statusText = 'Partially Paid';
+                    $statusKey = 'partial';
+                }
+
+                $leadDate = $row->lead_date
+                    ? Carbon::parse($row->lead_date)->toDateString()
+                    : ($row->lead_created_at ? Carbon::parse($row->lead_created_at)->toDateString() : null);
+
+                $lastPaymentDate = $row->last_payment_date
+                    ? Carbon::parse($row->last_payment_date)->toDateString()
+                    : null;
+
+                return [
+                    'lead_id'              => $row->lead_id,
+                    'lead_code'            => 'LD-' . str_pad((string) $row->lead_id, 4, '0', STR_PAD_LEFT),
+                    'company_name'         => $row->company_name ?: null,
+                    'contact_name'         => $row->contact_name ?: null,
+                    'mobile_number'        => $row->mobile_number ?: null,
+                    'email'                => $row->email ?: null,
+                    'branch_id'            => $row->branch_id,
+                    'branch_name'          => $row->branch_name ?: null,
+                    'assigned_to_id'       => $row->assigned_to_id,
+                    'assigned_to_name'     => $row->assigned_to_name ?: null,
+                    'total_products_count' => (int) ($row->total_products_count ?? 0),
+                    'product_names'        => $row->product_names ?: null,
+                    'total_deal_value'     => round($dealValue, 2),
+                    'total_paid_value'     => round($paidValue, 2),
+                    'outstanding_balance'  => round($outstanding, 2),
+                    'payment_status'       => $statusKey,
+                    'payment_status_label' => $statusText,
+                    'lead_date'            => $leadDate,
+                    'last_payment_date'    => $lastPaymentDate,
+                    'payment_count'        => (int) ($row->payment_count ?? 0),
+                ];
+            })->values();
+
+            return response()->json([
+                'status'     => true,
+                'message'    => 'Outstanding report fetched successfully.',
+                'data'       => $rowsData,
+                'summary'    => $summary,
+                'analytics'  => $analytics,
+                'filters'    => [
+                    'branches'         => $branches->map(fn($b) => ['id' => $b->id, 'name' => $b->name])->values(),
+                    'users'            => $users->map(fn($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+                    'products'         => $products->map(fn($p) => [
+                        'id'   => $p->id,
+                        'name' => $p->package_name ?: $p->product_name,
+                    ])->values(),
+                    'payment_statuses' => $paymentStatuses,
+                ],
+                'pagination' => [
+                    'current_page' => $reportRows->currentPage(),
+                    'last_page'    => $reportRows->lastPage(),
+                    'per_page'     => $reportRows->perPage(),
+                    'total'        => $reportRows->total(),
+                    'from'         => $reportRows->firstItem(),
+                    'to'           => $reportRows->lastItem(),
+                ],
+                'meta'       => [
+                    'default_from_date' => $defaultFromDate,
+                    'default_to_date'   => $defaultToDate,
+                    'applied_from_date' => $request->input('date_from', $defaultFromDate),
+                    'applied_to_date'   => $request->input('date_to', $defaultToDate),
+                ],
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invalid filters supplied.',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to fetch outstanding report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function buildOutstandingQuery(Request $request)
+    {
+        $productTotalsSubquery = DB::table('lead_products')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->whereNull('lead_products.deleted_at')
+            ->select([
+                'lead_products.lead_id',
+                DB::raw('COUNT(lead_products.id) as total_products_count'),
+                DB::raw('GROUP_CONCAT(DISTINCT COALESCE(lead_products.product_name, products.package_name, products.product_name) SEPARATOR ", ") as product_names'),
+                DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_deal_value'),
+                DB::raw('SUM(COALESCE((
+                    SELECT SUM(p.amount) FROM lead_product_payments p WHERE p.lead_product_id = lead_products.id
+                ), lead_products.amount_paid, 0)) as total_paid_value'),
+            ])
+            ->groupBy('lead_products.lead_id');
+
+        $lastPaymentSubquery = DB::table('lead_product_payments')
+            ->select([
+                'lead_id',
+                DB::raw('MAX(payment_date) as last_payment_date'),
+                DB::raw('COUNT(id) as payment_count')
+            ])
+            ->groupBy('lead_id');
+
+        $query = Lead::query()
+            ->joinSub($productTotalsSubquery, 'product_totals', function ($join) {
+                $join->on('product_totals.lead_id', '=', 'leads.id');
+            })
+            ->leftJoinSub($lastPaymentSubquery, 'payment_info', function ($join) {
+                $join->on('payment_info.lead_id', '=', 'leads.id');
+            })
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+            ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
+            ->select([
+                'leads.id as lead_id',
+                'leads.company_name',
+                'leads.contact_name',
+                'leads.mobile_number',
+                'leads.email',
+                'leads.lead_date',
+                'leads.created_at as lead_created_at',
+                'branches.id as branch_id',
+                'branches.name as branch_name',
+                'assigned_users.id as assigned_to_id',
+                'assigned_users.name as assigned_to_name',
+                'product_totals.total_products_count',
+                'product_totals.product_names',
+                'product_totals.total_deal_value',
+                'product_totals.total_paid_value',
+                DB::raw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0)) as outstanding_balance'),
+                'payment_info.last_payment_date',
+                'payment_info.payment_count',
+            ])
+            ->orderByDesc(DB::raw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0))'))
+            ->orderByDesc('leads.id');
+
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+
+        if ($companyId) {
+            $query->where('leads.company_id', $companyId);
+        }
+
+        if ($visibleUserIds !== null) {
+            $query->whereIn('leads.assigned_to', $visibleUserIds);
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('leads.branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('assigned_to')) {
+            $query->where('leads.assigned_to', $request->assigned_to);
+        }
+
+        if ($request->filled('search')) {
+            $s = trim((string) $request->search);
+            $query->where(function ($q) use ($s) {
+                $q->where('leads.company_name', 'like', "%{$s}%")
+                    ->orWhere('leads.contact_name', 'like', "%{$s}%")
+                    ->orWhere('leads.mobile_number', 'like', "%{$s}%")
+                    ->orWhere('leads.email', 'like', "%{$s}%")
+                    ->orWhere('product_totals.product_names', 'like', "%{$s}%");
+                if (is_numeric($s)) {
+                    $q->orWhere('leads.id', (int) $s);
+                }
+            });
+        }
+
+        if ($request->filled('payment_status')) {
+            $status = $request->payment_status;
+            if ($status === 'outstanding') {
+                $query->whereRaw('GREATEST(0, COALESCE(product_totals.total_deal_value, 0) - COALESCE(product_totals.total_paid_value, 0)) > 0');
+            } elseif ($status === 'unpaid') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) = 0 AND COALESCE(product_totals.total_deal_value, 0) > 0');
+            } elseif ($status === 'partial') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) > 0 AND COALESCE(product_totals.total_paid_value, 0) < COALESCE(product_totals.total_deal_value, 0)');
+            } elseif ($status === 'paid') {
+                $query->whereRaw('COALESCE(product_totals.total_paid_value, 0) >= COALESCE(product_totals.total_deal_value, 0) AND COALESCE(product_totals.total_deal_value, 0) > 0');
+            }
+        }
+
+        if ($request->filled('product_id')) {
+            $productId = (int) $request->product_id;
+            $query->whereExists(function ($sub) use ($productId) {
+                $sub->select(DB::raw(1))
+                    ->from('lead_products')
+                    ->whereColumn('lead_products.lead_id', 'leads.id')
+                    ->where('lead_products.product_id', $productId)
+                    ->whereNull('lead_products.deleted_at');
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('leads.lead_date', '>=', $request->date_from)
+                    ->orWhere(function ($sq) use ($request) {
+                        $sq->whereNull('leads.lead_date')
+                            ->whereDate('leads.created_at', '>=', $request->date_from);
+                    });
+            });
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('leads.lead_date', '<=', $request->date_to)
+                    ->orWhere(function ($sq) use ($request) {
+                        $sq->whereNull('leads.lead_date')
+                            ->whereDate('leads.created_at', '<=', $request->date_to);
+                    });
+            });
+        }
+
+        return $query;
+    }
+
+    private function buildOutstandingAnalytics($rows): array
+    {
+        $collection = collect($rows);
+
+        $branchBreakdown = $collection
+            ->groupBy(fn($row) => $row->branch_name ?: 'Unassigned Branch')
+            ->map(function ($items, $branchName) {
+                return [
+                    'label'               => $branchName,
+                    'total_leads'         => $items->count(),
+                    'total_deal_value'    => round((float) $items->sum('total_deal_value'), 2),
+                    'total_paid_value'    => round((float) $items->sum('total_paid_value'), 2),
+                    'outstanding_balance' => round((float) $items->sum('outstanding_balance'), 2),
+                ];
+            })
+            ->sortByDesc('outstanding_balance')
+            ->take(8)
+            ->values()
+            ->all();
+
+        $employeeBreakdown = $collection
+            ->groupBy(fn($row) => $row->assigned_to_name ?: 'Unassigned')
+            ->map(function ($items, $userName) {
+                return [
+                    'label'               => $userName,
+                    'total_leads'         => $items->count(),
+                    'total_deal_value'    => round((float) $items->sum('total_deal_value'), 2),
+                    'total_paid_value'    => round((float) $items->sum('total_paid_value'), 2),
+                    'outstanding_balance' => round((float) $items->sum('outstanding_balance'), 2),
+                ];
+            })
+            ->sortByDesc('outstanding_balance')
+            ->take(8)
+            ->values()
+            ->all();
+
+        $unpaidCount = $collection->filter(fn($r) => (float)$r->total_paid_value == 0 && (float)$r->total_deal_value > 0)->count();
+        $unpaidAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value == 0 && (float)$r->total_deal_value > 0)->sum('outstanding_balance'), 2);
+
+        $partialCount = $collection->filter(fn($r) => (float)$r->total_paid_value > 0 && (float)$r->total_paid_value < (float)$r->total_deal_value)->count();
+        $partialAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value > 0 && (float)$r->total_paid_value < (float)$r->total_deal_value)->sum('outstanding_balance'), 2);
+
+        $clearedCount = $collection->filter(fn($r) => (float)$r->total_paid_value >= (float)$r->total_deal_value && (float)$r->total_deal_value > 0)->count();
+        $clearedAmount = round((float) $collection->filter(fn($r) => (float)$r->total_paid_value >= (float)$r->total_deal_value && (float)$r->total_deal_value > 0)->sum('total_deal_value'), 2);
+
+        $statusBreakdown = [
+            [
+                'key'    => 'unpaid',
+                'label'  => 'Unpaid (0% Received)',
+                'count'  => $unpaidCount,
+                'amount' => $unpaidAmount,
+                'color'  => '#ef4444',
+            ],
+            [
+                'key'    => 'partial',
+                'label'  => 'Partially Paid',
+                'count'  => $partialCount,
+                'amount' => $partialAmount,
+                'color'  => '#f59e0b',
+            ],
+            [
+                'key'    => 'paid',
+                'label'  => 'Fully Cleared',
+                'count'  => $clearedCount,
+                'amount' => $clearedAmount,
+                'color'  => '#10b981',
+            ],
+        ];
+
+        return [
+            'branches'  => $branchBreakdown,
+            'employees' => $employeeBreakdown,
+            'statuses'  => $statusBreakdown,
+        ];
     }
 }

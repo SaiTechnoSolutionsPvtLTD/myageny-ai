@@ -167,12 +167,14 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('employees/meta',    [EmployeeApiController::class,    'meta'])->name('employees.meta');
         Route::get('employees',         [EmployeeApiController::class,    'index'])->name('employees.index');
         Route::get('employees/{id}',    [EmployeeApiController::class,    'show'])->name('employees.show');
+        Route::patch('employees/{id}/status', [EmployeeApiController::class, 'updateStatus'])->name('employees.status.update');
 
         Route::get('interns',      [InternApiController::class, 'index'])->name('interns.index');
         // Static segment before the {id} wildcard below — same rule as
         // employees/meta above.
         Route::get('interns/meta', [InternApiController::class, 'meta'])->name('interns.meta');
         Route::get('interns/{id}', [InternApiController::class, 'show'])->name('interns.show');
+        Route::patch('interns/{id}/status', [InternApiController::class, 'updateStatus'])->name('interns.status.update');
 
         Route::get('attendance',            [AttendanceApiController::class, 'index'])->name('attendance.index');
 
@@ -617,6 +619,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.re
     Route::get('/branch-comparison', [ReportApiController::class, 'branchComparisonApi'])->name('branch-comparison');
     Route::get('/smm', [ReportApiController::class, 'smmReportApi'])->name('smm');
     Route::get('/sales-comparison', [ReportApiController::class, 'salesComparisonApi'])->name('sales-comparison');
+    Route::get('/outstanding', [ReportApiController::class, 'outstandingReportApi'])->name('outstanding');
 
     // Lightweight, paginated lead lookup for filter dropdowns — built
     // generically (search on company_name/contact_name/mobile_number,

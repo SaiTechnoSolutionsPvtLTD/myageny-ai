@@ -8,6 +8,7 @@ use App\Models\EmployeeOnboarding;
 use App\Models\OdApproval;
 use App\Models\OdRequest;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use App\Services\HrmsApprovalHierarchyService;
 use App\Services\HrmsApprovalNotificationService;
 use Carbon\Carbon;
@@ -60,13 +61,58 @@ class OdRequestApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user  = $request->user();
-        $query = OdRequest::with(['approvals.approver', 'approvals.actionedBy'])
-            ->where('user_id', $user->id)
-            ->latest();
+        $vis   = $this->resolveVisibility($user);
+        $scope = $request->query('scope', 'my');
+
+        $query = OdRequest::with(['user.roles', 'employee', 'approvals.approver', 'approvals.actionedBy']);
+
+        if ($scope === 'team') {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $query->where('user_id', '!=', $user->id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $query->whereIn('user_id', $vis['descendant_ids']);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $query->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds));
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $query->where('company_id', $user->company_id);
+                }
+            } elseif ($vis['has_team_members']) {
+                $allowed = array_merge([$user->id], $vis['descendant_ids']);
+                $query->whereIn('user_id', $allowed);
+            }
+        } else {
+            // Default to user's own requests
+            $query->where('user_id', $user->id);
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('to_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('from_date', '<=', $request->date_to);
+        }
+
+        $query->latest('id');
 
         $perPage    = min((int) ($request->per_page ?? 15), 50);
         $odRequests = $query->paginate($perPage);
@@ -74,14 +120,18 @@ class OdRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'od_requests' => $odRequests->map(fn ($r) => $this->mapOdRequest($r)),
-                'pagination'  => [
+                'od_requests'      => $odRequests->map(fn ($r) => $this->mapOdRequest($r, false, $user)),
+                'pagination'       => [
                     'current_page' => $odRequests->currentPage(),
                     'last_page'    => $odRequests->lastPage(),
                     'per_page'     => $odRequests->perPage(),
                     'total'        => $odRequests->total(),
                     'has_more'     => $odRequests->hasMorePages(),
                 ],
+                'scope'            => $scope,
+                'has_team_members' => $vis['has_team_members'],
+                'is_admin_or_hr'   => $vis['is_admin_or_hr'],
+                'is_tl_or_manager' => $vis['is_tl_or_manager'],
             ],
         ]);
     }
@@ -90,6 +140,7 @@ class OdRequestApiController extends Controller
     public function meta(Request $request): JsonResponse
     {
         $user = $request->user();
+        $vis  = $this->resolveVisibility($user);
 
         $pendingApprovals = $this->pendingApprovalsFor($user)
             ->map(fn ($a) => $this->mapPendingApproval($a));
@@ -100,6 +151,32 @@ class OdRequestApiController extends Controller
             'approved' => OdRequest::where('user_id', $user->id)->where('status', 'approved')->count(),
             'rejected' => OdRequest::where('user_id', $user->id)->where('status', 'rejected')->count(),
         ];
+
+        $teamStats = null;
+        if ($vis['has_team_members'] || $vis['is_admin_or_hr']) {
+            $teamQuery = OdRequest::query();
+            if ($vis['is_admin_or_hr']) {
+                if ($vis['is_branch_admin']) {
+                    $branchIds = $user->getMyBranchIds();
+                    $teamQuery->whereHas('user', fn ($q) => $q->whereIn('branch_id', $branchIds))
+                        ->where('user_id', '!=', $user->id);
+                } elseif ($user->company_id && ! $vis['is_super_admin']) {
+                    $teamQuery->where('company_id', $user->company_id)
+                        ->where('user_id', '!=', $user->id);
+                } else {
+                    $teamQuery->where('user_id', '!=', $user->id);
+                }
+            } else {
+                $teamQuery->whereIn('user_id', $vis['descendant_ids']);
+            }
+
+            $teamStats = [
+                'total'    => (clone $teamQuery)->count(),
+                'pending'  => (clone $teamQuery)->where('status', 'pending')->count(),
+                'approved' => (clone $teamQuery)->where('status', 'approved')->count(),
+                'rejected' => (clone $teamQuery)->where('status', 'rejected')->count(),
+            ];
+        }
 
         // Approval chain preview — drives the "Approval Hierarchy" panel on
         // the New OD Request screen (same as web's create() view), including
@@ -120,6 +197,10 @@ class OdRequestApiController extends Controller
                 'pending_approvals'       => $pendingApprovals,
                 'pending_approvals_count' => $pendingApprovals->count(),
                 'my_stats'                => $myStats,
+                'team_stats'              => $teamStats,
+                'has_team_members'        => $vis['has_team_members'],
+                'is_admin_or_hr'          => $vis['is_admin_or_hr'],
+                'is_tl_or_manager'        => $vis['is_tl_or_manager'],
                 'approval_chain'          => $approvalChain,
                 'has_approval_chain'      => $approvalChain->isNotEmpty(),
                 'min_date'                => now()->format('Y-m-d'),
@@ -185,7 +266,7 @@ class OdRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'od_request'       => $this->mapOdRequest($odRequest, true),
+                'od_request'       => $this->mapOdRequest($odRequest, true, $user),
                 'approval_actions' => $approvalActions,
             ],
         ]);
@@ -252,7 +333,7 @@ class OdRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'OD request submitted successfully. Approval started with your hierarchy.',
-            'data'    => $this->mapOdRequest($odRequest, true),
+            'data'    => $this->mapOdRequest($odRequest, true, $user),
         ], 201);
     }
 
@@ -311,7 +392,7 @@ class OdRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'message' => "{$approval->step_name} approval completed.",
-            'data'    => $this->mapOdRequest($odRequest, true),
+            'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
         ]);
     }
 
@@ -358,7 +439,7 @@ class OdRequestApiController extends Controller
         return response()->json([
             'success' => true,
             'message' => "{$approval->step_name} rejected the OD request.",
-            'data'    => $this->mapOdRequest($odRequest, true),
+            'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
         ]);
     }
 
@@ -445,15 +526,19 @@ class OdRequestApiController extends Controller
             return true;
         }
 
-        if ($user->isSystemAdmin()) {
+        $vis = $this->resolveVisibility($user);
+        if ($vis['has_team_members'] && in_array((int) $odRequest->user_id, $vis['descendant_ids'], true)) {
+            return true;
+        }
+
+        if ($vis['is_admin_or_hr']) {
             $requestBranchId = $odRequest->branch_id ? (int) $odRequest->branch_id : null;
             $viewerBranchIds = $this->userBranchIds($user);
 
             if ($requestBranchId === null || empty($viewerBranchIds)) {
-                // No branch recorded on either side (e.g. a legacy/web-
-                // created row) — fall back to allowing admin access rather
-                // than hiding data no branch rule can actually be applied
-                // to.
+                if ($user->company_id && ! $vis['is_super_admin']) {
+                    return (int) $odRequest->company_id === (int) $user->company_id;
+                }
                 return true;
             }
 
@@ -461,6 +546,35 @@ class OdRequestApiController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Resolves role hierarchy visibility flags and descendant user IDs for the user.
+     */
+    private function resolveVisibility(User $user): array
+    {
+        $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCompanyAdmin = $user->isCompanyAdmin();
+        $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
+        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+
+        /** @var DataVisibilityService $visibility */
+        $visibility     = app(DataVisibilityService::class);
+        $descendantIds  = $visibility->descendantUserIds($user);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
+
+        return [
+            'is_super_admin'   => $isSuperAdmin,
+            'is_company_admin' => $isCompanyAdmin,
+            'is_hr'            => $isHr,
+            'is_branch_admin'  => $isBranchAdmin,
+            'is_tl_or_manager' => $isTlOrManager,
+            'has_team_members' => $hasTeamMembers,
+            'descendant_ids'   => $descendantIds->all(),
+            'user_branch_ids'  => $this->userBranchIds($user),
+        ];
     }
 
     /**
@@ -568,10 +682,23 @@ class OdRequestApiController extends Controller
     // Mappers
     // =========================================================================
 
-    private function mapOdRequest(OdRequest $r, bool $withApprovals = false): array
+    private function mapOdRequest(OdRequest $r, bool $withApprovals = false, ?User $currentUser = null): array
     {
+        $employee = $r->employee ?: $r->user?->employee;
+        $userName = $r->user?->name ?? $employee?->name ?? 'Unknown';
+        $userRole = $r->user?->roles?->first()?->display_name
+            ?: ($r->user?->roles?->first()?->name
+            ?: ($employee?->role?->name ?? 'Employee'));
+
         $data = [
             'id'            => $r->id,
+            'user_id'       => $r->user_id,
+            'user_name'     => $userName,
+            'employee_name' => $employee?->name ?? $userName,
+            'employee_code' => $employee?->employee_id ?? '',
+            'user_role'     => $userRole,
+            'user_avatar'   => $r->user?->profile_photo_path ?? null,
+            'is_owner'      => $currentUser ? (int) $r->user_id === (int) $currentUser->id : false,
             'from_date'     => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
             'to_date'       => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
             'gate_out_time' => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,

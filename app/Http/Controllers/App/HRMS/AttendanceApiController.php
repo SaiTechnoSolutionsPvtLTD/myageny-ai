@@ -150,7 +150,7 @@ class AttendanceApiController extends Controller
     private function accessibleAttendees(?int $actingBranchId = null): \Illuminate\Support\Collection
     {
         $employeeQuery = $this->withActivePortalAccount(
-            EmployeeOnboarding::query()->active()
+            EmployeeOnboarding::query()->with(['department', 'portalUser.branch'])->active()
         )->whereNotNull('name');
 
         if (! $this->canViewAllAttendance()) {
@@ -178,14 +178,16 @@ class AttendanceApiController extends Controller
 
         $employees = $employeeQuery
             ->orderBy('name')
-            ->get(['id', 'employee_id', 'name', 'status', 'photograph'])
+            ->get(['id', 'employee_id', 'name', 'status', 'photograph', 'department_id', 'portal_user_id'])
             ->map(fn(EmployeeOnboarding $e) => [
-                'id'           => $e->id,
-                'attendee_type' => 'employee',
-                'display_id'   => (string) $e->employee_id,
-                'name'         => $e->name,
-                'photo_url'    => $e->photograph ? asset('storage/' . $e->photograph) : null,
-                'select_key'   => 'employee:' . $e->id,
+                'id'              => $e->id,
+                'attendee_type'   => 'employee',
+                'display_id'      => (string) $e->employee_id,
+                'name'            => $e->name,
+                'photo_url'       => $e->photograph ? asset('storage/' . $e->photograph) : null,
+                'select_key'      => 'employee:' . $e->id,
+                'branch_name'     => $e->portalUser?->branch?->name ?? '',
+                'department_name' => $e->department?->name ?? '',
             ]);
 
         if (! $this->canViewAllAttendance()) {
@@ -193,7 +195,7 @@ class AttendanceApiController extends Controller
         }
 
         $internQuery = $this->withActivePortalAccount(
-            InternJoiningForm::query()->active()
+            InternJoiningForm::query()->with(['department', 'portalUser.branch'])->active()
         )->whereNotNull('name');
 
         if ($resolvedBranchId) {
@@ -211,14 +213,16 @@ class AttendanceApiController extends Controller
 
         $interns = $internQuery
             ->orderBy('name')
-            ->get(['id', 'intern_id', 'name', 'photograph'])
+            ->get(['id', 'intern_id', 'name', 'photograph', 'department_id', 'portal_user_id'])
             ->map(fn(InternJoiningForm $i) => [
-                'id'           => $i->id,
-                'attendee_type' => 'intern',
-                'display_id'   => (string) ($i->intern_id ?: 'INT-' . $i->id),
-                'name'         => $i->name,
-                'photo_url'    => $i->photograph ? asset('storage/' . $i->photograph) : null,
-                'select_key'   => 'intern:' . $i->id,
+                'id'              => $i->id,
+                'attendee_type'   => 'intern',
+                'display_id'      => (string) ($i->intern_id ?: 'INT-' . $i->id),
+                'name'            => $i->name,
+                'photo_url'       => $i->photograph ? asset('storage/' . $i->photograph) : null,
+                'select_key'      => 'intern:' . $i->id,
+                'branch_name'     => $i->portalUser?->branch?->name ?? '',
+                'department_name' => $i->department?->name ?? '',
             ]);
 
         return $employees->concat($interns)
@@ -369,7 +373,7 @@ class AttendanceApiController extends Controller
             'attendance_date' => ['nullable', 'date'],
             'date_from'       => ['nullable', 'date'],
             'date_to'         => ['nullable', 'date', 'after_or_equal:date_from'],
-            'status'          => ['nullable', 'in:present,absent,leave'],
+            'status'          => ['nullable', 'in:present,absent,leave,od'],
             'login_timing'    => ['nullable', 'in:early,late,on-time'],
             'outside_office'  => ['nullable', 'in:checkin,checkout,any'],
             'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -413,10 +417,24 @@ class AttendanceApiController extends Controller
         $accessibleAttendees = $this->accessibleAttendees($actingBranchId);
 
         if ($accessibleAttendees->isEmpty()) {
+            $user = auth()->user();
+            $isCompanyAdmin = $this->isCompanyAdminUser($user);
+            $branches = [];
+            if ($isCompanyAdmin) {
+                $branchesQuery = Branch::where('is_active', true);
+                if ($user?->company_id) {
+                    $branchesQuery->where('company_id', $user->company_id);
+                }
+                $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
+            }
+
             return response()->json([
                 'status'             => true,
                 'message'            => 'No accessible records.',
                 'can_view_all'       => false,
+                'is_company_admin'   => $isCompanyAdmin,
+                'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
+                'branches'           => $branches,
                 'stats'              => $this->emptyStats(),
                 'data'               => $this->emptyPagination($page, $perPage),
                 'selected_from_date' => $selectedFromDate,
@@ -429,7 +447,7 @@ class AttendanceApiController extends Controller
 
         // ── Fetch present / leave records across the range (scoped to accessible) ──
         $attendanceCollection = DailyAttendance::query()
-            ->with(['employee', 'intern'])
+            ->with(['employee.department', 'employee.portalUser.branch', 'intern.department', 'intern.portalUser.branch'])
             ->whereDate('attendance_date', '>=', $selectedFromDate)
             ->whereDate('attendance_date', '<=', $selectedToDate)
             ->where(function ($query) use ($accessibleEmployeeIds, $accessibleInternIds) {
@@ -489,6 +507,7 @@ class AttendanceApiController extends Controller
         $stats = [
             'total_employees'  => $accessibleAttendees->count(),
             'present_count'    => $attendanceRecords->where('attendance_status', 'present')->count(),
+            'od_count'         => $attendanceRecords->where('attendance_status', 'od')->count(),
             'absent_count'     => $absentRecords->count(),
             'leave_count'      => $attendanceRecords->where('attendance_status', 'leave')->count(),
             'late_count'       => $attendanceRecords->where('login_timing', 'late')->count(),
@@ -501,6 +520,7 @@ class AttendanceApiController extends Controller
         // ── Merge & status filter ────────────────────────────────────────────
         $records = match ($statusFilter) {
             'present' => $attendanceRecords->where('attendance_status', 'present')->values(),
+            'od'      => $attendanceRecords->where('attendance_status', 'od')->values(),
             'absent'  => $absentRecords->values(),
             'leave'   => $attendanceRecords->where('attendance_status', 'leave')->values(),
             default   => $attendanceRecords->concat($absentRecords),
@@ -561,10 +581,24 @@ class AttendanceApiController extends Controller
         $total = $records->count();
         $paged = $records->forPage($page, $perPage)->values();
 
+        $user = auth()->user();
+        $isCompanyAdmin = $this->isCompanyAdminUser($user);
+        $branches = [];
+        if ($isCompanyAdmin) {
+            $branchesQuery = Branch::where('is_active', true);
+            if ($user?->company_id) {
+                $branchesQuery->where('company_id', $user->company_id);
+            }
+            $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
+        }
+
         return response()->json([
             'status'             => true,
             'message'            => 'Attendance records fetched successfully.',
             'can_view_all'       => $this->canViewAllAttendance(),
+            'is_company_admin'   => $isCompanyAdmin,
+            'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
+            'branches'           => $branches,
             'stats'              => $stats,
             'data'               => [
                 'current_page' => $page,
@@ -1048,11 +1082,19 @@ class AttendanceApiController extends Controller
         $employeeName = $isIntern
             ? ($a->intern?->name ?: ($a->employee_name ?: 'Unknown Intern'))
             : ($a->employee?->name ?: ($a->employee_name ?: 'Unknown Employee'));
+        $branchName = $isIntern
+            ? ($a->intern?->portalUser?->branch?->name ?? '')
+            : ($a->employee?->portalUser?->branch?->name ?? '');
+        $departmentName = $isIntern
+            ? ($a->intern?->department?->name ?? '')
+            : ($a->employee?->department?->name ?? '');
 
         return [
             'id'                    => $a->id,
             'employee_id'           => (string) $employeeId,
             'employee_name'         => $employeeName,
+            'branch_name'           => $branchName,
+            'department_name'       => $departmentName,
             'attendee_type'         => $isIntern ? 'intern' : 'employee',
             'attendance_date'       => optional($a->attendance_date)->format('Y-m-d'),
             'attendance_status'     => strtolower((string) ($a->attendance_status ?? 'present')),
@@ -1092,6 +1134,8 @@ class AttendanceApiController extends Controller
             'id'                    => null,
             'employee_id'           => $attendee['display_id'],
             'employee_name'         => $attendee['name'],
+            'branch_name'           => $attendee['branch_name'] ?? '',
+            'department_name'       => $attendee['department_name'] ?? '',
             'attendee_type'         => $attendee['attendee_type'],
             'attendance_date'       => $date,
             'attendance_status'     => 'absent',
@@ -1125,6 +1169,7 @@ class AttendanceApiController extends Controller
         return [
             'total_employees' => 0,
             'present_count'   => 0,
+            'od_count'        => 0,
             'absent_count'    => 0,
             'leave_count'     => 0,
             'late_count'      => 0,
