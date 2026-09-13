@@ -35,6 +35,34 @@ class SupportController extends Controller
             }
         }
 
+        // Determine if user is Company Admin or Super Admin
+        $isCompanyAdmin = $user->isSuperAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('Company Admin')
+            || $user->roles->contains(function ($role) {
+                $name = strtolower($role->name);
+                $display = strtolower($role->display_name ?? '');
+                return str_contains($name, 'company_admin')
+                    || str_contains($display, 'company admin')
+                    || str_contains($name, 'super_admin')
+                    || str_contains($display, 'super admin');
+            });
+
+        // If Company Admin or Super Admin, fetch all tickets in the company scope
+        if ($isCompanyAdmin) {
+            $allTicketsQuery = SupportTicket::with(['creator', 'assignedTo']);
+            if ($companyId) {
+                $allTicketsQuery->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)
+                      ->orWhereHas('creator', fn($cq) => $cq->where('company_id', $companyId))
+                      ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
+                });
+            }
+            $allTickets = $allTicketsQuery->latest()->get();
+        } else {
+            $allTickets = collect();
+        }
+
         // Get received tickets (where current user is the target)
         $receivedTickets = SupportTicket::with(['creator', 'assignedTo'])
             ->where('to_user_id', $userId)
@@ -62,7 +90,7 @@ class SupportController extends Controller
         $users = $usersQuery->orderBy('name')
             ->get(['id', 'name', 'email']);
 
-        return view('pages.support.index', compact('receivedTickets', 'createdTickets', 'users'));
+        return view('pages.support.index', compact('receivedTickets', 'createdTickets', 'allTickets', 'isCompanyAdmin', 'users'));
     }
 
     /**
@@ -183,7 +211,21 @@ class SupportController extends Controller
      */
     public function updateStatus(Request $request, SupportTicket $ticket)
     {
-        if ($ticket->to_user_id !== Auth::id()) {
+        $user = Auth::user();
+
+        $isCompanyAdmin = $user->isSuperAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('Company Admin')
+            || $user->roles->contains(function ($role) {
+                $name = strtolower($role->name);
+                $display = strtolower($role->display_name ?? '');
+                return str_contains($name, 'company_admin')
+                    || str_contains($display, 'company admin')
+                    || str_contains($name, 'super_admin')
+                    || str_contains($display, 'super admin');
+            });
+
+        if ($ticket->to_user_id !== $user->id && ! $isCompanyAdmin) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -203,19 +245,24 @@ class SupportController extends Controller
             'remark' => $request->remark,
         ]);
 
-        // Send email to the ticket creator
+        // Send email to the ticket creator and optionally cc assigned user
         try {
             $creator = $ticket->creator;
-            $updater = Auth::user();
+            $updater = $user;
 
             if ($creator && !empty($creator->email) && filter_var($creator->email, FILTER_VALIDATE_EMAIL)) {
                 Mail::send('emails.support_ticket_updated', [
                     'ticket' => $ticket,
                     'creator' => $creator,
                     'updater' => $updater,
-                ], function ($message) use ($ticket, $creator) {
+                ], function ($message) use ($ticket, $creator, $updater) {
                     $message->to($creator->email, $creator->name)
                         ->subject('Support Ticket Updated: ' . $ticket->subject);
+
+                    // If updater is not the assigned user (e.g. company admin updated it), also inform assigned user
+                    if ($ticket->assignedTo && $ticket->assignedTo->id !== $updater->id && !empty($ticket->assignedTo->email) && filter_var($ticket->assignedTo->email, FILTER_VALIDATE_EMAIL)) {
+                        $message->cc($ticket->assignedTo->email, $ticket->assignedTo->name);
+                    }
                 });
             }
         } catch (\Throwable $exception) {

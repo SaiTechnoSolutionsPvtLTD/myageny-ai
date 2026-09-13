@@ -486,7 +486,13 @@
                 <i class="bi bi-chat-left-text-fill"></i> Helpdesk Portal
             </div>
             <h2 class="support-title">Support Tickets</h2>
-            <p class="support-subtitle">Create internal support tickets, collaborate with members, and manage incoming ticket updates.</p>
+            <p class="support-subtitle">
+                @if($isCompanyAdmin)
+                    Company Administration Portal: Monitor, manage and resolve all internal support tickets across all employees.
+                @else
+                    Create internal support tickets, collaborate with members, and manage incoming ticket updates.
+                @endif
+            </p>
         </div>
 
         <button type="button" class="btn-create-ticket" onclick="openCreateModal()">
@@ -494,29 +500,220 @@
         </button>
     </div>
 
-    <!-- Tabs Layout -->
-    <div class="tabs-container">
-        <button type="button" class="tab-btn active" onclick="switchTab(event, 'received')">
-            Received Tickets ({{ $receivedTickets->count() }})
-        </button>
-        <button type="button" class="tab-btn" onclick="switchTab(event, 'created')">
-            Created Tickets ({{ $createdTickets->count() }})
-        </button>
+    {{-- Company Admin KPI Summary Stats --}}
+    @if($isCompanyAdmin)
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">All Company Tickets</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #111827; margin-top: 4px;">{{ $allTickets->count() }}</div>
+                </div>
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="bi bi-collection-fill"></i>
+                </div>
+            </div>
+
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Pending Tickets</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #c2410c; margin-top: 4px;">{{ $allTickets->where('status', 'pending')->count() }}</div>
+                </div>
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+            </div>
+
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">On Process</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #1d4ed8; margin-top: 4px;">{{ $allTickets->where('status', 'onprocess')->count() }}</div>
+                </div>
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="bi bi-gear-wide-connected"></i>
+                </div>
+            </div>
+
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Resolved / Closed</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #15803d; margin-top: 4px;">{{ $allTickets->whereIn('status', ['resolved', 'closed'])->count() }}</div>
+                </div>
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #15803d; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Tabs Toolbar & Search -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 22px;">
+        <div class="tabs-container" style="margin-bottom: 0;">
+            @if($isCompanyAdmin)
+                <button type="button" class="tab-btn active" onclick="switchTab(event, 'all_tickets')">
+                    <i class="bi bi-collection-fill"></i> All Tickets ({{ $allTickets->count() }})
+                </button>
+                <button type="button" class="tab-btn" onclick="switchTab(event, 'received')">
+                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->count() }})
+                </button>
+                <button type="button" class="tab-btn" onclick="switchTab(event, 'created')">
+                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->count() }})
+                </button>
+            @else
+                <button type="button" class="tab-btn active" onclick="switchTab(event, 'received')">
+                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->count() }})
+                </button>
+                <button type="button" class="tab-btn" onclick="switchTab(event, 'created')">
+                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->count() }})
+                </button>
+            @endif
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d1d5db; border-radius: 12px; padding: 8px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+            <i class="bi bi-search" style="color: #9ca3af; font-size: 13px;"></i>
+            <input type="text" id="ticketSearchInput" onkeyup="filterSupportTickets(this.value)" placeholder="Search tickets, from, to..." 
+                   style="border: none; outline: none; font-size: 13px; font-weight: 600; color: #111827; width: 220px; background: transparent;">
+        </div>
     </div>
 
     <!-- Tab Panels -->
-    <div id="received" class="tab-panel active">
+    @if($isCompanyAdmin)
+        {{-- ALL TICKETS PANEL (FOR COMPANY ADMIN) --}}
+        <div id="all_tickets" class="tab-panel active">
+            <div class="ticket-card">
+                <table class="support-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">Ticket ID</th>
+                            <th>Subject</th>
+                            <th style="width: 175px;">From User</th>
+                            <th style="width: 175px;">To User</th>
+                            <th style="width: 150px;">Created At</th>
+                            <th style="width: 110px;">Status</th>
+                            <th>Remark</th>
+                            <th style="width: 110px;">Attachment</th>
+                            <th style="width: 140px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($allTickets as $ticket)
+                            <tr>
+                                <td><strong>#{{ $ticket->id }}</strong></td>
+                                <td>
+                                    <div>
+                                        <a href="javascript:void(0)" class="ticket-subject-link"
+                                           data-ticket-id="{{ $ticket->id }}"
+                                           data-subject="{{ $ticket->subject }}"
+                                           data-creator="{{ $ticket->creator?->name ?? '-' }}"
+                                           data-assigned="{{ $ticket->assignedTo?->name ?? '-' }}"
+                                           data-created-at="{{ $ticket->created_at?->format('d M Y, h:i A') ?? '-' }}"
+                                           data-status="{{ $ticket->status }}"
+                                           data-remark="{{ $ticket->remark ?? '' }}"
+                                           data-attachment="{{ $ticket->attachment_url ?? '' }}"
+                                           style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
+                                            {{ $ticket->subject }}
+                                        </a>
+                                    </div>
+                                    <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                    <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                            {{ strtoupper(substr($ticket->creator?->name ?? 'U', 0, 2)) }}
+                                        </div>
+                                        <div style="min-width: 0;">
+                                            <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator?->name ?? '-' }}">
+                                                {{ $ticket->creator?->name ?? 'Unknown' }}
+                                            </div>
+                                            @if($ticket->creator?->email)
+                                                <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator->email }}">
+                                                    {{ $ticket->creator->email }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                            {{ strtoupper(substr($ticket->assignedTo?->name ?? 'U', 0, 2)) }}
+                                        </div>
+                                        <div style="min-width: 0;">
+                                            <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo?->name ?? '-' }}">
+                                                {{ $ticket->assignedTo?->name ?? 'Unassigned' }}
+                                            </div>
+                                            @if($ticket->assignedTo?->email)
+                                                <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo->email }}">
+                                                    {{ $ticket->assignedTo->email }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
+                                <td>
+                                    <span class="status-badge {{ $ticket->status }}">
+                                        {{ $ticket->status === 'onprocess' ? 'On Process' : ucfirst($ticket->status) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    @if($ticket->remark)
+                                        <em class="text-gray">{{ $ticket->remark }}</em>
+                                    @else
+                                        <span class="text-gray" style="font-size: 12px; opacity: 0.65;">No remarks yet</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($ticket->attachment_path)
+                                        <a href="{{ $ticket->attachment_url }}" target="_blank" style="color: #fe5f04; font-weight: 700;">
+                                            <i class="bi bi-file-earmark-arrow-down"></i> View File
+                                        </a>
+                                    @else
+                                        <span class="text-gray">-</span>
+                                    @endif
+                                </td>
+                                <td style="text-align: center;">
+                                    @if($ticket->status === 'closed')
+                                        <button type="button" class="btn-update-status" disabled style="opacity: 0.55; cursor: not-allowed; background-color: #e5e7eb; border-color: #d1d5db; color: #6b7280;" title="Ticket is closed and cannot be updated.">
+                                            <i class="bi bi-lock-fill"></i> Closed
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn-update-status" 
+                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                            <i class="bi bi-pencil-square"></i> Update Status
+                                        </button>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="9" style="text-align: center; padding: 44px 20px; color: #8e8e8e;">
+                                    <i class="bi bi-inbox" style="font-size: 36px; display: block; margin-bottom: 10px; color: #cbd5e1;"></i>
+                                    <div style="font-weight: 700; color: #1e293b; font-size: 15px;">No support tickets found</div>
+                                    <div style="font-size: 13px; color: #64748b; margin-top: 4px;">There are currently no support tickets in your company.</div>
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
+
+    {{-- RECEIVED TICKETS PANEL --}}
+    <div id="received" class="tab-panel {{ $isCompanyAdmin ? '' : 'active' }}">
         <div class="ticket-card">
             <table class="support-table">
                 <thead>
                     <tr>
                         <th style="width: 80px;">Ticket ID</th>
                         <th>Subject</th>
-                        <th>From User</th>
-                        <th>Created At</th>
-                        <th>Status</th>
+                        <th style="width: 175px;">From User</th>
+                        <th style="width: 175px;">To User</th>
+                        <th style="width: 150px;">Created At</th>
+                        <th style="width: 110px;">Status</th>
                         <th>Remark</th>
-                        <th>Attachment</th>
+                        <th style="width: 110px;">Attachment</th>
                         <th style="width: 140px; text-align: center;">Actions</th>
                     </tr>
                 </thead>
@@ -542,7 +739,40 @@
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
                                 <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
-                            <td>{{ $ticket->creator?->name }}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        {{ strtoupper(substr($ticket->creator?->name ?? 'U', 0, 2)) }}
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator?->name ?? '-' }}">
+                                            {{ $ticket->creator?->name ?? 'Unknown' }}
+                                        </div>
+                                        @if($ticket->creator?->email)
+                                            <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator->email }}">
+                                                {{ $ticket->creator->email }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        {{ strtoupper(substr($ticket->assignedTo?->name ?? 'U', 0, 2)) }}
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo?->name ?? '-' }}">
+                                            {{ $ticket->assignedTo?->name ?? 'Unassigned' }}
+                                        </div>
+                                        @if($ticket->assignedTo?->email)
+                                            <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo->email }}">
+                                                {{ $ticket->assignedTo->email }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </td>
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
                             <td>
                                 <span class="status-badge {{ $ticket->status }}">
@@ -580,7 +810,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 40px; color: #8e8e8e;">
+                            <td colspan="9" style="text-align: center; padding: 40px; color: #8e8e8e;">
                                 <i class="bi bi-inbox" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
                                 No received tickets found.
                             </td>
@@ -591,6 +821,7 @@
         </div>
     </div>
 
+    {{-- CREATED TICKETS PANEL --}}
     <div id="created" class="tab-panel">
         <div class="ticket-card">
             <table class="support-table">
@@ -598,11 +829,13 @@
                     <tr>
                         <th style="width: 80px;">Ticket ID</th>
                         <th>Subject</th>
-                        <th>To Person</th>
-                        <th>Created At</th>
-                        <th>Status</th>
+                        <th style="width: 175px;">From User</th>
+                        <th style="width: 175px;">To User</th>
+                        <th style="width: 150px;">Created At</th>
+                        <th style="width: 110px;">Status</th>
                         <th>Remark</th>
-                        <th>Attachment</th>
+                        <th style="width: 110px;">Attachment</th>
+                        <th style="width: 140px; text-align: center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -627,7 +860,40 @@
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
                                 <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
-                            <td>{{ $ticket->assignedTo?->name }}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        {{ strtoupper(substr($ticket->creator?->name ?? 'U', 0, 2)) }}
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator?->name ?? '-' }}">
+                                            {{ $ticket->creator?->name ?? 'Unknown' }}
+                                        </div>
+                                        @if($ticket->creator?->email)
+                                            <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->creator->email }}">
+                                                {{ $ticket->creator->email }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        {{ strtoupper(substr($ticket->assignedTo?->name ?? 'U', 0, 2)) }}
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 700; color: #111827; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo?->name ?? '-' }}">
+                                            {{ $ticket->assignedTo?->name ?? 'Unassigned' }}
+                                        </div>
+                                        @if($ticket->assignedTo?->email)
+                                            <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $ticket->assignedTo->email }}">
+                                                {{ $ticket->assignedTo->email }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </td>
                             <td>{{ $ticket->created_at?->format('d M Y, h:i A') }}</td>
                             <td>
                                 <span class="status-badge {{ $ticket->status }}">
@@ -650,10 +916,26 @@
                                     <span class="text-gray">-</span>
                                 @endif
                             </td>
+                            <td style="text-align: center;">
+                                @if($isCompanyAdmin)
+                                    @if($ticket->status === 'closed')
+                                        <button type="button" class="btn-update-status" disabled style="opacity: 0.55; cursor: not-allowed; background-color: #e5e7eb; border-color: #d1d5db; color: #6b7280;" title="Ticket is closed and cannot be updated.">
+                                            <i class="bi bi-lock-fill"></i> Closed
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn-update-status" 
+                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                            <i class="bi bi-pencil-square"></i> Update Status
+                                        </button>
+                                    @endif
+                                @else
+                                    <span class="text-gray" style="font-size: 12px; opacity: 0.7;">Sent</span>
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 40px; color: #8e8e8e;">
+                            <td colspan="9" style="text-align: center; padding: 40px; color: #8e8e8e;">
                                 <i class="bi bi-send" style="font-size: 32px; display: block; margin-bottom: 10px;"></i>
                                 You haven't created any support tickets yet.
                             </td>
@@ -858,24 +1140,42 @@
 <script>
     // Tab switching logic
     function switchTab(evt, tabName) {
-        // Declare all variables
         var i, tabcontent, tablinks;
 
-        // Get all elements with class="tab-panel" and hide them
         tabcontent = document.getElementsByClassName("tab-panel");
         for (i = 0; i < tabcontent.length; i++) {
             tabcontent[i].classList.remove("active");
         }
 
-        // Get all elements with class="tab-btn" and remove the class "active"
         tablinks = document.getElementsByClassName("tab-btn");
         for (i = 0; i < tablinks.length; i++) {
             tablinks[i].classList.remove("active");
         }
 
-        // Show the current tab, and add an "active" class to the button that opened the tab
-        document.getElementById(tabName).classList.add("active");
+        const targetPanel = document.getElementById(tabName);
+        if (targetPanel) {
+            targetPanel.classList.add("active");
+        }
         evt.currentTarget.classList.add("active");
+
+        // Reapply search filter if search input has value
+        const searchInput = document.getElementById('ticketSearchInput');
+        if (searchInput && searchInput.value) {
+            filterSupportTickets(searchInput.value);
+        }
+    }
+
+    // Filter tickets in active tab
+    function filterSupportTickets(val) {
+        const q = (val || '').toLowerCase().trim();
+        const activePanel = document.querySelector('.tab-panel.active');
+        if (!activePanel) return;
+        const rows = activePanel.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.querySelector('td[colspan]')) return;
+            const text = row.textContent.toLowerCase();
+            row.style.display = (!q || text.includes(q)) ? '' : 'none';
+        });
     }
 
     // Modal Control Logic

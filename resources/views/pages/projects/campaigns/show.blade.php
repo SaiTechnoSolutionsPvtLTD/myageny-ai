@@ -123,6 +123,7 @@
 .cmp-form-input:focus, .cmp-form-select:focus, .cmp-form-textarea:focus { border-color:#ea580c; }
 .cmp-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .cmp-form-grid-3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+.cmp-form-grid-dates { display:grid; grid-template-columns:1fr 1.55fr 1fr; gap:14px; align-items:start; }
 
 .cmp-notice-box { padding:12px 14px; border-radius:10px; font-size:12px; line-height:1.5; }
 .cmp-notice-box--warning { background:#fffbeb; border:1px solid #fef3c7; color:#92400e; }
@@ -132,7 +133,7 @@
 
 @media (max-width: 900px) {
     .cmp-stats-mini { grid-template-columns:repeat(2,1fr); }
-    .cmp-form-grid, .cmp-form-grid-3 { grid-template-columns:1fr; }
+    .cmp-form-grid, .cmp-form-grid-3, .cmp-form-grid-dates { grid-template-columns:1fr; }
 }
 
 /* Action Dropdown Menu */
@@ -259,12 +260,12 @@
                 <table class="cmp-table">
                     <thead>
                         <tr>
-                            <th style="width: 26%;">Campaign Name & Details</th>
+                            <th style="width: 25%;">Campaign Name & Details</th>
                             <th style="width: 12%;">Platform</th>
                             <th style="width: 16%;">Status & Duration</th>
-                            <th style="width: 13%;">Budget</th>
-                            <th style="width: 15%;">Schedule / Dates</th>
-                            <th style="width: 18%; text-align: right;">Actions</th>
+                            <th style="width: 12%;">Budget</th>
+                            <th style="width: 19%;">Schedule & Tenure</th>
+                            <th style="width: 16%; text-align: right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -382,11 +383,21 @@
                                 </td>
                                 <td>
                                     @if($camp->start_date || $camp->end_date)
-                                        <div style="font-size:12px; color:#334155; font-weight:600;">
+                                        <div style="font-size:12.5px; color:#334155; font-weight:700;">
                                             {{ $camp->start_date ? $camp->start_date->format('d M Y') : 'Start' }}
                                             →
                                             {{ $camp->end_date ? $camp->end_date->format('d M Y') : 'Ongoing' }}
                                         </div>
+                                        @php
+                                            $calcDays = ($camp->start_date && $camp->end_date) ? (int) $camp->start_date->diffInDays($camp->end_date) : null;
+                                        @endphp
+                                        @if($calcDays !== null && $calcDays > 0)
+                                            <div style="margin-top:4px;">
+                                                <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:11px; font-weight:800;" title="Campaign Tenure Duration">
+                                                    ⏱️ {{ $calcDays }} {{ Str::plural('Day', $calcDays) }} Tenure
+                                                </span>
+                                            </div>
+                                        @endif
                                     @else
                                         <span style="color:#94a3b8; font-size:12px;">Not scheduled</span>
                                     @endif
@@ -584,7 +595,7 @@
 
 {{-- 2. Create Campaign Modal --}}
 <div class="cmp-modal-overlay" id="createCampaignModal">
-    <div class="cmp-modal-box">
+    <div class="cmp-modal-box cmp-modal-box--lg">
         <div class="cmp-modal-header">
             <div class="cmp-modal-title">Create Customer Campaign</div>
             <button type="button" class="cmp-modal-close" onclick="closeCreateModal()">&times;</button>
@@ -646,7 +657,7 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid-3">
+                <div class="cmp-form-grid-dates">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Start Date</label>
                         <input type="date" id="create_start_date" name="start_date" class="cmp-form-input">
@@ -654,9 +665,9 @@
 
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Tenure</label>
-                        <div style="display:flex; gap:6px;">
-                            <input type="number" min="1" step="1" id="create_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
-                            <select id="create_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" min="1" step="1" id="create_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:110px; font-weight:700;">
+                            <select id="create_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:96px; min-width:96px; flex-shrink:0; padding:8px 10px; font-size:12.5px; font-weight:700;">
                                 <option value="days" selected>Days</option>
                                 <option value="months">Months</option>
                             </select>
@@ -684,7 +695,7 @@
 
 {{-- 3. Edit Campaign Modal --}}
 <div class="cmp-modal-overlay" id="editCampaignModal">
-    <div class="cmp-modal-box">
+    <div class="cmp-modal-box cmp-modal-box--lg">
         <div class="cmp-modal-header">
             <div class="cmp-modal-title">Edit Customer Campaign</div>
             <button type="button" class="cmp-modal-close" onclick="closeEditModal()">&times;</button>
@@ -748,7 +759,7 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid-3">
+                <div class="cmp-form-grid-dates">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Start Date</label>
                         <input type="date" id="edit_start_date" name="start_date" class="cmp-form-input">
@@ -756,9 +767,9 @@
 
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Tenure</label>
-                        <div style="display:flex; gap:6px;">
-                            <input type="number" min="1" step="1" id="edit_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
-                            <select id="edit_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" min="1" step="1" id="edit_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:110px; font-weight:700;">
+                            <select id="edit_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:96px; min-width:96px; flex-shrink:0; padding:8px 10px; font-size:12.5px; font-weight:700;">
                                 <option value="days" selected>Days</option>
                                 <option value="months">Months</option>
                             </select>
@@ -861,7 +872,7 @@
 
 {{-- 6. Extend / Renew Campaign Modal --}}
 <div class="cmp-modal-overlay" id="extendCampaignModal">
-    <div class="cmp-modal-box">
+    <div class="cmp-modal-box cmp-modal-box--lg">
         <div class="cmp-modal-header">
             <div class="cmp-modal-title">🔄 Extend / Renew Campaign</div>
             <button type="button" class="cmp-modal-close" onclick="closeExtendModal()">&times;</button>
@@ -928,7 +939,7 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid-3">
+                <div class="cmp-form-grid-dates">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Renewal Start Date</label>
                         <input type="date" id="extend_start_date" name="start_date" class="cmp-form-input">
@@ -936,9 +947,9 @@
 
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Tenure</label>
-                        <div style="display:flex; gap:6px;">
-                            <input type="number" min="1" step="1" id="extend_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
-                            <select id="extend_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" min="1" step="1" id="extend_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:110px; font-weight:700;">
+                            <select id="extend_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:96px; min-width:96px; flex-shrink:0; padding:8px 10px; font-size:12.5px; font-weight:700;">
                                 <option value="days" selected>Days</option>
                                 <option value="months">Months</option>
                             </select>
