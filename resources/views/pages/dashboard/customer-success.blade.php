@@ -502,6 +502,86 @@
                     </table>
                 </div>
             </div>
+
+            {{-- Pending Welcome Call Updates (All Departments) --}}
+            <div class="dashboard-panel dashboard-grid-full" id="pendingWelcomeCallsPanel">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <h4 style="margin:0;">📞 Pending Welcome Call Updates (All Departments)</h4>
+                        <div style="font-size:12px;color:var(--cs-muted);margin-top:2px;">Approved production projects across all departments awaiting Welcome Call Update.</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <input type="text" id="pendingWcSearch" class="lpd-input" placeholder="Search company, client, product..." style="padding:6px 12px;font-size:12px;width:220px;" oninput="onPendingWcSearch(this.value)">
+                        <span id="pendingWcCountBadge" class="cs-badge cs-badge-pending" style="font-size:12px;padding:4px 10px;">0 Projects</span>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th>Account / Client</th>
+                                <th>Product</th>
+                                <th>Department</th>
+                                <th style="text-align:right;">Project Value</th>
+                                <th style="text-align:right;">Collected</th>
+                                <th style="text-align:right;">Pending</th>
+                                <th style="text-align:center;">Approved Date</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingWcTableBody">
+                            <tr><td colspan="8" style="text-align:center;color:var(--cs-muted);">Loading pending welcome calls...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="pendingWcPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
+            </div>
+
+            {{-- SMM Sheet Expiry Details (Current Month, Last Month, Next Month) --}}
+            <div class="dashboard-panel dashboard-grid-full" id="smmSheetExpiryPanel">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <h4 style="margin:0;">📱 SMM Sheet Expiry Details</h4>
+                        <div style="font-size:12px;color:var(--cs-muted);margin-top:2px;">Track Social Media Marketing (SMM) contracts expiring in current month, last month, and next month.</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" class="cs-tab-btn active" id="btn_smm_current_month" onclick="switchSmmTab('current_month')">
+                                <span>📅 Current Month Expire</span> (<span id="smmCountCurrentMonth">0</span>)
+                            </button>
+                            <button type="button" class="cs-tab-btn" id="btn_smm_last_month" onclick="switchSmmTab('last_month')">
+                                <span>⏮️ Last Month Expired</span> (<span id="smmCountLastMonth">0</span>)
+                            </button>
+                            <button type="button" class="cs-tab-btn" id="btn_smm_next_month" onclick="switchSmmTab('next_month')">
+                                <span>⏭️ Next Month Expire</span> (<span id="smmCountNextMonth">0</span>)
+                            </button>
+                        </div>
+                        <input type="text" id="smmSearch" class="lpd-input" placeholder="Search account, product..." style="padding:6px 12px;font-size:12px;width:180px;" oninput="onSmmSearch(this.value)">
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th>Account / Client</th>
+                                <th>Product / Department</th>
+                                <th style="text-align:center;">Campaign Period</th>
+                                <th style="text-align:center;">Posters (Done/Committed)</th>
+                                <th style="text-align:center;">Videos (Done/Committed)</th>
+                                <th style="text-align:right;">Contract Value</th>
+                                <th style="text-align:right;">Collected</th>
+                                <th style="text-align:right;">Pending</th>
+                                <th style="text-align:center;">Status</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="smmTableBody">
+                            <tr><td colspan="10" style="text-align:center;color:var(--cs-muted);padding:20px;">Loading SMM Sheet expiry data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="smmPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -810,6 +890,30 @@ function renderDashboard(data) {
             <div class="sc-label">Expired Campaigns</div>
             <div class="sc-sub">${campExpired.count} campaigns expired</div>
         </div>
+        <div class="summary-card sc-orange" style="background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%) !important;" onclick="document.getElementById('pendingWelcomeCallsPanel')?.scrollIntoView({behavior: 'smooth'})" title="Click to view Approved Projects Pending Welcome Call Update">
+            <div class="sc-icon">📞</div>
+            <div class="sc-value">${data.pending_welcome_calls?.count ?? 0}</div>
+            <div class="sc-label">Pending Welcome Calls</div>
+            <div class="sc-sub">Approved accounts (All Departments)</div>
+        </div>
+        <div class="summary-card sc-amber" style="background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%) !important;" onclick="switchSmmTab('current_month', true)" title="Click to view SMM Sheet Current Month Expiring Details">
+            <div class="sc-icon">📱</div>
+            <div class="sc-value">${data.smm_sheet?.current_month?.count ?? 0}</div>
+            <div class="sc-label">SMM Expiring (This Month)</div>
+            <div class="sc-sub">Accounts expiring this month</div>
+        </div>
+        <div class="summary-card sc-rose" style="background: linear-gradient(135deg, #be123c 0%, #fb7185 100%) !important;" onclick="switchSmmTab('last_month', true)" title="Click to view SMM Sheet Last Month Expired Details">
+            <div class="sc-icon">⏮️</div>
+            <div class="sc-value">${data.smm_sheet?.last_month?.count ?? 0}</div>
+            <div class="sc-label">SMM Expired (Last Month)</div>
+            <div class="sc-sub">Accounts expired last month</div>
+        </div>
+        <div class="summary-card sc-indigo" style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%) !important;" onclick="switchSmmTab('next_month', true)" title="Click to view SMM Sheet Next Month Expiring Details">
+            <div class="sc-icon">⏭️</div>
+            <div class="sc-value">${data.smm_sheet?.next_month?.count ?? 0}</div>
+            <div class="sc-label">SMM Expiring (Next Month)</div>
+            <div class="sc-sub">Accounts expiring next month</div>
+        </div>
     `;
 
     // 2. Department Pending Table
@@ -883,6 +987,18 @@ function renderDashboard(data) {
 
     // 7. Chart: Renewals Month Comparison
     renderRenewalsChart(data);
+
+    // 8. Pending Welcome Calls Table
+    renderPendingWelcomeCallsTable();
+
+    // 9. SMM Sheet Expiry Details
+    const elSmmCur = document.getElementById('smmCountCurrentMonth');
+    const elSmmLast = document.getElementById('smmCountLastMonth');
+    const elSmmNext = document.getElementById('smmCountNextMonth');
+    if (elSmmCur) elSmmCur.textContent = data.smm_sheet?.current_month?.count ?? 0;
+    if (elSmmLast) elSmmLast.textContent = data.smm_sheet?.last_month?.count ?? 0;
+    if (elSmmNext) elSmmNext.textContent = data.smm_sheet?.next_month?.count ?? 0;
+    renderSmmSheetTable();
 }
 
 let activeCampaignTab = 'cm_not_renewed';
@@ -1148,6 +1264,310 @@ function changeDeliveryPage(page) {
     if (dashboardDataRaw && dashboardDataRaw.delivery_projects) {
         renderDeliveryPlannedProjects(dashboardDataRaw.delivery_projects);
     }
+}
+
+let pendingWcCurrentPage = 1;
+const pendingWcPageSize = 10;
+let pendingWcSearchTerm = '';
+
+function onPendingWcSearch(val) {
+    pendingWcSearchTerm = (val || '').toLowerCase().trim();
+    pendingWcCurrentPage = 1;
+    renderPendingWelcomeCallsTable();
+}
+
+function renderPendingWelcomeCallsTable() {
+    if (!dashboardDataRaw) return;
+    const allItems = dashboardDataRaw.pending_welcome_calls?.items || [];
+    
+    let items = allItems;
+    if (pendingWcSearchTerm) {
+        items = allItems.filter(item => {
+            const str = `${item.company_name} ${item.mobile_number} ${item.product_name} ${item.department_name} ${item.lead_id}`.toLowerCase();
+            return str.includes(pendingWcSearchTerm);
+        });
+    }
+
+    const badge = document.getElementById('pendingWcCountBadge');
+    if (badge) {
+        badge.textContent = `${items.length} Projects`;
+    }
+
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / pendingWcPageSize));
+    if (pendingWcCurrentPage > totalPages) pendingWcCurrentPage = totalPages;
+    if (pendingWcCurrentPage < 1) pendingWcCurrentPage = 1;
+
+    const startIdx = (pendingWcCurrentPage - 1) * pendingWcPageSize;
+    const endIdx = Math.min(startIdx + pendingWcPageSize, total);
+    const pageItems = items.slice(startIdx, endIdx);
+
+    const tbody = document.getElementById('pendingWcTableBody');
+    const paginationEl = document.getElementById('pendingWcPagination');
+
+    if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--cs-muted);padding:24px;">No approved projects pending welcome call update.</td></tr>`;
+        if (paginationEl) paginationEl.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = pageItems.map(row => `
+        <tr>
+            <td>
+                <strong style="color:var(--cs-text);">${row.company_name}</strong>
+                <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">
+                    Lead #${row.lead_id} · 📞 ${row.mobile_number}
+                </div>
+            </td>
+            <td>
+                <span style="font-weight:600;">${row.product_name}</span>
+            </td>
+            <td>
+                <span class="cs-badge cs-badge-onboard">${row.department_name}</span>
+            </td>
+            <td style="text-align:right;font-weight:700;">${fmt(row.total_value)}</td>
+            <td style="text-align:right;color:var(--cs-emerald);font-weight:700;">${fmt(row.received_amount)}</td>
+            <td style="text-align:right;color:var(--cs-rose);font-weight:700;">${fmt(row.pending_amount)}</td>
+            <td style="text-align:center;font-size:12px;color:var(--cs-muted);font-weight:600;">${row.approved_date}</td>
+            <td style="text-align:center;">
+                <a href="${row.action_url}" class="lpd-btn lpd-btn-primary" style="padding:4px 10px;font-size:11px;text-decoration:none;display:inline-flex;">
+                    View Project
+                </a>
+            </td>
+        </tr>
+    `).join('');
+
+    if (paginationEl) {
+        if (totalPages <= 1 && total <= pendingWcPageSize) {
+            paginationEl.style.display = total > 0 ? 'flex' : 'none';
+            paginationEl.innerHTML = `
+                <div class="app-pagination__info">
+                    Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> projects
+                </div>
+                <div class="app-pagination__links">
+                    <span class="app-pagination__link is-active">1</span>
+                </div>
+            `;
+            return;
+        }
+
+        paginationEl.style.display = 'flex';
+        let linksHtml = '';
+
+        if (pendingWcCurrentPage > 1) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changePendingWcPage(${pendingWcCurrentPage - 1})">Prev</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Prev</span>`;
+        }
+
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= pendingWcCurrentPage - 1 && p <= pendingWcCurrentPage + 1)) {
+                if (p === pendingWcCurrentPage) {
+                    linksHtml += `<span class="app-pagination__link is-active">${p}</span>`;
+                } else {
+                    linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changePendingWcPage(${p})">${p}</a>`;
+                }
+            } else if (p === pendingWcCurrentPage - 2 || p === pendingWcCurrentPage + 2) {
+                linksHtml += `<span class="app-pagination__ellipsis">...</span>`;
+            }
+        }
+
+        if (pendingWcCurrentPage < totalPages) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changePendingWcPage(${pendingWcCurrentPage + 1})">Next</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Next</span>`;
+        }
+
+        paginationEl.innerHTML = `
+            <div class="app-pagination__info">
+                Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> projects
+            </div>
+            <div class="app-pagination__links">
+                ${linksHtml}
+            </div>
+        `;
+    }
+}
+
+function changePendingWcPage(page) {
+    pendingWcCurrentPage = page;
+    renderPendingWelcomeCallsTable();
+}
+
+let activeSmmTab = 'current_month';
+let smmCurrentPage = 1;
+const smmPageSize = 10;
+let smmSearchTerm = '';
+
+function switchSmmTab(tab, scrollToPanel = false) {
+    activeSmmTab = tab;
+    smmCurrentPage = 1;
+
+    ['current_month', 'last_month', 'next_month'].forEach(k => {
+        const btn = document.getElementById('btn_smm_' + k);
+        if (btn) {
+            if (k === tab) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+
+    renderSmmSheetTable();
+
+    if (scrollToPanel) {
+        document.getElementById('smmSheetExpiryPanel')?.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function onSmmSearch(val) {
+    smmSearchTerm = (val || '').toLowerCase().trim();
+    smmCurrentPage = 1;
+    renderSmmSheetTable();
+}
+
+function renderSmmSheetTable() {
+    if (!dashboardDataRaw || !dashboardDataRaw.smm_sheet) return;
+
+    let allItems = [];
+    if (activeSmmTab === 'current_month') {
+        allItems = dashboardDataRaw.smm_sheet.current_month?.items || [];
+    } else if (activeSmmTab === 'last_month') {
+        allItems = dashboardDataRaw.smm_sheet.last_month?.items || [];
+    } else if (activeSmmTab === 'next_month') {
+        allItems = dashboardDataRaw.smm_sheet.next_month?.items || [];
+    }
+
+    let items = allItems;
+    if (smmSearchTerm) {
+        items = allItems.filter(item => {
+            const str = `${item.company_name} ${item.mobile_number} ${item.product_name} ${item.department_name} ${item.status}`.toLowerCase();
+            return str.includes(smmSearchTerm);
+        });
+    }
+
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / smmPageSize));
+    if (smmCurrentPage > totalPages) smmCurrentPage = totalPages;
+    if (smmCurrentPage < 1) smmCurrentPage = 1;
+
+    const startIdx = (smmCurrentPage - 1) * smmPageSize;
+    const endIdx = Math.min(startIdx + smmPageSize, total);
+    const pageItems = items.slice(startIdx, endIdx);
+
+    const tbody = document.getElementById('smmTableBody');
+    const paginationEl = document.getElementById('smmPagination');
+
+    if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--cs-muted);padding:24px;">No SMM sheets found for this period.</td></tr>`;
+        if (paginationEl) paginationEl.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = pageItems.map(row => {
+        let statusBadge = '';
+        const s = (row.status || '').toLowerCase();
+        if (s === 'completed') {
+            statusBadge = `<span class="cs-badge cs-badge-paid">COMPLETED</span>`;
+        } else if (s === 'overdue') {
+            statusBadge = `<span class="cs-badge cs-badge-pending">OVERDUE</span>`;
+        } else {
+            statusBadge = `<span class="cs-badge cs-badge-onboard">PENDING</span>`;
+        }
+
+        return `
+            <tr>
+                <td>
+                    <strong style="color:var(--cs-text);">${row.company_name}</strong>
+                    <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">
+                        Lead #${row.lead_id} · 📞 ${row.mobile_number}
+                    </div>
+                </td>
+                <td>
+                    <span style="font-weight:600;">${row.product_name}</span>
+                    <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">${row.department_name}</div>
+                </td>
+                <td style="text-align:center;">
+                    <div style="font-size:12px;font-weight:600;color:var(--cs-text);">${row.end_date}</div>
+                    <div style="font-size:11px;color:var(--cs-muted);">From ${row.start_date}</div>
+                </td>
+                <td style="text-align:center;">
+                    <span style="font-weight:700;color:var(--cs-emerald);">${row.completed_posters}</span>
+                    <span style="color:var(--cs-muted);"> / ${row.committed_posters}</span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="font-weight:700;color:var(--cs-purple);">${row.completed_videos}</span>
+                    <span style="color:var(--cs-muted);"> / ${row.committed_videos}</span>
+                </td>
+                <td style="text-align:right;font-weight:700;">${fmt(row.total_value)}</td>
+                <td style="text-align:right;color:var(--cs-emerald);font-weight:700;">${fmt(row.received_amount)}</td>
+                <td style="text-align:right;color:var(--cs-rose);font-weight:700;">${fmt(row.pending_amount)}</td>
+                <td style="text-align:center;">${statusBadge}</td>
+                <td style="text-align:center;">
+                    <a href="${row.action_url}" class="lpd-btn lpd-btn-primary" style="padding:4px 10px;font-size:11px;text-decoration:none;display:inline-flex;">
+                        View
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (paginationEl) {
+        if (totalPages <= 1 && total <= smmPageSize) {
+            paginationEl.style.display = total > 0 ? 'flex' : 'none';
+            paginationEl.innerHTML = `
+                <div class="app-pagination__info">
+                    Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> records
+                </div>
+                <div class="app-pagination__links">
+                    <span class="app-pagination__link is-active">1</span>
+                </div>
+            `;
+            return;
+        }
+
+        paginationEl.style.display = 'flex';
+        let linksHtml = '';
+
+        if (smmCurrentPage > 1) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeSmmPage(${smmCurrentPage - 1})">Prev</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Prev</span>`;
+        }
+
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= smmCurrentPage - 1 && p <= smmCurrentPage + 1)) {
+                if (p === smmCurrentPage) {
+                    linksHtml += `<span class="app-pagination__link is-active">${p}</span>`;
+                } else {
+                    linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeSmmPage(${p})">${p}</a>`;
+                }
+            } else if (p === smmCurrentPage - 2 || p === smmCurrentPage + 2) {
+                linksHtml += `<span class="app-pagination__ellipsis">...</span>`;
+            }
+        }
+
+        if (smmCurrentPage < totalPages) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeSmmPage(${smmCurrentPage + 1})">Next</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Next</span>`;
+        }
+
+        paginationEl.innerHTML = `
+            <div class="app-pagination__info">
+                Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> records
+            </div>
+            <div class="app-pagination__links">
+                ${linksHtml}
+            </div>
+        `;
+    }
+}
+
+function changeSmmPage(page) {
+    smmCurrentPage = page;
+    renderSmmSheetTable();
 }
 
 function switchRenewalTab(tab) {

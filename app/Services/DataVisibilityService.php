@@ -216,11 +216,12 @@ class DataVisibilityService
         $user ??= auth()->user();
         $visibleIds = ($user && $user->hasPreSalesLikeRole()) ? null : $this->visibleUserIds($user);
         $companyId = $this->companyIdFor($user);
+        $isCompanyAdmin = $user && ($user->isCompanyAdmin() || $user->hasAdminLikeRole() || $this->isCompanyWideUser($user));
 
         $users = User::query()
             ->with('roles')
             ->where('is_active', true)
-            ->where(function (Builder $query) {
+            ->where(function (Builder $query) use ($isCompanyAdmin) {
                 $query->whereHas('roles.department', function (Builder $q) {
                     $q->whereIn(DB::raw('LOWER(name)'), [
                         'sales',
@@ -237,25 +238,41 @@ class DataVisibilityService
                         'telecalling',
                     ]);
                 })
-                ->orWhereHas('roles', function (Builder $q) {
-                    $q->whereIn(DB::raw('LOWER(name)'), [
-                        'sales_manager',
-                        'sales_executive',
-                        'sales_tl',
-                        'sales_intern',
-                        'bde',
-                        'business_development_executive',
-                        'telecaller',
-                    ])
-                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
-                        'sales_manager',
-                        'sales_executive',
-                        'sales_tl',
-                        'sales_intern',
-                        'bde',
-                        'business_development_executive',
-                        'telecaller',
-                    ]);
+                ->orWhereHas('roles', function (Builder $q) use ($isCompanyAdmin) {
+                    $q->where(function ($sub) {
+                        $sub->whereIn(DB::raw('LOWER(name)'), [
+                            'sales_manager',
+                            'sales_executive',
+                            'sales_tl',
+                            'sales_intern',
+                            'bde',
+                            'business_development_executive',
+                            'telecaller',
+                        ])
+                        ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                            'sales_manager',
+                            'sales_executive',
+                            'sales_tl',
+                            'sales_intern',
+                            'bde',
+                            'business_development_executive',
+                            'telecaller',
+                        ])
+                        ->orWhere('name', 'like', '%sales_manager%')
+                        ->orWhere('name', 'like', '%sales_executive%')
+                        ->orWhere('name', 'like', '%sales_tl%')
+                        ->orWhere('name', 'like', '%sales_intern%')
+                        ->orWhere('name', 'like', '%bde%')
+                        ->orWhere('name', 'like', '%telecaller%');
+                    });
+
+                    if ($isCompanyAdmin) {
+                        $q->orWhere('name', 'like', '%branch_admin%')
+                          ->orWhere('name', 'like', '%branch_manager%')
+                          ->orWhere('name', 'like', '%bm%')
+                          ->orWhere('display_name', 'like', '%branch%admin%')
+                          ->orWhere('display_name', 'like', '%branch%manager%');
+                    }
                 });
             })
             ->when($companyId, fn (Builder $query) => $query->where('company_id', $companyId))

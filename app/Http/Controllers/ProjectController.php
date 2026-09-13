@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CustomerCampaign;
 use App\Models\Department;
 use App\Models\DesignSettingTarget;
 use App\Models\Lead;
@@ -9,6 +10,7 @@ use App\Models\LeadProduct;
 use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
+use App\Models\ProductionTask;
 use App\Models\ProjectTimesheet;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -94,6 +96,8 @@ class ProjectController extends Controller
                 default => $testingHandovers->filter(fn($h) => in_array($h->status, ['moved_to_testing', 'open'], true)),
             };
 
+            $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, 'testing', $request->all());
+
             return view('pages.projects.testing-dashboard', [
                 'selectedDashboard' => 'testing',
                 'canViewSwitcher' => $canViewSwitcher,
@@ -103,6 +107,7 @@ class ProjectController extends Controller
                 'retestingCount' => $retestingCount,
                 'completedCount' => $completedCount,
                 'handovers' => $filteredHandovers->values(),
+                'employeeTimesheetTasks' => $employeeTimesheetTasks,
             ]);
         }
 
@@ -441,11 +446,24 @@ class ProjectController extends Controller
                 ];
             }
 
+            $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, 'design', [
+                'employee_id' => $filterEmployeeId,
+                'date' => $filterDate,
+                'date_from' => $filterDateFrom,
+                'date_to' => $filterDateTo,
+            ]);
+
+            $pendingWelcomeCallData = $this->getPendingWelcomeCallProjectsData($user, 'design', [
+                'search' => $filterSearch,
+            ], $request);
+
             return view('pages.projects.dashboard', [
                 'isDesigningDashboard' => true,
                 'isAdminLike'         => $isAdminLike,
                 'selectedDashboard'   => $selectedDashboard,
                 'stats'               => $stats,
+                'pendingWelcomeCallCount' => $pendingWelcomeCallData['count'],
+                'pendingWelcomeCallProjects' => $pendingWelcomeCallData['paginated'],
                 'designProjects'      => $designProjects,
                 'todayPlannedTasks'   => $todayPlannedTasks,
                 'overdueTasksList'    => $overdueTasksList,
@@ -453,6 +471,7 @@ class ProjectController extends Controller
                 'teamMembers'         => $teamMembers,
                 'designTeamMembers'   => $allDesigningUsers,
                 'userTargetsMap'      => $userTargetsMap,
+                'employeeTimesheetTasks' => $employeeTimesheetTasks,
                 'filters'             => [
                     'search'     => $filterSearch,
                     'project_id' => $filterAccountId,
@@ -720,6 +739,54 @@ class ProjectController extends Controller
         }
         $sixMonthsRevenue = array_values($lastSixMonths);
 
+        $allDeliveryProjects = $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters)->values();
+        $deliveryPage = max(1, (int) $request->query('delivery_page', 1));
+        $deliveryPerPage = 10;
+        $paginatedDeliveryProjects = new LengthAwarePaginator(
+            $allDeliveryProjects->slice(($deliveryPage - 1) * $deliveryPerPage, $deliveryPerPage)->values(),
+            $allDeliveryProjects->count(),
+            $deliveryPerPage,
+            $deliveryPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'delivery_page',
+            ]
+        );
+
+        $allRecentProjects = $filteredProjects->values();
+        $recentPage = max(1, (int) $request->query('recent_page', 1));
+        $recentPerPage = 10;
+        $paginatedRecentProjects = new LengthAwarePaginator(
+            $allRecentProjects->slice(($recentPage - 1) * $recentPerPage, $recentPerPage)->values(),
+            $allRecentProjects->count(),
+            $recentPerPage,
+            $recentPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'recent_page',
+            ]
+        );
+
+        $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, $selectedDashboard ?? 'development', $dashboardFilters);
+
+        $isDmDashboard = in_array($selectedDashboard, ['dm', 'digital_marketing'], true);
+        $dmCampaignsData = $isDmDashboard
+            ? $this->getDmCampaignsData($user, $dashboardFilters, $request)
+            : null;
+
+        $technicalSeoData = $isDmDashboard
+            ? $this->getActiveTechnicalSeoProjectsData($user, $dashboardFilters, $request)
+            : ['count' => 0, 'paginated' => null];
+
+        $pendingWelcomeCallData = $this->getPendingWelcomeCallProjectsData(
+            $user,
+            $isDmDashboard ? 'dm' : 'development',
+            $dashboardFilters,
+            $request
+        );
+
         return view('pages.projects.dashboard', [
             'isCompanyAdmin' => $isCompanyAdmin,
             'isAdminLike' => $isAdminLike,
@@ -728,15 +795,21 @@ class ProjectController extends Controller
             'employees' => $employees,
             'selectedDashboard' => $selectedDashboard,
             'stats' => $stats,
+            'pendingWelcomeCallCount' => $pendingWelcomeCallData['count'],
+            'pendingWelcomeCallProjects' => $pendingWelcomeCallData['paginated'],
             'allocationPendingCount' => $allocationPendingProjects,
             'dashboardFilters' => $dashboardFilters,
             'projectOptions' => $projects->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)->values(),
             'teamMemberOptions' => $this->dashboardTeamMembers($user, $projects),
-            'currentMonthDeliveryProjects' => $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters),
+            'currentMonthDeliveryProjects' => $paginatedDeliveryProjects,
             'deliverySectionTitle' => $deliverySectionTitle,
             'deliverySectionBadge' => $deliverySectionBadge,
-            'recentProjects' => $filteredProjects->take(10),
+            'recentProjects' => $paginatedRecentProjects,
             'timesheetSummary' => $this->dashboardTimesheetSummary($user, $filteredProjects, $dashboardFilters),
+            'employeeTimesheetTasks' => $employeeTimesheetTasks,
+            'dmCampaignsData' => $dmCampaignsData,
+            'activeTechnicalSeoCount' => $technicalSeoData['count'],
+            'technicalSeoProjects' => $technicalSeoData['paginated'],
             'isTlScopedView' => $this->shouldLimitToAssignedProjects($user),
             'isContributorScopedView' => $this->shouldLimitToEmployeeProjects($user),
             'canQuickAddProductionUpdate' => $canQuickAddProductionUpdate,
@@ -1965,7 +2038,7 @@ class ProjectController extends Controller
         $selectedUpdateType = (string) $request->query('update_type', '');
         $selectedUpdateDate = (string) $request->query('update_date', '');
 
-        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
+        if (in_array($selectedUpdateType, ['production_update', 'welcome_call_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
             $projectUpdatesQuery->where('type', $selectedUpdateType);
         } else {
             $selectedUpdateType = '';
@@ -2053,9 +2126,11 @@ class ProjectController extends Controller
     public function storeBug(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
     {
         $validated = $request->validate([
-            'description' => ['required', 'string', 'max:5000'],
-            'priority'    => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
-            'attachment'  => ['nullable', 'file', 'max:10240'],
+            'description'    => ['required', 'string', 'max:5000'],
+            'priority'       => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
+            'attachment'     => ['nullable', 'file', 'max:20480'],
+            'attachments'    => ['nullable', 'array'],
+            'attachments.*'  => ['file', 'max:20480'],
         ]);
 
         // Prevent duplicate bug submissions within 15 seconds
@@ -2071,33 +2146,71 @@ class ProjectController extends Controller
                 ->with('info', 'Bug report already submitted.');
         }
 
-        $attachmentPath = null;
-        $attachmentName = null;
+        $folder = public_path('uploads/project-bugs');
+        if (! file_exists($folder)) {
+            mkdir($folder, 0777, true);
+        }
 
+        $storedAttachments = [];
+        $firstAttachmentPath = null;
+        $firstAttachmentName = null;
+
+        // 1. Process multiple attachments if provided
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                if ($file && $file->isValid()) {
+                    $origName = $file->getClientOriginalName();
+                    $ext = $file->getClientOriginalExtension();
+                    $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . $ext : '');
+                    $file->move($folder, $fileName);
+                    $path = 'uploads/project-bugs/' . $fileName;
+
+                    $storedAttachments[] = [
+                        'path' => $path,
+                        'name' => $origName,
+                    ];
+
+                    if (! $firstAttachmentPath) {
+                        $firstAttachmentPath = $path;
+                        $firstAttachmentName = $origName;
+                    }
+                }
+            }
+        }
+
+        // 2. Process single attachment for backwards compatibility
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $attachmentName = $file->getClientOriginalName();
+            if ($file && $file->isValid()) {
+                $origName = $file->getClientOriginalName();
+                $ext = $file->getClientOriginalExtension();
+                $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . $ext : '');
+                $file->move($folder, $fileName);
+                $path = 'uploads/project-bugs/' . $fileName;
 
-            $folder = public_path('uploads/project-bugs');
-            if (! file_exists($folder)) {
-                mkdir($folder, 0777, true);
+                $storedAttachments[] = [
+                    'path' => $path,
+                    'name' => $origName,
+                ];
+
+                if (! $firstAttachmentPath) {
+                    $firstAttachmentPath = $path;
+                    $firstAttachmentName = $origName;
+                }
             }
-
-            $fileName = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
-            $file->move($folder, $fileName);
-            $attachmentPath = 'uploads/project-bugs/' . $fileName;
         }
 
         $productionInitiation->bugs()->create([
-            'company_id' => auth()->user()?->company_id,
-            'lead_id' => $productionInitiation->lead_id,
-            'lead_product_id' => $productionInitiation->lead_product_id,
-            'description' => $validated['description'],
-            'priority' => $validated['priority'],
-            'attachment_path' => $attachmentPath,
-            'attachment_original_name' => $attachmentName,
-            'status' => 'open',
-            'created_by_user_id' => auth()->id(),
+            'company_id'               => auth()->user()?->company_id,
+            'lead_id'                  => $productionInitiation->lead_id,
+            'lead_product_id'          => $productionInitiation->lead_product_id,
+            'description'              => $validated['description'],
+            'priority'                 => $validated['priority'],
+            'attachment_path'          => $firstAttachmentPath,
+            'attachment_original_name' => $firstAttachmentName,
+            'attachments'              => ! empty($storedAttachments) ? $storedAttachments : null,
+            'status'                   => 'open',
+            'created_by_user_id'       => auth()->id(),
         ]);
 
         return redirect()
@@ -2579,7 +2692,7 @@ class ProjectController extends Controller
 
 
         $validated = $request->validate([
-            'type' => ['required', 'in:production_update,meeting_update,weekly_update'],
+            'type' => ['required', 'in:production_update,welcome_call_update,meeting_update,weekly_update'],
             'content' => ['required', 'string'],
         ]);
 
@@ -2602,7 +2715,7 @@ class ProjectController extends Controller
 
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
-            'type' => ['required', 'in:production_update,meeting_update,weekly_update'],
+            'type' => ['required', 'in:production_update,welcome_call_update,meeting_update,weekly_update'],
             'content' => ['required', 'string'],
         ]);
 
@@ -2971,9 +3084,681 @@ class ProjectController extends Controller
         return $this->usersFromIds($employeeIds);
     }
 
-    private function shouldAllowDashboardUserFilter(User $user): bool
+    private function getEmployeeTimesheetTasksData(User $viewer, string $deptType, array $filters = []): array
     {
-        return $this->shouldLimitToAssignedProjects($user);
+        $isAdminLike = $viewer->hasAdminLikeRole();
+        $isTl = ! $isAdminLike && $this->isUserTl($viewer);
+        $isEmployeeOnly = ! $isAdminLike && ! $isTl;
+
+        // 1. Resolve Department IDs
+        $deptIds = match ($deptType) {
+            'design', 'designing' => Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->pluck('id')->toArray(),
+            'dm', 'digital_marketing' => Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray(),
+            'testing', 'qa' => Department::whereRaw('LOWER(name) LIKE ?', ['%testing%'])->orWhereRaw('LOWER(name) LIKE ?', ['%qa%'])->pluck('id')->toArray(),
+            default => Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray(),
+        };
+
+        // 2. Resolve Employees in Scope
+        if ($isEmployeeOnly) {
+            $scopedEmployees = collect([$viewer]);
+        } else {
+            $empQuery = User::query()
+                ->with(['roles.department'])
+                ->where('is_active', true)
+                ->when($viewer->company_id, fn ($q) => $q->where('company_id', $viewer->company_id));
+
+            // Department filter for employees
+            $empQuery->where(function ($q) use ($deptIds, $deptType) {
+                $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                  ->orWhereHas('roles', function ($rq) use ($deptType) {
+                      match ($deptType) {
+                          'design', 'designing' => $rq->whereRaw('LOWER(name) LIKE ?', ['%design%']),
+                          'dm', 'digital_marketing' => $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']),
+                          'testing', 'qa' => $rq->whereRaw('LOWER(name) LIKE ?', ['%test%'])->orWhereRaw('LOWER(name) LIKE ?', ['%qa%']),
+                          default => $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orWhereRaw('LOWER(name) LIKE ?', ['%software%'])->orWhereRaw('LOWER(name) LIKE ?', ['%web%'])->orWhereRaw('LOWER(name) LIKE ?', ['%app%']),
+                      };
+                  })
+                  ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                  ->orWhereHas('internJoiningForm.department', fn ($dq) => $dq->whereIn('id', $deptIds));
+            });
+
+            $scopedEmployees = $empQuery->orderBy('name')->get();
+
+            // If TL, make sure TL themselves and their allocated project members are in scope
+            if ($isTl) {
+                $tlProjectMemberIds = ProductionInitiation::query()
+                    ->where(function ($q) use ($viewer) {
+                        $q->whereJsonContains('project_allocated_tl_user_ids', $viewer->id)
+                          ->orWhere('initiated_by', $viewer->id);
+                    })
+                    ->get()
+                    ->flatMap(fn ($p) => Arr::wrap($p->project_allocated_employee_user_ids))
+                    ->map(fn ($id) => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->toArray();
+
+                if (!empty($tlProjectMemberIds)) {
+                    $additionalMembers = User::whereIn('id', $tlProjectMemberIds)
+                        ->where('is_active', true)
+                        ->where('company_id', $viewer->company_id)
+                        ->get();
+                    $scopedEmployees = $scopedEmployees->concat($additionalMembers);
+                }
+
+                if (! $scopedEmployees->contains('id', $viewer->id)) {
+                    $scopedEmployees->push($viewer);
+                }
+            }
+
+            // Exclude admins (other than viewer) from team employee listing
+            $scopedEmployees = $scopedEmployees->reject(function ($e) use ($viewer) {
+                return (int)$e->id !== (int)$viewer->id && ($e->hasAdminLikeRole() || $e->isCompanyAdmin() || $e->hasRole('super_admin'));
+            });
+
+            $scopedEmployees = $scopedEmployees->unique('id')->sortBy('name')->values();
+        }
+
+        // Apply specific employee filter if selected
+        $filterEmployeeId = (int) ($filters['employee_id'] ?? ($filters['team_member_id'] ?? 0));
+        if ($filterEmployeeId > 0 && ($isAdminLike || $isTl)) {
+            $scopedEmployees = $scopedEmployees->filter(fn ($e) => (int) $e->id === $filterEmployeeId)->values();
+        }
+
+        $employeeIds = $scopedEmployees->pluck('id')->all();
+
+        // 3. Date bounds
+        $dateFrom = $filters['date_from'] ?? ($filters['date'] ?? null);
+        $dateTo = $filters['date_to'] ?? ($filters['date'] ?? null);
+
+        if (!$dateFrom && !$dateTo) {
+            $dateFrom = Carbon::now()->startOfMonth()->toDateString();
+            $dateTo = Carbon::now()->endOfMonth()->toDateString();
+        } elseif ($dateFrom && !$dateTo) {
+            $dateTo = $dateFrom;
+        } elseif (!$dateFrom && $dateTo) {
+            $dateFrom = $dateTo;
+        }
+
+        try {
+            $parsedFrom = Carbon::parse($dateFrom)->startOfDay()->toDateString();
+            $parsedTo = Carbon::parse($dateTo)->endOfDay()->toDateString();
+        } catch (\Throwable) {
+            $parsedFrom = Carbon::now()->startOfMonth()->toDateString();
+            $parsedTo = Carbon::now()->endOfMonth()->toDateString();
+        }
+
+        // 4. Fetch Tasks in date range for these employees
+        $allTasks = collect();
+        if (!empty($employeeIds)) {
+            $tasksQuery = ProductionTask::query()
+                ->with(['project:id,product_name,company_name,lead_id', 'project.lead:id,company_name,contact_name', 'creator:id,name'])
+                ->whereIn('assigned_to', $employeeIds);
+
+            if ($parsedFrom === $parsedTo) {
+                $tasksQuery->whereDate('task_date', $parsedFrom);
+            } else {
+                $tasksQuery->whereBetween('task_date', [$parsedFrom, $parsedTo]);
+            }
+
+            $allTasks = $tasksQuery->orderByDesc('task_date')->orderByDesc('id')->get();
+        }
+        $tasksByUser = $allTasks->groupBy('assigned_to');
+
+        // 5. Fetch Timesheets in date range for these employees
+        $allTimesheets = collect();
+        if (!empty($employeeIds)) {
+            $timesheetQuery = ProjectTimesheet::query()
+                ->with(['project:id,product_name,company_name,lead_id', 'project.lead:id,company_name,contact_name'])
+                ->whereIn('user_id', $employeeIds);
+
+            if ($parsedFrom === $parsedTo) {
+                $timesheetQuery->whereDate('timesheet_date', $parsedFrom);
+            } else {
+                $timesheetQuery->whereBetween('timesheet_date', [$parsedFrom, $parsedTo]);
+            }
+
+            $allTimesheets = $timesheetQuery->orderByDesc('timesheet_date')->orderByDesc('id')->get();
+        }
+        $timesheetsByUser = $allTimesheets->groupBy('user_id');
+
+        // 6. Build Employee Records
+        $todayStr = Carbon::today()->toDateString();
+        $employeeRecords = $scopedEmployees->map(function (User $emp) use ($tasksByUser, $timesheetsByUser, $viewer, $todayStr) {
+            $empTasks = $tasksByUser->get($emp->id, collect());
+            $empTimesheets = $timesheetsByUser->get($emp->id, collect());
+
+            $totalTasks = $empTasks->count();
+            $completedTasks = $empTasks->where('status', 'completed')->count();
+            $pendingTasks = $totalTasks - $completedTasks;
+
+            $totalTimesheets = $empTimesheets->count();
+            $latestTimesheet = $empTimesheets->first();
+            $submittedToday = $empTimesheets->contains(fn ($ts) => ($ts->timesheet_date ? $ts->timesheet_date->toDateString() : '') === $todayStr);
+
+            $status = 'not_submitted';
+            if ($totalTimesheets > 0) {
+                $hasCompleted = $empTimesheets->contains(fn ($ts) => strtolower((string)$ts->status) === 'completed');
+                $hasOngoing = $empTimesheets->contains(fn ($ts) => strtolower((string)$ts->status) === 'ongoing');
+                if ($hasCompleted) {
+                    $status = 'completed';
+                } elseif ($hasOngoing) {
+                    $status = 'ongoing';
+                } else {
+                    $status = 'pending';
+                }
+            }
+
+            // Distinct projects
+            $projectNames = collect();
+            foreach ($empTasks as $t) {
+                $pName = $t->project?->product_name ?: $t->product_name;
+                if ($pName) $projectNames->push($pName);
+            }
+            foreach ($empTimesheets as $ts) {
+                $pName = $ts->project?->product_name;
+                if ($pName) $projectNames->push($pName);
+            }
+            $projectNames = $projectNames->unique()->values()->all();
+
+            $roleDisplayName = $emp->roles->first()?->display_name ?: ($emp->roles->first()?->name ?: 'Team Member');
+            $cleanRole = ucwords(str_replace(['company_1__', 'company_2__', 'company_3__', '_'], ['', '', '', ' '], $roleDisplayName));
+
+            return [
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'email' => $emp->email,
+                'designation' => $cleanRole,
+                'initials' => strtoupper(substr(trim($emp->name), 0, 2)),
+                'is_current_user' => (int) $emp->id === (int) $viewer->id,
+                'projects' => $projectNames,
+                'total_tasks' => $totalTasks,
+                'completed_tasks' => $completedTasks,
+                'pending_tasks' => $pendingTasks,
+                'tasks' => $empTasks->map(function ($t) {
+                    return [
+                        'id' => $t->id,
+                        'project_name' => $t->project?->product_name ?: ($t->product_name ?: 'General Task'),
+                        'company_name' => $t->project?->company_name ?: ($t->project?->lead?->company_name ?: ($t->lead?->company_name ?: '')),
+                        'task_date' => $t->task_date ? $t->task_date->format('d M Y') : '',
+                        'task_description' => $t->task_description ?: 'No description',
+                        'status' => strtolower((string)($t->status ?: 'pending')),
+                        'created_by' => $t->creator?->name ?: 'System',
+                    ];
+                })->values()->all(),
+                'total_timesheets' => $totalTimesheets,
+                'submitted_today' => $submittedToday,
+                'status' => $status,
+                'latest_update' => $latestTimesheet ? $latestTimesheet->day_closing_update : '',
+                'latest_date' => $latestTimesheet && $latestTimesheet->timesheet_date ? $latestTimesheet->timesheet_date->format('d M Y') : '',
+                'total_posters' => (int) $empTimesheets->sum('poster_count'),
+                'total_videos' => (int) $empTimesheets->sum('video_count'),
+                'timesheets' => $empTimesheets->map(function ($ts) {
+                    return [
+                        'id' => $ts->id,
+                        'project_name' => $ts->project?->product_name ?: 'General Project',
+                        'company_name' => $ts->project?->company_name ?: ($ts->project?->lead?->company_name ?: ''),
+                        'timesheet_date' => $ts->timesheet_date ? $ts->timesheet_date->format('d M Y') : '',
+                        'status' => strtolower((string)($ts->status ?: 'pending')),
+                        'day_closing_update' => $ts->day_closing_update ?: 'No update text',
+                        'poster_count' => (int) $ts->poster_count,
+                        'video_count' => (int) $ts->video_count,
+                    ];
+                })->values()->all(),
+            ];
+        });
+
+        $totalEmployees = $employeeRecords->count();
+        $submittedCount = $employeeRecords->filter(fn ($e) => $e['total_timesheets'] > 0)->count();
+        $notSubmittedCount = $totalEmployees - $submittedCount;
+        $totalTasksCount = $employeeRecords->sum('total_tasks');
+        $completedTasksCount = $employeeRecords->sum('completed_tasks');
+        $pendingTasksCount = $employeeRecords->sum('pending_tasks');
+
+        $deptLabel = match ($deptType) {
+            'design', 'designing' => 'Designing',
+            'dm', 'digital_marketing' => 'Digital Marketing',
+            'testing', 'qa' => 'Testing',
+            default => 'Development',
+        };
+
+        return [
+            'employees' => $employeeRecords,
+            'summary' => [
+                'total_employees' => $totalEmployees,
+                'submitted_count' => $submittedCount,
+                'not_submitted_count' => $notSubmittedCount,
+                'total_tasks' => $totalTasksCount,
+                'completed_tasks' => $completedTasksCount,
+                'pending_tasks' => $pendingTasksCount,
+            ],
+            'department_label' => $deptLabel,
+            'date_range' => [
+                'from' => $parsedFrom,
+                'to' => $parsedTo,
+                'label' => ($parsedFrom === $parsedTo) ? Carbon::parse($parsedFrom)->format('d M Y') : Carbon::parse($parsedFrom)->format('d M Y') . ' - ' . Carbon::parse($parsedTo)->format('d M Y'),
+            ],
+            'is_tl' => $isTl,
+            'is_admin' => $isAdminLike,
+            'is_contributor' => $isEmployeeOnly,
+        ];
+    }
+
+    private function getDmCampaignsData(User $viewer, array $filters, Request $request): array
+    {
+        $cmStart = Carbon::today()->startOfMonth()->toDateString();
+        $cmEnd = Carbon::today()->endOfMonth()->toDateString();
+        $today = Carbon::today()->startOfDay();
+
+        $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')
+            ->pluck('extended_from_id')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        $campaignsQuery = CustomerCampaign::query()
+            ->with([
+                'lead:id,company_name,contact_name,mobile_number,email',
+                'creator:id,name',
+                'productionInitiation:id,product_name,company_name,department_id,project_allocated_employee_user_ids,project_allocated_tl_user_ids,tl_employee_allocations',
+            ])
+            ->when($viewer->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $viewer->company_id));
+
+        $isAdminLike = $viewer->hasAdminLikeRole();
+        $isTl = ! $isAdminLike && $this->isUserTl($viewer);
+        $isEmployeeOnly = ! $isAdminLike && ! $isTl;
+
+        // Role scoping
+        if ($isEmployeeOnly) {
+            $campaignsQuery->where(function ($q) use ($viewer) {
+                $q->where('customer_campaigns.created_by', $viewer->id)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($viewer) {
+                      $piq->whereJsonContains('project_allocated_employee_user_ids', $viewer->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $viewer->id . '"%');
+                  });
+            });
+        } elseif ($isTl) {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+
+            $empQuery = User::query()
+                ->where('is_active', true)
+                ->when($viewer->company_id, fn ($q) => $q->where('company_id', $viewer->company_id))
+                ->where(function ($q) use ($dmDeptIds) {
+                    $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds))
+                      ->orWhereHas('roles', function ($rq) {
+                          $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                             ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                             ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                      })
+                      ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds))
+                      ->orWhereHas('internJoiningForm.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds));
+                });
+
+            $dmEmpIds = $empQuery->pluck('id')->push($viewer->id)->unique()->filter()->values()->all();
+
+            $campaignsQuery->where(function ($q) use ($viewer, $dmEmpIds) {
+                $q->whereIn('customer_campaigns.created_by', $dmEmpIds)
+                  ->orWhere('customer_campaigns.created_by', $viewer->id)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($viewer, $dmEmpIds) {
+                      $piq->where(function ($sub) use ($viewer, $dmEmpIds) {
+                          foreach ($dmEmpIds as $mId) {
+                              $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId)
+                                  ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $mId . '"%');
+                          }
+                          $sub->orWhereJsonContains('project_allocated_tl_user_ids', $viewer->id);
+                      });
+                  });
+            });
+        }
+
+        // Search Filter (Lead, Company, Campaign Name, Platform)
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $campaignsQuery->where(function ($q) use ($search) {
+                $q->where('customer_campaigns.campaign_name', 'LIKE', "%{$search}%")
+                  ->orWhere('customer_campaigns.platform', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', function ($lq) use ($search) {
+                      $lq->where('company_name', 'LIKE', "%{$search}%")
+                         ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                         ->orWhere('mobile_number', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        // Employee Filter
+        $filterEmpId = (int) ($filters['employee_id'] ?? 0);
+        if ($filterEmpId > 0) {
+            $campaignsQuery->where(function ($q) use ($filterEmpId) {
+                $q->where('customer_campaigns.created_by', $filterEmpId)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($filterEmpId) {
+                      $piq->whereJsonContains('project_allocated_employee_user_ids', $filterEmpId)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $filterEmpId . '"%');
+                  });
+            });
+        }
+
+        $allCampaigns = $campaignsQuery->latest('customer_campaigns.id')->get();
+
+        // 1. Current Month Renewal Campaigns
+        $renewalItems = $allCampaigns->filter(function (CustomerCampaign $c) use ($cmStart, $cmEnd) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $endsInCm = ($endDate && $endDate >= $cmStart && $endDate <= $cmEnd);
+            $extendedInCm = (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $cmStart && $createdAtDate <= $cmEnd);
+
+            return $endsInCm || $extendedInCm;
+        })->map(function (CustomerCampaign $c) use ($cmStart, $cmEnd, $today, $extendedParentIds) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $isRenewed = in_array($c->id, $extendedParentIds, true)
+                || (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $cmStart && $createdAtDate <= $cmEnd);
+
+            $daysRemaining = null;
+            $daysRemainingText = '—';
+            $isOverdue = false;
+            if ($c->end_date) {
+                $endCarbon = Carbon::parse($c->end_date)->startOfDay();
+                if ($endCarbon->isPast() && ! $endCarbon->isToday()) {
+                    $diff = $endCarbon->diffInDays($today);
+                    $daysRemaining = -$diff;
+                    $daysRemainingText = $diff . 'd ago';
+                    $isOverdue = true;
+                } elseif ($endCarbon->isToday()) {
+                    $daysRemaining = 0;
+                    $daysRemainingText = 'Today';
+                } else {
+                    $diff = $today->diffInDays($endCarbon);
+                    $daysRemaining = $diff;
+                    $daysRemainingText = $diff . 'd left';
+                }
+            }
+
+            return [
+                'id' => $c->id,
+                'campaign_name' => $c->campaign_name ?: 'Campaign #' . $c->id,
+                'platform' => $c->platform ?: 'meta',
+                'lead_id' => $c->lead_id,
+                'company_name' => $c->lead?->company_name ?: ($c->productionInitiation?->company_name ?: '—'),
+                'contact_name' => $c->lead?->contact_name ?: '—',
+                'mobile_number' => $c->lead?->mobile_number ?: '—',
+                'start_date' => $c->start_date ? $c->start_date->format('d M Y') : '—',
+                'end_date' => $c->end_date ? $c->end_date->format('d M Y') : '—',
+                'raw_end_date' => $endDate,
+                'days_remaining' => $daysRemaining,
+                'days_remaining_text' => $daysRemainingText,
+                'is_overdue' => $isOverdue,
+                'budget_amount' => (float) ($c->budget_amount ?? 0),
+                'budget_type' => ucfirst(strtolower($c->budget_type ?: 'monthly')),
+                'is_extended' => !empty($c->extended_from_id),
+                'is_renewed' => $isRenewed,
+                'renewal_status' => $isRenewed ? 'renewed' : 'due',
+                'renewal_badge_label' => $isRenewed ? 'Renewed' : 'Due for Renewal',
+                'campaign_status' => strtolower((string) ($c->status ?: 'active')),
+                'created_by_name' => $c->creator?->name ?: 'DM Team',
+                'lead_url' => $c->lead_id ? route('projects.campaigns.show', $c->lead_id) : null,
+            ];
+        })->sortBy(function ($item) {
+            return ($item['is_renewed'] ? 1 : 0) . '_' . ($item['raw_end_date'] ?: '9999-99-99');
+        })->values();
+
+        // 2. Current Expired Campaigns
+        $expiredItems = $allCampaigns->filter(function (CustomerCampaign $c) {
+            return $c->isExpired();
+        })->map(function (CustomerCampaign $c) use ($today, $extendedParentIds) {
+            $isRenewed = in_array($c->id, $extendedParentIds, true);
+
+            $overdueText = 'Expired';
+            $overdueDays = 0;
+            if ($c->end_date) {
+                $endCarbon = Carbon::parse($c->end_date)->startOfDay();
+                if ($endCarbon->isPast()) {
+                    $diff = $endCarbon->diffInDays($today);
+                    $overdueDays = $diff;
+                    $overdueText = $diff === 0 ? 'Expired Today' : 'Expired ' . $diff . 'd ago';
+                }
+            }
+
+            return [
+                'id' => $c->id,
+                'campaign_name' => $c->campaign_name ?: 'Campaign #' . $c->id,
+                'platform' => $c->platform ?: 'meta',
+                'lead_id' => $c->lead_id,
+                'company_name' => $c->lead?->company_name ?: ($c->productionInitiation?->company_name ?: '—'),
+                'contact_name' => $c->lead?->contact_name ?: '—',
+                'mobile_number' => $c->lead?->mobile_number ?: '—',
+                'start_date' => $c->start_date ? $c->start_date->format('d M Y') : '—',
+                'end_date' => $c->end_date ? $c->end_date->format('d M Y') : '—',
+                'raw_end_date' => $c->end_date ? $c->end_date->toDateString() : '1970-01-01',
+                'overdue_text' => $overdueText,
+                'overdue_days' => $overdueDays,
+                'budget_amount' => (float) ($c->budget_amount ?? 0),
+                'budget_type' => ucfirst(strtolower($c->budget_type ?: 'monthly')),
+                'is_renewed' => $isRenewed,
+                'renewal_badge_label' => $isRenewed ? 'Renewed' : 'Pending Renewal',
+                'campaign_status' => strtolower((string) ($c->status ?: 'expired')),
+                'created_by_name' => $c->creator?->name ?: 'DM Team',
+                'lead_url' => $c->lead_id ? route('projects.campaigns.show', $c->lead_id) : null,
+            ];
+        })->sortByDesc('raw_end_date')->values();
+
+        // Paginate Current Month Renewal Campaigns
+        $renewalPage = max(1, (int) $request->query('renewal_page', 1));
+        $renewalPerPage = 10;
+        $paginatedRenewals = new LengthAwarePaginator(
+            $renewalItems->slice(($renewalPage - 1) * $renewalPerPage, $renewalPerPage)->values(),
+            $renewalItems->count(),
+            $renewalPerPage,
+            $renewalPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'renewal_page',
+            ]
+        );
+
+        // Paginate Current Expired Campaigns
+        $expiredPage = max(1, (int) $request->query('expired_page', 1));
+        $expiredPerPage = 10;
+        $paginatedExpired = new LengthAwarePaginator(
+            $expiredItems->slice(($expiredPage - 1) * $expiredPerPage, $expiredPerPage)->values(),
+            $expiredItems->count(),
+            $expiredPerPage,
+            $expiredPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'expired_page',
+            ]
+        );
+
+        return [
+            'renewalCampaigns' => $paginatedRenewals,
+            'expiredCampaigns' => $paginatedExpired,
+            'summary' => [
+                'total_renewals' => $renewalItems->count(),
+                'due_renewals' => $renewalItems->where('is_renewed', false)->count(),
+                'completed_renewals' => $renewalItems->where('is_renewed', true)->count(),
+                'total_expired' => $expiredItems->count(),
+                'unrenewed_expired' => $expiredItems->where('is_renewed', false)->count(),
+            ],
+            'current_month_label' => Carbon::today()->format('F Y'),
+        ];
+    }
+
+    private function getActiveTechnicalSeoProjectsData(User $user, array $dashboardFilters, Request $request): array
+    {
+        $query = ProductionInitiation::query()
+            ->with($this->projectRelations())
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->where(function ($q) {
+                $q->where('product_name', 'Technical SEO')
+                  ->orWhere('product_name', 'LIKE', '%Technical SEO%');
+            })
+            ->whereNotIn('project_execution_status', ['delivered', 'cancelled', 'completed']);
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($this->shouldLimitToAssignedProjects($user)) {
+            $query->whereJsonContains('project_allocated_tl_user_ids', $user->id);
+        } elseif ($this->shouldLimitToEmployeeProjects($user)) {
+            $query->whereJsonContains('project_allocated_employee_user_ids', $user->id);
+        }
+
+        if (!empty($dashboardFilters['search'])) {
+            $search = strtolower($dashboardFilters['search']);
+            $query->where(function ($sq) use ($search) {
+                $sq->where('company_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('product_name', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('company_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('mobile_number', 'LIKE', "%{$search}%"));
+            });
+        }
+
+        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
+            $project = $this->decorateProjectForUser($project, $user);
+            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+            $project->received_amount = $received;
+            $project->balance_amount = max(0, $project->project_value - $received);
+            $project->project_delivery_date = $this->projectDeliveryDate($project);
+            return $project;
+        });
+
+        $count = $allProjects->count();
+
+        $page = max(1, (int) $request->query('seo_page', 1));
+        $perPage = 10;
+        $paginated = new LengthAwarePaginator(
+            $allProjects->slice(($page - 1) * $perPage, $perPage)->values(),
+            $count,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'seo_page',
+            ]
+        );
+
+        return [
+            'count' => $count,
+            'paginated' => $paginated,
+        ];
+    }
+
+    private function getPendingWelcomeCallProjectsData(User $user, string $departmentType, array $dashboardFilters, Request $request): array
+    {
+        $query = ProductionInitiation::query()
+            ->with($this->projectRelations())
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->whereDoesntHave('projectUpdates', function ($q) {
+                $q->where('type', 'welcome_call_update');
+            });
+
+        if ($departmentType === 'design') {
+            $designDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($designDeptIds) {
+                if (!empty($designDeptIds)) {
+                    $q->whereIn('department_id', $designDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']));
+            });
+        } elseif ($departmentType === 'dm') {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+            $query->where(function ($q) use ($dmDeptIds) {
+                if (!empty($dmDeptIds)) {
+                    $q->whereIn('department_id', $dmDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']));
+            });
+        } else {
+            // Default: 'development'
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($devDeptIds) {
+                if (!empty($devDeptIds)) {
+                    $q->whereIn('department_id', $devDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
+                  ->orWhere(function ($sq) {
+                      $sq->whereNull('department_id')
+                         ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+                  });
+            });
+        }
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($this->shouldLimitToAssignedProjects($user)) {
+            $query->whereJsonContains('project_allocated_tl_user_ids', $user->id);
+        } elseif ($this->shouldLimitToEmployeeProjects($user)) {
+            $query->whereJsonContains('project_allocated_employee_user_ids', $user->id);
+        }
+
+        if (!empty($dashboardFilters['search'])) {
+            $search = strtolower($dashboardFilters['search']);
+            $query->where(function ($sq) use ($search) {
+                $sq->where('company_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('product_name', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('company_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('client_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('mobile_number', 'LIKE', "%{$search}%"));
+            });
+        }
+
+        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
+            $project = $this->decorateProjectForUser($project, $user);
+            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+            $project->received_amount = $received;
+            $project->balance_amount = max(0, $project->project_value - $received);
+            $project->project_delivery_date = $this->projectDeliveryDate($project);
+            return $project;
+        });
+
+        $count = $allProjects->count();
+
+        $page = max(1, (int) $request->query('wc_page', 1));
+        $perPage = 10;
+        $paginated = new LengthAwarePaginator(
+            $allProjects->slice(($page - 1) * $perPage, $perPage)->values(),
+            $count,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'wc_page',
+            ]
+        );
+
+        return [
+            'count' => $count,
+            'paginated' => $paginated,
+        ];
     }
 
     private function dashboardTimesheetSummary(User $user, Collection $projects, array $filters): array
@@ -3397,6 +4182,11 @@ class ProjectController extends Controller
     private function shouldLimitToEmployeeProjects(User $user): bool
     {
         return ! $user->hasAdminLikeRole() && ! $this->isUserTl($user);
+    }
+
+    private function shouldAllowDashboardUserFilter(User $user): bool
+    {
+        return $this->shouldLimitToAssignedProjects($user);
     }
 
     private function canQuickAddProductionUpdate(User $user): bool

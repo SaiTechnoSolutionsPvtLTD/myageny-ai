@@ -1066,9 +1066,10 @@ class LeadController extends Controller
                 $content = (string) $u->content;
 
                 $typeMetaMap = [
-                    'production_update' => ['label' => 'Production Update', 'title' => 'Execution Progress'],
-                    'meeting_update'    => ['label' => 'Meeting Update', 'title' => 'Discussion Notes'],
-                    'weekly_update'     => ['label' => 'Weekly Update', 'title' => 'Weekly Summary'],
+                    'production_update'   => ['label' => 'Production Update', 'title' => 'Execution Progress'],
+                    'welcome_call_update' => ['label' => 'Welcome Call Update', 'title' => 'Welcome Call Notes'],
+                    'meeting_update'      => ['label' => 'Meeting Update', 'title' => 'Discussion Notes'],
+                    'weekly_update'       => ['label' => 'Weekly Update', 'title' => 'Weekly Summary'],
                 ];
 
                 $typeMeta = $typeMetaMap[$u->type] ?? [

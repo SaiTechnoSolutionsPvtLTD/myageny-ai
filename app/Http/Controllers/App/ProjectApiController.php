@@ -580,7 +580,7 @@ class ProjectApiController extends Controller
 
         $updatesQuery = $productionInitiation->projectUpdates()->with('createdBy:id,name');
 
-        if (in_array($selectedUpdateType, ['production_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
+        if (in_array($selectedUpdateType, ['production_update', 'welcome_call_update', 'meeting_update', 'weekly_update', 'timesheet'], true)) {
             $updatesQuery->where('type', $selectedUpdateType);
         } else {
             $selectedUpdateType = '';
@@ -1013,7 +1013,7 @@ class ProjectApiController extends Controller
 
         $validated = $request->validate([
             'production_initiation_id' => ['required', 'integer'],
-            'type' => ['required', 'in:production_update,meeting_update,weekly_update'],
+            'type' => ['required', 'in:production_update,welcome_call_update,meeting_update,weekly_update'],
             'content' => ['required', 'string'],
         ]);
 
@@ -1047,7 +1047,7 @@ class ProjectApiController extends Controller
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
 
         $validated = $request->validate([
-            'type'    => ['required', 'in:production_update,meeting_update,weekly_update'],
+            'type'    => ['required', 'in:production_update,welcome_call_update,meeting_update,weekly_update'],
             'content' => ['required', 'string'],
         ]);
 
@@ -2885,9 +2885,11 @@ class ProjectApiController extends Controller
     public function storeBug(Request $request, ProductionInitiation $productionInitiation): JsonResponse
     {
         $validated = $request->validate([
-            'description' => ['required', 'string', 'max:5000'],
-            'priority' => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
-            'attachment' => ['nullable', 'file', 'max:10240'],
+            'description'   => ['required', 'string', 'max:5000'],
+            'priority'      => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
+            'attachment'    => ['nullable', 'file', 'max:20480'],
+            'attachments'   => ['nullable', 'array'],
+            'attachments.*' => ['file', 'max:20480'],
         ]);
 
         $existingBug = ProjectBug::where('production_initiation_id', $productionInitiation->id)
@@ -2904,33 +2906,69 @@ class ProjectApiController extends Controller
             ]);
         }
 
-        $attachmentPath = null;
-        $attachmentName = null;
+        $folder = public_path('uploads/project-bugs');
+        if (! file_exists($folder)) {
+            mkdir($folder, 0777, true);
+        }
+
+        $storedAttachments = [];
+        $firstAttachmentPath = null;
+        $firstAttachmentName = null;
+
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                if ($file && $file->isValid()) {
+                    $origName = $file->getClientOriginalName();
+                    $ext = $file->getClientOriginalExtension();
+                    $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . $ext : '');
+                    $file->move($folder, $fileName);
+                    $path = 'uploads/project-bugs/' . $fileName;
+
+                    $storedAttachments[] = [
+                        'path' => $path,
+                        'name' => $origName,
+                    ];
+
+                    if (! $firstAttachmentPath) {
+                        $firstAttachmentPath = $path;
+                        $firstAttachmentName = $origName;
+                    }
+                }
+            }
+        }
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $attachmentName = $file->getClientOriginalName();
+            if ($file && $file->isValid()) {
+                $origName = $file->getClientOriginalName();
+                $ext = $file->getClientOriginalExtension();
+                $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . $ext : '');
+                $file->move($folder, $fileName);
+                $path = 'uploads/project-bugs/' . $fileName;
 
-            $folder = public_path('uploads/project-bugs');
-            if (! file_exists($folder)) {
-                mkdir($folder, 0777, true);
+                $storedAttachments[] = [
+                    'path' => $path,
+                    'name' => $origName,
+                ];
+
+                if (! $firstAttachmentPath) {
+                    $firstAttachmentPath = $path;
+                    $firstAttachmentName = $origName;
+                }
             }
-
-            $fileName = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
-            $file->move($folder, $fileName);
-            $attachmentPath = 'uploads/project-bugs/' . $fileName;
         }
 
         $bug = $productionInitiation->bugs()->create([
-            'company_id' => auth()->user()?->company_id,
-            'lead_id' => $productionInitiation->lead_id,
-            'lead_product_id' => $productionInitiation->lead_product_id,
-            'description' => $validated['description'],
-            'priority' => $validated['priority'],
-            'attachment_path' => $attachmentPath,
-            'attachment_original_name' => $attachmentName,
-            'status' => 'open',
-            'created_by_user_id' => auth()->id(),
+            'company_id'               => auth()->user()?->company_id,
+            'lead_id'                  => $productionInitiation->lead_id,
+            'lead_product_id'          => $productionInitiation->lead_product_id,
+            'description'              => $validated['description'],
+            'priority'                 => $validated['priority'],
+            'attachment_path'          => $firstAttachmentPath,
+            'attachment_original_name' => $firstAttachmentName,
+            'attachments'              => ! empty($storedAttachments) ? $storedAttachments : null,
+            'status'                   => 'open',
+            'created_by_user_id'       => auth()->id(),
         ]);
 
         return response()->json([

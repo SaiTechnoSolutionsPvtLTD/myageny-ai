@@ -236,12 +236,20 @@
                                         </div>
                                     </td>
                                     <td style="text-align: center;">
-                                        @if($bug->attachment_path)
-                                            <a href="{{ asset($bug->attachment_path) }}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #0284c7; background: #f0f9ff; padding: 6px 14px; border-radius: 10px; border: 1px solid #bae6fd; text-decoration: none; transition: all 0.2s ease;">
-                                                <i class="bi bi-paperclip" style="font-size: 15px;"></i> View File
-                                            </a>
+                                        @php
+                                            $attList = $bug->attachment_list;
+                                        @endphp
+                                        @if(!empty($attList))
+                                            <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+                                                @foreach($attList as $attIndex => $att)
+                                                    <a href="{{ $att['url'] }}" target="_blank" style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; color: #0284c7; background: #f0f9ff; padding: 4px 10px; border-radius: 8px; border: 1px solid #bae6fd; text-decoration: none; transition: all 0.2s ease; max-width: 180px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="{{ $att['name'] }}">
+                                                        <i class="bi bi-paperclip" style="font-size: 13px;"></i>
+                                                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $att['name'] }}</span>
+                                                    </a>
+                                                @endforeach
+                                            </div>
                                         @else
-                                            <span style="color: #94a3b8; font-size: 12px; font-weight: 600;">No File</span>
+                                            <span style="color: #94a3b8; font-size: 12px; font-weight: 600;">No Files</span>
                                         @endif
                                     </td>
                                     <td style="text-align: center;">
@@ -311,11 +319,15 @@
                 </div>
 
                 <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
-                        Attachment / File Upload (Screenshot, PDF, Log File)
+                    <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        <span>Attachments / Files Upload (Multiple Allowed)</span>
+                        <span style="font-size: 11px; color: #64748b; font-weight: 500;">Screenshots, PDFs, Logs, Docs</span>
                     </label>
-                    <input type="file" name="attachment" class="cc-sheet-input" style="width: 100%; padding: 8px 10px;" accept="image/*,.pdf,.doc,.docx,.zip">
-                    <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">Files will be stored in public directory (`uploads/project-bugs/`) and viewable by team.</div>
+                    <input type="file" name="attachments[]" id="bugAttachmentsInput" class="cc-sheet-input" style="width: 100%; padding: 8px 10px;" accept="image/*,.pdf,.doc,.docx,.zip,.txt,.log" multiple onchange="handleBugFilesChange(this)">
+                    <div id="bugFilesPreviewList" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;"></div>
+                    <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">
+                        <i class="bi bi-info-circle"></i> You can select <strong>multiple files</strong> at once (Images, PDF, Log, Word, Zip). Max 20MB per file.
+                    </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
@@ -333,6 +345,27 @@
 </div>
 
 <script>
+function handleBugFilesChange(input) {
+    const list = document.getElementById('bugFilesPreviewList');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!input.files || input.files.length === 0) return;
+
+    for (let i = 0; i < input.files.length; i++) {
+        const file = input.files[i];
+        const sizeKb = (file.size / 1024).toFixed(1);
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:4px 10px; background:#f1f5f9; border-radius:6px; font-size:12px; color:#334155;';
+        item.innerHTML = `
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:380px;">
+                📎 <strong>${file.name}</strong>
+            </span>
+            <span style="color:#64748b; font-size:11px; margin-left:8px;">${sizeKb} KB</span>
+        `;
+        list.appendChild(item);
+    }
+}
+
 function openAddBugModal() {
     const btn = document.getElementById('btnSubmitBug');
     if (btn) {
@@ -344,6 +377,11 @@ function openAddBugModal() {
         if (icon) icon.innerHTML = '🐞';
         if (text) text.textContent = 'Submit Bug Report';
     }
+    const preview = document.getElementById('bugFilesPreviewList');
+    if (preview) preview.innerHTML = '';
+    const fileInp = document.getElementById('bugAttachmentsInput');
+    if (fileInp) fileInp.value = '';
+
     document.getElementById('add-bug-modal-overlay').classList.add('is-open');
     document.getElementById('add-bug-modal').classList.add('is-open');
 }

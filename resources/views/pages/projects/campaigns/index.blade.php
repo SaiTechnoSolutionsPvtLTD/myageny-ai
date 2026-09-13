@@ -30,13 +30,18 @@
 .cmp-stat-value { font-size:24px; font-weight:900; color:#fff; line-height:1.2; text-shadow:0 2px 4px rgba(0,0,0,0.1); }
 .cmp-stat-footer { margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.25); font-size:10.5px; color:rgba(255,255,255,0.92); font-weight:600; text-shadow:0 1px 2px rgba(0,0,0,0.1); }
 
-/* Filter Card */
-.cmp-filter-card { background:#fff; border:1px solid #eee7df; border-radius:14px; overflow:hidden; box-shadow:0 6px 20px rgba(15,23,42,.03); }
-.cmp-filter-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid #f2ede8; background:#fffdfb; }
+/* Filter Accordion Card */
+.cmp-filter-card { background:#fff; border:1px solid #eee7df; border-radius:14px; overflow:hidden; box-shadow:0 6px 20px rgba(15,23,42,.03); transition:all .2s ease; }
+.cmp-filter-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid transparent; background:#fffdfb; cursor:pointer; user-select:none; transition:background .15s ease, border-color .15s ease; }
+.cmp-filter-head:hover { background:#fffaf5; }
+.cmp-filter-card.is-active .cmp-filter-head { border-bottom-color:#f2ede8; }
 .cmp-filter-title { font-size:14px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:8px; }
 .cmp-filter-badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 8px; border-radius:999px; background:#ea580c; color:#fff; font-size:11px; font-weight:800; }
+.cmp-accordion-arrow { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; transition:transform .25s ease, background .15s ease, color .15s ease; }
+.cmp-filter-head:hover .cmp-accordion-arrow { background:#fff7ed; border-color:#fed7aa; color:#ea580c; }
+.cmp-filter-card.is-active .cmp-accordion-arrow { transform:rotate(180deg); background:#fff7ed; border-color:#fed7aa; color:#ea580c; }
 .cmp-filter-body { padding:18px 20px; }
-.cmp-filter-grid { display:grid; grid-template-columns:1.5fr 1fr 1.3fr 1.2fr 1fr 1fr auto; gap:12px; align-items:end; }
+.cmp-filter-grid { display:grid; grid-template-columns:1.6fr 1.3fr 1.2fr 1fr 1fr auto; gap:12px; align-items:end; }
 .cmp-field { display:flex; flex-direction:column; gap:5px; }
 .cmp-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748b; }
 .cmp-input, .cmp-select { width:100%; min-height:40px; padding:8px 12px; border-radius:8px; border:1.5px solid #e2e8f0; font-size:13px; color:#1e293b; background:#f8fafc; outline:none; transition:all .15s; font-family:inherit; }
@@ -264,9 +269,9 @@
             </a>
         </section>
 
-        {{-- Filters Section --}}
-        <section class="cmp-filter-card">
-            <div class="cmp-filter-head">
+        {{-- Filters Accordion Section --}}
+        <section class="cmp-filter-card {{ $hasActiveFilters ? 'is-active' : '' }}" id="campaignFilterAccordion">
+            <div class="cmp-filter-head" onclick="toggleFilterAccordion()">
                 <div class="cmp-filter-title">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:#ea580c;">
                         <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
@@ -275,15 +280,25 @@
                     @if($hasActiveFilters)
                         <span class="cmp-filter-badge">Active Filters</span>
                     @endif
+                    <span style="font-size:11px; font-weight:600; color:#94a3b8; margin-left:4px;">
+                        <span id="accordionStateText">{{ $hasActiveFilters ? 'Click to collapse' : 'Click to expand' }}</span>
+                    </span>
                 </div>
-                @if($hasActiveFilters)
-                    <a href="{{ route('projects.campaigns.index', ['view' => $viewMode]) }}" class="cmp-btn cmp-btn-outline cmp-btn-sm">
-                        ✕ Clear All Filters
-                    </a>
-                @endif
+                <div style="display:flex; align-items:center; gap:10px;">
+                    @if($hasActiveFilters)
+                        <a href="{{ route('projects.campaigns.index', ['view' => $viewMode]) }}" class="cmp-btn cmp-btn-outline cmp-btn-sm" onclick="event.stopPropagation();" title="Clear all applied filters">
+                            ✕ Clear All Filters
+                        </a>
+                    @endif
+                    <span class="cmp-accordion-arrow" title="Toggle Filters">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </span>
+                </div>
             </div>
 
-            <div class="cmp-filter-body">
+            <div class="cmp-filter-body" id="campaignFilterBody" style="{{ $hasActiveFilters ? 'display: block;' : 'display: none;' }}">
                 <form method="GET" action="{{ route('projects.campaigns.index') }}">
                     <input type="hidden" name="view" value="{{ $viewMode }}">
 
@@ -301,20 +316,7 @@
                             >
                         </div>
 
-                        {{-- 2. Branch Dropdown --}}
-                        <div class="cmp-field">
-                            <label class="cmp-label" for="filter_branch_id">Branch</label>
-                            <select id="filter_branch_id" name="branch_id" class="cmp-select">
-                                <option value="">All Branches</option>
-                                @foreach($branches as $branch)
-                                    <option value="{{ $branch->id }}" {{ (string)($filters['branch_id'] ?? '') === (string)$branch->id ? 'selected' : '' }}>
-                                        {{ $branch->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        {{-- 3. Status & Renewal Dropdown --}}
+                        {{-- 2. Status & Renewal Dropdown --}}
                         <div class="cmp-field">
                             <label class="cmp-label" for="filter_status">Status / Renewal</label>
                             <select id="filter_status" name="status" class="cmp-select">
@@ -929,3 +931,53 @@
 </div>
 @endsection
 
+@push('scripts')
+<script>
+function toggleFilterAccordion() {
+    const card = document.getElementById('campaignFilterAccordion');
+    const body = document.getElementById('campaignFilterBody');
+    const stateText = document.getElementById('accordionStateText');
+    if (!card || !body) return;
+
+    const isOpen = card.classList.contains('is-active');
+    if (isOpen) {
+        card.classList.remove('is-active');
+        body.style.display = 'none';
+        if (stateText) stateText.textContent = 'Click to expand';
+        try { localStorage.setItem('cmp_filter_accordion_state', 'closed'); } catch (e) {}
+    } else {
+        card.classList.add('is-active');
+        body.style.display = 'block';
+        if (stateText) stateText.textContent = 'Click to collapse';
+        try { localStorage.setItem('cmp_filter_accordion_state', 'open'); } catch (e) {}
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const card = document.getElementById('campaignFilterAccordion');
+    const body = document.getElementById('campaignFilterBody');
+    const stateText = document.getElementById('accordionStateText');
+    if (!card || !body) return;
+
+    const hasActiveFilters = @json((bool) $hasActiveFilters);
+    if (hasActiveFilters) {
+        card.classList.add('is-active');
+        body.style.display = 'block';
+        if (stateText) stateText.textContent = 'Click to collapse';
+    } else {
+        let savedState = null;
+        try { savedState = localStorage.getItem('cmp_filter_accordion_state'); } catch (e) {}
+
+        if (savedState === 'open') {
+            card.classList.add('is-active');
+            body.style.display = 'block';
+            if (stateText) stateText.textContent = 'Click to collapse';
+        } else {
+            card.classList.remove('is-active');
+            body.style.display = 'none';
+            if (stateText) stateText.textContent = 'Click to expand';
+        }
+    }
+});
+</script>
+@endpush

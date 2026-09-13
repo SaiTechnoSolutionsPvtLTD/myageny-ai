@@ -77,7 +77,41 @@ class PayrollController extends Controller
             ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
             : now()->startOfMonth();
 
-        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : 1;
+
+        $branches = Branch::query()
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->where('name', 'like', 'Coimbatore%')
+                  ->orWhere('id', 1);
+            })
+            ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+
+        // Fast shell — employee data is loaded via AJAX (loadRows)
+        return view('pages.hrms.payroll.create', [
+            'selectedMonth'    => $selectedMonth,
+            'selectedBranchId' => $selectedBranchId,
+            'branches'         => $branches,
+        ]);
+    }
+
+    /**
+     * AJAX endpoint: returns payroll row data as JSON.
+     * Called by the create view via fetch() to avoid slow full-page reloads.
+     */
+    public function loadRows(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $this->authorizePayrollModuleAccess();
+
+        abort_if($this->isSelfServiceUser(), 403);
+
+        $selectedMonth = $request->filled('month')
+            ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
+            : now()->startOfMonth();
+
+        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : 1;
 
         $employees = EmployeeOnboarding::query()
             ->active()
@@ -87,7 +121,7 @@ class PayrollController extends Controller
                         $userQuery->where('is_active', true);
                     });
             })
-            ->with(['role', 'portalUser.branch'])
+            ->with(['role', 'portalUser'])
             ->when(auth()->user()?->company_id, function ($query) {
                 $query->whereHas('portalUser', function ($subQuery) {
                     $subQuery->where('company_id', auth()->user()->company_id);
@@ -108,65 +142,58 @@ class PayrollController extends Controller
             ->orderBy('name')
             ->get();
 
-        $branches = Branch::query()
-            ->where('is_active', true)
-            ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
-            ->orderBy('name')
-            ->get(['id', 'name', 'code']);
-
-        $workingDays = $this->workingDaysInMonth($selectedMonth);
+        // Compute working days once — reuse across all methods
+        $workingDates   = $this->workingDateStringsForMonth($selectedMonth);
+        $workingDays    = count($workingDates);
         $payrollSettings = PayrollSetting::forCompany(auth()->user()?->company_id);
-        $attendanceSummary = $this->attendanceSummaryForMonth($selectedMonth, $employees->pluck('id')->all(), $workingDays);
+        $attendanceSummary = $this->attendanceSummaryForMonth($selectedMonth, $employees->pluck('id')->all(), $workingDays, $workingDates, $payrollSettings);
 
         $rows = $employees->map(function (EmployeeOnboarding $employee) use ($attendanceSummary, $workingDays, $payrollSettings) {
             $components = $this->salaryComponentsForEmployee($employee);
-            $summary = $attendanceSummary[$employee->id] ?? [
+            $summary    = $attendanceSummary[$employee->id] ?? [
                 'days_attended' => 0,
-                'leave_days' => 0,
-                'lop_days' => $workingDays,
-                'payable_days' => 0,
+                'leave_days'    => 0,
+                'lop_days'      => $workingDays,
+                'payable_days'  => 0,
             ];
 
             return $this->calculatePayrollRow([
-                'employee_onboarding_id' => $employee->id,
-                'employee_code' => $employee->employee_id,
-                'employee_name' => $employee->name,
-                'branch_name' => $employee->branch_name,
-                'designation' => $employee->role?->display_name ?: ($employee->role?->name ? Str::of(Str::afterLast($employee->role->name, '__'))->replace('_', ' ')->title()->value() : 'Employee'),
-                'date_of_joining' => optional($employee->joining_date ?: $employee->salary_effective_from)->format('Y-m-d'),
-                'uan_no' => $employee->uan_no,
-                'esi_no' => $employee->esi_no,
-                'working_days' => $workingDays,
-                'days_attended' => $summary['days_attended'],
-                'leave_days' => $summary['leave_days'],
-                'lop_days' => $summary['lop_days'],
-                'payable_days' => $summary['payable_days'],
-                'use_pf' => (bool) $employee->pf_enabled,
-                'use_esi' => (bool) $employee->esi_enabled,
-                'pf_employee_percentage' => (float) $payrollSettings->pf_employee_percentage,
-                'pf_employer_percentage' => (float) $payrollSettings->pf_employer_percentage,
-                'esi_employee_percentage' => (float) $payrollSettings->esi_employee_percentage,
-                'esi_employer_percentage' => (float) $payrollSettings->esi_employer_percentage,
-                'esi_salary_limit' => (float) $payrollSettings->esi_salary_limit,
-                'gross_salary' => $components['gross_salary'],
-                'basic_salary' => $components['basic_salary'],
-                'hra' => $components['hra'],
-                'travel_allowance' => $components['travel_allowance'],
-                'other_allowance' => $components['other_allowance'],
-                'professional_tax' => (float) ($employee->professional_tax ?? 0),
-                'tds_amount' => (float) ($employee->tds_amount ?? 0),
-                'loan_deduction' => (float) ($employee->loan_deduction ?? 0),
-                'other_deduction' => (float) ($employee->other_deduction ?? 0),
+                'employee_onboarding_id'   => $employee->id,
+                'employee_code'            => $employee->employee_id,
+                'employee_name'            => $employee->name,
+                'branch_name'              => $employee->branch_name,
+                'designation'              => $employee->role?->display_name ?: ($employee->role?->name ? Str::of(Str::afterLast($employee->role->name, '__'))->replace('_', ' ')->title()->value() : 'Employee'),
+                'date_of_joining'          => optional($employee->joining_date ?: $employee->salary_effective_from)->format('Y-m-d'),
+                'uan_no'                   => $employee->uan_no,
+                'esi_no'                   => $employee->esi_no,
+                'working_days'             => $workingDays,
+                'days_attended'            => $summary['days_attended'],
+                'leave_days'               => $summary['leave_days'],
+                'lop_days'                 => $summary['lop_days'],
+                'payable_days'             => $summary['payable_days'],
+                'use_pf'                   => (bool) $employee->pf_enabled,
+                'use_esi'                  => (bool) $employee->esi_enabled,
+                'pf_employee_percentage'   => (float) $payrollSettings->pf_employee_percentage,
+                'pf_employer_percentage'   => (float) $payrollSettings->pf_employer_percentage,
+                'esi_employee_percentage'  => (float) $payrollSettings->esi_employee_percentage,
+                'esi_employer_percentage'  => (float) $payrollSettings->esi_employer_percentage,
+                'esi_salary_limit'         => (float) $payrollSettings->esi_salary_limit,
+                'gross_salary'             => $components['gross_salary'],
+                'basic_salary'             => $components['basic_salary'],
+                'hra'                      => $components['hra'],
+                'travel_allowance'         => $components['travel_allowance'],
+                'other_allowance'          => $components['other_allowance'],
+                'professional_tax'         => (float) ($employee->professional_tax ?? 0),
+                'tds_amount'               => (float) ($employee->tds_amount ?? 0),
+                'loan_deduction'           => (float) ($employee->loan_deduction ?? 0),
+                'other_deduction'          => (float) ($employee->other_deduction ?? 0),
             ]);
         })->values();
 
-        return view('pages.hrms.payroll.create', [
-            'selectedMonth' => $selectedMonth,
-            'selectedBranchId' => $selectedBranchId,
-            'branches' => $branches,
-            'workingDays' => $workingDays,
-            'payrollSettings' => $payrollSettings,
-            'rows' => $rows,
+        return response()->json([
+            'working_days' => $workingDays,
+            'month_label'  => $selectedMonth->format('M Y'),
+            'rows'         => $rows,
         ]);
     }
 
@@ -422,12 +449,14 @@ class PayrollController extends Controller
         return $dates;
     }
 
-    private function attendanceSummaryForMonth(Carbon $month, array $employeeIds, int $workingDays): array
+    private function attendanceSummaryForMonth(Carbon $month, array $employeeIds, int $workingDays, array $workingDates = [], ?PayrollSetting $settings = null): array
     {
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
-        $settings = PayrollSetting::forCompany(auth()->user()?->company_id);
-        $workingDates = $this->workingDateStringsForMonth($month);
+        $settings = $settings ?? PayrollSetting::forCompany(auth()->user()?->company_id);
+        if (empty($workingDates)) {
+            $workingDates = $this->workingDateStringsForMonth($month);
+        }
         $workingDateLookup = array_flip($workingDates);
         $paidLeaveAllowance = max((float) $settings->paid_leave_days, 0);
         $permissionAllowance = max((int) $settings->permission_days_per_month, 0);

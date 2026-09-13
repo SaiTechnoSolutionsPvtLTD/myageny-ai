@@ -324,14 +324,24 @@ class CustomerCampaignController extends Controller
             'total_budget' => $leads->sum(fn ($l) => (float) ($l->lead_budget_amount ?? 0)),
         ];
 
-        // Fetch Employees for Filter Dropdown
+        // Fetch Employees for Filter Dropdown (Only Production Digital Marketing Department)
         $employees = User::query()
             ->where('is_active', true)
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->where(function ($q) use ($dmDepartmentIds) {
+                $q->whereHas('roles.department', function ($dq) use ($dmDepartmentIds) {
+                    $dq->whereIn('id', $dmDepartmentIds)
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%marketing%'])
+                       ->orWhereRaw('LOWER(display_name) LIKE ?', ['%digital%marketing%']);
+                });
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
-
-        $branches = $this->visibility->visibleBranches($user);
 
         // ── Campaign-wise Query ──
         $campaignsQuery = CustomerCampaign::query()
@@ -385,10 +395,23 @@ class CustomerCampaignController extends Controller
         if ($employeeId) {
             $campaignsQuery->where(function ($q) use ($employeeId) {
                 $q->where('customer_campaigns.created_by', $employeeId)
-                  ->orWhereHas('lead', fn ($lq) => $lq->where('assigned_to', $employeeId)
-                        ->orWhere('customer_support_executive_id', $employeeId)
-                        ->orWhere('customer_support_tl_id', $employeeId)
-                  );
+                  ->orWhereHas('productionInitiation', function ($piq) use ($employeeId) {
+                        $piq->whereJsonContains('project_allocated_employee_user_ids', $employeeId)
+                            ->orWhereJsonContains('project_allocated_tl_user_ids', $employeeId)
+                            ->orWhere('initiated_by', $employeeId)
+                            ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $employeeId . '"%');
+                  })
+                  ->orWhereHas('lead', function ($lq) use ($employeeId) {
+                        $lq->where('assigned_to', $employeeId)
+                           ->orWhere('customer_support_executive_id', $employeeId)
+                           ->orWhere('customer_support_tl_id', $employeeId)
+                           ->orWhereHas('productionInitiations', function ($piq) use ($employeeId) {
+                                $piq->whereJsonContains('project_allocated_employee_user_ids', $employeeId)
+                                    ->orWhereJsonContains('project_allocated_tl_user_ids', $employeeId)
+                                    ->orWhere('initiated_by', $employeeId)
+                                    ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $employeeId . '"%');
+                           });
+                  });
             });
         }
 
@@ -441,7 +464,6 @@ class CustomerCampaignController extends Controller
         $filters = [
             'company_name' => $companyName,
             'employee_id' => $employeeId,
-            'branch_id' => $branchId,
             'source' => $source,
             'status' => $status,
             'renewal_filter' => $renewalFilter,
@@ -450,7 +472,7 @@ class CustomerCampaignController extends Controller
             'view' => $viewMode,
         ];
 
-        $hasActiveFilters = !empty($companyName) || !empty($employeeId) || !empty($branchId) || !empty($source) || !empty($status) || !empty($renewalFilter) || !empty($startDate) || !empty($endDate);
+        $hasActiveFilters = !empty($companyName) || !empty($employeeId) || !empty($source) || !empty($status) || !empty($renewalFilter) || !empty($startDate) || !empty($endDate);
 
         // Pagination
         $perPage = (int) $request->query('per_page', 10);
@@ -482,7 +504,6 @@ class CustomerCampaignController extends Controller
             'stats' => $stats,
             'search' => $companyName,
             'employees' => $employees,
-            'branches' => $branches,
             'filters' => $filters,
             'hasActiveFilters' => $hasActiveFilters,
             'viewMode' => $viewMode,
@@ -563,8 +584,8 @@ class CustomerCampaignController extends Controller
         // Find IDs of campaigns that have already been extended into a newer campaign
         $extendedParentIds = $allCampaigns->pluck('extended_from_id')->filter()->unique()->toArray();
 
-        // Show only the latest/current active campaign of each chain in the table (1 entry per campaign lineage)
-        $campaigns = $allCampaigns->reject(fn ($c) => in_array($c->id, $extendedParentIds, true))->values();
+        // Show all campaigns for this lead in the table (including extended campaigns)
+        $campaigns = $allCampaigns;
 
         $stats = [
             'total' => $campaigns->count(),
@@ -581,6 +602,7 @@ class CustomerCampaignController extends Controller
             'allocatedUsers' => $allocatedUsers,
             'campaigns' => $campaigns,
             'allCampaigns' => $allCampaigns,
+            'extendedParentIds' => $extendedParentIds,
             'stats' => $stats,
         ]);
     }
@@ -606,9 +628,23 @@ class CustomerCampaignController extends Controller
             'budget_type' => ['nullable', 'string', 'max:50'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'tenure' => ['nullable', 'numeric', 'min:1'],
+            'tenure_unit' => ['nullable', 'string', 'in:days,months'],
             'remarks' => ['nullable', 'string', 'max:5000'],
             'production_initiation_id' => ['nullable', 'integer', 'exists:production_initiations,id'],
         ]);
+
+        if (empty($validated['end_date']) && !empty($validated['start_date']) && $request->filled('tenure')) {
+            $startDate = Carbon::parse($validated['start_date']);
+            $tenure = (int) $request->input('tenure');
+            if ($tenure > 0) {
+                if ($request->input('tenure_unit') === 'months') {
+                    $validated['end_date'] = $startDate->copy()->addMonths($tenure)->subDay()->toDateString();
+                } else {
+                    $validated['end_date'] = $startDate->copy()->addDays($tenure - 1)->toDateString();
+                }
+            }
+        }
 
         $status = $validated['status'];
         $pausedAt = $status === 'paused' ? Carbon::now() : null;
@@ -665,14 +701,29 @@ class CustomerCampaignController extends Controller
             'budget_type' => ['nullable', 'string', 'max:50'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'tenure' => ['nullable', 'numeric', 'min:1'],
+            'tenure_unit' => ['nullable', 'string', 'in:days,months'],
             'remarks' => ['nullable', 'string', 'max:5000'],
         ]);
+
+        if (empty($validated['end_date']) && !empty($validated['start_date']) && $request->filled('tenure')) {
+            $startDate = Carbon::parse($validated['start_date']);
+            $tenure = (int) $request->input('tenure');
+            if ($tenure > 0) {
+                if ($request->input('tenure_unit') === 'months') {
+                    $validated['end_date'] = $startDate->copy()->addMonths($tenure)->subDay()->toDateString();
+                } else {
+                    $validated['end_date'] = $startDate->copy()->addDays($tenure - 1)->toDateString();
+                }
+            }
+        }
 
         $newStatus = $validated['status'];
         $oldStatus = $resolvedCampaign->status;
         $now = Carbon::now();
 
-        $updateData = array_merge($validated, [
+        $cleanData = Arr::except($validated, ['tenure', 'tenure_unit']);
+        $updateData = array_merge($cleanData, [
             'updated_by' => $user->id,
         ]);
 
@@ -865,8 +916,22 @@ class CustomerCampaignController extends Controller
             'budget_type' => ['nullable', 'string', 'max:50'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'tenure' => ['nullable', 'numeric', 'min:1'],
+            'tenure_unit' => ['nullable', 'string', 'in:days,months'],
             'remarks' => ['nullable', 'string', 'max:5000'],
         ]);
+
+        if (empty($validated['end_date']) && !empty($validated['start_date']) && $request->filled('tenure')) {
+            $startDate = Carbon::parse($validated['start_date']);
+            $tenure = (int) $request->input('tenure');
+            if ($tenure > 0) {
+                if ($request->input('tenure_unit') === 'months') {
+                    $validated['end_date'] = $startDate->copy()->addMonths($tenure)->subDay()->toDateString();
+                } else {
+                    $validated['end_date'] = $startDate->copy()->addDays($tenure - 1)->toDateString();
+                }
+            }
+        }
 
         $status = $validated['status'];
         $pausedAt = $status === 'paused' ? Carbon::now() : null;

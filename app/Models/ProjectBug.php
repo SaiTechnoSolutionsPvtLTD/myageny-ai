@@ -20,8 +20,13 @@ class ProjectBug extends Model
         'priority',
         'attachment_path',
         'attachment_original_name',
+        'attachments',
         'status',
         'created_by_user_id',
+    ];
+
+    protected $casts = [
+        'attachments' => 'array',
     ];
 
     public function productionInitiation(): BelongsTo
@@ -51,5 +56,42 @@ class ProjectBug extends Model
         }
 
         return asset($this->attachment_path);
+    }
+
+    /**
+     * Get all attachments as normalized array of ['path' => ..., 'name' => ...]
+     */
+    public function getAttachmentListAttribute(): array
+    {
+        $list = [];
+
+        if (! empty($this->attachments) && is_array($this->attachments)) {
+            foreach ($this->attachments as $item) {
+                if (is_array($item) && ! empty($item['path'])) {
+                    $list[] = [
+                        'path' => $item['path'],
+                        'name' => $item['name'] ?? basename($item['path']),
+                        'url'  => asset($item['path']),
+                    ];
+                } elseif (is_string($item) && ! empty($item)) {
+                    $list[] = [
+                        'path' => $item,
+                        'name' => basename($item),
+                        'url'  => asset($item),
+                    ];
+                }
+            }
+        }
+
+        // Fallback to legacy single attachment if attachments array was empty
+        if (empty($list) && ! empty($this->attachment_path)) {
+            $list[] = [
+                'path' => $this->attachment_path,
+                'name' => $this->attachment_original_name ?: basename($this->attachment_path),
+                'url'  => asset($this->attachment_path),
+            ];
+        }
+
+        return $list;
     }
 }

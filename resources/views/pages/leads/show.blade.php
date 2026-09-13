@@ -215,6 +215,7 @@ tbody tr:last-child td { border-bottom: none; }
         ->sortBy(fn ($fieldValue) => [$fieldValue->field->sort_order ?? 9999, strtolower($fieldValue->field->label ?? '')]);
     $productionUpdateTypeMeta = [
         'production_update' => ['label' => 'Production Update', 'title' => 'Execution Progress', 'bg' => '#eff6ff', 'border' => '#bfdbfe', 'text' => '#1d4ed8'],
+        'welcome_call_update' => ['label' => 'Welcome Call Update', 'title' => 'Welcome Call Notes', 'bg' => '#f0fdfa', 'border' => '#ccfbf1', 'text' => '#0f766e'],
         'meeting_update' => ['label' => 'Meeting Update', 'title' => 'Discussion Notes', 'bg' => '#fff7ed', 'border' => '#fed7aa', 'text' => '#c2410c'],
         'weekly_update' => ['label' => 'Weekly Update', 'title' => 'Weekly Summary', 'bg' => '#f0fdf4', 'border' => '#bbf7d0', 'text' => '#15803d'],
     ];
