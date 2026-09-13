@@ -10,6 +10,7 @@ use App\Models\Branch;
 use App\Models\Product;
 use App\Models\ProductionInitiation;
 use App\Models\CustomerCampaign;
+use App\Models\SmmSheet;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -660,6 +661,147 @@ class CustomerSuccessDashboardController extends Controller
                 }
             }
 
+            // 8. Pending Welcome Call Updates (All Departments)
+            $pendingWcProjects = ProductionInitiation::query()
+                ->with([
+                    'lead:id,company_name,contact_name,mobile_number,company_id,branch_id,lead_source',
+                    'leadProduct:id,total_price,amount_paid',
+                    'department:id,name',
+                    'product:id,product_name',
+                ])
+                ->whereIn('production_approval_status', ['approval', 'approved'])
+                ->whereDoesntHave('projectUpdates', function ($q) {
+                    $q->where('type', 'welcome_call_update');
+                })
+                ->when($currentUser->company_id, function ($q) use ($currentUser) {
+                    $q->where(function ($sq) use ($currentUser) {
+                        $sq->where('production_initiations.company_id', $currentUser->company_id)
+                           ->orWhereHas('lead', fn($lq) => $lq->where('company_id', $currentUser->company_id));
+                    });
+                })
+                ->when(!empty($filters['branch_id']), function ($q) use ($filters) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id']));
+                })
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), function ($q) use ($filters) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('lead_source', $filters['source']));
+                })
+                ->latest('production_initiations.id')
+                ->get();
+
+            $pendingWcItems = [];
+            foreach ($pendingWcProjects as $pwp) {
+                $compName = $pwp->company_name ?: ($pwp->lead?->company_name ?: ($pwp->client_name ?: ($pwp->lead?->client_name ?: ($pwp->lead?->contact_name ?: 'N/A'))));
+                $price = (float) ($pwp->leadProduct?->total_price ?? 0);
+                $paid  = (float) ($pwp->leadProduct?->amount_paid ?? 0);
+                $approvedAt = $pwp->production_approval_reviewed_at
+                    ? Carbon::parse($pwp->production_approval_reviewed_at)->format('d M Y')
+                    : ($pwp->created_at ? $pwp->created_at->format('d M Y') : '—');
+
+                $pendingWcItems[] = [
+                    'id'              => $pwp->id,
+                    'lead_id'         => $pwp->lead_id,
+                    'company_name'    => $compName,
+                    'mobile_number'   => $pwp->lead?->mobile_number ?: '—',
+                    'product_name'    => $pwp->product_name ?: ($pwp->product?->product_name ?: '—'),
+                    'department_name' => $pwp->department?->name ?: 'Development',
+                    'approved_date'   => $approvedAt,
+                    'total_value'     => $price,
+                    'received_amount' => $paid,
+                    'pending_amount'  => max(0, $price - $paid),
+                    'action_url'      => url('/projects-details/' . $pwp->id),
+                ];
+            }
+
+            // 9. SMM Sheet Expiry (Current Month, Last Month, Next Month)
+            $smmSheets = SmmSheet::query()
+                ->with([
+                    'lead:id,company_name,contact_name,mobile_number,company_id,branch_id,lead_source,customer_support_executive_id,customer_support_tl_id',
+                    'leadProduct:id,total_price,amount_paid',
+                    'product:id,product_name,package_name',
+                    'department:id,name',
+                ])
+                ->whereNull('deleted_at')
+                ->whereNotNull('end_date')
+                ->when($currentUser->company_id, function ($q) use ($currentUser) {
+                    $q->where(function ($sq) use ($currentUser) {
+                        $sq->where('smm_sheets.company_id', $currentUser->company_id)
+                           ->orWhereHas('lead', fn($lq) => $lq->where('company_id', $currentUser->company_id));
+                    });
+                })
+                ->when(!empty($filters['branch_id']), function ($q) use ($filters) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id']));
+                })
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('smm_sheets.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), function ($q) use ($filters) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('lead_source', $filters['source']));
+                })
+                ->orderBy('end_date', 'asc')
+                ->get();
+
+            $smmCurrentMonthItems = [];
+            $smmLastMonthItems = [];
+            $smmNextMonthItems = [];
+
+            $cmStartStr = $cmStart->toDateString();
+            $cmEndStr = $cmEnd->toDateString();
+            $lmStartStr = $lmStart->toDateString();
+            $lmEndStr = $lmEnd->toDateString();
+            $nmStartStr = $nmStart->toDateString();
+            $nmEndStr = $nmEnd->toDateString();
+
+            foreach ($smmSheets as $s) {
+                $endDate = $s->end_date ? Carbon::parse($s->end_date)->toDateString() : null;
+                if (!$endDate) continue;
+
+                $committedPosters = (int) $s->committed_posters;
+                $committedVideos  = (int) $s->committed_videos;
+                $completedPosters = (int) $s->design_completed_posters + (int) $s->dm_completed_posters;
+                $completedVideos  = (int) $s->design_completed_videos + (int) $s->dm_completed_videos;
+                $totalCommitted   = $committedPosters + $committedVideos;
+                $totalCompleted   = $completedPosters + $completedVideos;
+
+                $computedStatus = 'pending';
+                if ($totalCommitted > 0 && $totalCompleted >= $totalCommitted) {
+                    $computedStatus = 'completed';
+                } elseif ($endDate < $today->toDateString()) {
+                    $computedStatus = 'overdue';
+                }
+
+                $price = (float) ($s->leadProduct?->total_price ?? 0);
+                $paid  = (float) ($s->leadProduct?->amount_paid ?? 0);
+
+                $item = [
+                    'id'               => $s->id,
+                    'pi_id'            => $s->production_initiation_id,
+                    'lead_id'          => $s->lead_id,
+                    'company_name'     => $s->lead?->company_name ?: ($s->lead?->contact_name ?: 'N/A'),
+                    'mobile_number'    => $s->lead?->mobile_number ?: '—',
+                    'product_name'     => $s->product?->package_name ?: ($s->product?->product_name ?: 'SMM Package'),
+                    'department_name'  => $s->department?->name ?: 'Digital Marketing',
+                    'start_date'       => $s->start_date ? Carbon::parse($s->start_date)->format('d M Y') : '—',
+                    'end_date'         => Carbon::parse($endDate)->format('d M Y'),
+                    'end_date_raw'     => $endDate,
+                    'committed_posters'=> $committedPosters,
+                    'completed_posters'=> $completedPosters,
+                    'committed_videos' => $committedVideos,
+                    'completed_videos' => $completedVideos,
+                    'status'           => strtoupper($s->status ?: $computedStatus),
+                    'total_value'      => $price,
+                    'received_amount'  => $paid,
+                    'pending_amount'   => max(0, $price - $paid),
+                    'action_url'       => $s->production_initiation_id ? url('/projects-details/' . $s->production_initiation_id) : url('/projects/smm-sheet'),
+                ];
+
+                if ($endDate >= $cmStartStr && $endDate <= $cmEndStr) {
+                    $smmCurrentMonthItems[] = $item;
+                } elseif ($endDate >= $lmStartStr && $endDate <= $lmEndStr) {
+                    $smmLastMonthItems[] = $item;
+                } elseif ($endDate >= $nmStartStr && $endDate <= $nmEndStr) {
+                    $smmNextMonthItems[] = $item;
+                }
+            }
+
             return response()->json([
                 'status' => true,
                 'data'   => [
@@ -708,6 +850,24 @@ class CustomerSuccessDashboardController extends Controller
                     'delivery_projects'    => $deliveryProjectsData,
                     'delivery_title'       => $deliverySectionTitle,
                     'delivery_badge'       => $deliverySectionBadge,
+                    'pending_welcome_calls' => [
+                        'count' => count($pendingWcItems),
+                        'items' => $pendingWcItems,
+                    ],
+                    'smm_sheet' => [
+                        'current_month' => [
+                            'count' => count($smmCurrentMonthItems),
+                            'items' => $smmCurrentMonthItems,
+                        ],
+                        'last_month' => [
+                            'count' => count($smmLastMonthItems),
+                            'items' => $smmLastMonthItems,
+                        ],
+                        'next_month' => [
+                            'count' => count($smmNextMonthItems),
+                            'items' => $smmNextMonthItems,
+                        ],
+                    ],
                 ]
             ]);
 
@@ -743,6 +903,12 @@ class CustomerSuccessDashboardController extends Controller
             'delivery_projects'    => [],
             'delivery_title'       => 'Delivery Planned Projects',
             'delivery_badge'       => 'Planned',
+            'pending_welcome_calls' => ['count' => 0, 'items' => []],
+            'smm_sheet'            => [
+                'current_month' => ['count' => 0, 'items' => []],
+                'last_month'    => ['count' => 0, 'items' => []],
+                'next_month'    => ['count' => 0, 'items' => []],
+            ],
         ];
     }
 }

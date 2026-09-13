@@ -122,6 +122,7 @@
 .cmp-form-input, .cmp-form-select, .cmp-form-textarea { width:100%; padding:8px 12px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px; color:#0f172a; outline:none; transition:border-color .15s; }
 .cmp-form-input:focus, .cmp-form-select:focus, .cmp-form-textarea:focus { border-color:#ea580c; }
 .cmp-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.cmp-form-grid-3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
 
 .cmp-notice-box { padding:12px 14px; border-radius:10px; font-size:12px; line-height:1.5; }
 .cmp-notice-box--warning { background:#fffbeb; border:1px solid #fef3c7; color:#92400e; }
@@ -131,7 +132,7 @@
 
 @media (max-width: 900px) {
     .cmp-stats-mini { grid-template-columns:repeat(2,1fr); }
-    .cmp-form-grid { grid-template-columns:1fr; }
+    .cmp-form-grid, .cmp-form-grid-3 { grid-template-columns:1fr; }
 }
 
 /* Action Dropdown Menu */
@@ -218,20 +219,6 @@
                         @endif
                     </span>
                 </div>
-
-                @php
-                    $latestBudget = $dmInitiations->pluck('lead_budget_amount')->filter(fn($b) => (float)$b > 0)->first();
-                    $latestBudgetType = $dmInitiations->pluck('budget_amount_type')->filter()->first() ?? 'Standard';
-                @endphp
-                @if($latestBudget)
-                    <div class="cmp-info-pill" style="background:#fff7ed; border-color:#fed7aa;">
-                        <span class="cmp-info-pill-label" style="color:#ea580c;">Approved Ad Budget</span>
-                        <span class="cmp-info-pill-val" style="color:#c2410c;">
-                            ₹{{ number_format((float) $latestBudget, 2) }}
-                            <span style="font-size:11px; font-weight:600; color:#9a3412;">({{ $latestBudgetType }})</span>
-                        </span>
-                    </div>
-                @endif
             </div>
         </section>
 
@@ -286,9 +273,15 @@
                                 <td>
                                     <div style="font-weight:800; color:#0f172a; font-size:13.5px;">{{ $camp->campaign_name }}</div>
                                     
+                                    @if(in_array($camp->id, $extendedParentIds ?? [], true))
+                                        <div class="cmp-extended-badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;" title="This campaign was extended into a subsequent renewal.">
+                                            🔄 Extended / Renewed to newer version
+                                        </div>
+                                    @endif
+
                                     @if($camp->extendedFrom)
-                                        <div class="cmp-extended-badge" title="Latest extended version in this campaign chain. Click 'Actions -> View Full History' to see all previous versions.">
-                                            🔄 Latest Extension (from: <strong>{{ $camp->extendedFrom->campaign_name }}</strong>)
+                                        <div class="cmp-extended-badge" title="Extended renewal in this campaign chain.">
+                                            🔄 Renewal Extension (from: <strong>{{ $camp->extendedFrom->campaign_name }}</strong>)
                                         </div>
                                     @endif
 
@@ -653,15 +646,26 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid">
+                <div class="cmp-form-grid-3">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Start Date</label>
-                        <input type="date" name="start_date" class="cmp-form-input">
+                        <input type="date" id="create_start_date" name="start_date" class="cmp-form-input">
+                    </div>
+
+                    <div class="cmp-form-group">
+                        <label class="cmp-form-label">Tenure</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="number" min="1" step="1" id="create_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
+                            <select id="create_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                                <option value="days" selected>Days</option>
+                                <option value="months">Months</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">End Date</label>
-                        <input type="date" name="end_date" class="cmp-form-input">
+                        <input type="date" id="create_end_date" name="end_date" class="cmp-form-input">
                     </div>
                 </div>
 
@@ -744,10 +748,21 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid">
+                <div class="cmp-form-grid-3">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Start Date</label>
                         <input type="date" id="edit_start_date" name="start_date" class="cmp-form-input">
+                    </div>
+
+                    <div class="cmp-form-group">
+                        <label class="cmp-form-label">Tenure</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="number" min="1" step="1" id="edit_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
+                            <select id="edit_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                                <option value="days" selected>Days</option>
+                                <option value="months">Months</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="cmp-form-group">
@@ -913,10 +928,21 @@
                     </div>
                 </div>
 
-                <div class="cmp-form-grid">
+                <div class="cmp-form-grid-3">
                     <div class="cmp-form-group">
                         <label class="cmp-form-label">Renewal Start Date</label>
                         <input type="date" id="extend_start_date" name="start_date" class="cmp-form-input">
+                    </div>
+
+                    <div class="cmp-form-group">
+                        <label class="cmp-form-label">Tenure</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="number" min="1" step="1" id="extend_tenure" name="tenure" placeholder="e.g. 30" class="cmp-form-input" style="flex:1; min-width:0;">
+                            <select id="extend_tenure_unit" name="tenure_unit" class="cmp-form-select" style="width:84px; flex-shrink:0; padding:8px 6px; font-size:12px;">
+                                <option value="days" selected>Days</option>
+                                <option value="months">Months</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="cmp-form-group">
@@ -1356,6 +1382,10 @@ window.addEventListener('scroll', function() {
 }, true);
 
 function openCreateModal() {
+    document.getElementById('create_tenure').value = '';
+    if (document.getElementById('create_tenure_unit')) {
+        document.getElementById('create_tenure_unit').value = 'days';
+    }
     document.getElementById('createCampaignModal').classList.add('is-active');
 }
 function closeCreateModal() {
@@ -1376,6 +1406,16 @@ function openEditModal(campaign) {
     document.getElementById('edit_start_date').value = campaign.start_date ? campaign.start_date.substring(0, 10) : '';
     document.getElementById('edit_end_date').value = campaign.end_date ? campaign.end_date.substring(0, 10) : '';
     document.getElementById('edit_remarks').value = campaign.remarks || '';
+
+    if (campaign.start_date && campaign.end_date) {
+        const days = calculateTenureDays(campaign.start_date.substring(0, 10), campaign.end_date.substring(0, 10));
+        document.getElementById('edit_tenure').value = (days && days > 0) ? days : '';
+        if (document.getElementById('edit_tenure_unit')) {
+            document.getElementById('edit_tenure_unit').value = 'days';
+        }
+    } else {
+        document.getElementById('edit_tenure').value = '';
+    }
 
     document.getElementById('editCampaignModal').classList.add('is-active');
 }
@@ -1451,14 +1491,34 @@ function openExtendModal(campaign) {
     // Default start date to previous end date + 1 day or today
     let nextStartDate = '';
     if (campaign.end_date) {
-        let d = new Date(campaign.end_date);
-        d.setDate(d.getDate() + 1);
-        nextStartDate = d.toISOString().substring(0, 10);
-    } else {
-        nextStartDate = new Date().toISOString().substring(0, 10);
+        let d = parseYMD(campaign.end_date.substring(0, 10));
+        if (d) {
+            d.setDate(d.getDate() + 1);
+            nextStartDate = formatDateToYMD(d);
+        }
+    }
+    if (!nextStartDate) {
+        nextStartDate = formatDateToYMD(new Date());
     }
     document.getElementById('extend_start_date').value = nextStartDate;
-    document.getElementById('extend_end_date').value = '';
+
+    // Auto-calculate tenure from previous campaign duration
+    let prevTenure = null;
+    if (campaign.start_date && campaign.end_date) {
+        prevTenure = calculateTenureDays(campaign.start_date.substring(0, 10), campaign.end_date.substring(0, 10));
+    }
+    if (prevTenure && prevTenure > 0) {
+        document.getElementById('extend_tenure').value = prevTenure;
+        if (document.getElementById('extend_tenure_unit')) {
+            document.getElementById('extend_tenure_unit').value = 'days';
+        }
+        const nextEndDate = addTenure(nextStartDate, prevTenure, 'days');
+        document.getElementById('extend_end_date').value = nextEndDate || '';
+    } else {
+        document.getElementById('extend_tenure').value = '';
+        document.getElementById('extend_end_date').value = '';
+    }
+
     document.getElementById('extend_remarks').value = 'Renewal from ' + cleanBase;
 
     document.getElementById('extendCampaignModal').classList.add('is-active');
@@ -1548,6 +1608,104 @@ document.addEventListener('keydown', function(e) {
         closeStopModal();
         closeDeleteModal();
     }
+});
+
+// ── Tenure & Date Auto-Calculation Helpers ──
+function formatDateToYMD(date) {
+    if (!date || isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function parseYMD(dateStr) {
+    if (!dateStr) return null;
+    const parts = dateStr.substring(0, 10).split('-');
+    if (parts.length !== 3) return null;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+    return new Date(y, m, d);
+}
+
+function calculateTenureDays(startDateStr, endDateStr) {
+    const start = parseYMD(startDateStr);
+    const end = parseYMD(endDateStr);
+    if (!start || !end || end < start) return null;
+    const diffTime = end.getTime() - start.getTime();
+    return Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive of start day
+}
+
+function addTenure(startDateStr, tenureVal, unit) {
+    const start = parseYMD(startDateStr);
+    if (!start || !tenureVal) return null;
+    const count = parseInt(tenureVal, 10);
+    if (isNaN(count) || count <= 0) return null;
+
+    const result = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    if (unit === 'months') {
+        result.setMonth(result.getMonth() + count);
+        result.setDate(result.getDate() - 1); // inclusive
+    } else {
+        result.setDate(result.getDate() + (count - 1)); // inclusive
+    }
+    return formatDateToYMD(result);
+}
+
+function bindTenureCalculation(prefix) {
+    const startInput = document.getElementById(prefix + '_start_date');
+    const tenureInput = document.getElementById(prefix + '_tenure');
+    const unitSelect = document.getElementById(prefix + '_tenure_unit');
+    const endInput = document.getElementById(prefix + '_end_date');
+
+    if (!startInput || !tenureInput || !endInput) return;
+
+    function onTenureOrStartChange() {
+        const startVal = startInput.value;
+        const tenureVal = tenureInput.value;
+        const unit = unitSelect ? unitSelect.value : 'days';
+
+        if (startVal && tenureVal && parseInt(tenureVal, 10) > 0) {
+            const calculatedEnd = addTenure(startVal, tenureVal, unit);
+            if (calculatedEnd) {
+                endInput.value = calculatedEnd;
+            }
+        }
+    }
+
+    function onEndDateChange() {
+        const startVal = startInput.value;
+        const endVal = endInput.value;
+
+        if (startVal && endVal) {
+            const days = calculateTenureDays(startVal, endVal);
+            if (days !== null && days > 0) {
+                tenureInput.value = days;
+                if (unitSelect) unitSelect.value = 'days';
+            }
+        }
+    }
+
+    startInput.addEventListener('change', onTenureOrStartChange);
+    startInput.addEventListener('input', onTenureOrStartChange);
+    tenureInput.addEventListener('input', onTenureOrStartChange);
+    tenureInput.addEventListener('change', onTenureOrStartChange);
+    if (unitSelect) {
+        unitSelect.addEventListener('change', onTenureOrStartChange);
+    }
+    endInput.addEventListener('change', onEndDateChange);
+    endInput.addEventListener('input', onEndDateChange);
+}
+
+bindTenureCalculation('create');
+bindTenureCalculation('edit');
+bindTenureCalculation('extend');
+document.addEventListener('DOMContentLoaded', function() {
+    bindTenureCalculation('create');
+    bindTenureCalculation('edit');
+    bindTenureCalculation('extend');
 });
 </script>
 @endsection

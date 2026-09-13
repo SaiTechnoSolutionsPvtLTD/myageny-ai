@@ -1050,37 +1050,53 @@ function onPrjQuickDateChange(val, suffix = '') {
     updatePrjQuickDateRangeSpan(val, suffix);
 }
 
+let allPrjEmployeeOptions = null;
+
 function filterEmployeesByDepartment(deptId, preserveSelection) {
     const empSelect = document.getElementById('employee_id');
     if (!empSelect) return;
 
+    if (!allPrjEmployeeOptions) {
+        allPrjEmployeeOptions = Array.from(empSelect.options).map(function (opt) {
+            return {
+                value: opt.value,
+                text: opt.textContent,
+                departmentIds: (opt.getAttribute('data-department-ids') || '')
+                    .split(',')
+                    .map(function (s) { return s.trim(); })
+                    .filter(Boolean),
+            };
+        });
+    }
+
     const currentVal = empSelect.value;
-    const options = empSelect.querySelectorAll('option');
+    empSelect.innerHTML = '';
+
     let hasValidSelection = false;
 
-    options.forEach(function (opt) {
-        if (!opt.value) {
-            opt.hidden = false;
-            opt.disabled = false;
+    allPrjEmployeeOptions.forEach(function (optData) {
+        if (!optData.value) {
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = optData.text;
+            empSelect.appendChild(defaultOpt);
             return;
         }
 
-        const deptIdsStr = opt.getAttribute('data-department-ids') || '';
-        const deptIds = deptIdsStr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-
-        if (!deptId || deptIds.length === 0 || deptIds.includes(String(deptId))) {
-            opt.hidden = false;
-            opt.disabled = false;
-            if (opt.value === currentVal) {
+        if (!deptId || optData.departmentIds.length === 0 || optData.departmentIds.includes(String(deptId))) {
+            const opt = document.createElement('option');
+            opt.value = optData.value;
+            opt.textContent = optData.text;
+            opt.setAttribute('data-department-ids', optData.departmentIds.join(','));
+            if (optData.value === currentVal) {
+                opt.selected = true;
                 hasValidSelection = true;
             }
-        } else {
-            opt.hidden = true;
-            opt.disabled = true;
+            empSelect.appendChild(opt);
         }
     });
 
-    if (!preserveSelection && !hasValidSelection && currentVal !== '') {
+    if (!preserveSelection && !hasValidSelection) {
         empSelect.value = '';
     }
 }

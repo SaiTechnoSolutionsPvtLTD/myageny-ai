@@ -43,6 +43,8 @@
 .pjd-pill.allocated { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
 .pjd-pill.status-ontrack { color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; }
 .pjd-pill.status-hold { color:#b45309; background:#fff7ed; border-color:#fed7aa; }
+.pjd-pill.status-in-progress, .pjd-pill.status-inprogress { color:#0369a1; background:#f0f9ff; border-color:#bae6fd; }
+.pjd-pill.status-new { color:#4338ca; background:#eef2ff; border-color:#c7d2fe; }
 .pjd-pill.status-delivered { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
 .pjd-money { font-weight:800; color:#0f172a; white-space:nowrap; }
 .pjd-money.received { color:#15803d; }
@@ -109,6 +111,16 @@
     .pjd-update-modal-head { padding:18px 16px; }
     .pjd-update-modal-body { padding:16px; }
 }
+
+/* Pagination Styles */
+.pjd-pagination-footer { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-top:1px solid #f2ede8; background:#fffdfb; flex-wrap:wrap; gap:12px; }
+.pjd-pagination-info { font-size:12px; font-weight:600; color:#64748b; }
+.pjd-pagination-nav { display:inline-flex; align-items:center; gap:4px; list-style:none; margin:0; padding:0; }
+.pjd-page-btn { display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:32px; padding:0 8px; border-radius:8px; border:1px solid #e2e8f0; background:#fff; color:#475569; font-size:12px; font-weight:700; text-decoration:none; cursor:pointer; transition:all .15s ease; user-select:none; }
+.pjd-page-btn:hover:not(.is-disabled):not(.is-active) { border-color:#fb923c; background:#fff7ed; color:#c2410c; }
+.pjd-page-btn.is-active { background:linear-gradient(135deg, #ea580c, #f97316); border-color:#ea580c; color:#fff; box-shadow:0 2px 8px rgba(234,88,12,0.25); cursor:default; }
+.pjd-page-btn.is-disabled { opacity:0.4; cursor:not-allowed; background:#f8fafc; color:#94a3b8; border-color:#e2e8f0; }
+.pjd-page-ellipsis { display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:32px; color:#94a3b8; font-weight:800; font-size:12px; }
 </style>
 @endpush
 
@@ -317,119 +329,19 @@
                     </div>
                     <div class="pjd-stat-sub">Pending assets past delivery date</div>
                 </div>
-            </div>
 
-            {{-- Planned Tasks Table --}}
-            <section class="pjd-card">
-                <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Today Planned Tasks</div>
-                        <div class="pjd-card-sub">Task commitments, approval states, and completion counts for {{ \Carbon\Carbon::parse($filters['date'])->format('d M Y') }}.</div>
+                {{-- Pending Welcome Calls Card --}}
+                <a href="#design-pending-wc-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); text-decoration:none; cursor:pointer;">
+                    <div class="pjd-stat-header">
+                        <span class="pjd-stat-label">Pending Welcome Calls</span>
+                        <span class="pjd-stat-icon"><i class="bi bi-telephone-outbound-fill"></i></span>
                     </div>
-                </div>
-                <div class="pjd-card-body" style="padding:0;">
-                    <div class="pjd-table-wrap">
-                        <table class="pjd-table">
-                            <thead>
-                                <tr>
-                                    <th>Account Name</th>
-                                    <th>Start Date</th>
-                                    <th>End Date</th>
-                                    <th>Tenure</th>
-                                    <th>Committed Poster</th>
-                                    <th>Committed Video</th>
-                                    <th>Waiting Poster</th>
-                                    <th>Waiting Video</th>
-                                    <th>Completed Poster</th>
-                                    <th>Completed Video</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($todayPlannedTasks as $task)
-                                    <tr>
-                                        <td>
-                                            <a href="{{ route('projects.show', ['productionInitiation' => $task['project']->id]) }}" class="pjd-product" style="text-decoration:none; color:#ea580c;">
-                                                {{ $task['project']->product_name }}
-                                            </a>
-                                            <div class="pjd-meta">
-                                                {{ $task['project']->company_name ?: ($task['project']->lead?->company_name ?: 'No Company') }}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span style="color:#475569;">{{ $task['start_date'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="color:#475569;">{{ $task['end_date'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="color:#475569;">{{ $task['tenure'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#1e293b;">{{ $task['committed_posters'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#1e293b;">{{ $task['committed_videos'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#ea580c;">{{ $task['waiting_posters'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#ea580c;">{{ $task['waiting_videos'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#166534;">{{ $task['completed_posters'] }}</span>
-                                        </td>
-                                        <td>
-                                            <span style="font-weight:600; color:#166534;">{{ $task['completed_videos'] }}</span>
-                                        </td>
-                                        <td>
-                                            @php
-                                                $isPastDate = \Carbon\Carbon::parse($filters['date'])->lt(\Carbon\Carbon::today());
-                                            @endphp
-                                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                                                <button type="button"
-                                                    class="pjd-btn"
-                                                    style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; @if($isPastDate) background:#cbd5e1; border-color:#cbd5e1; color:#64748b; cursor:not-allowed; @else background:#ea580c; border-color:#ea580c; color:#fff; @endif"
-                                                    @disabled($isPastDate)
-                                                    data-open-task-update-modal
-                                                    data-project-id="{{ $task['project']->id }}"
-                                                    data-project-name="{{ $task['project']->product_name }}"
-                                                    data-committed-posters="{{ $task['committed_posters'] }}"
-                                                    data-committed-videos="{{ $task['committed_videos'] }}"
-                                                    data-waiting-posters="{{ $task['waiting_posters'] }}"
-                                                    data-waiting-videos="{{ $task['waiting_videos'] }}"
-                                                    data-completed-posters="{{ $task['completed_posters'] }}"
-                                                    data-completed-videos="{{ $task['completed_videos'] }}"
-                                                    data-day-closing-update="{{ $task['day_closing_update'] }}">
-                                                    Update
-                                                </button>
-                                                @if($isTl ?? false)
-                                                    <button type="button"
-                                                        class="pjd-btn"
-                                                        style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; background:#3b82f6; border-color:#3b82f6; color:#fff;"
-                                                        data-open-allocate-modal
-                                                        data-prefill-project-id="{{ $task['project']->id }}"
-                                                        data-prefill-committed-posters="{{ $task['per_day_posters'] }}"
-                                                        data-prefill-committed-videos="{{ $task['per_day_videos'] }}">
-                                                        Reallocate
-                                                    </button>
-                                                @endif
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="11" style="text-align:center; padding:30px; color:#64748b;">
-                                            No planned tasks found matching the criteria.
-                                        </td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                    <div class="pjd-stat-value" style="font-size: 28px;">
+                        <span>{{ number_format($pendingWelcomeCallCount ?? 0) }}</span>
                     </div>
-                </div>
-            </section>
+                    <div class="pjd-stat-sub">Approved accounts pending welcome call update</div>
+                </a>
+            </div>
 
             {{-- Overdue Projects Section --}}
             <section class="pjd-card" style="border-color:#fca5a5;">
@@ -531,6 +443,118 @@
                             <i class="bi bi-check-circle-fill" style="font-size:20px;"></i>
                             No Overdue — All accounts are on track!
                         </div>
+                    @endif
+                </div>
+            </section>
+
+            {{-- Employee-wise Timesheet & Tasks for Designing --}}
+            @include('pages.projects.partials.employee_timesheet_tasks')
+
+            {{-- Pending Welcome Call Updates for Designing --}}
+            <section class="pjd-card" id="design-pending-wc-section">
+                <div class="pjd-card-head">
+                    <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; flex-wrap:wrap;">
+                        <div>
+                            <div class="pjd-card-title">Pending Welcome Call Updates</div>
+                            <div class="pjd-card-sub">Approved designing projects waiting for Welcome Call Update.</div>
+                        </div>
+                        <span class="pjd-highlight" style="background:#fff7ed; color:#c2410c; border-color:#fed7aa;">
+                            {{ number_format($pendingWelcomeCallCount ?? 0) }} Accounts
+                        </span>
+                    </div>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
+                    @if(!empty($pendingWelcomeCallProjects) && $pendingWelcomeCallProjects->isNotEmpty())
+                        <div class="pjd-table-wrap">
+                            <table class="pjd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Lead / Account</th>
+                                        <th>Product</th>
+                                        <th>Approved Date</th>
+                                        <th>Delivery Date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($pendingWelcomeCallProjects as $item)
+                                        <tr>
+                                            <td>
+                                                <div class="pjd-product">
+                                                    {{ $item->company_name ?: ($item->lead?->company_name ?: ($item->client_name ?: ($item->lead?->client_name ?: 'No Company'))) }}
+                                                </div>
+                                                <div class="pjd-meta">
+                                                    Lead #{{ $item->lead_id }}
+                                                    @if($item->lead?->mobile_number)
+                                                        &nbsp;•&nbsp; 📞 {{ $item->lead->mobile_number }}
+                                                    @endif
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span style="font-weight:700; color:#1e293b;">{{ $item->product_name }}</span>
+                                            </td>
+                                            <td>
+                                                <span style="color:#475569; font-weight:600;">
+                                                    {{ $item->production_approval_reviewed_at ? \Carbon\Carbon::parse($item->production_approval_reviewed_at)->format('d M Y') : ($item->created_at ? $item->created_at->format('d M Y') : '—') }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span style="color:#475569;">
+                                                    {{ $item->project_delivery_date ? $item->project_delivery_date->format('d M Y') : '—' }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <a href="{{ url('/projects-details/' . $item->id) }}" class="pjd-btn" style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; background:#ea580c; border-color:#ea580c; color:#fff; text-decoration:none; display:inline-flex; align-items:center;">
+                                                    View Project
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if($pendingWelcomeCallProjects->hasPages())
+                            <div class="pjd-pagination-footer">
+                                <div class="pjd-pagination-info">
+                                    {{ $pendingWelcomeCallProjects->firstItem() }}-{{ $pendingWelcomeCallProjects->lastItem() }} of {{ $pendingWelcomeCallProjects->total() }}
+                                </div>
+                                <nav class="pjd-pagination-nav">
+                                    @if($pendingWelcomeCallProjects->onFirstPage())
+                                        <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </span>
+                                    @else
+                                        <a href="{{ $pendingWelcomeCallProjects->previousPageUrl() }}#design-pending-wc-section" class="pjd-page-btn" title="Previous Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </a>
+                                    @endif
+
+                                    @php
+                                        $wCur = $pendingWelcomeCallProjects->currentPage();
+                                        $wLast = $pendingWelcomeCallProjects->lastPage();
+                                        $wStart = max(1, $wCur - 1);
+                                        $wEnd = min($wLast, $wCur + 1);
+                                    @endphp
+
+                                    @for($i = $wStart; $i <= $wEnd; $i++)
+                                        <a href="{{ $pendingWelcomeCallProjects->url($i) }}#design-pending-wc-section" class="pjd-page-btn {{ $wCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                                    @endfor
+
+                                    @if($pendingWelcomeCallProjects->hasMorePages())
+                                        <a href="{{ $pendingWelcomeCallProjects->nextPageUrl() }}#design-pending-wc-section" class="pjd-page-btn" title="Next Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </a>
+                                    @else
+                                        <span class="pjd-page-btn is-disabled" title="Next Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </span>
+                                    @endif
+                                </nav>
+                            </div>
+                        @endif
+                    @else
+                        <div class="pjd-empty">No approved designing projects pending welcome call update.</div>
                     @endif
                 </div>
             </section>
@@ -917,57 +941,142 @@
             </div>
         </details>
 
-            <section class="pjd-stats">
-                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Allocated Projects</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-folder-fill"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>{{ number_format($stats['allocated_projects']) }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Projects available in the current dashboard scope.</div>
-                </div>
-                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Project Value</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-currency-rupee"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>{{ $currency($stats['project_value']) }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Overall value of the filtered allocated projects.</div>
-                </div>
-                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #14532d 0%, #22c55e 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Received Amount</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-wallet2"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>{{ $currency($stats['received_amount']) }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Payments already received for these projects.</div>
-                </div>
-                <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7c2d12 0%, #f97316 100%);">
-                    <div class="pjd-stat-header">
-                        <span class="pjd-stat-label">Balance Amount</span>
-                        <span class="pjd-stat-icon"><i class="bi bi-hourglass-split"></i></span>
-                    </div>
-                    <div class="pjd-stat-value">
-                        <span>{{ $currency($stats['balance_amount']) }}</span>
-                    </div>
-                    <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
-                </div>
+            @if(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))
+                @php
+                    $dmSummary = $dmCampaignsData['summary'] ?? [
+                        'due_renewals' => 0,
+                        'completed_renewals' => 0,
+                        'total_expired' => 0,
+                        'unrenewed_expired' => 0,
+                    ];
+                    $dmMonthLabel = $dmCampaignsData['current_month_label'] ?? 'this month';
+                @endphp
+                <section class="pjd-stats">
+                    {{-- 1. Due for Renewal --}}
+                    <a href="#dm-renewal-campaigns-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Due for renewal</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-arrow-repeat"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($dmSummary['due_renewals']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Ending in {{ $dmMonthLabel }} &amp; pending renewal.</div>
+                    </a>
 
-            </section>
+                    {{-- 2. Renewed this month --}}
+                    <a href="#dm-renewal-campaigns-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #059669 0%, #10b981 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Renewed this month</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-check-circle-fill"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($dmSummary['completed_renewals']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Active renewal extensions in {{ $dmMonthLabel }}.</div>
+                    </a>
 
-            <section class="pjd-card">
+                    {{-- 3. Expired Campaigns --}}
+                    <a href="#dm-expired-campaigns-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Expired Campaigns</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-hourglass-bottom"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($dmSummary['total_expired']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">{{ number_format($dmSummary['unrenewed_expired']) }} campaigns pending renewal follow-up.</div>
+                    </a>
+
+                    {{-- 4. Active Technical SEO Projects --}}
+                    <a href="#technical-seo-projects-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Active Technical SEO Projects</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-search"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($activeTechnicalSeoCount ?? 0) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Active Technical SEO accounts.</div>
+                    </a>
+
+                    {{-- 5. Pending Welcome Calls --}}
+                    <a href="#pending-welcome-call-projects-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Pending Welcome Calls</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-telephone-outbound-fill"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($pendingWelcomeCallCount ?? 0) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Approved accounts pending welcome call update.</div>
+                    </a>
+                </section>
+            @else
+                <section class="pjd-stats">
+                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Allocated Projects</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-folder-fill"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($stats['allocated_projects']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Projects available in the current dashboard scope.</div>
+                    </div>
+                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Project Value</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-currency-rupee"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ $currency($stats['project_value']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Overall value of the filtered allocated projects.</div>
+                    </div>
+                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #14532d 0%, #22c55e 100%);">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Received Amount</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-wallet2"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ $currency($stats['received_amount']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Payments already received for these projects.</div>
+                    </div>
+                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7c2d12 0%, #f97316 100%);">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Balance Amount</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-hourglass-split"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ $currency($stats['balance_amount']) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
+                    </div>
+
+                    {{-- 5. Pending Welcome Calls --}}
+                    <a href="#pending-welcome-call-projects-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); text-decoration:none; cursor:pointer;">
+                        <div class="pjd-stat-header">
+                            <span class="pjd-stat-label">Pending Welcome Calls</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-telephone-outbound-fill"></i></span>
+                        </div>
+                        <div class="pjd-stat-value">
+                            <span>{{ number_format($pendingWelcomeCallCount ?? 0) }}</span>
+                        </div>
+                        <div class="pjd-stat-sub">Approved accounts pending welcome call update.</div>
+                    </a>
+                </section>
+            @endif
+
+            @if(!in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))
+            <section class="pjd-card" id="delivery-planned-section">
                 <div class="pjd-card-head">
                      <div>
                          <div class="pjd-card-title">{{ $deliverySectionTitle ?? 'Delivery Planned Projects' }}</div>
                          <div class="pjd-card-sub">Projects with planned delivery dates in this period.</div>
                      </div>
-                     <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->count() }} {{ $deliverySectionBadge ?? 'Planned' }}</span>
+                     <span class="pjd-highlight">{{ $currentMonthDeliveryProjects->total() }} {{ $deliverySectionBadge ?? 'Planned' }}</span>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
                     @if($currentMonthDeliveryProjects->isNotEmpty())
@@ -1018,20 +1127,243 @@
                                 </tbody>
                             </table>
                         </div>
+
+                        @if($currentMonthDeliveryProjects->hasPages())
+                            <div class="pjd-pagination-footer">
+                                <div class="pjd-pagination-info">
+                                    Showing {{ $currentMonthDeliveryProjects->firstItem() }} to {{ $currentMonthDeliveryProjects->lastItem() }} of {{ $currentMonthDeliveryProjects->total() }} entries
+                                </div>
+                                <nav class="pjd-pagination-nav">
+                                    {{-- Previous Page Link --}}
+                                    @if($currentMonthDeliveryProjects->onFirstPage())
+                                        <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </span>
+                                    @else
+                                        <a href="{{ $currentMonthDeliveryProjects->previousPageUrl() }}" class="pjd-page-btn" title="Previous Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </a>
+                                    @endif
+
+                                    {{-- Pagination Elements --}}
+                                    @php
+                                        $dCur = $currentMonthDeliveryProjects->currentPage();
+                                        $dLast = $currentMonthDeliveryProjects->lastPage();
+                                        $dStart = max(1, $dCur - 2);
+                                        $dEnd = min($dLast, $dCur + 2);
+                                    @endphp
+
+                                    @if($dStart > 1)
+                                        <a href="{{ $currentMonthDeliveryProjects->url(1) }}" class="pjd-page-btn {{ $dCur == 1 ? 'is-active' : '' }}">1</a>
+                                        @if($dStart > 2)
+                                            <span class="pjd-page-ellipsis">...</span>
+                                        @endif
+                                    @endif
+
+                                    @for($i = $dStart; $i <= $dEnd; $i++)
+                                        <a href="{{ $currentMonthDeliveryProjects->url($i) }}" class="pjd-page-btn {{ $dCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                                    @endfor
+
+                                    @if($dEnd < $dLast)
+                                        @if($dEnd < $dLast - 1)
+                                            <span class="pjd-page-ellipsis">...</span>
+                                        @endif
+                                        <a href="{{ $currentMonthDeliveryProjects->url($dLast) }}" class="pjd-page-btn {{ $dCur == $dLast ? 'is-active' : '' }}">{{ $dLast }}</a>
+                                    @endif
+
+                                    {{-- Next Page Link --}}
+                                    @if($currentMonthDeliveryProjects->hasMorePages())
+                                        <a href="{{ $currentMonthDeliveryProjects->nextPageUrl() }}" class="pjd-page-btn" title="Next Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </a>
+                                    @else
+                                        <span class="pjd-page-btn is-disabled" title="Next Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </span>
+                                    @endif
+                                </nav>
+                            </div>
+                        @endif
                     @else
                         <div class="pjd-empty">No delivery scheduled in the current month scope.</div>
                     @endif
                 </div>
             </section>
+            @endif
+
+            @if(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))
+                {{-- Digital Marketing Campaigns: Current Month Renewals & Expired Campaigns --}}
+                @include('pages.projects.partials.dm_campaigns')
+            @endif
+
+            {{-- Active Technical SEO Projects Section (Only for Digital Marketing Dashboard) --}}
+            @if(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true) && !empty($technicalSeoProjects))
+            <section class="pjd-card" id="technical-seo-projects-section" style="margin-top: 18px;">
+                <div class="pjd-card-head">
+                    <div>
+                        <div class="pjd-card-title" style="display:flex; align-items:center; gap:8px;">
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:#6366f1;">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <span>Active Technical SEO Projects</span>
+                        </div>
+                        <div class="pjd-card-sub">Active Technical SEO client projects, allocated resources, and execution status.</div>
+                    </div>
+                    <span class="pjd-highlight" style="background:#eef2ff; border-color:#c7d2fe; color:#4338ca;">
+                        {{ $technicalSeoProjects->total() }} Active Projects
+                    </span>
+                </div>
+                <div class="pjd-card-body" style="padding:0;">
+                    @if($technicalSeoProjects->isNotEmpty())
+                        <div class="pjd-table-wrap">
+                            <table class="pjd-table">
+                                <thead>
+                                    <tr>
+                                        <th>Project / Client</th>
+                                        <th>Product</th>
+                                        <th>Allocated Team</th>
+                                        <th>Status</th>
+                                        <th>Project Value</th>
+                                        <th>Received</th>
+                                        <th>Balance</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($technicalSeoProjects as $project)
+                                        <tr>
+                                            <td>
+                                                <div class="pjd-product">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                <div class="pjd-meta">
+                                                    {{ $project->client_name ?: ($project->lead?->contact_name ?: 'N/A') }}
+                                                    @if($project->lead?->mobile_number)
+                                                        &bull; {{ $project->lead->mobile_number }}
+                                                    @endif
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="pjd-pill" style="background:#e0e7ff; color:#3730a3; font-weight:700;">
+                                                    {{ $project->product_name }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:600; color:#1e293b;">
+                                                    {{ $project->allocated_person_label ?: 'Not Allocated' }}
+                                                </div>
+                                                <div class="pjd-meta">{{ $project->department?->name ?: 'Development' }}</div>
+                                            </td>
+                                            <td>
+                                                @php
+                                                    $statusVal = strtolower((string) ($project->project_execution_status ?: 'ontrack'));
+                                                    $statusLabels = [
+                                                        'ontrack' => 'Onboard',
+                                                        'hold' => 'Hold',
+                                                        'delivered' => 'Delivered',
+                                                        'in progress' => 'In Progress',
+                                                        'new' => 'New',
+                                                    ];
+                                                    $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
+                                                    $statusClass = match($statusVal) {
+                                                        'ontrack' => 'status-ontrack',
+                                                        'hold' => 'status-hold',
+                                                        'delivered' => 'status-delivered',
+                                                        'in progress', 'inprogress' => 'status-in-progress',
+                                                        'new' => 'status-new',
+                                                        default => 'status-ontrack',
+                                                    };
+                                                @endphp
+                                                <span class="pjd-pill {{ $statusClass }}">{{ $statusLabel }}</span>
+                                            </td>
+                                            <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
+                                            <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
+                                            <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
+                                            <td>
+                                                <a href="{{ route('projects.show', $project) }}" class="pjd-link">View &rarr;</a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if($technicalSeoProjects->hasPages())
+                            <div class="pjd-pagination-footer">
+                                <div class="pjd-pagination-info">
+                                    Showing {{ $technicalSeoProjects->firstItem() }} to {{ $technicalSeoProjects->lastItem() }} of {{ $technicalSeoProjects->total() }} entries
+                                </div>
+                                <nav class="pjd-pagination-nav">
+                                    {{-- Previous Page Link --}}
+                                    @if($technicalSeoProjects->onFirstPage())
+                                        <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </span>
+                                    @else
+                                        <a href="{{ $technicalSeoProjects->previousPageUrl() }}" class="pjd-page-btn" title="Previous Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </a>
+                                    @endif
+
+                                    {{-- Pagination Elements --}}
+                                    @php
+                                        $sCur = $technicalSeoProjects->currentPage();
+                                        $sLast = $technicalSeoProjects->lastPage();
+                                        $sStart = max(1, $sCur - 2);
+                                        $sEnd = min($sLast, $sCur + 2);
+                                    @endphp
+
+                                    @if($sStart > 1)
+                                        <a href="{{ $technicalSeoProjects->url(1) }}" class="pjd-page-btn {{ $sCur == 1 ? 'is-active' : '' }}">1</a>
+                                        @if($sStart > 2)
+                                            <span class="pjd-page-ellipsis">...</span>
+                                        @endif
+                                    @endif
+
+                                    @for($i = $sStart; $i <= $sEnd; $i++)
+                                        <a href="{{ $technicalSeoProjects->url($i) }}" class="pjd-page-btn {{ $sCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                                    @endfor
+
+                                    @if($sEnd < $sLast)
+                                        @if($sEnd < $sLast - 1)
+                                            <span class="pjd-page-ellipsis">...</span>
+                                        @endif
+                                        <a href="{{ $technicalSeoProjects->url($sLast) }}" class="pjd-page-btn {{ $sCur == $sLast ? 'is-active' : '' }}">{{ $sLast }}</a>
+                                    @endif
+
+                                    {{-- Next Page Link --}}
+                                    @if($technicalSeoProjects->hasMorePages())
+                                        <a href="{{ $technicalSeoProjects->nextPageUrl() }}" class="pjd-page-btn" title="Next Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </a>
+                                    @else
+                                        <span class="pjd-page-btn is-disabled" title="Next Page">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </span>
+                                    @endif
+                                </nav>
+                            </div>
+                        @endif
+                    @else
+                        <div class="pjd-empty">No active Technical SEO projects found.</div>
+                    @endif
+                </div>
+            </section>
+            @endif
+
+            <!-- Employee-wise Timesheet & Tasks -->
+            @include('pages.projects.partials.employee_timesheet_tasks')
 
             <!-- Row: Recent Allocated Projects & Payment Status -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; margin-top: 18px;">
                 <!-- Recent Allocated Projects -->
-                <section class="pjd-card" style="display: flex; flex-direction: column;">
+                <section class="pjd-card" id="recent-allocated-section" style="display: flex; flex-direction: column;">
                     <div class="pjd-card-head">
-                        <div>
-                            <div class="pjd-card-title">Recent Allocated Projects</div>
-                            <div class="pjd-card-sub">Active projects and their allocated teams.</div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; flex-wrap:wrap;">
+                            <div>
+                                <div class="pjd-card-title">Recent Allocated Projects</div>
+                                <div class="pjd-card-sub">Active projects and their allocated teams.</div>
+                            </div>
+                            <span class="pjd-highlight">{{ $recentProjects->total() }} Projects</span>
                         </div>
                     </div>
                     <div class="pjd-card-body" style="padding:0; flex: 1;">
@@ -1070,6 +1402,49 @@
                                     </tbody>
                                 </table>
                             </div>
+
+                            @if($recentProjects->hasPages())
+                                <div class="pjd-pagination-footer">
+                                    <div class="pjd-pagination-info">
+                                        {{ $recentProjects->firstItem() }}-{{ $recentProjects->lastItem() }} of {{ $recentProjects->total() }}
+                                    </div>
+                                    <nav class="pjd-pagination-nav">
+                                        {{-- Previous Page Link --}}
+                                        @if($recentProjects->onFirstPage())
+                                            <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                            </span>
+                                        @else
+                                            <a href="{{ $recentProjects->previousPageUrl() }}" class="pjd-page-btn" title="Previous Page">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                            </a>
+                                        @endif
+
+                                        {{-- Page Numbers --}}
+                                        @php
+                                            $rCur = $recentProjects->currentPage();
+                                            $rLast = $recentProjects->lastPage();
+                                            $rStart = max(1, $rCur - 1);
+                                            $rEnd = min($rLast, $rCur + 1);
+                                        @endphp
+
+                                        @for($i = $rStart; $i <= $rEnd; $i++)
+                                            <a href="{{ $recentProjects->url($i) }}" class="pjd-page-btn {{ $rCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                                        @endfor
+
+                                        {{-- Next Page Link --}}
+                                        @if($recentProjects->hasMorePages())
+                                            <a href="{{ $recentProjects->nextPageUrl() }}" class="pjd-page-btn" title="Next Page">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            </a>
+                                        @else
+                                            <span class="pjd-page-btn is-disabled" title="Next Page">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            </span>
+                                        @endif
+                                    </nav>
+                                </div>
+                            @endif
                         @else
                             <div class="pjd-empty">No active allocated projects.</div>
                         @endif
@@ -1096,43 +1471,119 @@
                 </section>
             </div>
 
-            <!-- Timesheet & Activity Summary -->
-            <section class="pjd-card" style="margin-top: 18px;">
+            <!-- Pending Welcome Call Updates Section -->
+            <section class="pjd-card" id="pending-welcome-call-projects-section" style="margin-top: 18px;">
                 <div class="pjd-card-head">
-                    <div>
-                        <div class="pjd-card-title">Timesheet & Activity Summary</div>
-                        <div class="pjd-card-sub">Logs from daily timesheet entries.</div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; flex-wrap:wrap;">
+                        <div>
+                            <div class="pjd-card-title">Pending Welcome Call Updates</div>
+                            <div class="pjd-card-sub">Approved projects that have not yet had a Welcome Call Update recorded.</div>
+                        </div>
+                        <span class="pjd-highlight" style="background:#fff7ed; color:#c2410c; border-color:#fed7aa;">
+                            {{ number_format($pendingWelcomeCallCount ?? 0) }} Projects
+                        </span>
                     </div>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
-                    @if(!empty($timesheetSummary))
+                    @if(!empty($pendingWelcomeCallProjects) && $pendingWelcomeCallProjects->isNotEmpty())
                         <div class="pjd-table-wrap">
                             <table class="pjd-table">
                                 <thead>
                                     <tr>
-                                        <th>Project Name</th>
-                                        <th>Submissions</th>
-                                        <th>Total Posters</th>
-                                        <th>Total Videos</th>
+                                        <th>Project / Client</th>
+                                        <th>Department</th>
+                                        <th>Project Value</th>
+                                        <th>Received Amount</th>
+                                        <th>Approved Date</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($timesheetSummary as $row)
+                                    @foreach($pendingWelcomeCallProjects as $item)
                                         <tr>
                                             <td>
-                                                <div class="pjd-product">{{ $row['project_name'] }}</div>
-                                                <div class="pjd-meta">{{ $row['company_name'] }}</div>
+                                                <div class="pjd-product">
+                                                    {{ $item->product_name }}
+                                                </div>
+                                                <div class="pjd-meta">
+                                                    {{ $item->company_name ?: ($item->lead?->company_name ?: ($item->client_name ?: ($item->lead?->client_name ?: 'No Company'))) }}
+                                                    @if($item->lead?->mobile_number)
+                                                        &nbsp;•&nbsp; 📞 {{ $item->lead->mobile_number }}
+                                                    @endif
+                                                </div>
                                             </td>
-                                            <td>{{ $row['entries_count'] }} logs</td>
-                                            <td>{{ $row['total_posters'] }}</td>
-                                            <td>{{ $row['total_videos'] }}</td>
+                                            <td>
+                                                <span class="pjd-pill" style="background:#f1f5f9; color:#475569; border-color:#e2e8f0;">
+                                                    {{ $item->department?->name ?: 'Development' }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="pjd-money">
+                                                    {{ $currency($item->project_value ?? 0) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="pjd-money received">
+                                                    {{ $currency($item->received_amount ?? 0) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span style="color:#475569; font-weight:600;">
+                                                    {{ $item->production_approval_reviewed_at ? \Carbon\Carbon::parse($item->production_approval_reviewed_at)->format('d M Y') : ($item->created_at ? $item->created_at->format('d M Y') : '—') }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <a href="{{ url('/projects-details/' . $item->id) }}" class="pjd-btn" style="min-height:30px; height:30px; padding:4px 10px; font-size:11px; border-radius:8px; background:#ea580c; border-color:#ea580c; color:#fff; text-decoration:none; display:inline-flex; align-items:center;">
+                                                    View Project
+                                                </a>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>
                             </table>
                         </div>
+
+                        @if($pendingWelcomeCallProjects->hasPages())
+                            <div class="pjd-pagination-footer">
+                                <div class="pjd-pagination-info">
+                                    {{ $pendingWelcomeCallProjects->firstItem() }}-{{ $pendingWelcomeCallProjects->lastItem() }} of {{ $pendingWelcomeCallProjects->total() }}
+                                </div>
+                                <nav class="pjd-pagination-nav">
+                                    @if($pendingWelcomeCallProjects->onFirstPage())
+                                        <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </span>
+                                    @else
+                                        <a href="{{ $pendingWelcomeCallProjects->previousPageUrl() }}#pending-welcome-call-projects-section" class="pjd-page-btn" title="Previous Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        </a>
+                                    @endif
+
+                                    @php
+                                        $wCur = $pendingWelcomeCallProjects->currentPage();
+                                        $wLast = $pendingWelcomeCallProjects->lastPage();
+                                        $wStart = max(1, $wCur - 1);
+                                        $wEnd = min($wLast, $wCur + 1);
+                                    @endphp
+
+                                    @for($i = $wStart; $i <= $wEnd; $i++)
+                                        <a href="{{ $pendingWelcomeCallProjects->url($i) }}#pending-welcome-call-projects-section" class="pjd-page-btn {{ $wCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                                    @endfor
+
+                                    @if($pendingWelcomeCallProjects->hasMorePages())
+                                        <a href="{{ $pendingWelcomeCallProjects->nextPageUrl() }}#pending-welcome-call-projects-section" class="pjd-page-btn" title="Next Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </a>
+                                    @else
+                                        <span class="pjd-page-btn is-disabled" title="Next Page">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </span>
+                                    @endif
+                                </nav>
+                            </div>
+                        @endif
                     @else
-                        <div class="pjd-empty">No active timesheet submissions found.</div>
+                        <div class="pjd-empty">No approved projects pending welcome call update.</div>
                     @endif
                 </div>
             </section>
@@ -1569,37 +2020,53 @@
         updatePjdQuickDateRangeSpan(val);
     }
 
+    let allPjdEmployeeOptions = null;
+
     function filterEmployeesByDepartment(deptId, preserveSelection) {
         const empSelect = document.getElementById('employee_id');
         if (!empSelect) return;
 
+        if (!allPjdEmployeeOptions) {
+            allPjdEmployeeOptions = Array.from(empSelect.options).map(function (opt) {
+                return {
+                    value: opt.value,
+                    text: opt.textContent,
+                    departmentIds: (opt.getAttribute('data-department-ids') || '')
+                        .split(',')
+                        .map(function (s) { return s.trim(); })
+                        .filter(Boolean),
+                };
+            });
+        }
+
         const currentVal = empSelect.value;
-        const options = empSelect.querySelectorAll('option');
+        empSelect.innerHTML = '';
+
         let hasValidSelection = false;
 
-        options.forEach(function (opt) {
-            if (!opt.value) {
-                opt.hidden = false;
-                opt.disabled = false;
+        allPjdEmployeeOptions.forEach(function (optData) {
+            if (!optData.value) {
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.textContent = optData.text;
+                empSelect.appendChild(defaultOpt);
                 return;
             }
 
-            const deptIdsStr = opt.getAttribute('data-department-ids') || '';
-            const deptIds = deptIdsStr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-
-            if (!deptId || deptIds.length === 0 || deptIds.includes(String(deptId))) {
-                opt.hidden = false;
-                opt.disabled = false;
-                if (opt.value === currentVal) {
+            if (!deptId || optData.departmentIds.length === 0 || optData.departmentIds.includes(String(deptId))) {
+                const opt = document.createElement('option');
+                opt.value = optData.value;
+                opt.textContent = optData.text;
+                opt.setAttribute('data-department-ids', optData.departmentIds.join(','));
+                if (optData.value === currentVal) {
+                    opt.selected = true;
                     hasValidSelection = true;
                 }
-            } else {
-                opt.hidden = true;
-                opt.disabled = true;
+                empSelect.appendChild(opt);
             }
         });
 
-        if (!preserveSelection && !hasValidSelection && currentVal !== '') {
+        if (!preserveSelection && !hasValidSelection) {
             empSelect.value = '';
         }
     }

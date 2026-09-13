@@ -293,6 +293,9 @@
                 </table>
             </div>
         </div>
+
+        {{-- Employee-wise Timesheet & Tasks for Testing --}}
+        @include('pages.projects.partials.employee_timesheet_tasks')
     </div>
 </div>
 

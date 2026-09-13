@@ -372,6 +372,15 @@ document.addEventListener('keydown', function(e) {
             'soft_border' => '#bfdbfe',
             'soft_text' => '#1d4ed8',
         ],
+        'welcome_call_update' => [
+            'label' => 'Welcome Call Update',
+            'title' => '',
+            'description' => '',
+            'accent' => '#0d9488',
+            'soft_bg' => '#f0fdfa',
+            'soft_border' => '#ccfbf1',
+            'soft_text' => '#0f766e',
+        ],
         'meeting_update' => [
             'label' => 'Meeting Update',
             'title' => '',
@@ -1207,6 +1216,7 @@ document.addEventListener('keydown', function(e) {
                                 <select name="update_type" class="ps-input">
                                     <option value="">All Types</option>
                                     <option value="production_update" @selected($selectedUpdateType === 'production_update')>Production Update</option>
+                                    <option value="welcome_call_update" @selected($selectedUpdateType === 'welcome_call_update')>Welcome Call Update</option>
                                     <option value="meeting_update" @selected($selectedUpdateType === 'meeting_update')>Meeting Update</option>
                                     <option value="weekly_update" @selected($selectedUpdateType === 'weekly_update')>Weekly Update</option>
                                     <option value="timesheet" @selected($selectedUpdateType === 'timesheet')>Timesheet</option>
@@ -1583,11 +1593,16 @@ document.addEventListener('keydown', function(e) {
 
                                         <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6; white-space: pre-line;">{!! e($bug->description) !!}</div>
 
-                                        @if($bug->attachment_path)
-                                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
-                                                <a href="{{ asset($bug->attachment_path) }}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: #0284c7; text-decoration: underline;">
-                                                    <i class="bi bi-paperclip" style="font-size: 14px;"></i> View / Download Attachment ({{ $bug->attachment_original_name ?: 'File' }})
-                                                </a>
+                                        @php
+                                            $showAttList = $bug->attachment_list;
+                                        @endphp
+                                        @if(!empty($showAttList))
+                                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9; display: flex; flex-wrap: wrap; gap: 8px;">
+                                                @foreach($showAttList as $att)
+                                                    <a href="{{ $att['url'] }}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #0284c7; background: #f0f9ff; padding: 4px 10px; border-radius: 8px; border: 1px solid #bae6fd; text-decoration: none;">
+                                                        <i class="bi bi-paperclip" style="font-size: 13px;"></i> {{ $att['name'] }}
+                                                    </a>
+                                                @endforeach
                                             </div>
                                         @endif
                                     </div>
@@ -1707,11 +1722,15 @@ document.addEventListener('keydown', function(e) {
                 </div>
 
                 <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
-                        Attachment / File Upload (Screenshot, PDF, Log File)
+                    <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px;">
+                        <span>Attachments / Files Upload (Multiple Allowed)</span>
+                        <span style="font-size: 11px; color: #64748b; font-weight: 500;">Screenshots, PDFs, Logs, Docs</span>
                     </label>
-                    <input type="file" name="attachment" class="cc-sheet-input" style="width: 100%; padding: 8px 10px;" accept="image/*,.pdf,.doc,.docx,.zip">
-                    <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">Files will be stored in public folder and viewable by team.</div>
+                    <input type="file" name="attachments[]" id="bugAttachmentsInputShow" class="cc-sheet-input" style="width: 100%; padding: 8px 10px;" accept="image/*,.pdf,.doc,.docx,.zip,.txt,.log" multiple onchange="handleBugFilesChangeShow(this)">
+                    <div id="bugFilesPreviewListShow" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;"></div>
+                    <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">
+                        <i class="bi bi-info-circle"></i> You can select <strong>multiple files</strong> at once (Images, PDF, Log, Word, Zip). Max 20MB per file.
+                    </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
@@ -1740,6 +1759,27 @@ document.addEventListener('keydown', function(e) {
 </style>
 
 <script>
+function handleBugFilesChangeShow(input) {
+    const list = document.getElementById('bugFilesPreviewListShow');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!input.files || input.files.length === 0) return;
+
+    for (let i = 0; i < input.files.length; i++) {
+        const file = input.files[i];
+        const sizeKb = (file.size / 1024).toFixed(1);
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:4px 10px; background:#f1f5f9; border-radius:6px; font-size:12px; color:#334155;';
+        item.innerHTML = `
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:380px;">
+                📎 <strong>${file.name}</strong>
+            </span>
+            <span style="color:#64748b; font-size:11px; margin-left:8px;">${sizeKb} KB</span>
+        `;
+        list.appendChild(item);
+    }
+}
+
 function openAddBugModal() {
     const btn = document.getElementById('btnSubmitBugShow');
     if (btn) {
@@ -1751,6 +1791,11 @@ function openAddBugModal() {
         if (icon) icon.innerHTML = '🐞';
         if (text) text.textContent = 'Submit Bug Report';
     }
+    const preview = document.getElementById('bugFilesPreviewListShow');
+    if (preview) preview.innerHTML = '';
+    const fileInp = document.getElementById('bugAttachmentsInputShow');
+    if (fileInp) fileInp.value = '';
+
     document.getElementById('add-bug-modal-overlay').classList.add('is-open');
     document.getElementById('add-bug-modal').classList.add('is-open');
 }

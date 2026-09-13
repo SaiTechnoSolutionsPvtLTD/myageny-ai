@@ -40,6 +40,7 @@
                 <select name="type" class="ps-input" required>
                     <option value="">Select update type</option>
                     <option value="production_update" @selected(old('type') === 'production_update')>Production Update</option>
+                    <option value="welcome_call_update" @selected(old('type') === 'welcome_call_update')>Welcome Call Update</option>
                     <option value="meeting_update" @selected(old('type') === 'meeting_update')>Meeting Update</option>
                     <option value="weekly_update" @selected(old('type') === 'weekly_update')>Weekly Update</option>
                 </select>

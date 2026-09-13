@@ -559,6 +559,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('dynamic-forms', DynamicFormController::class);
     Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
     Route::get('/payroll/create', [PayrollController::class, 'create'])->name('payroll.create');
+    Route::get('/payroll/load-rows', [PayrollController::class, 'loadRows'])->name('payroll.loadRows');
     Route::post('/payroll', [PayrollController::class, 'store'])->name('payroll.store');
     Route::get('/payroll/{payroll}', [PayrollController::class, 'show'])->name('payroll.show');
     Route::get('/payroll/{payroll}/payslip/{item}', [PayrollController::class, 'payslip'])->name('payroll.payslip');
