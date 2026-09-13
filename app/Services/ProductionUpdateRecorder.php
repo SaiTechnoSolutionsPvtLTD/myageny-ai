@@ -146,7 +146,8 @@ HTML;
     }
 
     /**
-     * Record Production Approval (Approve or Reject) with reviewer, remarks, and budget details.
+     * Record Production Approval (Approve or Reject) with reviewer and remarks.
+     * Note: Budget details are not shown in production updates to keep financial data restricted.
      */
     public function recordProductionApproval(ProductionInitiation $initiation, string $decision, ?string $remarks = null, ?User $actor = null, ?array $budgetData = null, ?Carbon $customTimestamp = null): ProjectUpdate
     {
@@ -160,24 +161,6 @@ HTML;
         $badgeBg = $isApproval ? '#f0fdf4' : '#fef2f2';
         $badgeBorder = $isApproval ? '#bbf7d0' : '#fecaca';
         $badgeColor = $isApproval ? '#166534' : '#991b1b';
-
-        $budgetHtml = '';
-        if ($isApproval && !empty($budgetData) && isset($budgetData['lead_budget_amount'])) {
-            $formattedAmount = '₹' . number_format((float) $budgetData['lead_budget_amount'], 2);
-            $budgetType = htmlspecialchars($budgetData['budget_amount_type'] ?? 'Standard');
-            $budgetHtml = <<<HTML
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 10px; padding: 10px 14px; background: #fff; border: 1px solid #bbf7d0; border-radius: 8px;">
-                <div>
-                    <span style="display: block; font-size: 11px; color: #166534; font-weight: 600; text-transform: uppercase;">Approved Budget Amount</span>
-                    <span style="display: block; font-size: 15px; color: #166534; font-weight: 700; margin-top: 2px;">{$formattedAmount}</span>
-                </div>
-                <div>
-                    <span style="display: block; font-size: 11px; color: #166534; font-weight: 600; text-transform: uppercase;">Budget Frequency / Type</span>
-                    <span style="display: block; font-size: 14px; color: #0f172a; font-weight: 600; margin-top: 2px;">{$budgetType}</span>
-                </div>
-            </div>
-HTML;
-        }
 
         $safeRemarks = nl2br(htmlspecialchars(trim((string) $remarks)));
         $remarksTitle = $isApproval ? 'Approval Remarks' : 'Rejection Remarks';
@@ -197,7 +180,6 @@ HTML;
     <div style="background: {$badgeBg}; border: 1px solid {$badgeBorder}; border-radius: 10px; padding: 14px;">
         <span style="display: block; font-size: 11px; color: {$badgeColor}; font-weight: 700; text-transform: uppercase;">{$remarksTitle}</span>
         <div style="font-size: 13px; color: #1e293b; margin-top: 4px; line-height: 1.5;">{$safeRemarks}</div>
-        {$budgetHtml}
     </div>
 </div>
 HTML;
