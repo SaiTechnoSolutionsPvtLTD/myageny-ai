@@ -367,6 +367,16 @@ class User extends Authenticatable
         ])->isNotEmpty();
     }
 
+    public function canAccessTimesheetLop(): bool
+    {
+        return $this->isSystemAdmin()
+            || $this->isCompanyAdmin()
+            || $this->belongsToHrDepartment()
+            || $this->hasHrLikeRole()
+            || $this->can('timesheet_lop.menuview')
+            || $this->can('timesheet_lop.view');
+    }
+
     public function belongsToDesigningDepartment(): bool
     {
         return collect($this->departmentKeys()->all())->contains(function ($key) {

@@ -8,6 +8,8 @@ use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
+use App\Models\User;
+use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,7 +31,24 @@ class AttendanceApiController extends Controller
             || $user->hasHrLikeRole()
             || $user->isCompanyAdmin()
             || $user->isBranchAdmin()
+            || app(DataVisibilityService::class)->hasBranchAdminRole($user)
         ));
+    }
+
+    private function hasMappedTeamMembers(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        return $user->managedUsers()->exists()
+            || app(DataVisibilityService::class)->descendantUserIds($user)->isNotEmpty();
+    }
+
+    private function canManageOrViewTeam(): bool
+    {
+        return $this->canViewAllAttendance() || $this->hasMappedTeamMembers();
     }
 
     private function shouldFilterByBranch(): bool
@@ -143,9 +162,11 @@ class AttendanceApiController extends Controller
     }
 
     /**
-     * Returns a collection of accessible attendees (employees + interns for HR,
-     * only the current employee for self-service users).
-     * Each item: ['id', 'attendee_type', 'display_id', 'name', 'photo_url']
+     * Returns a collection of accessible attendees:
+     * - HR / Admin / Super Admin: all employees + interns (branch-filtered if branch admin/manager)
+     * - Team Lead / Manager: their assigned subordinates (direct + indirect) + themselves
+     * - Regular Employee / Intern: only their own record
+     * Each item: ['id', 'attendee_type', 'display_id', 'name', 'photo_url', 'select_key', 'branch_name', 'department_name']
      */
     private function accessibleAttendees(?int $actingBranchId = null): \Illuminate\Support\Collection
     {
@@ -153,27 +174,81 @@ class AttendanceApiController extends Controller
             EmployeeOnboarding::query()->with(['department', 'portalUser.branch'])->active()
         )->whereNotNull('name');
 
+        $internQuery = $this->withActivePortalAccount(
+            InternJoiningForm::query()->with(['department', 'portalUser.branch'])->active()
+        )->whereNotNull('name');
+
         if (! $this->canViewAllAttendance()) {
-            $currentEmployee = $this->currentEmployee();
-            if (! $currentEmployee) {
+            $user = auth()->user();
+
+            if (! $user) {
                 return collect();
             }
-            $employeeQuery->whereKey($currentEmployee->id);
+
+            /** @var \App\Services\DataVisibilityService $visibility */
+            $visibility = app(\App\Services\DataVisibilityService::class);
+            $mappedUserIds = $visibility->descendantUserIds($user)->push($user->id)->unique()->values();
+
+            $mappedUsers = \App\Models\User::whereIn('id', $mappedUserIds)->get(['id', 'email']);
+            $mappedPortalUserIds = $mappedUsers->pluck('id')->filter()->values()->all();
+            $mappedEmails = $mappedUsers->pluck('email')->filter()->values()->all();
+
+            $employeeQuery->where(function (Builder $query) use ($mappedPortalUserIds, $mappedEmails) {
+                $query->whereIn('portal_user_id', $mappedPortalUserIds)
+                    ->orWhereIn('email', $mappedEmails);
+            });
+
+            $internQuery->where(function (Builder $query) use ($mappedPortalUserIds, $mappedEmails) {
+                $query->whereIn('portal_user_id', $mappedPortalUserIds)
+                    ->orWhereIn('email', $mappedEmails);
+            });
         }
 
-        $resolvedBranchId = func_num_args() > 0 ? $actingBranchId : $this->resolveActingBranchId();
-
-        if ($resolvedBranchId) {
-            $branch = Branch::find($resolvedBranchId);
-            $branchCode = $branch?->code;
-            $employeeQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
-                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
-                if ($branchCode) {
-                    $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                        $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+        if ($this->canViewAllAttendance()) {
+            if ($this->shouldFilterByBranch()) {
+                $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+                if (!empty($branchIds)) {
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                    $employeeQuery->where(function (Builder $q) use ($branchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                            $puQ->whereIn('branch_id', $branchIds);
+                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('employee_id', 'like', $code . '%');
+                        }
+                    });
+                    $internQuery->where(function (Builder $q) use ($branchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                            $puQ->whereIn('branch_id', $branchIds);
+                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('intern_id', 'like', $code . '%');
+                        }
                     });
                 }
-            });
+            } else {
+                $resolvedBranchId = func_num_args() > 0 ? $actingBranchId : $this->resolveActingBranchId();
+                if ($resolvedBranchId) {
+                    $branch = Branch::find($resolvedBranchId);
+                    $branchCode = $branch?->code;
+                    $employeeQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
+                        if ($branchCode) {
+                            $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                    $internQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
+                        if ($branchCode) {
+                            $sub->orWhere(function (Builder $q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    });
+                }
+            }
         }
 
         $employees = $employeeQuery
@@ -189,27 +264,6 @@ class AttendanceApiController extends Controller
                 'branch_name'     => $e->portalUser?->branch?->name ?? '',
                 'department_name' => $e->department?->name ?? '',
             ]);
-
-        if (! $this->canViewAllAttendance()) {
-            return $employees->values();
-        }
-
-        $internQuery = $this->withActivePortalAccount(
-            InternJoiningForm::query()->with(['department', 'portalUser.branch'])->active()
-        )->whereNotNull('name');
-
-        if ($resolvedBranchId) {
-            $branch = Branch::find($resolvedBranchId);
-            $branchCode = $branch?->code;
-            $internQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
-                $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
-                if ($branchCode) {
-                    $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                        $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
-                    });
-                }
-            });
-        }
 
         $interns = $internQuery
             ->orderBy('name')
@@ -381,8 +435,8 @@ class AttendanceApiController extends Controller
             'branch_id'       => ['nullable', 'string'],
         ];
 
-        // HR/Admin can filter by name, employee_id, attendee_type
-        if ($this->canViewAllAttendance()) {
+        // HR/Admin/TL/Manager can filter by name, employee_id, attendee_type
+        if ($this->canManageOrViewTeam()) {
             $rules['employee_name'] = ['nullable', 'string', 'max:255'];
             $rules['employee_id']   = ['nullable', 'string', 'max:255'];
             $rules['attendee_type'] = ['nullable', 'in:employee,intern'];
@@ -407,9 +461,9 @@ class AttendanceApiController extends Controller
         $statusFilter       = $validated['status']        ?? null;
         $loginTimingFilter  = $validated['login_timing']  ?? null;
         $outsideOfficeFilter = $validated['outside_office'] ?? null;
-        $employeeNameFilter = $this->canViewAllAttendance() ? trim((string) ($validated['employee_name'] ?? '')) : '';
-        $employeeIdFilter   = $this->canViewAllAttendance() ? trim((string) ($validated['employee_id']   ?? '')) : '';
-        $attendeeTypeFilter = $this->canViewAllAttendance() ? ($validated['attendee_type'] ?? '') : '';
+        $employeeNameFilter = $this->canManageOrViewTeam() ? trim((string) ($validated['employee_name'] ?? '')) : '';
+        $employeeIdFilter   = $this->canManageOrViewTeam() ? trim((string) ($validated['employee_id']   ?? '')) : '';
+        $attendeeTypeFilter = $this->canManageOrViewTeam() ? ($validated['attendee_type'] ?? '') : '';
         $perPage            = (int) ($validated['per_page'] ?? 15);
         $page               = (int) ($validated['page']     ?? 1);
 
@@ -431,7 +485,9 @@ class AttendanceApiController extends Controller
             return response()->json([
                 'status'             => true,
                 'message'            => 'No accessible records.',
-                'can_view_all'       => false,
+                'can_view_all'       => $this->canViewAllAttendance(),
+                'has_team_members'   => $this->hasMappedTeamMembers(),
+                'can_view_team'      => $this->canManageOrViewTeam(),
                 'is_company_admin'   => $isCompanyAdmin,
                 'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
                 'branches'           => $branches,
@@ -596,6 +652,8 @@ class AttendanceApiController extends Controller
             'status'             => true,
             'message'            => 'Attendance records fetched successfully.',
             'can_view_all'       => $this->canViewAllAttendance(),
+            'has_team_members'   => $this->hasMappedTeamMembers(),
+            'can_view_team'      => $this->canManageOrViewTeam(),
             'is_company_admin'   => $isCompanyAdmin,
             'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
             'branches'           => $branches,
@@ -623,27 +681,19 @@ class AttendanceApiController extends Controller
             return response()->json(['status' => false, 'message' => 'Attendance record not found.'], 404);
         }
 
-        // Self-service: only allow viewing own record
-        if (! $this->canViewAllAttendance()) {
-            $currentEmployee = $this->currentEmployee();
-            $isOwn = $currentEmployee &&
-                $attendance->attendee_type === 'employee' &&
-                $attendance->employee_id === $currentEmployee->id;
-
-            if (! $isOwn) {
-                return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
-            }
-        }
-
-        if ($this->canViewAllAttendance() && $this->shouldFilterByBranch() && ! $this->isAccessibleRecord($attendance)) {
+        // Authorization check: record must belong to an accessible attendee
+        // (HR/Admin can view all, Branch Admin/Manager within branch, TL/Manager their team, Employee only self)
+        if ((! $this->canViewAllAttendance() || $this->shouldFilterByBranch()) && ! $this->isAccessibleRecord($attendance)) {
             return response()->json(['status' => false, 'message' => 'Unauthorized.'], 403);
         }
 
         return response()->json([
-            'status'       => true,
-            'message'      => 'Attendance record fetched successfully.',
-            'can_view_all' => $this->canViewAllAttendance(),
-            'data'         => $this->formatRecord($attendance),
+            'status'           => true,
+            'message'          => 'Attendance record fetched successfully.',
+            'can_view_all'     => $this->canViewAllAttendance(),
+            'has_team_members' => $this->hasMappedTeamMembers(),
+            'can_view_team'    => $this->canManageOrViewTeam(),
+            'data'             => $this->formatRecord($attendance),
         ]);
     }
 

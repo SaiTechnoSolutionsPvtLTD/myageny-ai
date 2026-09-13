@@ -34,6 +34,7 @@ use App\Http\Controllers\App\HRMS\RecruitmentApiController;
 use App\Http\Controllers\App\HRMS\PettyCashApiController;
 use App\Http\Controllers\App\HRMS\FaceAttendanceApiController;
 use App\Http\Controllers\App\HRMS\FaceRegistrationApiController;
+use App\Http\Controllers\App\HRMS\TimesheetLopApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -313,6 +314,11 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         // FaceRegistrationApiController's class doc comment.
         Route::get('face-registration/employees', [FaceRegistrationApiController::class, 'index'])->name('face-registration.employees');
         Route::post('face-registration/register', [FaceRegistrationApiController::class, 'register'])->name('face-registration.register');
+
+        // ── Timesheet LOP (HR/Admin only) ─────────────────────────────────────
+        Route::get('timesheet-lop/meta', [TimesheetLopApiController::class, 'meta'])->name('timesheet-lop.meta');
+        Route::get('timesheet-lop', [TimesheetLopApiController::class, 'index'])->name('timesheet-lop.index');
+        Route::get('timesheet-lop/details/{employeeId}', [TimesheetLopApiController::class, 'details'])->name('timesheet-lop.details');
     });
 
     // ── Face Attendance (new self-service module, separate from the

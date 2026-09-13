@@ -277,6 +277,14 @@ return [
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
             [
+                'key' => 'hrms.timesheet_lop',
+                'label' => 'Timesheet LOP',
+                'section' => 'HRMS',
+                'order' => 99,
+                'require_method' => 'canAccessTimesheetLop',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser',
+            ],
+            [
                 'key' => 'hrms.facility',
                 'label' => 'Facility',
                 'section' => 'HRMS',

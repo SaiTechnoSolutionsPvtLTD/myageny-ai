@@ -498,6 +498,7 @@ class ExpenseRequestApiController extends Controller
             'is_branch_admin'  => $isBranchAdmin,
             'is_tl_or_manager' => $isTlOrManager,
             'has_team_members' => $hasTeamMembers,
+            'is_admin_or_hr'   => $isAdminOrHr,
             'descendant_ids'   => $descendantIds->all(),
             'user_branch_ids'  => method_exists($user, 'getMyBranchIds') ? $user->getMyBranchIds() : ($user->branch_id ? [(int) $user->branch_id] : []),
         ];
