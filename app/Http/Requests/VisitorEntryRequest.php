@@ -25,19 +25,25 @@ class VisitorEntryRequest extends FormRequest
             'mobile_number' => ['required', 'string', 'max:30'],
             'email' => [
                 'nullable',
-                Rule::requiredIf($this->input('visitor_type') === VisitorEntry::TYPE_CANDIDATE),
+                Rule::requiredIf(fn () => $this->input('visitor_type') === VisitorEntry::TYPE_CANDIDATE),
                 'email',
                 'max:150',
             ],
             'applied_position' => [
                 'nullable',
-                Rule::requiredIf($this->input('visitor_type') === VisitorEntry::TYPE_CANDIDATE),
+                Rule::requiredIf(fn () => $this->input('visitor_type') === VisitorEntry::TYPE_CANDIDATE),
                 'string',
                 'max:150',
             ],
             'company_name' => [
                 'nullable',
-                Rule::requiredIf($this->input('visitor_type') === VisitorEntry::TYPE_CLIENT),
+                Rule::requiredIf(fn () => $this->input('visitor_type') === VisitorEntry::TYPE_CLIENT),
+                'string',
+                'max:150',
+            ],
+            'other_visitor_type' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->input('visitor_type') === VisitorEntry::TYPE_OTHERS),
                 'string',
                 'max:150',
             ],

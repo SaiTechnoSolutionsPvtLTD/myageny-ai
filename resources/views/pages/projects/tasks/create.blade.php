@@ -206,6 +206,19 @@
             </div>
         @endif
 
+        <!-- Daily 11:00 AM Deadline Notice -->
+        <div class="pts-flash" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span><strong>Daily Deadline Notice:</strong> Daily tasks must be created and assigned before <strong>11:00 AM IST</strong>. Please complete and submit before the cutoff time.</span>
+            </div>
+            @if(!empty($cutoffInfo['formatted_remaining']))
+                <span style="font-size:12px; font-weight:800; background:#dbeafe; padding:4px 10px; border-radius:999px; white-space:nowrap;">
+                    {{ $cutoffInfo['formatted_remaining'] }} left
+                </span>
+            @endif
+        </div>
+
         <form method="POST" action="{{ route('projects.tasks.store') }}" id="taskCreationForm">
             @csrf
 
@@ -312,8 +325,12 @@
 
                                     <!-- Task Description (Full width below) -->
                                     <div class="pts-grid-col-12">
-                                        <label class="pts-label">Task Description <span class="req">*</span></label>
-                                        <textarea name="tasks[{{ $index }}][task_description]" class="pts-textarea" placeholder="Enter detailed task instructions, deliverables, requirements..." required>{{ $row['task_description'] ?? '' }}</textarea>
+                                        <label class="pts-label">Task Description <span class="req">*</span> <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Minimum 30 characters required)</span></label>
+                                        <textarea name="tasks[{{ $index }}][task_description]" class="pts-textarea task-desc-input" minlength="30" placeholder="Enter detailed task instructions, deliverables, requirements (minimum 30 characters)..." required>{{ $row['task_description'] ?? '' }}</textarea>
+                                        <div class="pts-help task-desc-counter" style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                                            <span class="counter-text" style="font-weight:700; font-size:11px; color:#ea580c;">0 / 30 min characters</span>
+                                            <span style="font-size:11px; color:#64748b;">Must be at least 30 characters</span>
+                                        </div>
                                         @error("tasks.{$index}.task_description")
                                             <div class="pts-error">{{ $message }}</div>
                                         @enderror
@@ -571,6 +588,8 @@ document.addEventListener('DOMContentLoaded', function () {
             populateProjectsForLead('', projectSelect, null, '');
         }
 
+        setupCharCounter(row);
+
         if (removeBtn) {
             removeBtn.addEventListener('click', function () {
                 const totalRows = container.querySelectorAll('.task-item-row').length;
@@ -587,6 +606,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+    }
+
+    function setupCharCounter(row) {
+        const textarea = row.querySelector('.task-desc-input');
+        const counterSpan = row.querySelector('.counter-text');
+        if (!textarea || !counterSpan) return;
+
+        function updateCounter() {
+            const len = textarea.value.trim().length;
+            if (len >= 30) {
+                counterSpan.style.color = '#15803d';
+                counterSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:inline; vertical-align:-1px; margin-right:3px;"><polyline points="20 6 9 17 4 12"></polyline></svg>${len} characters (Requirement met)`;
+            } else {
+                counterSpan.style.color = '#ea580c';
+                const remaining = 30 - len;
+                counterSpan.textContent = `${len} / 30 characters (${remaining} more required)`;
+            }
+        }
+
+        textarea.addEventListener('input', updateCounter);
+        textarea.addEventListener('blur', updateCounter);
+        updateCounter();
     }
 
     function updateRowNumbersAndIndices() {
@@ -640,8 +681,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         </select>
                     </div>
                     <div class="pts-grid-col-12">
-                        <label class="pts-label">Task Description <span class="req">*</span></label>
-                        <textarea name="tasks[${newIndex}][task_description]" class="pts-textarea" placeholder="Enter detailed task instructions, deliverables, requirements..." required></textarea>
+                        <label class="pts-label">Task Description <span class="req">*</span> <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Minimum 30 characters required)</span></label>
+                        <textarea name="tasks[${newIndex}][task_description]" class="pts-textarea task-desc-input" minlength="30" placeholder="Enter detailed task instructions, deliverables, requirements (minimum 30 characters)..." required></textarea>
+                        <div class="pts-help task-desc-counter" style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                            <span class="counter-text" style="font-weight:700; font-size:11px; color:#ea580c;">0 / 30 min characters</span>
+                            <span style="font-size:11px; color:#64748b;">Must be at least 30 characters</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -671,6 +716,26 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.jQuery) {
             window.jQuery(assignedUserSelect).on('change select2:select', handleMemberChange);
         }
+    }
+
+    // Form submit validation: ensure each task description is >= 30 characters
+    const form = document.getElementById('taskCreationForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            const textareas = form.querySelectorAll('.task-desc-input');
+            for (let i = 0; i < textareas.length; i++) {
+                const ta = textareas[i];
+                const cleanText = ta.value.trim();
+                if (cleanText.length < 30) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    ta.focus();
+                    ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    alert(`Task Description for Item #${i + 1} must be at least 30 characters long. Currently entered: ${cleanText.length} character(s).`);
+                    return false;
+                }
+            }
+        });
     }
 
     // Init existing rows

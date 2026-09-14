@@ -10,12 +10,19 @@
 
     <div class="eob-group">
         <label class="eob-label">Visitor Type <span class="eob-label-required">*</span></label>
-        <select name="visitor_type" class="eob-select" id="visitorTypeSelect" required>
+        <select name="visitor_type" class="eob-select no-select2" id="visitorTypeSelect" required>
             <option value="others" @selected($selectedType === 'others')>Others</option>
             <option value="candidate" @selected($selectedType === 'candidate')>Candidate</option>
             <option value="client" @selected($selectedType === 'client')>Client</option>
         </select>
         @error('visitor_type')<div class="eob-error">{{ $message }}</div>@enderror
+    </div>
+
+    <!-- Others Specific Field -->
+    <div class="eob-group others-field" style="display: none;">
+        <label class="eob-label">Specify Visitor Type / Details <span class="eob-label-required">*</span></label>
+        <input type="text" name="other_visitor_type" class="eob-input" id="otherVisitorTypeInput" value="{{ old('other_visitor_type', $visitor->other_visitor_type) }}" placeholder="Enter visitor details (e.g. Vendor, Delivery, Guest)">
+        @error('other_visitor_type')<div class="eob-error">{{ $message }}</div>@enderror
     </div>
 
     <!-- Candidate Specific Fields -->
@@ -76,33 +83,81 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const visitorTypeSelect = document.getElementById('visitorTypeSelect');
-    const candidateFields = document.querySelectorAll('.candidate-field');
-    const clientFields = document.querySelectorAll('.client-field');
-    const candidateEmail = document.getElementById('candidateEmailInput');
-    const candidatePosition = document.getElementById('candidatePositionInput');
-    const clientCompany = document.getElementById('clientCompanyInput');
+(function () {
+    function initVisitorTypeFieldToggle() {
+        const visitorTypeSelect = document.getElementById('visitorTypeSelect');
+        const othersFields = document.querySelectorAll('.others-field');
+        const candidateFields = document.querySelectorAll('.candidate-field');
+        const clientFields = document.querySelectorAll('.client-field');
+        const otherVisitorType = document.getElementById('otherVisitorTypeInput');
+        const candidateEmail = document.getElementById('candidateEmailInput');
+        const candidatePosition = document.getElementById('candidatePositionInput');
+        const clientCompany = document.getElementById('clientCompanyInput');
 
-    function toggleVisitorTypeFields() {
-        const value = visitorTypeSelect ? visitorTypeSelect.value : 'others';
+        function toggleVisitorTypeFields() {
+            const value = visitorTypeSelect ? visitorTypeSelect.value : '';
+            const isOthers = (value === 'others');
+            const isCandidate = (value === 'candidate');
+            const isClient = (value === 'client');
 
-        candidateFields.forEach(el => {
-            el.style.display = (value === 'candidate') ? 'block' : 'none';
-        });
+            // Strictly show others-field ONLY when 'others' is selected
+            othersFields.forEach(el => {
+                el.style.setProperty('display', isOthers ? 'block' : 'none', 'important');
+            });
 
-        clientFields.forEach(el => {
-            el.style.display = (value === 'client') ? 'block' : 'none';
-        });
+            // Show candidate fields only when 'candidate' is selected
+            candidateFields.forEach(el => {
+                el.style.setProperty('display', isCandidate ? 'block' : 'none', 'important');
+            });
 
-        if (candidateEmail) candidateEmail.required = (value === 'candidate');
-        if (candidatePosition) candidatePosition.required = (value === 'candidate');
-        if (clientCompany) clientCompany.required = (value === 'client');
+            // Show client fields only when 'client' is selected
+            clientFields.forEach(el => {
+                el.style.setProperty('display', isClient ? 'block' : 'none', 'important');
+            });
+
+            // Required & value cleanup
+            if (otherVisitorType) {
+                otherVisitorType.required = isOthers;
+                if (!isOthers) {
+                    otherVisitorType.value = '';
+                }
+            }
+            if (candidateEmail) {
+                candidateEmail.required = isCandidate;
+            }
+            if (candidatePosition) {
+                candidatePosition.required = isCandidate;
+            }
+            if (clientCompany) {
+                clientCompany.required = isClient;
+            }
+        }
+
+        if (visitorTypeSelect) {
+            visitorTypeSelect.addEventListener('change', toggleVisitorTypeFields);
+            visitorTypeSelect.addEventListener('input', toggleVisitorTypeFields);
+
+            if (window.jQuery) {
+                window.jQuery(visitorTypeSelect).on('change select2:select select2:unselect select2:clear', toggleVisitorTypeFields);
+                window.jQuery(document).on('change select2:select', '#visitorTypeSelect', toggleVisitorTypeFields);
+            }
+
+            toggleVisitorTypeFields();
+            setTimeout(toggleVisitorTypeFields, 100);
+            setTimeout(toggleVisitorTypeFields, 400);
+        }
     }
 
-    if (visitorTypeSelect) {
-        visitorTypeSelect.addEventListener('change', toggleVisitorTypeFields);
-        toggleVisitorTypeFields();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initVisitorTypeFieldToggle);
+    } else {
+        initVisitorTypeFieldToggle();
     }
-});
+
+    if (window.jQuery) {
+        window.jQuery(document).ready(function () {
+            initVisitorTypeFieldToggle();
+        });
+    }
+})();
 </script>

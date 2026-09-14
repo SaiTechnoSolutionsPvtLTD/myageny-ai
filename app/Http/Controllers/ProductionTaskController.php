@@ -147,6 +147,8 @@ class ProductionTaskController extends Controller
             || !empty($filterUserId)
             || !empty($filterStatus);
 
+        $cutoffInfo = $this->getTaskCutoffInfo();
+
         return view('pages.projects.tasks.index', [
             'groupedTasks' => $paginatedGroups,
             'assignedProjects' => $assignedProjects,
@@ -154,6 +156,8 @@ class ProductionTaskController extends Controller
             'mappedTeamMembers' => $mappedTeamMembers,
             'isAdminLike' => $isAdminLike,
             'hasActiveFilters' => $hasActiveFilters,
+            'isTaskCreationAllowed' => $cutoffInfo['is_allowed'],
+            'cutoffInfo' => $cutoffInfo,
             'filters' => [
                 'quick_date' => $quickDate,
                 'date_from' => $dateFrom,
@@ -167,9 +171,16 @@ class ProductionTaskController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(): View|RedirectResponse
     {
         $user = auth()->user();
+
+        if (! $this->isTaskCreationAllowed()) {
+            return redirect()
+                ->route('projects.tasks.index')
+                ->with('error', 'Daily task creation window closed at 11:00 AM. Tasks must be added and updated before 11:00 AM daily.');
+        }
+
         $assignedProjects = $this->getAccessibleProjects($user);
 
         $uniqueLeads = $assignedProjects->groupBy('lead_id')->map(function ($projects) {
@@ -198,12 +209,14 @@ class ProductionTaskController extends Controller
 
         $mappedTeamMembers = $this->getMappedTeamMembers($user);
         $today = Carbon::today()->toDateString();
+        $cutoffInfo = $this->getTaskCutoffInfo();
 
         return view('pages.projects.tasks.create', [
             'assignedProjects' => $assignedProjectsPayload,
             'uniqueLeads' => $uniqueLeads,
             'mappedTeamMembers' => $mappedTeamMembers,
             'today' => $today,
+            'cutoffInfo' => $cutoffInfo,
         ]);
     }
 
@@ -211,13 +224,19 @@ class ProductionTaskController extends Controller
     {
         $user = auth()->user();
 
+        if (! $this->isTaskCreationAllowed()) {
+            return redirect()
+                ->route('projects.tasks.index')
+                ->with('error', 'Daily task creation window closed at 11:00 AM. Tasks must be added and updated before 11:00 AM daily.');
+        }
+
         $validated = $request->validate([
             'task_date' => ['required', 'date'],
             'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
             'tasks' => ['required', 'array', 'min:1'],
             'tasks.*.lead_id' => ['required', 'integer', 'exists:leads,id'],
             'tasks.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
-            'tasks.*.task_description' => ['required', 'string', 'min:1'],
+            'tasks.*.task_description' => ['required', 'string', 'min:30'],
         ], [
             'task_date.required' => 'The date field is mandatory.',
             'assigned_to_user_id.required' => 'Selecting a team member is mandatory.',
@@ -225,6 +244,7 @@ class ProductionTaskController extends Controller
             'tasks.*.lead_id.required' => 'Lead Name is mandatory for all task rows.',
             'tasks.*.production_initiation_id.required' => 'Product Name is mandatory for all task rows.',
             'tasks.*.task_description.required' => 'Task Description is mandatory for all task rows.',
+            'tasks.*.task_description.min' => 'Task Description must be at least 30 characters for all task rows.',
         ]);
 
         $taskDate = Carbon::parse($validated['task_date'])->toDateString();
@@ -530,4 +550,39 @@ class ProductionTaskController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
     }
+
+    /**
+     * Check if task creation is allowed today.
+     * Allowed only until 11:00 AM daily (Asia/Kolkata timezone).
+     */
+    protected function isTaskCreationAllowed(): bool
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        return $now->hour < 11;
+    }
+
+    /**
+     * Get detailed cutoff and countdown information for daily task creation.
+     */
+    protected function getTaskCutoffInfo(): array
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        $cutoffToday = $now->copy()->setTime(11, 0, 0);
+        $isAllowed = $now->lessThan($cutoffToday);
+
+        $secondsRemaining = $isAllowed ? $now->diffInSeconds($cutoffToday, false) : 0;
+        $minutesRemaining = $isAllowed ? (int) ceil($secondsRemaining / 60) : 0;
+
+        return [
+            'is_allowed' => $isAllowed,
+            'cutoff_time' => '11:00 AM',
+            'current_time' => $now->format('h:i A'),
+            'seconds_remaining' => max(0, $secondsRemaining),
+            'minutes_remaining' => max(0, $minutesRemaining),
+            'formatted_remaining' => $minutesRemaining > 60
+                ? floor($minutesRemaining / 60) . 'h ' . ($minutesRemaining % 60) . 'm'
+                : $minutesRemaining . 'm',
+        ];
+    }
 }
+

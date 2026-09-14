@@ -1,7 +1,7 @@
 @php
     $showDesignCols = in_array($teamView ?? 'all', ['all', 'design']);
     $showDmCols     = in_array($teamView ?? 'all', ['all', 'dm']);
-    $totalCols = 5 + ($showDesignCols ? 5 : 0) + ($showDmCols ? 5 : 0) + 1;
+    $totalCols = 5 + ($showDesignCols ? 5 : 0) + ($showDmCols ? 5 : 0) + 2;
 @endphp
 {{-- SMM Sheet Export View (Excel-friendly HTML table) --}}
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;">
@@ -26,7 +26,8 @@
                 <th colspan="5" style="background:#f5f3ff;color:#6d28d9;border:1px solid #c4b5fd;">DM Team</th>
             @endif
 
-            <th rowspan="2">Status</th>
+            <th rowspan="2">Production Status</th>
+            <th rowspan="2">Renewal Status</th>
         </tr>
         <tr style="font-weight:bold;">
             @if($showDesignCols)
@@ -75,11 +76,28 @@
                 @endif
 
                 <td align="center" style="
-                    @if($row['status'] === 'completed') background:#f0fdf4;color:#16a34a;
-                    @elseif($row['status'] === 'overdue') background:#fef2f2;color:#dc2626;
+                    @if(!empty($row['is_completed'])) background:#f0fdf4;color:#16a34a;
+                    @elseif(!empty($row['is_overdue'])) background:#fef2f2;color:#dc2626;
                     @else background:#fff7ed;color:#c2410c;
                     @endif
-                    font-weight:bold;">{{ ucfirst($row['status']) }}</td>
+                    font-weight:bold;">
+                    {{ !empty($row['is_completed']) ? 'Completed' : (!empty($row['is_overdue']) ? 'Overdue' : 'Pending') }}
+                </td>
+
+                <td align="center" style="
+                    @if(!empty($row['is_expired'])) background:#fef2f2;color:#dc2626;
+                    @elseif(!empty($row['is_cm_renewed'])) background:#eff6ff;color:#1d4ed8;
+                    @elseif(!empty($row['is_cm_not_renewed'])) background:#fffbeb;color:#b45309;
+                    @elseif(!empty($row['is_active'])) background:#ecfdf5;color:#059669;
+                    @endif
+                    font-weight:bold;">
+                    @if(!empty($row['is_expired'])) Expired
+                    @elseif(!empty($row['is_cm_renewed'])) CM Renewed
+                    @elseif(!empty($row['is_cm_not_renewed'])) CM Not Renewed
+                    @elseif(!empty($row['is_active'])) Active
+                    @else —
+                    @endif
+                </td>
             </tr>
         @empty
             <tr><td colspan="{{ $totalCols }}" align="center" style="color:#6b7280;padding:20px;">No records found.</td></tr>
@@ -107,10 +125,16 @@
                 <td style="background:#f5f3ff;"></td>
             @endif
 
-            <td>
-                ✅ {{ $rows->where('status','completed')->count() }} Completed |
-                ⏳ {{ $rows->where('status','pending')->count() }} Pending |
-                🔴 {{ $rows->where('status','overdue')->count() }} Overdue
+            <td style="font-size:11px;">
+                ⏳ {{ $rows->where('is_pending', true)->count() }} Pending |
+                ✔️ {{ $rows->where('is_completed', true)->count() }} Completed |
+                🔴 {{ $rows->where('is_overdue', true)->count() }} Overdue
+            </td>
+            <td style="font-size:11px;">
+                ⚡ {{ $rows->where('is_active', true)->count() }} Active |
+                ⚠️ {{ $rows->where('is_cm_not_renewed', true)->count() }} CM Not Renewed |
+                ✅ {{ $rows->where('is_cm_renewed', true)->count() }} CM Renewed |
+                ⏳ {{ $rows->where('is_expired', true)->count() }} Expired
             </td>
         </tr>
     </tfoot>

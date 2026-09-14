@@ -16,6 +16,20 @@
 .pts-btn-outline:hover { background:#fff7ed; }
 .pts-btn-danger { background:#ef4444; border-color:#ef4444; color:#fff; }
 .pts-btn-danger:hover { background:#dc2626; border-color:#dc2626; color:#fff; }
+.pts-btn.is-disabled, .pts-btn:disabled { background:#f1f5f9 !important; border-color:#e2e8f0 !important; color:#94a3b8 !important; cursor:not-allowed !important; box-shadow:none !important; }
+.pts-notice-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; border-radius:12px; margin-bottom:2px; box-shadow:0 4px 14px rgba(15,23,42,.03); transition:all 0.3s ease; }
+.pts-notice-banner.open { background:linear-gradient(135deg, #f0f9ff 0%, #ecfdf5 100%); border:1px solid #bae6fd; color:#0369a1; }
+.pts-notice-banner.closed { background:linear-gradient(135deg, #fff7ed 0%, #fef2f2 100%); border:1px solid #fed7aa; color:#9a3412; }
+.pts-notice-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.pts-notice-banner.open .pts-notice-icon { background:#e0f2fe; color:#0284c7; }
+.pts-notice-banner.closed .pts-notice-icon { background:#ffedd5; color:#ea580c; }
+.pts-notice-title { font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
+.pts-notice-desc { font-size:12px; margin-top:2px; opacity:0.95; line-height:1.45; }
+.pts-notice-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+.pts-notice-banner.open .pts-notice-pill { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.pts-notice-banner.closed .pts-notice-pill { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
+.pts-pulse-dot { width:7px; height:7px; border-radius:50%; background:currentColor; display:inline-block; animation:pts-pulse 1.8s infinite; }
+@keyframes pts-pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.3; transform:scale(0.85); } }
 .pts-body { padding:22px 28px 34px; display:grid; gap:18px; }
 .pts-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pts-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
@@ -125,11 +139,25 @@
             <div class="pts-breadcrumb">Projects &gt; Tasks (Assigned Directory)</div>
         </div>
         <div class="pts-actions">
+            <!-- Daily Task Policy / Notification Option Button -->
+            <button type="button" class="pts-btn pts-btn-outline" id="ptsTaskNoticeBtn" title="Daily Task Submission Policy">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <span>Task Notice</span>
+                <span class="pts-badge" style="background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; font-size:10px; padding:2px 7px;">11 AM Rule</span>
+            </button>
+
             @can('tasks.create')
-            <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                <span>Create Task</span>
-            </a>
+                @if($isTaskCreationAllowed)
+                    <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary" id="ptsAddTaskBtn" title="Add Task (Allowed until 11:00 AM)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>Add Task</span>
+                    </a>
+                @else
+                    <button type="button" class="pts-btn is-disabled" id="ptsAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        <span>Add Task (Closed)</span>
+                    </button>
+                @endif
             @endcan
         </div>
     </div>
@@ -142,6 +170,45 @@
         @if(session('error'))
             <div class="pts-flash error">{{ session('error') }}</div>
         @endif
+
+        <!-- Daily Task 11:00 AM Cutoff Notification Banner -->
+        <div id="ptsNoticeBanner" class="pts-notice-banner {{ $isTaskCreationAllowed ? 'open' : 'closed' }}">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div class="pts-notice-icon" id="ptsNoticeIcon">
+                    @if($isTaskCreationAllowed)
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    @else
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    @endif
+                </div>
+                <div>
+                    <div class="pts-notice-title" id="ptsNoticeTitle">
+                        @if($isTaskCreationAllowed)
+                            <span>Daily Task Submission Notice</span>
+                            <span class="pts-pulse-dot" style="color:#0284c7;"></span>
+                        @else
+                            <span>Daily Task Creation Closed for Today</span>
+                        @endif
+                    </div>
+                    <div class="pts-notice-desc" id="ptsNoticeDesc">
+                        @if($isTaskCreationAllowed)
+                            Daily tasks must be added and updated before <strong>11:00 AM</strong>. After 11:00 AM, task creation is closed for the day.
+                        @else
+                            Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.
+                        @endif
+                    </div>
+                </div>
+            </div>
+            <div class="pts-notice-pill" id="ptsNoticePill">
+                @if($isTaskCreationAllowed)
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span id="ptsCountdownLabel">Window open until 11:00 AM ({{ $cutoffInfo['formatted_remaining'] ?? '' }} remaining)</span>
+                @else
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <span>Closed at 11:00 AM IST</span>
+                @endif
+            </div>
+        </div>
 
         <!-- Filter Accordion Card -->
         <details class="pts-filter-card" id="taskFiltersAccordion" @if($hasActiveFilters ?? false) open @endif>
@@ -406,10 +473,17 @@
                         <div>No tasks match your filter criteria. Click below to create a new task.</div>
                         @can('tasks.create')
                         <div style="margin-top:16px;">
-                            <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                <span>Create First Task</span>
-                            </a>
+                            @if($isTaskCreationAllowed)
+                                <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary" id="ptsEmptyAddTaskBtn">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <span>Add Task</span>
+                                </a>
+                            @else
+                                <button type="button" class="pts-btn is-disabled" id="ptsEmptyAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    <span>Add Task (Closed after 11:00 AM)</span>
+                                </button>
+                            @endif
                         </div>
                         @endcan
                     </div>
@@ -451,6 +525,45 @@
                     <!-- Populated dynamically via JS -->
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Daily Task Policy Notification Modal Popup -->
+<div class="pts-modal-overlay" id="ptsPolicyModalOverlay" style="display:none; z-index:1300;"></div>
+<div class="pts-modal" id="ptsPolicyModal" style="display:none; max-width:540px; z-index:1310;">
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; color:#ea580c; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </div>
+            <div>
+                <div class="pts-card-title" style="font-size:16px;">Daily Task Update Policy</div>
+                <div class="pts-card-sub">Daily Cutoff: 11:00 AM IST</div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" id="ptsClosePolicyModalBtn" aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="pts-modal-body" style="padding:20px 24px; display:grid; gap:16px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+            <div style="font-size:13px; font-weight:800; color:#0f172a; margin-bottom:8px;">Policy Guidelines:</div>
+            <ul style="margin:0; padding-left:18px; font-size:13px; color:#334155; line-height:1.7;">
+                <li>Daily tasks must be added and allocated <strong>before 11:00 AM</strong> every day.</li>
+                <li>The <strong>Add Task</strong> button is enabled until <strong>11:00 AM IST</strong>.</li>
+                <li>After <strong>11:00 AM</strong>, new task creation is closed for the day.</li>
+                <li>Existing task status updates (Pending, In Progress, Completed) remain accessible.</li>
+            </ul>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:{{ $isTaskCreationAllowed ? '#f0fdf4' : '#fff7ed' }}; border:1px solid {{ $isTaskCreationAllowed ? '#bbf7d0' : '#fed7aa' }}; border-radius:10px; font-size:13px; font-weight:700;">
+            <span style="color:#475569;">Current Status:</span>
+            <span id="ptsModalStatusBadge" style="color:{{ $isTaskCreationAllowed ? '#15803d' : '#c2410c' }}; font-weight:800;">
+                {{ $isTaskCreationAllowed ? 'Open (Until 11:00 AM IST)' : 'Closed for Today' }}
+            </span>
+        </div>
+        <div style="text-align:right;">
+            <button type="button" class="pts-btn pts-btn-primary" id="ptsAcknowledgePolicyBtn" style="padding:8px 20px;">I Understand</button>
         </div>
     </div>
 </div>
@@ -668,6 +781,127 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') setModalOpen(false);
     });
+
+    // ─────────────────────────────────────────────────────────────
+    //  Daily 11:00 AM Cutoff & Policy Notification Logic
+    // ─────────────────────────────────────────────────────────────
+    const cutoffData = @json($cutoffInfo ?? []);
+    let isAllowed = Boolean(@json($isTaskCreationAllowed ?? false));
+    let secondsRemaining = parseInt(cutoffData.seconds_remaining, 10) || 0;
+
+    const policyModal = document.getElementById('ptsPolicyModal');
+    const policyOverlay = document.getElementById('ptsPolicyModalOverlay');
+    const openPolicyBtn = document.getElementById('ptsTaskNoticeBtn');
+    const closePolicyBtn = document.getElementById('ptsClosePolicyModalBtn');
+    const ackPolicyBtn = document.getElementById('ptsAcknowledgePolicyBtn');
+
+    function showPolicyModal() {
+        if (policyModal && policyOverlay) {
+            policyModal.style.display = 'block';
+            policyOverlay.style.display = 'block';
+            policyModal.classList.add('is-open');
+            policyOverlay.classList.add('is-open');
+        }
+    }
+
+    function hidePolicyModal() {
+        if (policyModal && policyOverlay) {
+            policyModal.style.display = 'none';
+            policyOverlay.style.display = 'none';
+            policyModal.classList.remove('is-open');
+            policyOverlay.classList.remove('is-open');
+        }
+    }
+
+    if (openPolicyBtn) openPolicyBtn.addEventListener('click', showPolicyModal);
+    if (closePolicyBtn) closePolicyBtn.addEventListener('click', hidePolicyModal);
+    if (ackPolicyBtn) ackPolicyBtn.addEventListener('click', hidePolicyModal);
+    if (policyOverlay) policyOverlay.addEventListener('click', hidePolicyModal);
+
+    // Intercept clicks on disabled Add Task buttons to show notification policy modal
+    document.addEventListener('click', function(e) {
+        const disabledBtn = e.target.closest('[data-time-closed="true"]');
+        if (disabledBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            showPolicyModal();
+        }
+    });
+
+    // Real-time Countdown and auto-cutoff transition at 11:00 AM
+    function updateCountdown() {
+        if (!isAllowed) return;
+
+        secondsRemaining--;
+        if (secondsRemaining <= 0) {
+            isAllowed = false;
+            applyCutoffClosed();
+            return;
+        }
+
+        const mins = Math.ceil(secondsRemaining / 60);
+        const formatted = mins > 60
+            ? `${Math.floor(mins / 60)}h ${mins % 60}m`
+            : `${mins}m`;
+
+        const label = document.getElementById('ptsCountdownLabel');
+        if (label) {
+            label.textContent = `Window open until 11:00 AM (${formatted} remaining)`;
+        }
+    }
+
+    function applyCutoffClosed() {
+        // 1. Update Topbar Add Task button
+        const topBtn = document.getElementById('ptsAddTaskBtn');
+        if (topBtn) {
+            topBtn.className = 'pts-btn is-disabled';
+            topBtn.setAttribute('data-time-closed', 'true');
+            topBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            topBtn.removeAttribute('href');
+            topBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed)</span>`;
+        }
+
+        // 2. Update Empty State Add Task button
+        const emptyBtn = document.getElementById('ptsEmptyAddTaskBtn');
+        if (emptyBtn) {
+            emptyBtn.className = 'pts-btn is-disabled';
+            emptyBtn.setAttribute('data-time-closed', 'true');
+            emptyBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            emptyBtn.removeAttribute('href');
+            emptyBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed after 11:00 AM)</span>`;
+        }
+
+        // 3. Update Banner State
+        const banner = document.getElementById('ptsNoticeBanner');
+        if (banner) {
+            banner.className = 'pts-notice-banner closed';
+        }
+        const icon = document.getElementById('ptsNoticeIcon');
+        if (icon) {
+            icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+        }
+        const title = document.getElementById('ptsNoticeTitle');
+        if (title) {
+            title.innerHTML = `<span>Daily Task Creation Closed for Today</span>`;
+        }
+        const desc = document.getElementById('ptsNoticeDesc');
+        if (desc) {
+            desc.innerHTML = `Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.`;
+        }
+        const pill = document.getElementById('ptsNoticePill');
+        if (pill) {
+            pill.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Closed at 11:00 AM IST</span>`;
+        }
+        const modalStatus = document.getElementById('ptsModalStatusBadge');
+        if (modalStatus) {
+            modalStatus.style.color = '#c2410c';
+            modalStatus.textContent = 'Closed for Today';
+        }
+    }
+
+    if (isAllowed && secondsRemaining > 0) {
+        setInterval(updateCountdown, 1000);
+    }
 });
 </script>
 @endpush
