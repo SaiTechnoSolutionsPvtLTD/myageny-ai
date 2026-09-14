@@ -1,7 +1,7 @@
 <table border="1">
     <thead>
         <tr>
-            <th colspan="13">CRM Payment Collection Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
+            <th colspan="14">CRM Payment Collection Export - {{ \Illuminate\Support\Carbon::parse($selectedFromDate)->format('d M Y') }} to {{ \Illuminate\Support\Carbon::parse($selectedToDate)->format('d M Y') }}</th>
         </tr>
         <tr>
             @foreach(array_keys($rows->first() ?? [
@@ -12,6 +12,7 @@
                 'Branch' => '',
                 'Company Name' => '',
                 'Customer Name' => '',
+                'Payment Type' => '',
                 'Total Amount' => '',
                 'Received Amount' => '',
                 'Outstanding Amount' => '',
@@ -32,14 +33,14 @@
             </tr>
         @empty
             <tr>
-                <td colspan="13">No payment collection records found for the selected filters.</td>
+                <td colspan="14">No payment collection records found for the selected filters.</td>
             </tr>
         @endforelse
     </tbody>
     @if($rows->isNotEmpty())
         <tfoot>
             <tr style="font-weight: bold; background-color: #f2f2f2;">
-                <td colspan="7" align="right">Total ({{ $rows->count() }} rows):</td>
+                <td colspan="8" align="right">Total ({{ $rows->count() }} rows):</td>
                 <td>{{ number_format($rows->sum(fn($r) => (float)($r['Total Amount'] ?? 0)), 2, '.', '') }}</td>
                 <td>{{ number_format($rows->sum(fn($r) => (float)($r['Received Amount'] ?? 0)), 2, '.', '') }}</td>
                 <td>{{ number_format($rows->sum(fn($r) => (float)($r['Outstanding Amount'] ?? 0)), 2, '.', '') }}</td>

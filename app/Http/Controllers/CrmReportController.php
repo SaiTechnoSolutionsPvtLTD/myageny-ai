@@ -384,15 +384,26 @@ class CrmReportController extends Controller
         }
         $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
-        $receivedAmount = (float) $analyticsRows->sum('received_amount');
-        $outstandingAmount = (float) $analyticsRows->sum('outstanding_amount');
-        $totalAmount = $receivedAmount + $outstandingAmount;
+        $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
+        $balanceRows = $analyticsRows->where('collection_type', 'balance_payment');
+
+        $totalCollectedPayment = (float) $analyticsRows->sum('received_amount');
+        $dealValue = (float) $newRenewalsRows->sum('total_amount');
+        $newRenewalsReceived = (float) $newRenewalsRows->sum('received_amount');
+        $balanceReceived = (float) $balanceRows->sum('received_amount');
+        $newRenewalsPending = (float) $newRenewalsRows->sum('outstanding_amount');
+        $overallPending = (float) $analyticsRows->sum('outstanding_amount');
 
         $summary = [
-            'rows' => $totalCount,
-            'total_amount' => $totalAmount,
-            'received_amount' => $receivedAmount,
-            'outstanding_amount' => $outstandingAmount,
+            'rows'                     => $totalCount,
+            'total_collected_payment'  => $totalCollectedPayment,
+            'deal_value'               => $dealValue,
+            'new_renewals_received'    => $newRenewalsReceived,
+            'balance_received'         => $balanceReceived,
+            'new_renewals_pending'     => $newRenewalsPending,
+            'total_amount'             => $dealValue,
+            'received_amount'          => $totalCollectedPayment,
+            'outstanding_amount'       => $overallPending,
         ];
 
         $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -420,6 +431,7 @@ class CrmReportController extends Controller
             || $request->filled('user_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
+            || $request->filled('collection_type')
             || ($request->filled('quick_date') && $request->quick_date !== 'month')
             || ($request->filled('date_from') && $request->date_from !== $defaultFromDate)
             || ($request->filled('date_to') && $request->date_to !== $defaultToDate);
@@ -449,7 +461,14 @@ class CrmReportController extends Controller
         $rows = $this->buildPaymentCollectionQuery($request)->get()->map(function ($row) {
             $receivedAmount = (float) ($row->received_amount ?? 0);
             $outstandingAmount = (float) ($row->outstanding_amount ?? 0);
-            $totalAmount = (float) ($row->total_amount ?? ($receivedAmount + $outstandingAmount));
+            $totalAmount = (float) ($row->total_amount ?? 0);
+            $typeLabel = match($row->collection_type ?? '') {
+                'new_sales' => 'New Sales',
+                'balance_payment' => 'Balance Payment',
+                'renewals' => 'Renewals',
+                default => '-',
+            };
+            $totalAmountFormatted = ($row->collection_type === 'balance_payment') ? '' : number_format($totalAmount, 2, '.', '');
 
             return [
                 'Payment ID' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
@@ -459,7 +478,8 @@ class CrmReportController extends Controller
                 'Branch' => $row->branch_name ?: '-',
                 'Company Name' => $row->company_name ?: '-',
                 'Customer Name' => $row->customer_name ?: '-',
-                'Total Amount' => number_format($totalAmount, 2, '.', ''),
+                'Payment Type' => $typeLabel,
+                'Total Amount' => $totalAmountFormatted,
                 'Received Amount' => number_format($receivedAmount, 2, '.', ''),
                 'Outstanding Amount' => number_format($outstandingAmount, 2, '.', ''),
                 'Payment Mode' => LeadProduct::PAYMENT_MODES[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
@@ -658,11 +678,46 @@ class CrmReportController extends Controller
         return $query;
     }
 
+    private function getCollectionTypeSql(): string
+    {
+        return "
+        CASE
+            WHEN EXISTS (
+                SELECT 1 FROM lead_product_payments p_prev
+                WHERE p_prev.lead_product_id = lead_product_payments.lead_product_id
+                  AND (
+                      p_prev.payment_date < lead_product_payments.payment_date
+                      OR (p_prev.payment_date = lead_product_payments.payment_date AND p_prev.id < lead_product_payments.id)
+                  )
+            ) THEN 'balance_payment'
+            WHEN (
+                COALESCE(products.is_this_renewal_product, 0) = 1
+                OR COALESCE(products.count_wise_report, 0) = 1
+                OR LOWER(COALESCE(lead_products.deal_name, '')) LIKE '%renewal%'
+                OR LOWER(COALESCE(lead_products.product_name, '')) LIKE '%renewal%'
+                OR EXISTS (
+                    SELECT 1 FROM lead_products lp_prior
+                    WHERE lp_prior.lead_id = lead_products.lead_id
+                      AND lp_prior.id != lead_products.id
+                      AND lp_prior.created_at < lead_products.created_at
+                      AND (
+                          (lead_products.product_id IS NOT NULL AND lp_prior.product_id = lead_products.product_id)
+                          OR (lead_products.product_name IS NOT NULL AND lp_prior.product_name = lead_products.product_name)
+                      )
+                )
+            ) THEN 'renewals'
+            ELSE 'new_sales'
+        END";
+    }
+
     private function buildPaymentCollectionQuery(Request $request)
     {
+        $collectionTypeSql = $this->getCollectionTypeSql();
+
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
             ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
             ->select([
@@ -675,9 +730,10 @@ class CrmReportController extends Controller
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
                 'leads.company_name',
+                'lead_products.product_name',
                 'branches.name as branch_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('(lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) as total_amount'),
+                DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
                 DB::raw('(
@@ -687,6 +743,7 @@ class CrmReportController extends Controller
                         (SELECT d.name FROM departments d JOIN roles r ON r.department_id = d.id JOIN model_has_roles mhr ON mhr.role_id = r.id WHERE mhr.model_id = collectors.id AND mhr.model_type = "App\\\\Models\\\\User" LIMIT 1)
                     )
                 ) as received_by_department'),
+                DB::raw("({$collectionTypeSql}) as collection_type"),
             ])
             ->orderByDesc('lead_product_payments.payment_date')
             ->orderByDesc('lead_product_payments.id');
@@ -721,6 +778,10 @@ class CrmReportController extends Controller
 
         if ($request->filled('branch_id')) {
             $query->where('leads.branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('collection_type')) {
+            $query->whereRaw("({$collectionTypeSql}) = ?", [$request->collection_type]);
         }
 
         if ($request->filled('date_from')) {

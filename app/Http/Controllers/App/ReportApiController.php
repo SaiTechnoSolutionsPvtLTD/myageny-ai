@@ -387,6 +387,7 @@ class ReportApiController extends Controller
                 'sales_executive_id' => 'nullable|integer',
                 'payment_mode'       => 'nullable|string|max:100',
                 'branch_id'          => 'nullable|integer',
+                'collection_type'    => 'nullable|string|in:new_sales,balance_payment,renewals',
                 'date_from'          => 'nullable|date',
                 'date_to'            => 'nullable|date',
                 'page'               => 'nullable|integer|min:1',
@@ -401,15 +402,26 @@ class ReportApiController extends Controller
             $reportRows = $query->paginate($perPage)->withQueryString();
 
             $analyticsRows = (clone $query)->get();
-            $receivedAmount = round((float) $analyticsRows->sum('received_amount'), 2);
-            $outstandingAmount = round((float) $analyticsRows->sum('outstanding_amount'), 2);
-            $totalAmount = round($receivedAmount + $outstandingAmount, 2);
+            $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
+            $balanceRows = $analyticsRows->where('collection_type', 'balance_payment');
+
+            $totalCollectedPayment = round((float) $analyticsRows->sum('received_amount'), 2);
+            $dealValue = round((float) $newRenewalsRows->sum('total_amount'), 2);
+            $newRenewalsReceived = round((float) $newRenewalsRows->sum('received_amount'), 2);
+            $balanceReceived = round((float) $balanceRows->sum('received_amount'), 2);
+            $newRenewalsPending = round((float) $newRenewalsRows->sum('outstanding_amount'), 2);
+            $overallPending = round((float) $analyticsRows->sum('outstanding_amount'), 2);
 
             $summary = [
-                'rows'                => $analyticsRows->count(),
-                'total_amount'        => $totalAmount,
-                'received_amount'     => $receivedAmount,
-                'outstanding_amount'  => $outstandingAmount,
+                'rows'                     => $analyticsRows->count(),
+                'total_collected_payment'  => $totalCollectedPayment,
+                'deal_value'               => $dealValue,
+                'new_renewals_received'    => $newRenewalsReceived,
+                'balance_received'         => $balanceReceived,
+                'new_renewals_pending'     => $newRenewalsPending,
+                'total_amount'             => $dealValue,
+                'received_amount'          => $totalCollectedPayment,
+                'outstanding_amount'       => $overallPending,
             ];
 
             $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -425,6 +437,12 @@ class ReportApiController extends Controller
             $rowsData = $reportRows->getCollection()->map(function ($row) use ($paymentModes) {
                 $paymentDate = $row->payment_date ? Carbon::parse($row->payment_date) : null;
                 $code = str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT);
+                $typeLabel = match($row->collection_type ?? '') {
+                    'new_sales' => 'New Sales',
+                    'balance_payment' => 'Balance Payment',
+                    'renewals' => 'Renewals',
+                    default => '-',
+                };
 
                 return [
                     'payment_id'            => $row->payment_id,
@@ -434,6 +452,8 @@ class ReportApiController extends Controller
                     'customer_id'           => $row->customer_id,
                     'customer_code'         => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
                     'customer_name'         => $row->customer_name ?: null,
+                    'collection_type'       => $row->collection_type ?? null,
+                    'collection_type_label' => $typeLabel,
                     'total_amount'          => round((float) ($row->total_amount ?? 0), 2),
                     'received_amount'       => round((float) ($row->received_amount ?? 0), 2),
                     'outstanding_amount'    => round((float) ($row->outstanding_amount ?? 0), 2),
@@ -520,8 +540,42 @@ class ReportApiController extends Controller
         return $query->get();
     }
 
+    private function getCollectionTypeSql(): string
+    {
+        return "
+        CASE
+            WHEN EXISTS (
+                SELECT 1 FROM lead_product_payments p_prev
+                WHERE p_prev.lead_product_id = lead_product_payments.lead_product_id
+                  AND (
+                      p_prev.payment_date < lead_product_payments.payment_date
+                      OR (p_prev.payment_date = lead_product_payments.payment_date AND p_prev.id < lead_product_payments.id)
+                  )
+            ) THEN 'balance_payment'
+            WHEN (
+                COALESCE(products.is_this_renewal_product, 0) = 1
+                OR COALESCE(products.count_wise_report, 0) = 1
+                OR LOWER(COALESCE(lead_products.deal_name, '')) LIKE '%renewal%'
+                OR LOWER(COALESCE(lead_products.product_name, '')) LIKE '%renewal%'
+                OR EXISTS (
+                    SELECT 1 FROM lead_products lp_prior
+                    WHERE lp_prior.lead_id = lead_products.lead_id
+                      AND lp_prior.id != lead_products.id
+                      AND lp_prior.created_at < lead_products.created_at
+                      AND (
+                          (lead_products.product_id IS NOT NULL AND lp_prior.product_id = lead_products.product_id)
+                          OR (lead_products.product_name IS NOT NULL AND lp_prior.product_name = lead_products.product_name)
+                      )
+                )
+            ) THEN 'renewals'
+            ELSE 'new_sales'
+        END";
+    }
+
     private function buildPaymentCollectionQuery(Request $request)
     {
+        $collectionTypeSql = $this->getCollectionTypeSql();
+
         $paidSubquery = LeadProductPayment::query()
             ->selectRaw('lead_product_id, SUM(amount) as total_received')
             ->groupBy('lead_product_id');
@@ -529,6 +583,7 @@ class ReportApiController extends Controller
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
+            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
             ->leftJoinSub($paidSubquery, 'payment_totals', function ($join) {
                 $join->on('payment_totals.lead_product_id', '=', 'lead_products.id');
@@ -540,10 +595,12 @@ class ReportApiController extends Controller
                 'lead_product_payments.reference_number as transaction_reference',
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
+                'lead_products.product_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('(lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0)) as total_amount'),
-                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0) as outstanding_amount'),
+                DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
+                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
+                DB::raw("({$collectionTypeSql}) as collection_type"),
             ])
             ->orderByDesc('lead_product_payments.payment_date')
             ->orderByDesc('lead_product_payments.id');
@@ -573,6 +630,10 @@ class ReportApiController extends Controller
 
         if ($request->filled('branch_id')) {
             $query->where('leads.branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('collection_type')) {
+            $query->whereRaw("({$collectionTypeSql}) = ?", [$request->collection_type]);
         }
 
         if ($request->filled('date_from')) {
