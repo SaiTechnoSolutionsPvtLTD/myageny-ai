@@ -179,7 +179,9 @@ class CstAllocationApiController extends Controller
             $this->visibility->applyProductVisibility($products, $currentUser);
             $products = $products->select('id', 'product_name')->orderBy('product_name')->get();
 
-            $leadAccounts = Lead::whereHas('products', fn ($q) => $q->where('product_status', 'converted'))
+            $leadAccountsQuery = Lead::whereHas('products', fn ($q) => $q->where('product_status', 'converted'));
+            $this->visibility->applyCompanyVisibility($leadAccountsQuery, $currentUser);
+            $leadAccounts = $leadAccountsQuery
                 ->select('id', 'company_name', 'contact_name')
                 ->orderBy('company_name')
                 ->get()
@@ -202,6 +204,86 @@ class CstAllocationApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to load filters. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /mobile/cst-allocation/leads-search?q=&page=&branch_id=&product_id=
+     * Paginated, searchable lead lookup for the CST Allocation Lead filter.
+     * Restricts to leads with converted products and respects company scoping.
+     */
+    public function leadsSearch(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'q'    => ['nullable', 'string', 'max:100'],
+                'page' => ['nullable', 'integer', 'min:1'],
+            ]);
+
+            $currentUser = $request->user();
+            $q = trim((string) $request->input('q', ''));
+
+            $query = Lead::whereHas('products', fn ($sub) => $sub->where('product_status', 'converted'))
+                ->with(['branch:id,name']);
+
+            $this->visibility->applyCompanyVisibility($query, $currentUser);
+
+            if ($branchId = $request->get('branch_id')) {
+                $query->where('branch_id', $branchId);
+            }
+
+            if ($productId = $request->get('product_id')) {
+                $query->whereHas('products', function ($sub) use ($productId) {
+                    $sub->where('product_status', 'converted')->where('product_id', $productId);
+                });
+            }
+
+            if ($q !== '') {
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('company_name', 'like', "%{$q}%")
+                        ->orWhere('contact_name', 'like', "%{$q}%")
+                        ->orWhere('mobile_number', 'like', "%{$q}%");
+                });
+            }
+
+            $leads = $query->orderBy('company_name')
+                ->paginate(20, ['id', 'company_name', 'contact_name', 'mobile_number', 'branch_id']);
+
+            $data = collect($leads->items())->map(function ($lead) {
+                $name = trim($lead->company_name ?: ($lead->contact_name ?? '')) ?: ('Lead #' . $lead->id);
+                $subtitleParts = [];
+                if ($lead->contact_name && $lead->company_name) {
+                    $subtitleParts[] = $lead->contact_name;
+                }
+                if ($lead->mobile_number) {
+                    $subtitleParts[] = $lead->mobile_number;
+                }
+                if ($lead->branch?->name) {
+                    $subtitleParts[] = $lead->branch->name;
+                }
+                return [
+                    'id'       => $lead->id,
+                    'name'     => $name,
+                    'subtitle' => implode(' · ', $subtitleParts),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data'    => $data,
+                'meta'    => [
+                    'current_page' => $leads->currentPage(),
+                    'last_page'    => $leads->lastPage(),
+                    'has_more'     => $leads->currentPage() < $leads->lastPage(),
+                    'total'        => $leads->total(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to search leads.',
             ], 500);
         }
     }

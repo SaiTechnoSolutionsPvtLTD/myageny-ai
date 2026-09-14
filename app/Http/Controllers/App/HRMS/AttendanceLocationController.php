@@ -31,7 +31,7 @@ class AttendanceLocationApiController extends Controller
                 'branch_name'              => $branch->name,
                 'latitude'                 => $branch->latitude,
                 'longitude'                => $branch->longitude,
-                'attendance_radius_meters' => $branch->attendance_radius_meters ?? 50,
+                'attendance_radius_meters' => (float) ($branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50)),
             ],
         ]);
     }

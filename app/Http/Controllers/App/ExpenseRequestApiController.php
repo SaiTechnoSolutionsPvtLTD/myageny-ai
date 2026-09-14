@@ -69,7 +69,7 @@ class ExpenseRequestApiController extends Controller
                 }
             })->pluck('id')->toArray();
 
-            $scopedQuery = ExpenseRequest::with(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole'])
+            $scopedQuery = ExpenseRequest::query()
                 ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
 
             // Default scope determination
@@ -156,14 +156,32 @@ class ExpenseRequestApiController extends Controller
                 })
                 ->count();
 
-            $totalCount    = (clone $scopedQuery)->count();
-            $pendingCount  = (clone $scopedQuery)->where('status', 'pending')->count();
-            $approvedCount = (clone $scopedQuery)->where('status', 'approved')->count();
-            $rejectedCount = (clone $scopedQuery)->where('status', 'rejected')->count();
+            // Single aggregate query for status counts
+            $statusCounts = (clone $scopedQuery)
+                ->selectRaw("
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+                    COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+                    COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected
+                ")
+                ->first();
 
-            $requests = $scopedQuery
+            $totalCount    = (int) ($statusCounts->total ?? 0);
+            $pendingCount  = (int) ($statusCounts->pending ?? 0);
+            $approvedCount = (int) ($statusCounts->approved ?? 0);
+            $rejectedCount = (int) ($statusCounts->rejected ?? 0);
+
+            $requests = (clone $scopedQuery)
+                ->with(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole'])
                 ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
                 ->when($request->filled('expense_category_id'), fn ($q) => $q->where('expense_category_id', $request->expense_category_id))
+                ->when($request->filled('branch_id'), fn ($q) => $q->whereHas('user', fn ($u) => $u->where('branch_id', $request->branch_id)))
+                ->when($request->filled('employee_id'), fn ($q) => $q->where('user_id', $request->employee_id))
+                ->when($request->filled('user_id'), fn ($q) => $q->where('user_id', $request->user_id))
+                ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date_from))
+                ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date_to))
+                ->when($request->filled('start_date'), fn ($q) => $q->whereDate('created_at', '>=', $request->start_date))
+                ->when($request->filled('end_date'), fn ($q) => $q->whereDate('created_at', '<=', $request->end_date))
                 ->when($request->filled('search'), function ($query) use ($request) {
                     $search = trim((string) $request->search);
                     $query->where(function ($q) use ($search) {
@@ -173,13 +191,22 @@ class ExpenseRequestApiController extends Controller
                           ->orWhereHas('category', fn ($c) => $c->where('name', 'like', '%' . $search . '%'));
                     });
                 })
-                ->latest('id')
-                ->paginate(min((int) ($request->per_page ?? 20), 50));
+                ->when($request->filled('sort_by'), function ($q) use ($request) {
+                    $allowed = ['id', 'amount', 'created_at', 'status'];
+                    $sortBy = in_array($request->sort_by, $allowed, true) ? $request->sort_by : 'id';
+                    $direction = strtolower($request->sort_order ?? 'desc') === 'asc' ? 'asc' : 'desc';
+                    $q->orderBy($sortBy, $direction);
+                }, function ($q) {
+                    $q->latest('id');
+                })
+                ->paginate(min(max((int) ($request->per_page ?? 20), 1), 100));
+
+            $batchContext = $this->buildBatchContext($requests, $user, $companyId, $matchingRoleIds);
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'requests' => $requests->map(fn ($r) => $this->formatExpenseRequest($r, $user)),
+                    'requests' => $requests->map(fn ($r) => $this->formatExpenseRequest($r, $user, $batchContext)),
                     'counts' => [
                         'total'    => $totalCount,
                         'pending'  => $pendingCount,
@@ -301,7 +328,7 @@ class ExpenseRequestApiController extends Controller
 
             $this->sendApproverNotification($expenseRequest);
 
-            $expenseRequest->load(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole']);
+            $expenseRequest->load(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole']);
 
             return response()->json([
                 'success' => true,
@@ -385,7 +412,7 @@ class ExpenseRequestApiController extends Controller
                 $msg = 'Expense request fully approved across all pipeline stages!';
             }
 
-            $expenseRequest->load(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole']);
+            $expenseRequest->load(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole']);
 
             return response()->json([
                 'success' => true,
@@ -450,7 +477,7 @@ class ExpenseRequestApiController extends Controller
 
             $this->sendApplicantStatusNotification($expenseRequest, 'rejected', $reason);
 
-            $expenseRequest->load(['user.roles', 'user.branch', 'category', 'approver', 'currentApproverRole']);
+            $expenseRequest->load(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole']);
 
             return response()->json([
                 'success' => true,
@@ -587,45 +614,193 @@ class ExpenseRequestApiController extends Controller
         return $role->display_name ?: ucfirst(str_replace('_', ' ', $role->name));
     }
 
-    private function formatExpenseRequest(ExpenseRequest $r, User $currentUser): array
+    /**
+     * Pre-fetches pipelines, chains, and roles for all paginated requests
+     * to eliminate N+1 queries during formatting.
+     */
+    private function buildBatchContext($requests, User $currentUser, $companyId, array $matchingRoleIds): array
     {
-        $applicant = $r->user;
-        $rawStages = $r->approval_stages;
+        $isAdmin = $currentUser->isCompanyAdmin() || $currentUser->isSystemAdmin();
+        $items = $requests instanceof \Illuminate\Contracts\Pagination\Paginator ? $requests->items() : $requests;
 
-        $stages = [];
-        foreach ($rawStages as $stg) {
-            $actionedAt = $stg['actioned_at'] ?? null;
-            if ($actionedAt instanceof Carbon) {
-                $actionedAtStr = $actionedAt->toIso8601String();
-            } elseif (is_string($actionedAt) && !empty($actionedAt)) {
-                $actionedAtStr = Carbon::parse($actionedAt)->toIso8601String();
-            } else {
-                $actionedAtStr = null;
+        // 1. Collect applicant role IDs
+        $applicantRoleIdsMap = [];
+        $allApplicantRoleIds = [];
+        foreach ($items as $r) {
+            $applicant = $r->user;
+            if (! $applicant) {
+                continue;
             }
+            $roles = $applicant->relationLoaded('roles')
+                ? $applicant->roles->pluck('id')->toArray()
+                : [];
+            $applicantRoleIdsMap[$applicant->id] = $roles;
+            foreach ($roles as $rid) {
+                $allApplicantRoleIds[] = (int) $rid;
+            }
+        }
+        $allApplicantRoleIds = array_values(array_unique($allApplicantRoleIds));
 
-            $stages[] = [
-                'step'         => (int) $stg['step'],
-                'role_id'      => (int) $stg['role_id'],
-                'role_label'   => $stg['role_name'],
-                'status'       => $stg['status'], // 'completed' | 'current' | 'rejected' | 'upcoming'
-                'actioned_by'  => $stg['actioned_by'] ?? null,
-                'actioned_at'  => $actionedAtStr,
-                'remarks'      => $stg['remarks'] ?? null,
-                'is_current'   => $stg['status'] === 'current',
-                'is_completed' => $stg['status'] === 'completed',
-            ];
+        // 2. Fetch all pipelines matching any applicant roles
+        $pipelines = collect();
+        if (! empty($allApplicantRoleIds)) {
+            $pipelines = ExpensePipeline::withoutGlobalScopes()
+                ->whereIn('role_id', $allApplicantRoleIds)
+                ->when($companyId, fn ($q) => $q->where(fn ($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->where('is_active', true)
+                ->get();
+        }
+        $pipelineByRoleId = $pipelines->keyBy('role_id');
+
+        // 3. Resolve approval chains and collect all role IDs needed
+        $chainsByRequestId = [];
+        $allRoleIdsToLoad = [];
+        foreach ($matchingRoleIds as $mId) {
+            $allRoleIdsToLoad[] = (int) $mId;
         }
 
-        // Identical to web's blade: `$canAction = $req->canUserAction();` — the
-        // shared model gate, not a locally re-derived guess. Previously this
-        // used isHrOrAdmin() as a blanket bypass, which is far broader than
-        // the real gate (isCompanyAdmin()/isSystemAdmin() only): any HR-ish
-        // user would see Approve/Reject on every pending request regardless
-        // of whether they were actually the assigned pipeline-stage
-        // approver, then get a 403 from canUserAction() on tap. Using the
-        // same method here as the actual authorization check guarantees the
-        // button is only ever shown when the action will actually succeed.
-        $canAction = $r->canUserAction($currentUser);
+        foreach ($items as $r) {
+            if ($r->current_approver_role_id) {
+                $allRoleIdsToLoad[] = (int) $r->current_approver_role_id;
+            }
+
+            $applicant = $r->user;
+            $applicantRoles = $applicant ? ($applicantRoleIdsMap[$applicant->id] ?? []) : [];
+            $pipeline = null;
+
+            foreach ($applicantRoles as $rid) {
+                if (isset($pipelineByRoleId[$rid])) {
+                    $pipeline = $pipelineByRoleId[$rid];
+                    break;
+                }
+            }
+
+            $chain = $pipeline?->approval_chain ?? [];
+            if (empty($chain) && $applicant) {
+                $chain = $this->resolveApprovalChainForUser($applicant, $companyId);
+            }
+
+            if (empty($chain) && $r->current_approver_role_id) {
+                $chain = [(int) $r->current_approver_role_id];
+            }
+
+            $chainsByRequestId[$r->id] = $chain;
+            foreach ($chain as $cRoleId) {
+                $allRoleIdsToLoad[] = (int) $cRoleId;
+            }
+        }
+
+        // 4. Load all roles in a single batch query
+        $allRoleIdsToLoad = array_values(array_filter(array_unique($allRoleIdsToLoad)));
+        $rolesById = ! empty($allRoleIdsToLoad)
+            ? Role::withoutGlobalScopes()->whereIn('id', $allRoleIdsToLoad)->get()->keyBy('id')->all()
+            : [];
+
+        return [
+            'isAdmin'           => $isAdmin,
+            'matchingRoleIds'   => array_map('intval', $matchingRoleIds),
+            'chainsByRequestId' => $chainsByRequestId,
+            'roles'             => $rolesById,
+        ];
+    }
+
+    private function formatExpenseRequest(ExpenseRequest $r, User $currentUser, ?array $batchContext = null): array
+    {
+        $applicant = $r->user;
+
+        if ($batchContext !== null) {
+            $chain = $batchContext['chainsByRequestId'][$r->id] ?? [];
+            $history = collect($r->stage_history ?? []);
+            $stages = [];
+
+            foreach ($chain as $index => $roleId) {
+                $step = $index + 1;
+                $role = $batchContext['roles'][$roleId] ?? null;
+                $roleName = $role?->display_name ?: ($role ? ucfirst(str_replace('_', ' ', preg_replace('/^company_\d+__/', '', $role->name))) : ('Role #' . $roleId));
+
+                $stepHistory = $history->firstWhere('step', $step);
+
+                $stageStatus = 'upcoming';
+                if ($r->status === 'approved') {
+                    $stageStatus = 'completed';
+                } elseif ($r->status === 'rejected') {
+                    if ($step < $r->current_step || ($stepHistory && ($stepHistory['action'] ?? '') === 'approved')) {
+                        $stageStatus = 'completed';
+                    } elseif ($step === $r->current_step) {
+                        $stageStatus = 'rejected';
+                    } else {
+                        $stageStatus = 'upcoming';
+                    }
+                } else {
+                    if ($step < $r->current_step) {
+                        $stageStatus = 'completed';
+                    } elseif ($step === $r->current_step) {
+                        $stageStatus = 'current';
+                    } else {
+                        $stageStatus = 'upcoming';
+                    }
+                }
+
+                $actionedAt = $stepHistory['actioned_at'] ?? null;
+                $actionedAtStr = null;
+                if ($actionedAt instanceof Carbon) {
+                    $actionedAtStr = $actionedAt->toIso8601String();
+                } elseif (is_string($actionedAt) && !empty($actionedAt)) {
+                    $actionedAtStr = Carbon::parse($actionedAt)->toIso8601String();
+                }
+
+                $stages[] = [
+                    'step'         => $step,
+                    'role_id'      => (int) $roleId,
+                    'role_label'   => $roleName,
+                    'status'       => $stageStatus,
+                    'actioned_by'  => $stepHistory['user_name'] ?? null,
+                    'actioned_at'  => $actionedAtStr,
+                    'remarks'      => $stepHistory['remarks'] ?? null,
+                    'is_current'   => $stageStatus === 'current',
+                    'is_completed' => $stageStatus === 'completed',
+                ];
+            }
+
+            if ($r->status !== 'pending' || (int) $r->user_id === (int) $currentUser->id) {
+                $canAction = false;
+            } elseif ($batchContext['isAdmin']) {
+                $canAction = true;
+            } else {
+                $approverRoleId = (int) ($r->current_approver_role_id ?: ($chain[max(0, ($r->current_step ?? 1) - 1)] ?? 0));
+                $canAction = in_array($approverRoleId, $batchContext['matchingRoleIds'], true);
+            }
+        } else {
+            $rawStages = $r->approval_stages;
+
+            $stages = [];
+            foreach ($rawStages as $stg) {
+                $actionedAt = $stg['actioned_at'] ?? null;
+                if ($actionedAt instanceof Carbon) {
+                    $actionedAtStr = $actionedAt->toIso8601String();
+                } elseif (is_string($actionedAt) && !empty($actionedAt)) {
+                    $actionedAtStr = Carbon::parse($actionedAt)->toIso8601String();
+                } else {
+                    $actionedAtStr = null;
+                }
+
+                $stages[] = [
+                    'step'         => (int) $stg['step'],
+                    'role_id'      => (int) $stg['role_id'],
+                    'role_label'   => $stg['role_name'],
+                    'status'       => $stg['status'], // 'completed' | 'current' | 'rejected' | 'upcoming'
+                    'actioned_by'  => $stg['actioned_by'] ?? null,
+                    'actioned_at'  => $actionedAtStr,
+                    'remarks'      => $stg['remarks'] ?? null,
+                    'is_current'   => $stg['status'] === 'current',
+                    'is_completed' => $stg['status'] === 'completed',
+                ];
+            }
+
+            $canAction = $r->canUserAction($currentUser);
+        }
+
+        $applicantRole = $applicant?->relationLoaded('roles') ? $applicant->roles->first() : null;
 
         return [
             'id' => $r->id,
@@ -633,9 +808,9 @@ class ExpenseRequestApiController extends Controller
             'applicant' => $applicant ? [
                 'id' => $applicant->id,
                 'name' => $applicant->name,
-                'role_label' => $this->roleLabel($applicant->roles->first()),
+                'role_label' => $this->roleLabel($applicantRole),
                 'branch_name' => $applicant->branch?->name,
-                'employee_code' => $applicant->employee?->employee_id ?? null,
+                'employee_code' => $applicant->employee?->employee_id ?? $applicant->employeeOnboarding?->employee_id ?? null,
                 'avatar' => $applicant->profile_photo_path ?? null,
             ] : null,
             'category' => $r->category ? ['id' => $r->category->id, 'name' => $r->category->name] : null,
@@ -650,7 +825,10 @@ class ExpenseRequestApiController extends Controller
             'current_approver_role' => $r->currentApproverRole ? [
                 'id' => $r->currentApproverRole->id,
                 'label' => $this->roleLabel($r->currentApproverRole),
-            ] : null,
+            ] : (isset($batchContext['roles'][$r->current_approver_role_id]) ? [
+                'id' => (int) $r->current_approver_role_id,
+                'label' => $this->roleLabel($batchContext['roles'][$r->current_approver_role_id]),
+            ] : null),
             'pipeline_stages' => $stages,
             'approver' => $r->approver ? ['id' => $r->approver->id, 'name' => $r->approver->name] : null,
             'rejection_reason' => $r->rejection_reason,

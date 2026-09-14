@@ -184,6 +184,15 @@ return [
                 'permission' => 'visitor_management.menuview',
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
+            // Announcements: universally accessible to all HRMS users, matching
+            // sidebar.blade.php line 535.
+            [
+                'key' => 'hrms.announcements',
+                'label' => 'Announcements',
+                'section' => 'HRMS',
+                'order' => 94,
+                'permission' => null,
+            ],
             // Matches sidebar.blade.php's @can('expense_request.menuview') gate
             // exactly — same permission key, so the mobile menu and web
             // sidebar always show/hide this item in lockstep.

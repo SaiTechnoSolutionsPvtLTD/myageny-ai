@@ -378,7 +378,7 @@ class AuthController extends Controller
                 'longitude'                => $user->branch->longitude,
                 'latitude_2'               => $user->branch->latitude,
                 'longitude_2'              => $user->branch->longitude,
-                'attendance_radius_meters' => 50,
+                'attendance_radius_meters' => (float) ($user->branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50)),
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),
             'profile_photo'   => $user->photo ?? null,

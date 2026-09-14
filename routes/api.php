@@ -35,6 +35,7 @@ use App\Http\Controllers\App\HRMS\PettyCashApiController;
 use App\Http\Controllers\App\HRMS\FaceAttendanceApiController;
 use App\Http\Controllers\App\HRMS\FaceRegistrationApiController;
 use App\Http\Controllers\App\HRMS\TimesheetLopApiController;
+use App\Http\Controllers\App\HRMS\AnnouncementApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -244,17 +245,21 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::post('od-requests/{odRequest}/approvals/{approval}/approve', [OdRequestApiController::class, 'approve'])->name('od-requests.approve');
         Route::post('od-requests/{odRequest}/approvals/{approval}/reject',  [OdRequestApiController::class, 'reject'])->name('od-requests.reject');
 
-        // Recruitment — static routes BEFORE wildcard. List/Details/Call
-        // Update/Interview/Decision only — no create/edit/delete of the
-        // candidate record itself is exposed to mobile (see
-        // RecruitmentApiController's class doc-comment).
+        // Recruitment — static routes BEFORE wildcard.
         Route::get('recruitment/meta', [RecruitmentApiController::class, 'meta'])->name('recruitment.meta');
+        Route::get('recruitment/call-updates', [RecruitmentApiController::class, 'callUpdates'])->name('recruitment.call-updates.index');
+        Route::get('recruitment/reminders', [RecruitmentApiController::class, 'reminders'])->name('recruitment.reminders.index');
+        Route::patch('recruitment/reminders/{reminder}/complete', [RecruitmentApiController::class, 'completeReminder'])->name('recruitment.reminders.complete');
+        Route::patch('recruitment/reminders/{reminder}/incomplete', [RecruitmentApiController::class, 'incompleteReminder'])->name('recruitment.reminders.incomplete');
+        Route::delete('recruitment/reminders/{reminder}', [RecruitmentApiController::class, 'destroyReminder'])->name('recruitment.reminders.destroy');
 
         Route::get('recruitment',              [RecruitmentApiController::class, 'index'])->name('recruitment.index');
         Route::get('recruitment/{recruitment}', [RecruitmentApiController::class, 'show'])->name('recruitment.show');
 
         Route::post('recruitment/{recruitment}/call-updates', [RecruitmentApiController::class, 'storeCallUpdate'])
             ->name('recruitment.call-updates.store');
+        Route::post('recruitment/{recruitment}/reminders', [RecruitmentApiController::class, 'storeReminder'])
+            ->name('recruitment.reminders.store');
         Route::post('recruitment/{recruitment}/interviews', [RecruitmentApiController::class, 'storeInterview'])
             ->name('recruitment.interviews.store');
         Route::put('recruitment/{recruitment}/interviews/{interview}', [RecruitmentApiController::class, 'updateInterview'])
@@ -319,6 +324,14 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('timesheet-lop/meta', [TimesheetLopApiController::class, 'meta'])->name('timesheet-lop.meta');
         Route::get('timesheet-lop', [TimesheetLopApiController::class, 'index'])->name('timesheet-lop.index');
         Route::get('timesheet-lop/details/{employeeId}', [TimesheetLopApiController::class, 'details'])->name('timesheet-lop.details');
+
+        // ── Announcements (HRMS) ──────────────────────────────────────────────
+        Route::get('announcements', [AnnouncementApiController::class, 'index'])->name('announcements.index');
+        Route::post('announcements', [AnnouncementApiController::class, 'store'])->name('announcements.store');
+        Route::get('announcements/{announcement}', [AnnouncementApiController::class, 'show'])->name('announcements.show');
+        Route::put('announcements/{announcement}', [AnnouncementApiController::class, 'update'])->name('announcements.update');
+        Route::delete('announcements/{announcement}', [AnnouncementApiController::class, 'destroy'])->name('announcements.destroy');
+        Route::patch('announcements/{announcement}/toggle-status', [AnnouncementApiController::class, 'toggleStatus'])->name('announcements.toggle-status');
     });
 
     // ── Face Attendance (new self-service module, separate from the
@@ -510,6 +523,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
     Route::get('/cst-allocation', [CstAllocationApiController::class, 'index']);
     Route::get('/cst-allocation/filters', [CstAllocationApiController::class, 'filters']);
+    Route::get('/cst-allocation/leads-search', [CstAllocationApiController::class, 'leadsSearch']);
     Route::post('/cst-allocation/{lead}/allocate-tl', [CstAllocationApiController::class, 'allocateTl']);
     Route::post('/cst-allocation/{lead}/allocate-executive', [CstAllocationApiController::class, 'allocateExecutive']);
 
