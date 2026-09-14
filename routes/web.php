@@ -490,6 +490,15 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/house-keeping-attendances/{attendance}', [HouseKeepingAttendanceController::class, 'destroy'])
         ->middleware('can:house_keeping.menuview')
         ->name('house-keeping.attendances.destroy');
+    Route::get('/house-keeping-salaries', [\App\Http\Controllers\HouseKeepingSalaryController::class, 'index'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.salaries.index');
+    Route::post('/house-keeping-salaries', [\App\Http\Controllers\HouseKeepingSalaryController::class, 'storeOrUpdate'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.salaries.store');
+    Route::delete('/house-keeping-salaries/{salary}', [\App\Http\Controllers\HouseKeepingSalaryController::class, 'destroy'])
+        ->middleware('can:house_keeping.menuview')
+        ->name('house-keeping.salaries.destroy');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'create', 'store', 'show']);
     Route::get('/leave-requests/{leaveRequest}/approvals/{approval}/email-approve', [LeaveRequestController::class, 'emailApprove'])
         ->name('leave-requests.email-approve');

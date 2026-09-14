@@ -478,6 +478,9 @@
                     <a href="{{ route('house-keeping.attendances.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.attendances.*') ? 'active' : '' }}">
                         Attendance
                     </a>
+                    <a href="{{ route('house-keeping.salaries.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.salaries.*') ? 'active' : '' }}">
+                        Salary / Payouts
+                    </a>
                 </div>
                 @endcan
                 @endif

@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Quotation extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use HasFactory, SoftDeletes, BelongsToCompany;
 
     protected static function booted(): void
     {
@@ -28,6 +29,18 @@ class Quotation extends Model
                     });
                 }
             }
+        });
+
+        static::deleting(function (Quotation $quotation) {
+            if ($quotation->isForceDeleting()) {
+                $quotation->items()->withTrashed()->forceDelete();
+            } else {
+                $quotation->items()->delete();
+            }
+        });
+
+        static::restoring(function (Quotation $quotation) {
+            $quotation->items()->withTrashed()->restore();
         });
     }
 
@@ -164,7 +177,7 @@ class Quotation extends Model
         $year   = now()->format('y');
         $prefix = "QT-{$year}-";
 
-        $query = static::where('quotation_no', 'like', "{$prefix}%");
+        $query = static::withTrashed()->where('quotation_no', 'like', "{$prefix}%");
         if ($companyId) {
             $query->where('company_id', $companyId);
         }

@@ -591,6 +591,10 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($this->isCompanyAdmin()) {
+            return true;
+        }
+
         $keys = collect($this->roleKeys()->all());
 
         if ($keys->intersect([
@@ -604,11 +608,11 @@ class User extends Authenticatable
             return true;
         }
 
-        if ($this->belongsToDigitalMarketingDepartment() && $this->hasTlLikeRole()) {
+        if ($this->belongsToDigitalMarketingDepartment()) {
             return true;
         }
 
-        if ($keys->contains(fn($k) => Str::contains($k, ['digital_marketing']) && Str::contains($k, ['tl', 'lead', 'leader']))) {
+        if ($keys->contains(fn($k) => Str::contains($k, ['digital_marketing', 'digital-marketing']) || $k === 'dm' || Str::startsWith($k, 'dm_') || Str::endsWith($k, '_dm'))) {
             return true;
         }
 

@@ -187,14 +187,14 @@
             <div class="petty-cash-kicker">
                 <i class="bi bi-wallet2"></i> Finance Management
             </div>
-            <h2 class="petty-cash-title">Petty Cash & Rani Accounts</h2>
-            <p class="petty-cash-subtitle">Branch-wise Debit & Credit transaction ledger statement alongside Rani petty cash entries.</p>
+            <h2 class="petty-cash-title">Petty Cash & House keeping Ledger</h2>
+            <p class="petty-cash-subtitle">Branch-wise Debit & Credit transaction ledger statement.</p>
         </div>
     </div>
 
     <!-- Main 12-Column Single Row Layout -->
     <div class="petty-cash-grid-container">
-        
+
         <!-- 8 Column: Petty Cash Account Report Partial -->
         <div class="petty-cash-col-8">
             @include('pages.hrms.dashboard.partials._petty_cash_report')
@@ -210,8 +210,7 @@
                             👑
                         </div>
                         <div>
-                            <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;">Rani</h3>
-                            <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Rani petty cash account ledger.</p>
+                            <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;">House Keeping Ledger</h3>
                         </div>
                     </div>
 
@@ -327,7 +326,7 @@ function openEditRaniModal(entry) {
     document.getElementById('raniModalTitle').textContent = 'Edit Rani Entry';
     document.getElementById('raniFormMethod').value = 'PUT';
     document.getElementById('raniForm').action = `/hrms/petty-cash/rani/${entry.id}`;
-    
+
     let formattedDate = entry.entry_date ? entry.entry_date.substring(0, 10) : '';
     document.getElementById('raniDateInput').value = formattedDate;
     document.getElementById('raniAmountInput').value = entry.amount || '';
