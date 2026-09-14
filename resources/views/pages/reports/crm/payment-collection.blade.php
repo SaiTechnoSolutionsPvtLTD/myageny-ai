@@ -173,7 +173,7 @@
                 <span class="crm-pay-stat-chip">Total</span>
                 <div class="crm-pay-stat-label">Total Amount</div>
                 <div class="crm-pay-stat-value">Rs {{ number_format($summary['total_amount'], 2) }}</div>
-                <div class="crm-pay-stat-note">Product total value attached to listed payments.</div>
+                <div class="crm-pay-stat-note">Sum of Received &amp; Pending amounts for visible rows.</div>
             </div>
             <div class="crm-pay-stat" style="--stat-accent:#047857;">
                 <span class="crm-pay-stat-chip">Collected</span>
@@ -185,7 +185,7 @@
                 <span class="crm-pay-stat-chip">Pending</span>
                 <div class="crm-pay-stat-label">Outstanding Amount</div>
                 <div class="crm-pay-stat-value">Rs {{ number_format($summary['outstanding_amount'], 2) }}</div>
-                <div class="crm-pay-stat-note">Current balance remaining against listed products.</div>
+                <div class="crm-pay-stat-note">Pending balance remaining for visible payment entries.</div>
             </div>
         </div>
 
@@ -339,9 +339,9 @@
                             <tbody>
                                 @foreach($reportRows as $row)
                                     @php
-                                        $rowTotalAmount = (float) ($row->total_amount ?? 0);
                                         $rowReceivedAmount = (float) ($row->received_amount ?? 0);
-                                        $rowOutstandingAmount = (float) ($row->outstanding_amount ?? max(0, $rowTotalAmount - $rowReceivedAmount));
+                                        $rowOutstandingAmount = (float) ($row->outstanding_amount ?? 0);
+                                        $rowTotalAmount = (float) ($row->total_amount ?? ($rowReceivedAmount + $rowOutstandingAmount));
                                     @endphp
                                     <tr style="cursor:pointer;" onclick="window.location='{{ route('leads.show', $row->customer_id) }}'" title="Click to view lead details for {{ $row->company_name ?: $row->customer_name }}">
                                         <td><span class="crm-pay-code">PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
@@ -381,6 +381,44 @@
                                     </tr>
                                 @endforeach
                             </tbody>
+                            <tfoot>
+                                <tr style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;">
+                                    <td colspan="7" style="text-align:right; padding:14px 16px; color:#475569; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
+                                        @if($reportRows->hasPages())
+                                            Page Total ({{ $reportRows->count() }} rows):
+                                        @else
+                                            Total ({{ $reportRows->count() }} rows):
+                                        @endif
+                                    </td>
+                                    <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#0f172a;">
+                                        Rs {{ number_format($reportRows->sum(fn($r) => ((float)($r->total_amount ?? ((float)($r->received_amount ?? 0) + (float)($r->outstanding_amount ?? 0))))), 2) }}
+                                    </td>
+                                    <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#047857;">
+                                        Rs {{ number_format($reportRows->sum('received_amount'), 2) }}
+                                    </td>
+                                    <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#dc2626;">
+                                        Rs {{ number_format($reportRows->sum('outstanding_amount'), 2) }}
+                                    </td>
+                                    <td colspan="3"></td>
+                                </tr>
+                                @if($reportRows->hasPages())
+                                    <tr style="background:#f1f5f9; font-weight:900; border-top:1px solid #cbd5e1;">
+                                        <td colspan="7" style="text-align:right; padding:14px 16px; color:#0f172a; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
+                                            Overall Report Total ({{ number_format($summary['rows']) }} rows):
+                                        </td>
+                                        <td class="crm-pay-money" style="padding:14px; font-size:14px; color:#0f172a;">
+                                            Rs {{ number_format($summary['total_amount'], 2) }}
+                                        </td>
+                                        <td class="crm-pay-money" style="padding:14px; font-size:14px; color:#047857;">
+                                            Rs {{ number_format($summary['received_amount'], 2) }}
+                                        </td>
+                                        <td class="crm-pay-money" style="padding:14px; font-size:14px; color:#dc2626;">
+                                            Rs {{ number_format($summary['outstanding_amount'], 2) }}
+                                        </td>
+                                        <td colspan="3"></td>
+                                    </tr>
+                                @endif
+                            </tfoot>
                         </table>
                     </div>
 

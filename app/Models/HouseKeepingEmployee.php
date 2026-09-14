@@ -37,4 +37,9 @@ class HouseKeepingEmployee extends Model
     {
         return $this->hasMany(HouseKeepingAttendance::class, 'house_keeping_employee_id');
     }
+
+    public function salaries(): HasMany
+    {
+        return $this->hasMany(HouseKeepingSalary::class, 'house_keeping_employee_id');
+    }
 }

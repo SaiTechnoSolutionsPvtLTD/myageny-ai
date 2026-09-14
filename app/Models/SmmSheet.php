@@ -117,12 +117,16 @@ class SmmSheet extends Model
         $today = now()->toDateString();
         $targetDate = $this->delivery_date?->toDateString() ?: ($this->end_date?->toDateString());
 
+        if ($this->status === 'cm_renewed') {
+            return 'cm_renewed';
+        }
+
         if ($totalCommitted > 0 && $totalDone >= $totalCommitted) {
             $status = 'completed';
         } elseif ($targetDate && $targetDate < $today) {
-            $status = 'overdue';
+            $status = 'expired';
         } else {
-            $status = 'pending';
+            $status = 'active';
         }
 
         $this->status = $status;

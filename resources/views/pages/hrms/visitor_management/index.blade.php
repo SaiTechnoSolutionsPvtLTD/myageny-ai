@@ -107,6 +107,8 @@
                                             <div class="eob-cell-sub">{{ $visitor->applied_position ?: 'Candidate' }} {{ $visitor->email ? '('.$visitor->email.')' : '' }}</div>
                                         @elseif($visitor->visitor_type === 'client' && $visitor->company_name)
                                             <div class="eob-cell-sub">{{ $visitor->company_name }}</div>
+                                        @elseif($visitor->visitor_type === 'others' && $visitor->other_visitor_type)
+                                            <div class="eob-cell-sub">{{ $visitor->other_visitor_type }}</div>
                                         @else
                                             <div class="eob-cell-sub">#{{ $visitor->id }}</div>
                                         @endif

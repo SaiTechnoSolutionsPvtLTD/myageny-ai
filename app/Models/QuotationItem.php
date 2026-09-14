@@ -6,10 +6,11 @@ use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class QuotationItem extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use HasFactory, SoftDeletes, BelongsToCompany;
 
     protected $fillable = [
         'quotation_id',

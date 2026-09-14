@@ -16,6 +16,20 @@
 .pts-btn-outline:hover { background:#fff7ed; }
 .pts-btn-danger { background:#ef4444; border-color:#ef4444; color:#fff; }
 .pts-btn-danger:hover { background:#dc2626; border-color:#dc2626; color:#fff; }
+.pts-btn.is-disabled, .pts-btn:disabled { background:#f1f5f9 !important; border-color:#e2e8f0 !important; color:#94a3b8 !important; cursor:not-allowed !important; box-shadow:none !important; }
+.pts-notice-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; border-radius:12px; margin-bottom:2px; box-shadow:0 4px 14px rgba(15,23,42,.03); transition:all 0.3s ease; }
+.pts-notice-banner.open { background:linear-gradient(135deg, #f0f9ff 0%, #ecfdf5 100%); border:1px solid #bae6fd; color:#0369a1; }
+.pts-notice-banner.closed { background:linear-gradient(135deg, #fff7ed 0%, #fef2f2 100%); border:1px solid #fed7aa; color:#9a3412; }
+.pts-notice-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.pts-notice-banner.open .pts-notice-icon { background:#e0f2fe; color:#0284c7; }
+.pts-notice-banner.closed .pts-notice-icon { background:#ffedd5; color:#ea580c; }
+.pts-notice-title { font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
+.pts-notice-desc { font-size:12px; margin-top:2px; opacity:0.95; line-height:1.45; }
+.pts-notice-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+.pts-notice-banner.open .pts-notice-pill { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.pts-notice-banner.closed .pts-notice-pill { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
+.pts-pulse-dot { width:7px; height:7px; border-radius:50%; background:currentColor; display:inline-block; animation:pts-pulse 1.8s infinite; }
+@keyframes pts-pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.3; transform:scale(0.85); } }
 .pts-body { padding:22px 28px 34px; display:grid; gap:18px; }
 .pts-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pts-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
@@ -114,6 +128,50 @@
     .pts-filter-form { grid-template-columns:1fr; }
     .pts-modal { width:calc(100vw - 20px); }
 }
+
+/* Department Filter Cards (Company Admin) */
+.pts-dept-section { display:grid; gap:12px; }
+.pts-dept-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.pts-dept-section-title { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#475569; display:flex; align-items:center; gap:8px; }
+.pts-dept-clear-btn { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#64748b; text-decoration:none; padding:5px 12px; border-radius:999px; background:#f1f5f9; border:1px solid #cbd5e1; transition:all 0.2s; }
+.pts-dept-clear-btn:hover { background:#e2e8f0; color:#0f172a; }
+.pts-dept-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; }
+.pts-dept-card { background:#fff; border:1.5px solid #e2e8f0; border-radius:14px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px; cursor:pointer; text-decoration:none; color:inherit; transition:all 0.22s ease-in-out; box-shadow:0 4px 12px rgba(15,23,42,.03); position:relative; overflow:hidden; }
+.pts-dept-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.07); border-color:#cbd5e1; }
+.pts-dept-card-left { display:flex; align-items:center; gap:14px; min-width:0; }
+.pts-dept-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s ease; }
+.pts-dept-info { min-width:0; }
+.pts-dept-name { font-size:15px; font-weight:800; color:#0f172a; line-height:1.2; }
+.pts-dept-meta { font-size:11px; font-weight:600; color:#64748b; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pts-dept-count-badge { display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:32px; padding:0 10px; border-radius:999px; font-size:13px; font-weight:800; flex-shrink:0; transition:all 0.2s; }
+
+/* Development Theme */
+.pts-dept-card.dept-dev .pts-dept-icon { background:#eff6ff; color:#2563eb; }
+.pts-dept-card.dept-dev .pts-dept-count-badge { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+.pts-dept-card.dept-dev:hover { border-color:#93c5fd; }
+.pts-dept-card.dept-dev.active { background:linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%); border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.15), 0 8px 24px rgba(37,99,235,.12); }
+.pts-dept-card.dept-dev.active .pts-dept-icon { background:#2563eb; color:#ffffff; }
+.pts-dept-card.dept-dev.active .pts-dept-count-badge { background:#2563eb; color:#ffffff; border-color:#2563eb; }
+
+/* Designing Theme */
+.pts-dept-card.dept-design .pts-dept-icon { background:#f5f3ff; color:#7c3aed; }
+.pts-dept-card.dept-design .pts-dept-count-badge { background:#f5f3ff; color:#6d28d9; border:1px solid #ddd6fe; }
+.pts-dept-card.dept-design:hover { border-color:#c4b5fd; }
+.pts-dept-card.dept-design.active { background:linear-gradient(135deg, #ffffff 0%, #f7f4ff 100%); border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.15), 0 8px 24px rgba(124,58,237,.12); }
+.pts-dept-card.dept-design.active .pts-dept-icon { background:#7c3aed; color:#ffffff; }
+.pts-dept-card.dept-design.active .pts-dept-count-badge { background:#7c3aed; color:#ffffff; border-color:#7c3aed; }
+
+/* Digital Marketing Theme */
+.pts-dept-card.dept-dm .pts-dept-icon { background:#fff7ed; color:#ea580c; }
+.pts-dept-card.dept-dm .pts-dept-count-badge { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+.pts-dept-card.dept-dm:hover { border-color:#fdba74; }
+.pts-dept-card.dept-dm.active { background:linear-gradient(135deg, #ffffff 0%, #fff8f0 100%); border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.15), 0 8px 24px rgba(234,88,12,.12); }
+.pts-dept-card.dept-dm.active .pts-dept-icon { background:#ea580c; color:#ffffff; }
+.pts-dept-card.dept-dm.active .pts-dept-count-badge { background:#ea580c; color:#ffffff; border-color:#ea580c; }
+
+@media (max-width: 900px) {
+    .pts-dept-grid { grid-template-columns:1fr; }
+}
 </style>
 @endpush
 
@@ -125,11 +183,25 @@
             <div class="pts-breadcrumb">Projects &gt; Tasks (Assigned Directory)</div>
         </div>
         <div class="pts-actions">
+            <!-- Daily Task Policy / Notification Option Button -->
+            <button type="button" class="pts-btn pts-btn-outline" id="ptsTaskNoticeBtn" title="Daily Task Submission Policy">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <span>Task Notice</span>
+                <span class="pts-badge" style="background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; font-size:10px; padding:2px 7px;">11 AM Rule</span>
+            </button>
+
             @can('tasks.create')
-            <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                <span>Create Task</span>
-            </a>
+                @if($isTaskCreationAllowed)
+                    <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary" id="ptsAddTaskBtn" title="Add Task (Allowed until 11:00 AM)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>Add Task</span>
+                    </a>
+                @else
+                    <button type="button" class="pts-btn is-disabled" id="ptsAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        <span>Add Task (Closed)</span>
+                    </button>
+                @endif
             @endcan
         </div>
     </div>
@@ -141,6 +213,138 @@
 
         @if(session('error'))
             <div class="pts-flash error">{{ session('error') }}</div>
+        @endif
+
+        <!-- Daily Task 11:00 AM Cutoff Notification Banner -->
+        <div id="ptsNoticeBanner" class="pts-notice-banner {{ $isTaskCreationAllowed ? 'open' : 'closed' }}">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div class="pts-notice-icon" id="ptsNoticeIcon">
+                    @if($isTaskCreationAllowed)
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    @else
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    @endif
+                </div>
+                <div>
+                    <div class="pts-notice-title" id="ptsNoticeTitle">
+                        @if($isTaskCreationAllowed)
+                            <span>Daily Task Submission Notice</span>
+                            <span class="pts-pulse-dot" style="color:#0284c7;"></span>
+                        @else
+                            <span>Daily Task Creation Closed for Today</span>
+                        @endif
+                    </div>
+                    <div class="pts-notice-desc" id="ptsNoticeDesc">
+                        @if($isTaskCreationAllowed)
+                            Daily tasks must be added and updated before <strong>11:00 AM</strong>. After 11:00 AM, task creation is closed for the day.
+                        @else
+                            Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.
+                        @endif
+                    </div>
+                </div>
+            </div>
+            <div class="pts-notice-pill" id="ptsNoticePill">
+                @if($isTaskCreationAllowed)
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span id="ptsCountdownLabel">Window open until 11:00 AM ({{ $cutoffInfo['formatted_remaining'] ?? '' }} remaining)</span>
+                @else
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <span>Closed at 11:00 AM IST</span>
+                @endif
+            </div>
+        </div>
+
+        @if($isCompanyAdmin)
+            <!-- Department Filter Cards (Company Admin) -->
+            <div class="pts-dept-section">
+                <div class="pts-dept-header">
+                    <div class="pts-dept-section-title">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        <span>Departments</span>
+                    </div>
+                    @if(!empty($filters['filter_department']))
+                        <a href="{{ request()->fullUrlWithQuery(['filter_department' => null, 'page' => 1]) }}" class="pts-dept-clear-btn" title="View all departments">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            <span>Clear Filter (Showing {{ ucfirst(str_replace('_', ' ', $filters['filter_department'])) }})</span>
+                        </a>
+                    @else
+                        <span style="font-size:12px; font-weight:700; color:#64748b;">
+                            Total: {{ $deptCounts['all'] ?? 0 }} Tasks
+                        </span>
+                    @endif
+                </div>
+
+                <div class="pts-dept-grid">
+                    {{-- Development Card --}}
+                    @php
+                        $isDevActive = ($filters['filter_department'] ?? '') === 'development';
+                        $devUrl = request()->fullUrlWithQuery([
+                            'filter_department' => $isDevActive ? null : 'development',
+                            'page' => 1,
+                        ]);
+                    @endphp
+                    <a href="{{ $devUrl }}" class="pts-dept-card dept-dev {{ $isDevActive ? 'active' : '' }}" title="{{ $isDevActive ? 'Click to show all tasks' : 'Click to filter Development tasks' }}">
+                        <div class="pts-dept-card-left">
+                            <div class="pts-dept-icon">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                            </div>
+                            <div class="pts-dept-info">
+                                <div class="pts-dept-name">Development</div>
+                                <div class="pts-dept-meta">Web, App &amp; Software Tasks</div>
+                            </div>
+                        </div>
+                        <div class="pts-dept-count-badge">
+                            {{ $deptCounts['development'] ?? 0 }}
+                        </div>
+                    </a>
+
+                    {{-- Designing Card --}}
+                    @php
+                        $isDesignActive = ($filters['filter_department'] ?? '') === 'designing';
+                        $designUrl = request()->fullUrlWithQuery([
+                            'filter_department' => $isDesignActive ? null : 'designing',
+                            'page' => 1,
+                        ]);
+                    @endphp
+                    <a href="{{ $designUrl }}" class="pts-dept-card dept-design {{ $isDesignActive ? 'active' : '' }}" title="{{ $isDesignActive ? 'Click to show all tasks' : 'Click to filter Designing tasks' }}">
+                        <div class="pts-dept-card-left">
+                            <div class="pts-dept-icon">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.563-2.512 5.563-5.563C22 6.5 17.5 2 12 2z"></path></svg>
+                            </div>
+                            <div class="pts-dept-info">
+                                <div class="pts-dept-name">Designing</div>
+                                <div class="pts-dept-meta">UI/UX, Graphics &amp; Video Tasks</div>
+                            </div>
+                        </div>
+                        <div class="pts-dept-count-badge">
+                            {{ $deptCounts['designing'] ?? 0 }}
+                        </div>
+                    </a>
+
+                    {{-- Digital Marketing Card --}}
+                    @php
+                        $isDmActive = ($filters['filter_department'] ?? '') === 'digital_marketing';
+                        $dmUrl = request()->fullUrlWithQuery([
+                            'filter_department' => $isDmActive ? null : 'digital_marketing',
+                            'page' => 1,
+                        ]);
+                    @endphp
+                    <a href="{{ $dmUrl }}" class="pts-dept-card dept-dm {{ $isDmActive ? 'active' : '' }}" title="{{ $isDmActive ? 'Click to show all tasks' : 'Click to filter Digital Marketing tasks' }}">
+                        <div class="pts-dept-card-left">
+                            <div class="pts-dept-icon">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><line x1="2" y1="8" x2="4" y2="8"></line><line x1="20" y1="8" x2="22" y2="8"></line></svg>
+                            </div>
+                            <div class="pts-dept-info">
+                                <div class="pts-dept-name">Digital Marketing</div>
+                                <div class="pts-dept-meta">SEO, Ads &amp; SMM Tasks</div>
+                            </div>
+                        </div>
+                        <div class="pts-dept-count-badge">
+                            {{ $deptCounts['digital_marketing'] ?? 0 }}
+                        </div>
+                    </a>
+                </div>
+            </div>
         @endif
 
         <!-- Filter Accordion Card -->
@@ -170,6 +374,7 @@
 
             <div class="pts-filter-body">
                 <form method="GET" action="{{ route('projects.tasks.index') }}" class="pts-filter-form" id="ptsTaskFilterForm">
+                    <input type="hidden" name="filter_department" value="{{ $filters['filter_department'] ?? '' }}">
                     {{-- 1. Quick Dates Select --}}
                     <div class="pts-filter-group">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
@@ -267,7 +472,15 @@
         <section class="pts-card">
             <div class="pts-card-head">
                 <div>
-                    <div class="pts-card-title">Assigned Tasks (Grouped by Member &amp; Date)</div>
+                    <div class="pts-card-title" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span>Assigned Tasks</span>
+                        @if(!empty($filters['filter_department']))
+                            <span class="pts-badge count" style="font-size:11px; background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-weight:800;">
+                                {{ ucfirst(str_replace('_', ' ', $filters['filter_department'])) }}
+                            </span>
+                        @endif
+                        <span style="font-size:13px; font-weight:600; color:#64748b;">(Grouped by Member &amp; Date)</span>
+                    </div>
                     <div class="pts-card-sub">Each row displays the allocated task list for a team member on a specific date.</div>
                 </div>
                 <div style="font-size:12px; font-weight:800; color:#64748b;">
@@ -406,10 +619,17 @@
                         <div>No tasks match your filter criteria. Click below to create a new task.</div>
                         @can('tasks.create')
                         <div style="margin-top:16px;">
-                            <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                <span>Create First Task</span>
-                            </a>
+                            @if($isTaskCreationAllowed)
+                                <a href="{{ route('projects.tasks.create') }}" class="pts-btn pts-btn-primary" id="ptsEmptyAddTaskBtn">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <span>Add Task</span>
+                                </a>
+                            @else
+                                <button type="button" class="pts-btn is-disabled" id="ptsEmptyAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    <span>Add Task (Closed after 11:00 AM)</span>
+                                </button>
+                            @endif
                         </div>
                         @endcan
                     </div>
@@ -451,6 +671,45 @@
                     <!-- Populated dynamically via JS -->
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Daily Task Policy Notification Modal Popup -->
+<div class="pts-modal-overlay" id="ptsPolicyModalOverlay" style="display:none; z-index:1300;"></div>
+<div class="pts-modal" id="ptsPolicyModal" style="display:none; max-width:540px; z-index:1310;">
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; color:#ea580c; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </div>
+            <div>
+                <div class="pts-card-title" style="font-size:16px;">Daily Task Update Policy</div>
+                <div class="pts-card-sub">Daily Cutoff: 11:00 AM IST</div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" id="ptsClosePolicyModalBtn" aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="pts-modal-body" style="padding:20px 24px; display:grid; gap:16px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+            <div style="font-size:13px; font-weight:800; color:#0f172a; margin-bottom:8px;">Policy Guidelines:</div>
+            <ul style="margin:0; padding-left:18px; font-size:13px; color:#334155; line-height:1.7;">
+                <li>Daily tasks must be added and allocated <strong>before 11:00 AM</strong> every day.</li>
+                <li>The <strong>Add Task</strong> button is enabled until <strong>11:00 AM IST</strong>.</li>
+                <li>After <strong>11:00 AM</strong>, new task creation is closed for the day.</li>
+                <li>Existing task status updates (Pending, In Progress, Completed) remain accessible.</li>
+            </ul>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:{{ $isTaskCreationAllowed ? '#f0fdf4' : '#fff7ed' }}; border:1px solid {{ $isTaskCreationAllowed ? '#bbf7d0' : '#fed7aa' }}; border-radius:10px; font-size:13px; font-weight:700;">
+            <span style="color:#475569;">Current Status:</span>
+            <span id="ptsModalStatusBadge" style="color:{{ $isTaskCreationAllowed ? '#15803d' : '#c2410c' }}; font-weight:800;">
+                {{ $isTaskCreationAllowed ? 'Open (Until 11:00 AM IST)' : 'Closed for Today' }}
+            </span>
+        </div>
+        <div style="text-align:right;">
+            <button type="button" class="pts-btn pts-btn-primary" id="ptsAcknowledgePolicyBtn" style="padding:8px 20px;">I Understand</button>
         </div>
     </div>
 </div>
@@ -668,6 +927,127 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') setModalOpen(false);
     });
+
+    // ─────────────────────────────────────────────────────────────
+    //  Daily 11:00 AM Cutoff & Policy Notification Logic
+    // ─────────────────────────────────────────────────────────────
+    const cutoffData = @json($cutoffInfo ?? []);
+    let isAllowed = Boolean(@json($isTaskCreationAllowed ?? false));
+    let secondsRemaining = parseInt(cutoffData.seconds_remaining, 10) || 0;
+
+    const policyModal = document.getElementById('ptsPolicyModal');
+    const policyOverlay = document.getElementById('ptsPolicyModalOverlay');
+    const openPolicyBtn = document.getElementById('ptsTaskNoticeBtn');
+    const closePolicyBtn = document.getElementById('ptsClosePolicyModalBtn');
+    const ackPolicyBtn = document.getElementById('ptsAcknowledgePolicyBtn');
+
+    function showPolicyModal() {
+        if (policyModal && policyOverlay) {
+            policyModal.style.display = 'block';
+            policyOverlay.style.display = 'block';
+            policyModal.classList.add('is-open');
+            policyOverlay.classList.add('is-open');
+        }
+    }
+
+    function hidePolicyModal() {
+        if (policyModal && policyOverlay) {
+            policyModal.style.display = 'none';
+            policyOverlay.style.display = 'none';
+            policyModal.classList.remove('is-open');
+            policyOverlay.classList.remove('is-open');
+        }
+    }
+
+    if (openPolicyBtn) openPolicyBtn.addEventListener('click', showPolicyModal);
+    if (closePolicyBtn) closePolicyBtn.addEventListener('click', hidePolicyModal);
+    if (ackPolicyBtn) ackPolicyBtn.addEventListener('click', hidePolicyModal);
+    if (policyOverlay) policyOverlay.addEventListener('click', hidePolicyModal);
+
+    // Intercept clicks on disabled Add Task buttons to show notification policy modal
+    document.addEventListener('click', function(e) {
+        const disabledBtn = e.target.closest('[data-time-closed="true"]');
+        if (disabledBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            showPolicyModal();
+        }
+    });
+
+    // Real-time Countdown and auto-cutoff transition at 11:00 AM
+    function updateCountdown() {
+        if (!isAllowed) return;
+
+        secondsRemaining--;
+        if (secondsRemaining <= 0) {
+            isAllowed = false;
+            applyCutoffClosed();
+            return;
+        }
+
+        const mins = Math.ceil(secondsRemaining / 60);
+        const formatted = mins > 60
+            ? `${Math.floor(mins / 60)}h ${mins % 60}m`
+            : `${mins}m`;
+
+        const label = document.getElementById('ptsCountdownLabel');
+        if (label) {
+            label.textContent = `Window open until 11:00 AM (${formatted} remaining)`;
+        }
+    }
+
+    function applyCutoffClosed() {
+        // 1. Update Topbar Add Task button
+        const topBtn = document.getElementById('ptsAddTaskBtn');
+        if (topBtn) {
+            topBtn.className = 'pts-btn is-disabled';
+            topBtn.setAttribute('data-time-closed', 'true');
+            topBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            topBtn.removeAttribute('href');
+            topBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed)</span>`;
+        }
+
+        // 2. Update Empty State Add Task button
+        const emptyBtn = document.getElementById('ptsEmptyAddTaskBtn');
+        if (emptyBtn) {
+            emptyBtn.className = 'pts-btn is-disabled';
+            emptyBtn.setAttribute('data-time-closed', 'true');
+            emptyBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            emptyBtn.removeAttribute('href');
+            emptyBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed after 11:00 AM)</span>`;
+        }
+
+        // 3. Update Banner State
+        const banner = document.getElementById('ptsNoticeBanner');
+        if (banner) {
+            banner.className = 'pts-notice-banner closed';
+        }
+        const icon = document.getElementById('ptsNoticeIcon');
+        if (icon) {
+            icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+        }
+        const title = document.getElementById('ptsNoticeTitle');
+        if (title) {
+            title.innerHTML = `<span>Daily Task Creation Closed for Today</span>`;
+        }
+        const desc = document.getElementById('ptsNoticeDesc');
+        if (desc) {
+            desc.innerHTML = `Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.`;
+        }
+        const pill = document.getElementById('ptsNoticePill');
+        if (pill) {
+            pill.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Closed at 11:00 AM IST</span>`;
+        }
+        const modalStatus = document.getElementById('ptsModalStatusBadge');
+        if (modalStatus) {
+            modalStatus.style.color = '#c2410c';
+            modalStatus.textContent = 'Closed for Today';
+        }
+    }
+
+    if (isAllowed && secondsRemaining > 0) {
+        setInterval(updateCountdown, 1000);
+    }
 });
 </script>
 @endpush

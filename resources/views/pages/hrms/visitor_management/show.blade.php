@@ -57,6 +57,11 @@
                             <div class="eob-show-label">Company Name</div>
                             <div class="eob-show-value">{{ $visitor->company_name ?: '-' }}</div>
                         </div>
+                    @elseif($visitor->visitor_type === 'others' && $visitor->other_visitor_type)
+                        <div class="eob-show-item">
+                            <div class="eob-show-label">Visitor Type Details</div>
+                            <div class="eob-show-value">{{ $visitor->other_visitor_type }}</div>
+                        </div>
                     @endif
                     <div class="eob-show-item">
                         <div class="eob-show-label">Visit Date</div>

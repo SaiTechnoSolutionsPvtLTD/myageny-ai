@@ -4,6 +4,7 @@
     $showProjectSelector = $showProjectSelector ?? false;
     $projectOptions = $projectOptions ?? collect();
     $selectedProjectId = old('production_initiation_id', $selectedProjectId ?? '');
+    $projectItem = $projectItem ?? null;
 @endphp
 
 <form method="POST" action="{{ $updateFormAction }}">
@@ -14,6 +15,21 @@
     @endif
 
     <div class="ps-update-form">
+        @if(auth()->user()?->canViewBudgetApprovalDetails() && $projectItem?->lead_budget_amount)
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #86efac; border-radius: 12px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">💰</span>
+                    <span style="font-size: 12px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.05em;">Lead Budget Amount:</span>
+                </div>
+                <div style="font-size: 16px; font-weight: 900; color: #15803d;">
+                    ₹{{ number_format($projectItem->lead_budget_amount, 2) }}
+                    @if($projectItem->budget_amount_type)
+                        <span style="font-size: 11px; font-weight: 700; color: #166534;">({{ $projectItem->budget_amount_type }})</span>
+                    @endif
+                </div>
+            </div>
+        @endif
+
         <div class="ps-form-grid{{ $showProjectSelector ? '' : ' ps-form-grid-single' }}">
             @if($showProjectSelector)
                 <div>

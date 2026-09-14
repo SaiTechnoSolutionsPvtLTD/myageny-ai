@@ -53,6 +53,13 @@
                 @error('visitor_type')<div class="ve-error">{{ $message }}</div>@enderror
             </div>
 
+            <!-- Others Fields -->
+            <div class="ve-field others-field" style="display:none;">
+                <label class="ve-label">Specify Visitor Type / Details <span class="ve-req">*</span></label>
+                <input type="text" name="other_visitor_type" class="ve-input" id="pubOtherVisitorType" value="{{ old('other_visitor_type') }}" placeholder="Enter visitor details (e.g. Vendor, Delivery, Guest)">
+                @error('other_visitor_type')<div class="ve-error">{{ $message }}</div>@enderror
+            </div>
+
             <!-- Candidate Fields -->
             <div class="ve-field candidate-field" style="display:none;">
                 <label class="ve-label">Email ID <span class="ve-req">*</span></label>
@@ -111,25 +118,38 @@
     <script>
     document.addEventListener('DOMContentLoaded', function () {
         const typeSelect = document.getElementById('publicVisitorTypeSelect');
+        const othersFields = document.querySelectorAll('.others-field');
         const candidateFields = document.querySelectorAll('.candidate-field');
         const clientFields = document.querySelectorAll('.client-field');
+        const otherVisitorType = document.getElementById('pubOtherVisitorType');
         const candidateEmail = document.getElementById('pubCandidateEmail');
         const candidatePosition = document.getElementById('pubCandidatePosition');
         const clientCompany = document.getElementById('pubClientCompany');
 
         function toggleFields() {
-            const val = typeSelect ? typeSelect.value : 'others';
+            const val = typeSelect ? typeSelect.value : '';
+            const isOthers = (val === 'others');
+            const isCandidate = (val === 'candidate');
+            const isClient = (val === 'client');
 
-            candidateFields.forEach(el => el.style.display = (val === 'candidate') ? 'flex' : 'none');
-            clientFields.forEach(el => el.style.display = (val === 'client') ? 'flex' : 'none');
+            othersFields.forEach(el => el.style.setProperty('display', isOthers ? 'flex' : 'none', 'important'));
+            candidateFields.forEach(el => el.style.setProperty('display', isCandidate ? 'flex' : 'none', 'important'));
+            clientFields.forEach(el => el.style.setProperty('display', isClient ? 'flex' : 'none', 'important'));
 
-            if (candidateEmail) candidateEmail.required = (val === 'candidate');
-            if (candidatePosition) candidatePosition.required = (val === 'candidate');
-            if (clientCompany) clientCompany.required = (val === 'client');
+            if (otherVisitorType) {
+                otherVisitorType.required = isOthers;
+                if (!isOthers) {
+                    otherVisitorType.value = '';
+                }
+            }
+            if (candidateEmail) candidateEmail.required = isCandidate;
+            if (candidatePosition) candidatePosition.required = isCandidate;
+            if (clientCompany) clientCompany.required = isClient;
         }
 
         if (typeSelect) {
             typeSelect.addEventListener('change', toggleFields);
+            typeSelect.addEventListener('input', toggleFields);
             toggleFields();
         }
     });

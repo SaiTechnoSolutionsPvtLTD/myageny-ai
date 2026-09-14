@@ -156,7 +156,7 @@
     <div class="cmp-topbar">
         <div>
             <div class="cmp-title">Digital Marketing Campaigns</div>
-            <div class="cmp-breadcrumb">Modules &gt; Production &gt; Campaigns</div>
+            <div class="cmp-breadcrumb">Modules &gt; Production &gt; Paid Campaigns</div>
         </div>
         <div class="cmp-topbar-actions">
             {{-- View Switcher --}}

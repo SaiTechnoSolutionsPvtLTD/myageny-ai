@@ -36,4 +36,15 @@
             </tr>
         @endforelse
     </tbody>
+    @if($rows->isNotEmpty())
+        <tfoot>
+            <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <td colspan="7" align="right">Total ({{ $rows->count() }} rows):</td>
+                <td>{{ number_format($rows->sum(fn($r) => (float)($r['Total Amount'] ?? 0)), 2, '.', '') }}</td>
+                <td>{{ number_format($rows->sum(fn($r) => (float)($r['Received Amount'] ?? 0)), 2, '.', '') }}</td>
+                <td>{{ number_format($rows->sum(fn($r) => (float)($r['Outstanding Amount'] ?? 0)), 2, '.', '') }}</td>
+                <td colspan="3"></td>
+            </tr>
+        </tfoot>
+    @endif
 </table>

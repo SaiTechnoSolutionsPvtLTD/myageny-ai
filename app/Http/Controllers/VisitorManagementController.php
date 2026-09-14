@@ -123,6 +123,10 @@ class VisitorManagementController extends Controller
             $validated['company_name'] = null;
         }
 
+        if (($validated['visitor_type'] ?? '') !== VisitorEntry::TYPE_OTHERS) {
+            $validated['other_visitor_type'] = null;
+        }
+
         return $validated;
     }
 }

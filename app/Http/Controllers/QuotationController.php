@@ -342,10 +342,9 @@ class QuotationController extends Controller
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
 
-        $quotation->delete(); // items cascade via FK
+        $quotation->delete();
 
-        return redirect()->route('quotations.index')
-            ->with('success', 'Quotation deleted.');
+        return back()->with('success', 'Quotation deleted successfully.');
     }
 
     // ── API: Products for Select2 ─────────────────────────────────────────────

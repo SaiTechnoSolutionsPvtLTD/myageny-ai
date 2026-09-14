@@ -30,6 +30,7 @@ class VisitorEntry extends Model
         'email',
         'applied_position',
         'company_name',
+        'other_visitor_type',
         'visit_date',
         'in_time',
         'out_time',

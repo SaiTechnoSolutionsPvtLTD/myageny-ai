@@ -178,7 +178,7 @@
                             <line x1="16" y1="17" x2="8" y2="17"></line>
                             <polyline points="10 9 9 9 8 9"></polyline>
                         </svg>
-                        <span>SMM Sheet</span>
+                        <span>Organic Campaigns</span>
                     </div>
                 </a>
                 @endif
@@ -193,7 +193,7 @@
                             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
                             <line x1="4" y1="22" x2="4" y2="15"></line>
                         </svg>
-                        <span>Campaigns</span>
+                        <span>Paid Campaigns</span>
                     </div>
                 </a>
                 @endif
@@ -477,6 +477,9 @@
                     </a>
                     <a href="{{ route('house-keeping.attendances.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.attendances.*') ? 'active' : '' }}">
                         Attendance
+                    </a>
+                    <a href="{{ route('house-keeping.salaries.index') }}" class="submenu-item {{ request()->routeIs('house-keeping.salaries.*') ? 'active' : '' }}">
+                        Salary / Payouts
                     </a>
                 </div>
                 @endcan

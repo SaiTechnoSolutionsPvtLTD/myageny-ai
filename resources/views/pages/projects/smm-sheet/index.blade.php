@@ -23,15 +23,16 @@
 .pts-body { padding: 22px 28px 34px; display: grid; gap: 18px; }
 
 /* ── KPI Stats ── */
-.pjd-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
-.pjd-stat { position: relative; overflow: hidden; background: var(--stat-gradient); border: none; border-radius: 16px; padding: 22px 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); color: #fff; }
-.pjd-stat:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15), 0 10px 10px -5px rgba(0,0,0,0.08); }
+.pjd-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.pjd-stat { position: relative; overflow: hidden; background: var(--stat-gradient); border: 2.5px solid transparent; border-radius: 16px; padding: 20px 22px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; transition: all 0.25s cubic-bezier(0.4,0,0.2,1); color: #fff; text-decoration: none; cursor: pointer; }
+.pjd-stat:hover { transform: translateY(-3px); box-shadow: 0 18px 26px -4px rgba(0,0,0,0.16), 0 10px 10px -5px rgba(0,0,0,0.06); color: #fff; }
+.pjd-stat.is-active-card { border-color: #fff; box-shadow: 0 0 0 3px rgba(234,88,12,0.45), 0 16px 28px -4px rgba(0,0,0,0.2); transform: translateY(-2px); }
 .pjd-stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .pjd-stat-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.22); color: #fff; font-size: 18px; backdrop-filter: blur(4px); }
-.pjd-stat-label { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.92); text-transform: uppercase; letter-spacing: .06em; }
+.pjd-stat-label { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.95); text-transform: uppercase; letter-spacing: .06em; }
 .pjd-stat-body { display: flex; flex-direction: column; gap: 2px; }
 .pjd-stat-value { font-size: 30px; font-weight: 900; color: #fff; line-height: 1.1; }
-.pjd-stat-footer { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.25); font-size: 12px; color: rgba(255,255,255,0.9); font-weight: 600; }
+.pjd-stat-footer { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.25); font-size: 11.5px; color: rgba(255,255,255,0.92); font-weight: 600; }
 
 /* ── Filter Card & Accordion ── */
 .pts-card { background: #fff; border: 1px solid #e6edf5; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(15,23,42,.04); }
@@ -107,20 +108,108 @@ details[open] .smm-chevron { transform: rotate(180deg); }
 .smm-tab:hover { background: #fff7ed; color: #ea580c; }
 .smm-tab.active { background: #ea580c; color: #fff; box-shadow: 0 4px 12px rgba(234,88,12,.25); }
 
-.smm-team-switcher { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; }
-.smm-team-btn {
-    padding: 7px 14px; border-radius: 8px; border: none; background: transparent;
-    font-size: 12px; font-weight: 700; color: #64748b; cursor: pointer; transition: all .15s; font-family: inherit;
-    text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+/* ── Modern Team View Switcher ── */
+.smm-team-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    padding: 4px 5px 4px 12px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(15,23,42,.04);
 }
-.smm-team-btn:hover { background: #f8fafc; color: #0f172a; }
-.smm-team-btn.active-all    { background: #0284c7; color: #fff; }
-.smm-team-btn.active-design { background: #16a34a; color: #fff; }
-.smm-team-btn.active-dm     { background: #7c3aed; color: #fff; }
+.smm-team-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #64748b;
+    user-select: none;
+}
+.smm-team-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 9px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+}
+.smm-team-btn {
+    padding: 6px 14px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .16s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.smm-team-btn:hover {
+    background: #fff;
+    color: #0f172a;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+}
+.smm-team-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    display: inline-block;
+    transition: all .16s ease;
+}
+.smm-team-icon {
+    font-size: 13px;
+    line-height: 1;
+}
+.smm-team-btn.active.active-all {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+    border-color: #0284c7;
+    box-shadow: 0 3px 10px rgba(2,132,199,.32);
+}
+.smm-team-btn.active.active-all .smm-team-dot {
+    background: #fff;
+    box-shadow: 0 0 6px rgba(255,255,255,0.8);
+}
+.smm-team-btn.active.active-design {
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+    color: #fff;
+    border-color: #16a34a;
+    box-shadow: 0 3px 10px rgba(22,163,74,.32);
+}
+.smm-team-btn.active.active-dm {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    color: #fff;
+    border-color: #7c3aed;
+    box-shadow: 0 3px 10px rgba(124,58,237,.32);
+}
 
-.smm-team-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; }
-.smm-team-badge.is-design { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-.smm-team-badge.is-dm     { background: #f5f3ff; color: #7c3aed; border: 1px solid #c4b5fd; }
+.smm-team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(15,23,42,.04);
+}
+.smm-team-badge.is-design { background: #f0fdf4; color: #15803d; border: 1.5px solid #bbf7d0; }
+.smm-team-badge.is-dm     { background: #f5f3ff; color: #7c3aed; border: 1.5px solid #c4b5fd; }
 
 .smm-records-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
 .smm-records-label strong { color: #374151; }
@@ -167,10 +256,20 @@ details[open] .smm-chevron { transform: rotate(180deg); }
 .smm-num.done   { color: #16a34a; font-weight: 800; }
 .smm-num.pend   { color: #ca8a04; font-weight: 800; }
 .smm-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
-.smm-badge.completed { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
-.smm-badge.pending   { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
-.smm-badge.overdue   { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.smm-badge.active         { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+.smm-badge.cm_not_renewed { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.smm-badge.cm_renewed     { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.smm-badge.expired        { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.smm-badge.completed      { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
+.smm-badge.pending        { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+.smm-badge.overdue        { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
 .smm-badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: currentColor; }
+.smm-pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block; margin-right: 2px; box-shadow: 0 0 0 0 rgba(16,185,129,0.7); animation: smmPulse 2s infinite; }
+@keyframes smmPulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
 .smm-person { font-size: 12px; color: #475569; max-width: 160px; word-break: break-word; }
 .smm-person.empty { color: #d1d5db; font-style: italic; }
 .smm-date { font-size: 12px; color: #64748b; white-space: nowrap; }
@@ -319,11 +418,16 @@ details[open] .smm-chevron { transform: rotate(180deg); }
     color: #fff !important;
 }
 
-@media (max-width: 1280px) {
-    .pjd-stats { grid-template-columns: repeat(2, 1fr); }
-    .smm-filter-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1400px) {
+    .pjd-stats { grid-template-columns: repeat(4, 1fr); }
 }
-@media (max-width: 768px) {
+@media (max-width: 1100px) {
+    .pjd-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 860px) {
+    .pjd-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
     .pts-topbar { flex-direction: column; align-items: flex-start; }
     .pjd-stats { grid-template-columns: 1fr; }
     .smm-filter-grid { grid-template-columns: 1fr; }
@@ -335,17 +439,23 @@ details[open] .smm-chevron { transform: rotate(180deg); }
 
 @section('content')
 @php
-    $total     = $rows->count();
-    $completed = $rows->where('status','completed')->count();
-    $pending   = $rows->where('status','pending')->count();
-    $overdue   = $rows->where('status','overdue')->count();
+    $total             = $rows->count();
+    $totalRecords      = $stats['total_records'] ?? $total;
+    $totalActive       = $stats['total_active'] ?? $rows->where('is_active', true)->count();
+    $totalPending      = $stats['total_pending'] ?? $rows->where('is_pending', true)->count();
+    $totalOverdue      = $stats['total_overdue'] ?? $rows->where('is_overdue', true)->count();
+    $totalCmNotRenewed = $stats['total_cm_not_renewed'] ?? $rows->where('is_cm_not_renewed', true)->count();
+    $totalCmRenewed    = $stats['total_cm_renewed'] ?? $rows->where('is_cm_renewed', true)->count();
+    $totalExpired      = $stats['total_expired'] ?? $rows->where('is_expired', true)->count();
+    $totalCompleted    = $stats['total_completed'] ?? $rows->where('is_completed', true)->count();
+
     $byLead    = $rows->groupBy('account_name');
     $activeTab = request('view', 'product');
 
     $showDesignCols = in_array($teamView, ['all', 'design']);
     $showDmCols     = in_array($teamView, ['all', 'dm']);
 
-    $totalCols = 5 + ($showDesignCols ? 5 : 0) + ($showDmCols ? 5 : 0) + 2; // +2 for status & actions
+    $totalCols = 5 + ($showDesignCols ? 5 : 0) + ($showDmCols ? 5 : 0) + 3; // +3 for production status, renewal status & actions
 
     $filterCount = 0;
     if (!empty($filters['date_from'])) $filterCount++;
@@ -359,13 +469,13 @@ details[open] .smm-chevron { transform: rotate(180deg); }
     {{-- ── Topbar ── --}}
     <div class="pts-topbar">
         <div>
-            <div class="pts-title">SMM Sheet</div>
-            <div class="pts-breadcrumb">Modules &gt; Projects &gt; SMM Sheet</div>
+            <div class="pts-title">Organic Campaigns</div>
+            <div class="pts-breadcrumb">Modules &gt; Projects &gt; Organic Campaigns</div>
         </div>
         <div class="pts-actions">
             <button type="button" class="pts-btn pts-btn-success" id="btnOpenEntryModal">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Add SMM Entry
+                 Add SMM Entry
             </button>
             <a href="{{ route('projects.smm-sheet.export', request()->query()) }}" class="pts-btn pts-btn-primary">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -379,63 +489,119 @@ details[open] .smm-chevron { transform: rotate(180deg); }
     </div>
 
     <div class="pts-body">
-        {{-- ── Stats Cards ── --}}
+        {{-- ── Stats Cards (Clickable Quick Filters) ── --}}
         <section class="pjd-stats">
-            {{-- Total Records --}}
-            <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #ea580c 0%, #ff7e3b 100%);">
+            {{-- 1. Total Records --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']))) }}"
+               class="pjd-stat {{ empty($filters['status']) ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #ea580c 0%, #ff7e3b 100%);">
                 <div class="pjd-stat-header">
                     <span class="pjd-stat-label">Total Records</span>
                     <span class="pjd-stat-icon">📋</span>
                 </div>
                 <div class="pjd-stat-body">
-                    <span class="pjd-stat-value">{{ $total }}</span>
+                    <span class="pjd-stat-value">{{ $totalRecords }}</span>
                 </div>
                 <div class="pjd-stat-footer">
                     Count-wise renewal records
                 </div>
-            </div>
+            </a>
 
-            {{-- Completed --}}
-            <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);">
+            {{-- 2. Active --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'active'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'active' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);">
                 <div class="pjd-stat-header">
-                    <span class="pjd-stat-label">Completed</span>
-                    <span class="pjd-stat-icon">✅</span>
+                    <span class="pjd-stat-label">Active</span>
+                    <span class="pjd-stat-icon">⚡</span>
                 </div>
                 <div class="pjd-stat-body">
-                    <span class="pjd-stat-value">{{ $completed }}</span>
+                    <span class="pjd-stat-value">{{ $totalActive }}</span>
                 </div>
                 <div class="pjd-stat-footer">
-                    Deliverables 100% completed
+                    Active running accounts
                 </div>
-            </div>
+            </a>
 
-            {{-- Pending --}}
-            <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);">
+            {{-- 3. Pending --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'pending'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'pending' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);">
                 <div class="pjd-stat-header">
                     <span class="pjd-stat-label">Pending</span>
                     <span class="pjd-stat-icon">⏳</span>
                 </div>
                 <div class="pjd-stat-body">
-                    <span class="pjd-stat-value">{{ $pending }}</span>
+                    <span class="pjd-stat-value">{{ $totalPending }}</span>
                 </div>
                 <div class="pjd-stat-footer">
-                    In progress deliveries
+                    Deliverables in progress
                 </div>
-            </div>
+            </a>
 
-            {{-- Overdue --}}
-            <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
+            {{-- 4. Overdue --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'overdue'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'overdue' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
                 <div class="pjd-stat-header">
                     <span class="pjd-stat-label">Overdue</span>
                     <span class="pjd-stat-icon">🔴</span>
                 </div>
                 <div class="pjd-stat-body">
-                    <span class="pjd-stat-value">{{ $overdue }}</span>
+                    <span class="pjd-stat-value">{{ $totalOverdue }}</span>
                 </div>
                 <div class="pjd-stat-footer">
                     Past delivery deadline
                 </div>
-            </div>
+            </a>
+
+            {{-- 5. CM Not Renewed --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'cm_not_renewed'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'cm_not_renewed' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                <div class="pjd-stat-header">
+                    <span class="pjd-stat-label">CM Not Renewed</span>
+                    <span class="pjd-stat-icon">⚠️</span>
+                </div>
+                <div class="pjd-stat-body">
+                    <span class="pjd-stat-value">{{ $totalCmNotRenewed }}</span>
+                </div>
+                <div class="pjd-stat-footer">
+                    Ending this month, pending renewal
+                </div>
+            </a>
+
+            {{-- 6. CM Renewed --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'cm_renewed'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'cm_renewed' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);">
+                <div class="pjd-stat-header">
+                    <span class="pjd-stat-label">CM Renewed</span>
+                    <span class="pjd-stat-icon">✅</span>
+                </div>
+                <div class="pjd-stat-body">
+                    <span class="pjd-stat-value">{{ $totalCmRenewed }}</span>
+                </div>
+                <div class="pjd-stat-footer">
+                    Renewed this month
+                </div>
+            </a>
+
+            {{-- 7. Completed --}}
+            <a href="{{ route('projects.smm-sheet', array_merge(request()->except(['status', 'page']), ['status' => 'completed'])) }}"
+               class="pjd-stat {{ ($filters['status'] ?? '') === 'completed' ? 'is-active-card' : '' }}"
+               style="--stat-gradient: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);">
+                <div class="pjd-stat-header">
+                    <span class="pjd-stat-label">Completed</span>
+                    <span class="pjd-stat-icon">✔️</span>
+                </div>
+                <div class="pjd-stat-body">
+                    <span class="pjd-stat-value">{{ $totalCompleted }}</span>
+                </div>
+                <div class="pjd-stat-footer">
+                    Deliverables 100% completed
+                </div>
+            </a>
         </section>
 
         {{-- ── Filter Accordion Card ── --}}
@@ -489,10 +655,18 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                     <div class="smm-field">
                         <label class="smm-label" for="smm_status">Status</label>
                         <select id="smm_status" name="status" class="smm-select no-select2" data-no-select2="true">
-                            <option value="">All Status</option>
-                            <option value="completed" @selected($filters['status'] === 'completed')>✅ Completed</option>
-                            <option value="pending"   @selected($filters['status'] === 'pending')>⏳ Pending</option>
-                            <option value="overdue"   @selected($filters['status'] === 'overdue')>🔴 Overdue</option>
+                            <option value="">All Statuses &amp; Renewals</option>
+                            <optgroup label="Production Status">
+                                <option value="pending"        @selected(($filters['status'] ?? '') === 'pending')>⏳ Pending</option>
+                                <option value="completed"      @selected(($filters['status'] ?? '') === 'completed')>✔️ Completed</option>
+                                <option value="overdue"        @selected(($filters['status'] ?? '') === 'overdue')>🔴 Overdue</option>
+                            </optgroup>
+                            <optgroup label="Renewal Status">
+                                <option value="active"         @selected(($filters['status'] ?? '') === 'active')>🟢 Active</option>
+                                <option value="cm_not_renewed" @selected(($filters['status'] ?? '') === 'cm_not_renewed')>⚠️ CM Not Renewed</option>
+                                <option value="cm_renewed"     @selected(($filters['status'] ?? '') === 'cm_renewed')>✅ CM Renewed</option>
+                                <option value="expired"        @selected(($filters['status'] ?? '') === 'expired')>⏳ Expired</option>
+                            </optgroup>
                         </select>
                     </div>
                     <input type="hidden" name="view" value="{{ $activeTab }}">
@@ -519,23 +693,34 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                         📋 Product Wise
                     </button>
                     <button type="button" class="smm-tab {{ $activeTab === 'lead' ? 'active' : '' }}" data-view="lead">
-                        🏢 Lead / Account Wise
+                        🏢 Lead Wise
                     </button>
                 </div>
 
-                {{-- Team Column Switcher for Admin / Multidisciplinary Roles --}}
+                {{-- Team View Selector --}}
                 @if($isAdminLike)
-                    <div class="smm-team-switcher">
-                        <a href="{{ request()->fullUrlWithQuery(['team_view' => 'all']) }}" class="smm-team-btn {{ $teamView === 'all' ? 'active-all' : '' }}">
-                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
-                            All Columns
-                        </a>
-                        <a href="{{ request()->fullUrlWithQuery(['team_view' => 'design']) }}" class="smm-team-btn {{ $teamView === 'design' ? 'active-design' : '' }}">
-                            🎨 Design Only
-                        </a>
-                        <a href="{{ request()->fullUrlWithQuery(['team_view' => 'dm']) }}" class="smm-team-btn {{ $teamView === 'dm' ? 'active-dm' : '' }}">
-                            📢 DM Only
-                        </a>
+                    <div class="smm-team-wrapper">
+                        <span class="smm-team-label">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" style="color:#64748b;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            Team View
+                        </span>
+                        <div class="smm-team-switcher">
+                            <a href="{{ route('projects.smm-sheet', array_merge(request()->query(), ['team_view' => 'all'])) }}"
+                               class="smm-team-btn {{ $teamView === 'all' ? 'active active-all' : '' }}"
+                               title="View deliverables for All Teams">
+                                <span class="smm-team-dot"></span> All
+                            </a>
+                            <a href="{{ route('projects.smm-sheet', array_merge(request()->query(), ['team_view' => 'design'])) }}"
+                               class="smm-team-btn {{ $teamView === 'design' ? 'active active-design' : '' }}"
+                               title="Filter to Design Team deliverables">
+                                <span class="smm-team-icon">🎨</span> Design
+                            </a>
+                            <a href="{{ route('projects.smm-sheet', array_merge(request()->query(), ['team_view' => 'dm'])) }}"
+                               class="smm-team-btn {{ $teamView === 'dm' ? 'active active-dm' : '' }}"
+                               title="Filter to Digital Marketing Team deliverables">
+                                <span class="smm-team-icon">📢</span> DM
+                            </a>
+                        </div>
                     </div>
                 @elseif($isDesignUser)
                     <span class="smm-team-badge is-design">🎨 Design Team View</span>
@@ -546,9 +731,9 @@ details[open] .smm-chevron { transform: rotate(180deg); }
 
             <div class="smm-records-label">
                 Showing <strong>{{ $total }}</strong> record{{ $total !== 1 ? 's' : '' }}
-                @if($overdue > 0)
+                @if($totalOverdue > 0)
                     &nbsp;·&nbsp;
-                    <span style="color:#dc2626;font-weight:700;">⚠ {{ $overdue }} overdue</span>
+                    <span style="color:#dc2626;font-weight:700;">⚠ {{ $totalOverdue }} overdue</span>
                 @endif
             </div>
         </div>
@@ -580,7 +765,8 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                                 <th colspan="5" class="th-group th-grp-dm sep-dm">📢 Digital Marketing Team</th>
                             @endif
 
-                            <th rowspan="2" class="th-center">Status</th>
+                            <th rowspan="2" class="th-center">Production Status</th>
+                            <th rowspan="2" class="th-center">Renewal Status</th>
                             <th rowspan="2" class="th-center" style="min-width:130px;">Action</th>
                         </tr>
                         <tr>
@@ -638,9 +824,27 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                                 @endif
 
                                 <td class="td-center">
-                                    <span class="smm-badge {{ $row['status'] }}">
-                                        <span class="smm-badge-dot"></span> {{ ucfirst($row['status']) }}
-                                    </span>
+                                    @if(!empty($row['is_completed']))
+                                        <span class="smm-badge completed"><span class="smm-badge-dot"></span> Completed</span>
+                                    @elseif(!empty($row['is_overdue']))
+                                        <span class="smm-badge overdue"><span class="smm-badge-dot"></span> Overdue</span>
+                                    @else
+                                        <span class="smm-badge pending"><span class="smm-badge-dot"></span> Pending</span>
+                                    @endif
+                                </td>
+
+                                <td class="td-center">
+                                    @if(!empty($row['is_expired']))
+                                        <span class="smm-badge expired"><span class="smm-badge-dot"></span> Expired</span>
+                                    @elseif(!empty($row['is_cm_renewed']))
+                                        <span class="smm-badge cm_renewed"><span class="smm-badge-dot"></span> CM Renewed</span>
+                                    @elseif(!empty($row['is_cm_not_renewed']))
+                                        <span class="smm-badge cm_not_renewed"><span class="smm-badge-dot"></span> CM Not Renewed</span>
+                                    @elseif(!empty($row['is_active']))
+                                        <span class="smm-badge active"><span class="smm-pulse-dot"></span> Active</span>
+                                    @else
+                                        <span style="color:#94a3b8;font-size:12px;">—</span>
+                                    @endif
                                 </td>
 
                                 <td class="td-center">
@@ -710,7 +914,8 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                                 <th colspan="5" class="th-group th-grp-dm sep-dm">📢 Digital Marketing Team</th>
                             @endif
 
-                            <th rowspan="2" class="th-center">Status</th>
+                            <th rowspan="2" class="th-center">Production Status</th>
+                            <th rowspan="2" class="th-center">Renewal Status</th>
                             <th rowspan="2" class="th-center" style="min-width:130px;">Action</th>
                         </tr>
                         <tr>
@@ -775,9 +980,27 @@ details[open] .smm-chevron { transform: rotate(180deg); }
                                     @endif
 
                                     <td class="td-center">
-                                        <span class="smm-badge {{ $row['status'] }}">
-                                            <span class="smm-badge-dot"></span> {{ ucfirst($row['status']) }}
-                                        </span>
+                                        @if(!empty($row['is_completed']))
+                                            <span class="smm-badge completed"><span class="smm-badge-dot"></span> Completed</span>
+                                        @elseif(!empty($row['is_overdue']))
+                                            <span class="smm-badge overdue"><span class="smm-badge-dot"></span> Overdue</span>
+                                        @else
+                                            <span class="smm-badge pending"><span class="smm-badge-dot"></span> Pending</span>
+                                        @endif
+                                    </td>
+
+                                    <td class="td-center">
+                                        @if(!empty($row['is_expired']))
+                                            <span class="smm-badge expired"><span class="smm-badge-dot"></span> Expired</span>
+                                        @elseif(!empty($row['is_cm_renewed']))
+                                            <span class="smm-badge cm_renewed"><span class="smm-badge-dot"></span> CM Renewed</span>
+                                        @elseif(!empty($row['is_cm_not_renewed']))
+                                            <span class="smm-badge cm_not_renewed"><span class="smm-badge-dot"></span> CM Not Renewed</span>
+                                        @elseif(!empty($row['is_active']))
+                                            <span class="smm-badge active"><span class="smm-pulse-dot"></span> Active</span>
+                                        @else
+                                            <span style="color:#94a3b8;font-size:12px;">—</span>
+                                        @endif
                                     </td>
 
                                     <td class="td-center">
@@ -1055,11 +1278,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const committedVideos  = parseInt(opt.dataset.committedVideos || 0);
         const team             = getSelectedTeam();
 
-        const currentDonePosters = team === 'dm' 
-            ? parseInt(opt.dataset.dmDonePosters || 0) 
+        const currentDonePosters = team === 'dm'
+            ? parseInt(opt.dataset.dmDonePosters || 0)
             : parseInt(opt.dataset.designDonePosters || 0);
-        const currentDoneVideos  = team === 'dm' 
-            ? parseInt(opt.dataset.dmDoneVideos || 0) 
+        const currentDoneVideos  = team === 'dm'
+            ? parseInt(opt.dataset.dmDoneVideos || 0)
             : parseInt(opt.dataset.designDoneVideos || 0);
 
         const enteredPosters = parseInt(inputPosters.value || 0);

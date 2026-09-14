@@ -384,10 +384,9 @@ class CrmReportController extends Controller
         }
         $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
-        $latestProductRows = $analyticsRows->unique('lead_product_id');
-        $totalAmount = (float) $latestProductRows->sum('total_amount');
         $receivedAmount = (float) $analyticsRows->sum('received_amount');
-        $outstandingAmount = (float) $latestProductRows->sum('outstanding_amount');
+        $outstandingAmount = (float) $analyticsRows->sum('outstanding_amount');
+        $totalAmount = $receivedAmount + $outstandingAmount;
 
         $summary = [
             'rows' => $totalCount,
@@ -448,9 +447,9 @@ class CrmReportController extends Controller
         $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
         $rows = $this->buildPaymentCollectionQuery($request)->get()->map(function ($row) {
-            $totalAmount = (float) ($row->total_amount ?? 0);
             $receivedAmount = (float) ($row->received_amount ?? 0);
-            $outstandingAmount = (float) ($row->outstanding_amount ?? max(0, $totalAmount - $receivedAmount));
+            $outstandingAmount = (float) ($row->outstanding_amount ?? 0);
+            $totalAmount = (float) ($row->total_amount ?? ($receivedAmount + $outstandingAmount));
 
             return [
                 'Payment ID' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
@@ -678,7 +677,7 @@ class CrmReportController extends Controller
                 'leads.company_name',
                 'branches.name as branch_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
+                DB::raw('(lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
                 DB::raw('(

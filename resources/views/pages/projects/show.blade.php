@@ -1200,6 +1200,17 @@ document.addEventListener('keydown', function(e) {
                     </div>
 
                     <div class="ps-update-overview">
+                        @if(auth()->user()->canViewBudgetApprovalDetails() && $projectItem->lead_budget_amount)
+                            <div class="ps-update-overview-card" style="--update-accent:#16a34a; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #86efac;">
+                                <div class="ps-update-overview-label" style="color: #166534; font-weight: 800; font-size: 11px; text-transform: uppercase;">💰 Lead Budget Amount</div>
+                                <div class="ps-update-overview-value" style="color: #15803d; font-size: 20px; font-weight: 900;">
+                                    ₹{{ number_format($projectItem->lead_budget_amount, 2) }}
+                                    @if($projectItem->budget_amount_type)
+                                        <span style="font-size: 12px; font-weight: 700; color: #166534;">({{ $projectItem->budget_amount_type }})</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
                         @foreach($updateTypeMeta as $typeKey => $typeMeta)
                             <div class="ps-update-overview-card" style="--update-accent:{{ $typeMeta['accent'] }};">
                                 <div class="ps-update-overview-label">{{ $typeMeta['label'] }}</div>
@@ -1250,7 +1261,8 @@ document.addEventListener('keydown', function(e) {
                                         || str_contains((string)$update->content, 'Production Approval')
                                         || str_contains((string)$update->content, 'Team Lead Allocation')
                                         || str_contains((string)$update->content, 'Team Member Allocation')
-                                        || str_contains((string)$update->content, 'OVP Executive Allocation');
+                                        || str_contains((string)$update->content, 'OVP Executive Allocation')
+                                        || str_contains((string)$update->content, 'Welcome Call Completed');
                                 @endphp
                                 <article class="ps-update-item" style="--update-accent:{{ $typeMeta['accent'] }};">
                                     <div class="ps-update-head">
@@ -1272,7 +1284,18 @@ document.addEventListener('keydown', function(e) {
                                             </div>
                                         @endif
                                     </div>
-                                    <div class="ps-update-content">{!! $update->content !!}</div>
+                                    <div class="ps-update-content">
+                                        {!! $update->content !!}
+                                        @if(auth()->user()->canViewBudgetApprovalDetails() && $projectItem->lead_budget_amount && (str_contains((string)$update->content, 'Production Approval') || str_contains((string)$update->content, 'Production Initiation')))
+                                            <div style="margin-top: 10px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 11px; font-weight: 800; color: #166534; text-transform: uppercase;">💰 Lead Budget:</span>
+                                                <span style="font-size: 13px; font-weight: 800; color: #15803d;">₹{{ number_format($projectItem->lead_budget_amount, 2) }}</span>
+                                                @if($projectItem->budget_amount_type)
+                                                    <span style="font-size: 11px; font-weight: 700; color: #166534;">({{ $projectItem->budget_amount_type }})</span>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
                                 </article>
                             @endforeach
                         </div>
@@ -1873,6 +1896,7 @@ function handleMoveToTestingSubmit(event, form) {
             'updateFormAction' => route('projects.updates.store', $projectItem),
             'updateEditorId' => 'projectUpdateEditor',
             'showProjectSelector' => false,
+            'projectItem' => $projectItem,
         ])
     </div>
 </div>
