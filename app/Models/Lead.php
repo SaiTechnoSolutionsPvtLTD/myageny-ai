@@ -308,10 +308,19 @@ class Lead extends Model
         return $this->lead_status ?? '';
     }
 
+    public function getConvertedDealValueAttribute(): float
+    {
+        $convertedStatusIds = LeadProduct::convertedStatusIds();
+        return (float) $this->products
+            ->filter(fn ($p) => $p->isConvertedProduct($convertedStatusIds))
+            ->sum('total_price');
+    }
+
     public function getFormattedDealValueAttribute(): string
     {
-        if (!$this->deal_value) return '—';
-        return '₹' . number_format($this->deal_value, 2);
+        $val = $this->converted_deal_value > 0 ? $this->converted_deal_value : (float) ($this->deal_value ?? 0);
+        if ($val <= 0) return '—';
+        return '₹' . number_format($val, 2);
     }
 
     // ── Auto-set created_by ───────────────────────────────────────

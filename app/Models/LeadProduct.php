@@ -196,7 +196,9 @@ class LeadProduct extends Model
         $ids = $convertedStatusIds ?? static::convertedStatusIds();
         $status = strtolower(trim((string) $this->product_status));
         return in_array($status, ['converted', 'won'], true)
-            || ($this->lead_status_id && in_array($this->lead_status_id, $ids, true));
+            || ($this->lead_status_id && in_array($this->lead_status_id, $ids, true))
+            || static::statusKey($this->product_status) === 'converted'
+            || static::statusKey($this->leadStatus?->name ?? '') === 'converted';
     }
 
     // ── Accessors ─────────────────────────────────────────────────────

@@ -56,11 +56,16 @@ class SalesTargetSettingController extends Controller
                 }
             });
 
-        // Filter users by selected branch
+        // Filter users by selected branch:
+        // If secondary branches are assigned, match only those secondary branches.
+        // If no secondary branches are assigned, fall back to the primary branch.
         if ($selectedBranchId) {
             $usersQuery->where(function($q) use ($selectedBranchId) {
-                $q->where('branch_id', $selectedBranchId)
-                  ->orWhereHas('branches', fn($bq) => $bq->where('branches.id', $selectedBranchId));
+                $q->whereHas('branches', fn($bq) => $bq->where('branches.id', $selectedBranchId))
+                  ->orWhere(function($sq) use ($selectedBranchId) {
+                      $sq->whereDoesntHave('branches')
+                         ->where('branch_id', $selectedBranchId);
+                  });
             });
         }
 
