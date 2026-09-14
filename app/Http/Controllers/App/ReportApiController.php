@@ -401,13 +401,15 @@ class ReportApiController extends Controller
             $reportRows = $query->paginate($perPage)->withQueryString();
 
             $analyticsRows = (clone $query)->get();
-            $latestProductRows = $analyticsRows->unique('lead_product_id');
+            $receivedAmount = round((float) $analyticsRows->sum('received_amount'), 2);
+            $outstandingAmount = round((float) $analyticsRows->sum('outstanding_amount'), 2);
+            $totalAmount = round($receivedAmount + $outstandingAmount, 2);
 
             $summary = [
                 'rows'                => $analyticsRows->count(),
-                'total_amount'        => round((float) $latestProductRows->sum('total_amount'), 2),
-                'received_amount'     => round((float) $analyticsRows->sum('received_amount'), 2),
-                'outstanding_amount'  => round((float) $latestProductRows->sum('outstanding_amount'), 2),
+                'total_amount'        => $totalAmount,
+                'received_amount'     => $receivedAmount,
+                'outstanding_amount'  => $outstandingAmount,
             ];
 
             $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -539,7 +541,7 @@ class ReportApiController extends Controller
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('COALESCE(lead_products.total_price, 0) as total_amount'),
+                DB::raw('(lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0)) as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - COALESCE(payment_totals.total_received, 0), 0) as outstanding_amount'),
                 'collectors.name as received_by',
             ])

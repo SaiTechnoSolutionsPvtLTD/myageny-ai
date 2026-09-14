@@ -825,6 +825,8 @@ class ProjectController extends Controller
     {
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
+        $isCompanyAdmin = (bool) ($user && ($user->isCompanyAdmin() || $user->isSuperAdmin() || $user->hasAdminLikeRole()));
+        $filterDepartment = strtolower(trim((string) $request->query('filter_department', '')));
 
         $visibility = app(\App\Services\DataVisibilityService::class);
         $mappedIds = $visibility->descendantUserIds($user);
@@ -949,6 +951,7 @@ class ProjectController extends Controller
             'filter_status' => trim((string) $request->query('filter_status', '')),
             'filter_user_id' => trim((string) $request->query('filter_user_id', '')),
             'filter_department_id' => $selectedDepartmentId,
+            'filter_department' => $filterDepartment,
         ];
 
         $accessibleUserIds = $isAdminLike
@@ -956,7 +959,12 @@ class ProjectController extends Controller
             : $allMappedIds->all();
 
         $timesheets = ProjectTimesheet::query()
-            ->with(['project' => fn ($query) => $query->with($this->projectRelations()), 'user'])
+            ->with([
+                'project' => fn ($query) => $query->with($this->projectRelations()),
+                'user.roles.department',
+                'user.employeeOnboarding.department',
+                'user.internJoiningForm.department',
+            ])
             ->when(!$isAdminLike, function ($query) use ($accessibleUserIds) {
                 $query->whereIn('user_id', $accessibleUserIds);
             })
@@ -999,6 +1007,28 @@ class ProjectController extends Controller
             ->latest('created_at')
             ->latest('timesheet_date')
             ->get();
+
+        // Calculate department counts across all filtered timesheets before department-specific filtering
+        $deptCounts = [
+            'all' => $timesheets->count(),
+            'development' => 0,
+            'designing' => 0,
+            'digital_marketing' => 0,
+        ];
+
+        foreach ($timesheets as $ts) {
+            $deptSlug = $this->resolveTimesheetDepartmentSlug($ts);
+            if (isset($deptCounts[$deptSlug])) {
+                $deptCounts[$deptSlug]++;
+            }
+        }
+
+        // Filter timesheets if department card is clicked
+        if (in_array($filterDepartment, ['development', 'designing', 'digital_marketing'], true)) {
+            $timesheets = $timesheets->filter(function ($ts) use ($filterDepartment) {
+                return $this->resolveTimesheetDepartmentSlug($ts) === $filterDepartment;
+            });
+        }
 
         $timesheetUserIds = $timesheets->pluck('user_id')->unique()->filter()->all();
         $timesheetProjectIds = $timesheets->pluck('production_initiation_id')->unique()->filter()->all();
@@ -1061,6 +1091,8 @@ class ProjectController extends Controller
             'timesheetFilters' => $timesheetFilters,
             'today' => Carbon::today()->toDateString(),
             'isAdminLike' => $isAdminLike,
+            'isCompanyAdmin' => $isCompanyAdmin,
+            'deptCounts' => $deptCounts,
             'canViewTeamTimesheets' => $canViewTeamTimesheets,
             'allUsers' => $allUsers,
             'departments' => $departments,
@@ -4690,5 +4722,84 @@ class ProjectController extends Controller
             'stats' => $stats,
             'isDesigningDashboard' => $user->belongsToDesigningDepartment(),
         ]);
+    }
+
+    public function resolveTimesheetDepartmentSlug(ProjectTimesheet $timesheet): string
+    {
+        // 1. Check assigned user's role department
+        $userDepts = $timesheet->user?->roles?->map(function ($r) {
+            return strtolower(trim($r->department?->name ?? ''));
+        })->filter()->all() ?? [];
+
+        foreach ($userDepts as $deptName) {
+            if (str_contains($deptName, 'develop') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app')) {
+                return 'development';
+            }
+            if (str_contains($deptName, 'design') || str_contains($deptName, 'video')) {
+                return 'designing';
+            }
+            if (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm') || str_contains($deptName, 'smm') || str_contains($deptName, 'seo')) {
+                return 'digital_marketing';
+            }
+        }
+
+        // 2. Check employee onboarding / intern joining form departments
+        $extraDeptNames = array_filter([
+            strtolower(trim($timesheet->user?->employeeOnboarding?->department?->name ?? '')),
+            strtolower(trim($timesheet->user?->internJoiningForm?->department?->name ?? '')),
+        ]);
+        foreach ($extraDeptNames as $deptName) {
+            if (str_contains($deptName, 'develop') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app')) {
+                return 'development';
+            }
+            if (str_contains($deptName, 'design') || str_contains($deptName, 'video')) {
+                return 'designing';
+            }
+            if (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm') || str_contains($deptName, 'smm') || str_contains($deptName, 'seo')) {
+                return 'digital_marketing';
+            }
+        }
+
+        // 3. Check user's role names directly
+        $roleNames = $timesheet->user?->roles?->pluck('name')->map(fn($n) => strtolower(trim($n)))->all() ?? [];
+        foreach ($roleNames as $roleName) {
+            if (str_contains($roleName, 'develop') || str_contains($roleName, 'flutter') || str_contains($roleName, 'laravel') || str_contains($roleName, 'react') || str_contains($roleName, 'frontend') || str_contains($roleName, 'backend') || str_contains($roleName, 'fullstack')) {
+                return 'development';
+            }
+            if (str_contains($roleName, 'design') || str_contains($roleName, 'graphic') || str_contains($roleName, 'ui') || str_contains($roleName, 'ux') || str_contains($roleName, 'video')) {
+                return 'designing';
+            }
+            if (str_contains($roleName, 'digital') || str_contains($roleName, 'marketing') || str_contains($roleName, 'dm') || str_contains($roleName, 'smm') || str_contains($roleName, 'seo')) {
+                return 'digital_marketing';
+            }
+        }
+
+        // 4. Check project department
+        $projDeptName = strtolower(trim($timesheet->project?->department?->name ?? ''));
+        $projDeptId = (int) ($timesheet->project?->department_id ?? 0);
+
+        if ($projDeptId === 1 || str_contains($projDeptName, 'develop') || str_contains($projDeptName, 'software') || str_contains($projDeptName, 'web') || str_contains($projDeptName, 'app')) {
+            return 'development';
+        }
+        if ($projDeptId === 2 || str_contains($projDeptName, 'design') || str_contains($projDeptName, 'video')) {
+            return 'designing';
+        }
+        if ($projDeptId === 3 || str_contains($projDeptName, 'digital') || str_contains($projDeptName, 'marketing') || str_contains($projDeptName, 'dm') || str_contains($projDeptName, 'smm') || str_contains($projDeptName, 'seo')) {
+            return 'digital_marketing';
+        }
+
+        // 5. Fallback to product name
+        $productName = strtolower(trim($timesheet->project?->product_name ?: ($timesheet->project?->leadProduct?->product_name ?: '')));
+        if (str_contains($productName, 'design') || str_contains($productName, 'poster') || str_contains($productName, 'logo') || str_contains($productName, 'video') || str_contains($productName, 'creative')) {
+            return 'designing';
+        }
+        if (str_contains($productName, 'seo') || str_contains($productName, 'social media') || str_contains($productName, 'smm') || str_contains($productName, 'campaign') || str_contains($productName, 'marketing')) {
+            return 'digital_marketing';
+        }
+        if (str_contains($productName, 'develop') || str_contains($productName, 'website') || str_contains($productName, 'app') || str_contains($productName, 'software')) {
+            return 'development';
+        }
+
+        return 'other';
     }
 }

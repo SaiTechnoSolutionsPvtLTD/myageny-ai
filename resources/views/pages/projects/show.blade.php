@@ -1261,7 +1261,8 @@ document.addEventListener('keydown', function(e) {
                                         || str_contains((string)$update->content, 'Production Approval')
                                         || str_contains((string)$update->content, 'Team Lead Allocation')
                                         || str_contains((string)$update->content, 'Team Member Allocation')
-                                        || str_contains((string)$update->content, 'OVP Executive Allocation');
+                                        || str_contains((string)$update->content, 'OVP Executive Allocation')
+                                        || str_contains((string)$update->content, 'Welcome Call Completed');
                                 @endphp
                                 <article class="ps-update-item" style="--update-accent:{{ $typeMeta['accent'] }};">
                                     <div class="ps-update-head">

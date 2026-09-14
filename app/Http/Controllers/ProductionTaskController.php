@@ -21,6 +21,7 @@ class ProductionTaskController extends Controller
     {
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
+        $isCompanyAdmin = (bool) ($user && ($user->isCompanyAdmin() || $user->isSuperAdmin() || $user->hasAdminLikeRole()));
 
         $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->orderBy('name')->get(['users.id', 'users.name']);
         $hasMappedUsers = $managedUsers->isNotEmpty();
@@ -63,9 +64,10 @@ class ProductionTaskController extends Controller
         $filterProjectId = trim((string) $request->query('filter_project_id', ''));
         $filterUserId = trim((string) $request->query('filter_user_id', ''));
         $filterStatus = trim((string) $request->query('filter_status', ''));
+        $filterDepartment = strtolower(trim((string) $request->query('filter_department', '')));
 
         $allTasks = ProductionTask::query()
-            ->with(['creator', 'assignedUser', 'lead', 'project'])
+            ->with(['creator', 'assignedUser.roles.department', 'lead', 'project.department'])
             ->when(!$isAdminLike, function ($query) use ($accessibleUserIds, $user) {
                 $query->where(function ($q) use ($accessibleUserIds, $user) {
                     $q->whereIn('assigned_to', $accessibleUserIds)
@@ -104,6 +106,28 @@ class ProductionTaskController extends Controller
             ->latest('task_date')
             ->latest('id')
             ->get();
+
+        // Calculate department counts across all filtered tasks before department-specific filtering
+        $deptCounts = [
+            'all' => $allTasks->count(),
+            'development' => 0,
+            'designing' => 0,
+            'digital_marketing' => 0,
+        ];
+
+        foreach ($allTasks as $task) {
+            $deptSlug = $this->resolveTaskDepartmentSlug($task);
+            if (isset($deptCounts[$deptSlug])) {
+                $deptCounts[$deptSlug]++;
+            }
+        }
+
+        // Filter tasks if department is explicitly selected
+        if (in_array($filterDepartment, ['development', 'designing', 'digital_marketing'], true)) {
+            $allTasks = $allTasks->filter(function ($task) use ($filterDepartment) {
+                return $this->resolveTaskDepartmentSlug($task) === $filterDepartment;
+            });
+        }
 
         // Group tasks by Date + Assigned User
         $groupedTasks = $allTasks->groupBy(function ($task) {
@@ -145,7 +169,8 @@ class ProductionTaskController extends Controller
             || !empty($filterLeadId)
             || !empty($filterProjectId)
             || !empty($filterUserId)
-            || !empty($filterStatus);
+            || !empty($filterStatus)
+            || !empty($filterDepartment);
 
         $cutoffInfo = $this->getTaskCutoffInfo();
 
@@ -155,9 +180,11 @@ class ProductionTaskController extends Controller
             'uniqueLeads' => $uniqueLeads,
             'mappedTeamMembers' => $mappedTeamMembers,
             'isAdminLike' => $isAdminLike,
+            'isCompanyAdmin' => $isCompanyAdmin,
             'hasActiveFilters' => $hasActiveFilters,
             'isTaskCreationAllowed' => $cutoffInfo['is_allowed'],
             'cutoffInfo' => $cutoffInfo,
+            'deptCounts' => $deptCounts,
             'filters' => [
                 'quick_date' => $quickDate,
                 'date_from' => $dateFrom,
@@ -167,6 +194,7 @@ class ProductionTaskController extends Controller
                 'filter_project_id' => $filterProjectId,
                 'filter_user_id' => $filterUserId,
                 'filter_status' => $filterStatus,
+                'filter_department' => $filterDepartment,
             ],
         ]);
     }
@@ -583,6 +611,57 @@ class ProductionTaskController extends Controller
                 ? floor($minutesRemaining / 60) . 'h ' . ($minutesRemaining % 60) . 'm'
                 : $minutesRemaining . 'm',
         ];
+    }
+
+    /**
+     * Resolves the department slug ('development', 'designing', 'digital_marketing', 'other') for a given ProductionTask.
+     */
+    public function resolveTaskDepartmentSlug(ProductionTask $task): string
+    {
+        // 1. Check assigned user's role department
+        $userDepts = $task->assignedUser?->roles->map(function ($r) {
+            return strtolower(trim($r->department?->name ?? ''));
+        })->filter()->all() ?? [];
+
+        foreach ($userDepts as $deptName) {
+            if (str_contains($deptName, 'develop') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app')) {
+                return 'development';
+            }
+            if (str_contains($deptName, 'design') || str_contains($deptName, 'video')) {
+                return 'designing';
+            }
+            if (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm') || str_contains($deptName, 'smm') || str_contains($deptName, 'seo')) {
+                return 'digital_marketing';
+            }
+        }
+
+        // 2. Check project department
+        $projDeptName = strtolower(trim($task->project?->department?->name ?? ''));
+        $projDeptId = (int) ($task->project?->department_id ?? 0);
+
+        if ($projDeptId === 1 || str_contains($projDeptName, 'develop') || str_contains($projDeptName, 'software') || str_contains($projDeptName, 'web') || str_contains($projDeptName, 'app')) {
+            return 'development';
+        }
+        if ($projDeptId === 2 || str_contains($projDeptName, 'design') || str_contains($projDeptName, 'video')) {
+            return 'designing';
+        }
+        if ($projDeptId === 3 || str_contains($projDeptName, 'digital') || str_contains($projDeptName, 'marketing') || str_contains($projDeptName, 'dm') || str_contains($projDeptName, 'smm') || str_contains($projDeptName, 'seo')) {
+            return 'digital_marketing';
+        }
+
+        // 3. Fallback to product name
+        $productName = strtolower(trim($task->product_name ?: ($task->project?->product_name ?: '')));
+        if (str_contains($productName, 'design') || str_contains($productName, 'poster') || str_contains($productName, 'logo') || str_contains($productName, 'video') || str_contains($productName, 'creative')) {
+            return 'designing';
+        }
+        if (str_contains($productName, 'seo') || str_contains($productName, 'social media') || str_contains($productName, 'smm') || str_contains($productName, 'campaign') || str_contains($productName, 'marketing')) {
+            return 'digital_marketing';
+        }
+        if (str_contains($productName, 'develop') || str_contains($productName, 'website') || str_contains($productName, 'app') || str_contains($productName, 'software')) {
+            return 'development';
+        }
+
+        return 'other';
     }
 }
 
