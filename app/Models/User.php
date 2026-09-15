@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -910,6 +911,11 @@ class User extends Authenticatable
     public function employeeOnboarding(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(\App\Models\EmployeeOnboarding::class, 'portal_user_id');
+    }
+
+    public function employee(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->employeeOnboarding();
     }
 
     public function internJoiningForm(): \Illuminate\Database\Eloquent\Relations\HasOne

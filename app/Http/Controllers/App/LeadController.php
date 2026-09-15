@@ -165,22 +165,72 @@ class LeadController extends Controller
         // Mirrors web's LeadController@index — the Filter Leads sheet's new
         // "Pre Sales Exec" dropdown (see meta()'s pre_sale_executives list).
         if ($request->filled('pre_sale_executive_id')) $query->where('pre_sale_executive_id', $request->pre_sale_executive_id);
-        if ($request->filled('date_from'))     $query->whereDate('lead_date', '>=', $request->date_from);
-        if ($request->filled('date_to'))       $query->whereDate('lead_date', '<=', $request->date_to);
+        if ($request->boolean('untouched') || $request->input('is_untouched') === '1' || $request->input('untouched') === '1') {
+            $query->whereDoesntHave('callUpdates');
+        }
+        // Date filters check lead_date OR created_at — mirrors web LeadController@index
+        // and SuperAdminDashboardController@dashboardData so the lead list and dashboard
+        // counts stay strictly identical (leads with null lead_date are not dropped).
+        if ($request->filled('date_from')) {
+            $dateFrom = $request->date_from;
+            $query->where(function ($dq) use ($dateFrom) {
+                $dq->whereDate('lead_date', '>=', $dateFrom)
+                   ->orWhereDate('created_at', '>=', $dateFrom);
+            });
+        }
+        if ($request->filled('date_to')) {
+            $dateTo = $request->date_to;
+            $query->where(function ($dq) use ($dateTo) {
+                $dq->whereDate('lead_date', '<=', $dateTo)
+                   ->orWhereDate('created_at', '<=', $dateTo);
+            });
+        }
 
         $perPage = (int) $request->input('per_page', 15);
         $leads   = $query->paginate($perPage);
 
-        $statsBase = Lead::query();
-        $this->visibility->applyLeadVisibility($statsBase, $request->user());
+        // Stats for top cards — computed on leads matching active filters (same as web index)
+        $activeLeadIds = (clone $query)->pluck('leads.id');
+        $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
+
+        $convertedStatusIds = LeadStatus::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('name', 'like', '%convert%');
+            })
+            ->pluck('id')
+            ->toArray();
+
+        $isConvertedProduct = function (LeadProduct $lp) use ($convertedStatusIds) {
+            $status = strtolower(trim((string) $lp->product_status));
+            return in_array($status, ['converted', 'won'])
+                || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+        };
+
+        $convertedProducts    = $lpProducts->filter($isConvertedProduct);
+        $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
+
+        $convertedProductsCount = $convertedProducts->count();
+        $upcomingAmount         = (float) $nonConvertedProducts->sum('total_price');
+        $convertedValue         = (float) $convertedProducts->sum('total_price');
+        $totalProductsCount     = $lpProducts->count();
+        $totalPipeline          = (float) $lpProducts->sum('total_price');
+        $wonLeadsCount          = (clone $query)->converted()->count();
+        $untouchedCount         = (clone $query)->whereDoesntHave('callUpdates')->count();
 
         $stats = [
-            'total'         => (clone $statsBase)->count(),
-            'new'           => (clone $statsBase)->where('lead_status', 'new')->count(),
-            'won'           => (clone $statsBase)->where('lead_status', 'won')->count(),
-            'lost'          => (clone $statsBase)->where('lead_status', 'lost')->count(),
-            'pipeline'      => (clone $statsBase)->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value'),
-            'high_priority' => (clone $statsBase)->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count(),
+            'total'              => $activeLeadIds->count(),
+            'total_products'     => $totalProductsCount,
+            'pipeline'           => $totalPipeline,
+            'untouched'          => $untouchedCount,
+            'new'                => $untouchedCount,
+            'active_customers'   => $wonLeadsCount,
+            'converted_products' => $convertedProductsCount,
+            'upcoming_amount'    => $upcomingAmount,
+            'converted_value'    => $convertedValue,
+            'won'                => $wonLeadsCount,
+            'lost'               => (clone $query)->lost()->count(),
+            'high_priority'      => (clone $query)->where('priority', 'high')->count(),
         ];
 
         return response()->json([
@@ -845,17 +895,21 @@ class LeadController extends Controller
             // ── Call Updates ──────────────────────────────────────────────────
             'call_updates' => $lead->relationLoaded('callUpdates')
                 ? $lead->callUpdates->map(fn($c) => [
-                    'id'               => $c->id,
-                    'called_at'        => $c->called_at?->format('d M Y, h.i A'),
-                    'call_type'        => $c->call_type,
-                    'call_type_label'  => $c->call_type_label,
-                    'duration_minutes' => $c->duration_minutes,
-                    'outcome'          => $c->outCome?->name ?? $c->outcome,
-                    'outcome_label'    => $c->outComeSubCategory?->name ?? $c->outcome_subcategory,
-                    'outcome_color'    => $c->outcome_color,
-                    'notes'            => $c->notes,
-                    'next_follow_up'   => $c->next_follow_up?->format('d M Y, h.i A'),
-                    'user'             => $c->user
+                    'id'                     => $c->id,
+                    'called_at'              => $c->called_at?->format('d M Y, h.i A'),
+                    'call_type'              => $c->call_type,
+                    'call_type_label'        => $c->call_type_label,
+                    'duration_minutes'       => $c->duration_minutes,
+                    'outcome'                => $c->outCome?->name ?? $c->outcome,
+                    'outcome_label'          => $c->outComeSubCategory?->name ?? $c->outcome_subcategory,
+                    'outcome_id'             => $c->getRawOriginal('outcome') !== null ? (string) $c->getRawOriginal('outcome') : null,
+                    'outcome_subcategory_id' => $c->getRawOriginal('outcome_subcategory') !== null ? (string) $c->getRawOriginal('outcome_subcategory') : null,
+                    'outcome_color'          => $c->outcome_color,
+                    'notes'                  => $c->notes,
+                    'next_follow_up'         => $c->next_follow_up?->format('d M Y, h.i A'),
+                    'next_follow_up_date'    => $c->next_follow_up?->toDateString(),
+                    'followup_time'          => $c->followup_time,
+                    'user'                   => $c->user
                         ? ['id' => $c->user->id, 'name' => $c->user->name]
                         : null,
                 ])->values()

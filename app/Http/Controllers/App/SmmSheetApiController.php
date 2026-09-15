@@ -23,7 +23,7 @@ class SmmSheetApiController extends Controller
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     /**
-     * Check if user is authorized to access SMM Sheet module.
+     * Check if user is authorized to access Organic Campaigns module.
      */
     private function authorizeSmmAccess(User $user): void
     {
@@ -31,10 +31,9 @@ class SmmSheetApiController extends Controller
             $user->belongsToDesigningDepartment() ||
             $user->belongsToDigitalMarketingDepartment() ||
             $user->hasAdminLikeRole() ||
-            $user->canViewProjectsDashboardSwitcher() ||
-            $user->canAccessProjectsModule(),
+            $user->canViewProjectsDashboardSwitcher(),
             403,
-            'Unauthorized access to SMM Sheet.'
+            'Unauthorized access to Organic Campaigns.'
         );
     }
 
@@ -63,7 +62,7 @@ class SmmSheetApiController extends Controller
 
     /**
      * GET /mobile/projects/smm-sheet
-     * Returns paginated SMM Sheet records, KPI stats, leads dropdown, and active accounts.
+     * Returns paginated Organic Campaigns (SMM Sheet) records, 7 KPI stats, leads dropdown, and active accounts.
      */
     public function index(Request $request): JsonResponse
     {
@@ -147,7 +146,7 @@ class SmmSheetApiController extends Controller
         $dateFrom = $request->input('date_from');
         $dateTo   = $request->input('date_to');
         $leadId   = $request->input('lead_id');
-        $status   = $request->input('status');
+        $status   = is_array($request->input('status')) ? (reset($request->input('status')) ?: '') : (string) ($request->input('status') ?? '');
         $search   = trim((string) $request->input('search', ''));
 
         $query = DB::table('smm_sheets as s')
@@ -256,8 +255,33 @@ class SmmSheetApiController extends Controller
             ->groupBy('production_initiation_id') : collect();
 
         $today = now()->toDateString();
+        $cmStart = now()->startOfMonth()->toDateString();
+        $cmEnd   = now()->endOfMonth()->toDateString();
 
-        $allRows = $sheets->map(function ($s) use ($timesheetSums, $today, $usersWithDept) {
+        // Extended parent campaign IDs (to detect renewals)
+        $extendedParentIds = DB::table('customer_campaigns')
+            ->whereNotNull('extended_from_id')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->pluck('extended_from_id')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        // All customer campaigns grouped by lead
+        $campaignsByLead = DB::table('customer_campaigns')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->whereNull('deleted_at')
+            ->get()
+            ->groupBy('lead_id');
+
+        // All smm_sheets grouped by lead
+        $allLeadSheets = DB::table('smm_sheets')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->whereNull('deleted_at')
+            ->get()
+            ->groupBy('lead_id');
+
+        $allRows = $sheets->map(function ($s) use ($timesheetSums, $today, $usersWithDept, $campaignsByLead, $allLeadSheets, $extendedParentIds, $cmStart, $cmEnd) {
             $committedPosters = (int) $s->committed_posters;
             $committedVideos  = (int) $s->committed_videos;
 
@@ -315,6 +339,7 @@ class SmmSheetApiController extends Controller
                 }
             }
 
+            // Fallback to timesheet persons if any
             if ($s->pi_id && $timesheetSums->has($s->pi_id)) {
                 foreach ($timesheetSums->get($s->pi_id) as $ts) {
                     $tsDeptLower = strtolower($ts->dept_name ?? '');
@@ -330,16 +355,65 @@ class SmmSheetApiController extends Controller
             $designPersons = ! empty($designPersonsList) ? implode(', ', array_unique($designPersonsList)) : '-';
             $dmPersons     = ! empty($dmPersonsList)     ? implode(', ', array_unique($dmPersonsList))     : '-';
 
-            // Status calculation
+            // Dates & Renewal calculation matching web SmmSheetController
+            $deliveryDate  = $s->delivery_date ?: $s->project_delivery_date;
+            $targetDate    = $s->end_date ?: $deliveryDate;
+            $targetDateStr = $targetDate ? Carbon::parse($targetDate)->toDateString() : null;
+            $startDateStr  = $s->start_date ? Carbon::parse($s->start_date)->toDateString() : null;
+
+            // Check if lead / SMM sheet has renewals
+            $leadCampaigns = $campaignsByLead->get($s->lead_id, collect());
+            $campaignRenewed = $leadCampaigns->contains(function ($c) use ($extendedParentIds, $cmStart, $cmEnd) {
+                $cEnd     = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
+                $cCreated = Carbon::parse($c->created_at)->toDateString();
+                $cStart   = $c->start_date ? Carbon::parse($c->start_date)->toDateString() : null;
+
+                return (in_array($c->id, $extendedParentIds, true) && $cEnd && $cEnd >= $cmStart && $cEnd <= $cmEnd)
+                    || (! empty($c->extended_from_id) && (($cCreated >= $cmStart && $cCreated <= $cmEnd) || ($cStart && $cStart >= $cmStart && $cStart <= $cmEnd)));
+            });
+
+            $leadOtherSheets = $allLeadSheets->get($s->lead_id, collect())->where('id', '!=', $s->smm_sheet_id);
+            $sheetRenewed = $leadOtherSheets->contains(function ($os) use ($targetDateStr, $cmStart, $cmEnd) {
+                $osStart = $os->start_date ? Carbon::parse($os->start_date)->toDateString() : null;
+                if ($targetDateStr && $osStart && $osStart >= $targetDateStr) {
+                    return true;
+                }
+                return ($osStart && $osStart >= $cmStart && $osStart <= $cmEnd) || ($os->status === 'cm_renewed');
+            });
+
+            $isRenewed = $campaignRenewed || $sheetRenewed || ($s->smm_status === 'cm_renewed');
+
+            // Status calculations
             $totalCommitted = $committedPosters + $committedVideos;
             $totalCompleted = $completedPosters + $completedVideos;
-            $deliveryDate   = $s->delivery_date ?: $s->project_delivery_date ?: $s->end_date;
+            $finalDeliveryDate = $s->delivery_date ?: $s->project_delivery_date ?: $s->end_date;
 
-            $computedStatus = 'pending';
-            if ($totalCommitted > 0 && $totalCompleted >= $totalCommitted) {
+            $isCompleted = ($totalCommitted > 0 && $totalCompleted >= $totalCommitted);
+            $isOverdue   = (! $isCompleted && $finalDeliveryDate && Carbon::parse($finalDeliveryDate)->toDateString() < $today);
+            $isExpired   = (! $isCompleted && $targetDateStr && $targetDateStr < $today);
+            $isCmRenewed = (bool) $isRenewed && (
+                ($targetDateStr && $targetDateStr >= $cmStart && $targetDateStr <= $cmEnd)
+                || ($startDateStr && $startDateStr >= $cmStart && $startDateStr <= $cmEnd)
+                || ($s->smm_status === 'cm_renewed')
+            );
+            $isCmNotRenewed = (! $isRenewed && $targetDateStr && $targetDateStr >= $cmStart && $targetDateStr <= $cmEnd);
+            $isActive       = (! $isExpired && (! $targetDateStr || $targetDateStr >= $today));
+            $isPending      = (! $isCompleted && ! $isOverdue);
+
+            // Primary display status
+            $computedStatus = 'active';
+            if ($isCompleted) {
                 $computedStatus = 'completed';
-            } elseif ($deliveryDate && Carbon::parse($deliveryDate)->toDateString() < $today) {
+            } elseif ($isOverdue) {
                 $computedStatus = 'overdue';
+            } elseif ($isExpired) {
+                $computedStatus = 'expired';
+            } elseif ($isCmRenewed) {
+                $computedStatus = 'cm_renewed';
+            } elseif ($isCmNotRenewed) {
+                $computedStatus = 'cm_not_renewed';
+            } elseif ($isPending) {
+                $computedStatus = 'pending';
             }
 
             $accountName = trim(($s->company_name ?? '') ?: ($s->contact_name ?? ''));
@@ -352,7 +426,7 @@ class SmmSheetApiController extends Controller
                 'product_name'             => $s->product_name ?? '-',
                 'start_date'               => $s->start_date ? Carbon::parse($s->start_date)->toDateString() : null,
                 'end_date'                 => $s->end_date ? Carbon::parse($s->end_date)->toDateString() : null,
-                'delivery_date'            => $deliveryDate ? Carbon::parse($deliveryDate)->toDateString() : null,
+                'delivery_date'            => $finalDeliveryDate ? Carbon::parse($finalDeliveryDate)->toDateString() : null,
                 'committed_posters'        => $committedPosters,
                 'committed_videos'         => $committedVideos,
                 'completed_posters'        => $completedPosters,
@@ -370,22 +444,51 @@ class SmmSheetApiController extends Controller
                 'dm_pending_videos'        => $dmPendingVideos,
                 'dm_persons'               => $dmPersons,
                 'status'                   => $computedStatus,
+                'is_active'                => $isActive,
+                'is_pending'               => $isPending,
+                'is_overdue'               => $isOverdue,
+                'is_cm_not_renewed'        => $isCmNotRenewed,
+                'is_cm_renewed'            => $isCmRenewed,
+                'is_completed'             => $isCompleted,
+                'is_expired'               => $isExpired,
                 'department_name'          => $s->department_name ?? '-',
             ];
         });
 
-        // Compute global KPI stats before status filtering
+        // Compute 7 KPI stats matching web
         $stats = [
-            'total'     => $allRows->count(),
-            'completed' => $allRows->where('status', 'completed')->count(),
-            'pending'   => $allRows->where('status', 'pending')->count(),
-            'overdue'   => $allRows->where('status', 'overdue')->count(),
+            'total_records'        => $allRows->count(),
+            'total_active'         => $allRows->where('is_active', true)->count(),
+            'total_pending'        => $allRows->where('is_pending', true)->count(),
+            'total_overdue'        => $allRows->where('is_overdue', true)->count(),
+            'total_cm_not_renewed' => $allRows->where('is_cm_not_renewed', true)->count(),
+            'total_cm_renewed'     => $allRows->where('is_cm_renewed', true)->count(),
+            'total_completed'      => $allRows->where('is_completed', true)->count(),
+            'total_expired'        => $allRows->where('is_expired', true)->count(),
+            // Backwards compatibility keys
+            'total'                => $allRows->count(),
+            'completed'            => $allRows->where('is_completed', true)->count(),
+            'pending'              => $allRows->where('is_pending', true)->count(),
+            'overdue'              => $allRows->where('is_overdue', true)->count(),
         ];
 
         // Apply status filter if provided
-        $filteredRows = $status
-            ? $allRows->where('status', $status)->values()
-            : $allRows->values();
+        if ($status) {
+            $filteredRows = $allRows->filter(function ($row) use ($status) {
+                return match ($status) {
+                    'active'         => ! empty($row['is_active']),
+                    'pending'        => ! empty($row['is_pending']),
+                    'overdue'        => ! empty($row['is_overdue']),
+                    'cm_not_renewed' => ! empty($row['is_cm_not_renewed']),
+                    'cm_renewed'     => ! empty($row['is_cm_renewed']),
+                    'expired'        => ! empty($row['is_expired']),
+                    'completed'      => ! empty($row['is_completed']),
+                    default          => ($row['status'] === $status),
+                };
+            })->values();
+        } else {
+            $filteredRows = $allRows->values();
+        }
 
         // Active accounts for entry modal dropdown
         $activeAccounts = SmmSheet::with(['lead', 'product'])

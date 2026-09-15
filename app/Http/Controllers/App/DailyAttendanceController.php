@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\User;
@@ -54,11 +55,49 @@ class DailyAttendanceController extends Controller
             ], 422);
         }
 
-        // Server-side safety net: a client-modified/replayed request can't
-        // record an outside-office check-in without a reason, even though the
-        // reason field is only shown/enforced in the app UI when the client's
-        // own geofence check flags the employee as outside range.
+        $branch = $this->resolveBranchForRequest($request);
         $isOutsideOfficeCheckIn = $request->boolean('is_outside_office');
+
+        // Server-side geofence validation: if the employee's branch has office coordinates,
+        // compute actual geodesic distance from employee's submitted coordinates.
+        if ($branch && $branch->latitude !== null && $branch->longitude !== null &&
+            !($branch->latitude == 0 && $branch->longitude == 0) &&
+            abs($branch->latitude) <= 90 && abs($branch->longitude) <= 180) {
+
+            $distance = self::calculateDistanceMeters(
+                (float) $request->login_latitude,
+                (float) $request->login_longitude,
+                (float) $branch->latitude,
+                (float) $branch->longitude
+            );
+
+            // Support secondary location if configured on the branch
+            if (isset($branch->latitude_2, $branch->longitude_2) &&
+                $branch->latitude_2 !== null && $branch->longitude_2 !== null &&
+                !($branch->latitude_2 == 0 && $branch->longitude_2 == 0)) {
+                $distance2 = self::calculateDistanceMeters(
+                    (float) $request->login_latitude,
+                    (float) $request->login_longitude,
+                    (float) $branch->latitude_2,
+                    (float) $branch->longitude_2
+                );
+                $distance = min($distance, $distance2);
+            }
+
+            $allowedRadius = (float) ($branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50));
+            $gpsTolerance = (float) config('hrms.attendance_gps_tolerance_meters', 15.0);
+
+            if ($distance <= ($allowedRadius + $gpsTolerance)) {
+                // Employee is physically within office range (e.g. <= 50m + 15m tolerance buffer).
+                // Even if an older mobile app sent is_outside_office = 1,
+                // accurately classify as inside office and record attendance directly!
+                $isOutsideOfficeCheckIn = false;
+            } else {
+                $isOutsideOfficeCheckIn = true;
+            }
+        }
+
+        // Server-side safety net: require a reason when outside office
         if ($isOutsideOfficeCheckIn && trim((string) $request->input('outside_office_reason')) === '') {
             return response()->json([
                 'status'  => false,
@@ -153,6 +192,7 @@ class DailyAttendanceController extends Controller
                 $request->filled('employee_id') ? (int) $request->employee_id : null,
                 $request->filled('intern_id')   ? (int) $request->intern_id   : null,
             ),
+            'branch_id'              => $branch?->id,
             'employee_id'            => $request->filled('employee_id') ? $request->employee_id : null,
             'intern_joining_form_id' => $request->filled('intern_id')   ? $request->intern_id   : null,
             'attendee_type'          => $request->filled('employee_id') ? 'employee' : 'intern',
@@ -204,8 +244,47 @@ class DailyAttendanceController extends Controller
             ], 422);
         }
 
-        // Same server-side safety net as check-in.
+        $branch = $this->resolveBranchForRequest($request);
         $isOutsideOfficeCheckOut = $request->boolean('is_outside_office');
+
+        // Server-side geofence validation: if the employee's branch has office coordinates,
+        // compute actual geodesic distance from employee's submitted coordinates.
+        if ($branch && $branch->latitude !== null && $branch->longitude !== null &&
+            !($branch->latitude == 0 && $branch->longitude == 0) &&
+            abs($branch->latitude) <= 90 && abs($branch->longitude) <= 180) {
+
+            $distance = self::calculateDistanceMeters(
+                (float) $request->logout_latitude,
+                (float) $request->logout_longitude,
+                (float) $branch->latitude,
+                (float) $branch->longitude
+            );
+
+            // Support secondary location if configured on the branch
+            if (isset($branch->latitude_2, $branch->longitude_2) &&
+                $branch->latitude_2 !== null && $branch->longitude_2 !== null &&
+                !($branch->latitude_2 == 0 && $branch->longitude_2 == 0)) {
+                $distance2 = self::calculateDistanceMeters(
+                    (float) $request->logout_latitude,
+                    (float) $request->logout_longitude,
+                    (float) $branch->latitude_2,
+                    (float) $branch->longitude_2
+                );
+                $distance = min($distance, $distance2);
+            }
+
+            $allowedRadius = (float) ($branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50));
+            $gpsTolerance = (float) config('hrms.attendance_gps_tolerance_meters', 15.0);
+
+            if ($distance <= ($allowedRadius + $gpsTolerance)) {
+                // Employee is physically within office range (e.g. <= 50m + 15m tolerance buffer).
+                $isOutsideOfficeCheckOut = false;
+            } else {
+                $isOutsideOfficeCheckOut = true;
+            }
+        }
+
+        // Same server-side safety net as check-in: require reason when outside office
         if ($isOutsideOfficeCheckOut && trim((string) $request->input('outside_office_reason')) === '') {
             return response()->json([
                 'status'  => false,
@@ -318,6 +397,7 @@ class DailyAttendanceController extends Controller
             : $attendance->logout_photo;
 
         $attendance->update([
+            'branch_id'              => $attendance->branch_id ?? $branch?->id,
             'logout_photo'          => $logoutPhotoPath,
             'logout_location'       => $request->input('logout_location'),
             'logout_latitude'       => $request->logout_latitude,
@@ -772,4 +852,55 @@ class DailyAttendanceController extends Controller
             'updated_at'            => optional($attendance->updated_at)->toDateTimeString(),
         ];
     }
+
+    /**
+     * Calculates the geodesic distance between two coordinate pairs in meters using the Haversine formula.
+     */
+    public static function calculateDistanceMeters(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadius = 6371000.0; // Earth radius in meters
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
+    }
+
+    /**
+     * Resolves the assigned Branch for the checking-in/out user or employee.
+     */
+    private function resolveBranchForRequest(Request $request): ?Branch
+    {
+        $user = $request->user();
+        if ($user?->branch) {
+            return $user->branch;
+        }
+        if ($user?->branch_id) {
+            return Branch::find($user->branch_id);
+        }
+        if ($request->filled('employee_id')) {
+            $emp = \App\Models\EmployeeOnboarding::find($request->employee_id);
+            if ($emp?->portalUser?->branch) {
+                return $emp->portalUser->branch;
+            }
+            if ($emp?->portalUser?->branch_id) {
+                return Branch::find($emp->portalUser->branch_id);
+            }
+        }
+        if ($request->filled('intern_id')) {
+            $intern = \App\Models\InternJoiningForm::find($request->intern_id);
+            if ($intern?->portalUser?->branch) {
+                return $intern->portalUser->branch;
+            }
+            if ($intern?->portalUser?->branch_id) {
+                return Branch::find($intern->portalUser->branch_id);
+            }
+        }
+
+        return null;
+    }
 }
+

@@ -135,14 +135,17 @@ class ExpenseRequest extends Model
             return null;
         }
 
-        $applicantRoleIds = \DB::table('model_has_roles')
-            ->where('model_type', User::class)
-            ->where('model_id', $applicantUser->id)
-            ->pluck('role_id')
-            ->toArray();
-
-        if (empty($applicantRoleIds) && $applicantUser->relationLoaded('roles')) {
+        $applicantRoleIds = [];
+        if ($applicantUser->relationLoaded('roles')) {
             $applicantRoleIds = $applicantUser->roles->pluck('id')->toArray();
+        }
+
+        if (empty($applicantRoleIds)) {
+            $applicantRoleIds = \DB::table('model_has_roles')
+                ->where('model_type', User::class)
+                ->where('model_id', $applicantUser->id)
+                ->pluck('role_id')
+                ->toArray();
         }
 
         $companyId = $applicantUser->company_id ?: $this->company_id;
@@ -275,14 +278,17 @@ class ExpenseRequest extends Model
         }
 
         // Check user's assigned roles (matching by ID or normalized role name)
-        $userRoleIds = \DB::table('model_has_roles')
-            ->where('model_type', User::class)
-            ->where('model_id', $user->id)
-            ->pluck('role_id')
-            ->toArray();
-
-        if (empty($userRoleIds) && $user->relationLoaded('roles')) {
+        $userRoleIds = [];
+        if ($user->relationLoaded('roles')) {
             $userRoleIds = $user->roles->pluck('id')->toArray();
+        }
+
+        if (empty($userRoleIds)) {
+            $userRoleIds = \DB::table('model_has_roles')
+                ->where('model_type', User::class)
+                ->where('model_id', $user->id)
+                ->pluck('role_id')
+                ->toArray();
         }
 
         if (in_array((int) $approverRoleId, array_map('intval', $userRoleIds), true)) {

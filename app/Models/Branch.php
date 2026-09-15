@@ -54,6 +54,13 @@ class Branch extends Model
         ];
     }
 
+    public const DEFAULT_GEOFENCE_RADIUS_METERS = 50.0;
+
+    public function getAttendanceRadiusMetersAttribute(): float
+    {
+        return (float) config('hrms.attendance_radius_meters', self::DEFAULT_GEOFENCE_RADIUS_METERS);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

@@ -385,21 +385,51 @@ class ReportApiController extends Controller
             $request->validate([
                 'customer_id'        => 'nullable|integer',
                 'sales_executive_id' => 'nullable|integer',
+                'user_id'            => 'nullable|integer',
+                'company_name'       => 'nullable|string|max:255',
                 'payment_mode'       => 'nullable|string|max:100',
                 'branch_id'          => 'nullable|integer',
                 'collection_type'    => 'nullable|string|in:new_sales,balance_payment,renewals',
+                'quick_date'         => 'nullable|string|max:50',
                 'date_from'          => 'nullable|date',
                 'date_to'            => 'nullable|date',
                 'page'               => 'nullable|integer|min:1',
                 'per_page'           => 'nullable|integer|min:1|max:200',
             ]);
 
+            // If quick_date is provided, resolve it to exact date_from / date_to bounds
+            if ($request->filled('quick_date') && (! $request->filled('date_from') || ! $request->filled('date_to'))) {
+                $dates = match ($request->quick_date) {
+                    'today'               => [now()->toDateString(), now()->toDateString()],
+                    'yesterday'           => [now()->subDay()->toDateString(), now()->subDay()->toDateString()],
+                    'week', 'this_week'   => [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                    'month', 'this_month' => [$defaultFromDate, $defaultToDate],
+                    'quarter'             => [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
+                    'year', 'this_year'   => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                    default               => null,
+                };
+                if ($dates) {
+                    $request->merge([
+                        'date_from' => $dates[0],
+                        'date_to'   => $dates[1],
+                    ]);
+                }
+            }
+
             $this->applyDefaultDateRange($request, $defaultFromDate, $defaultToDate);
 
             $query = $this->buildPaymentCollectionQuery($request);
 
+            // Clone query BEFORE running paginate to avoid builder mutation limits/offsets
+            $analyticsQuery = clone $query;
+            $analyticsRows = $analyticsQuery->get();
+
+            $totalCount = $analyticsRows->count();
             $perPage = (int) $request->input('per_page', 20);
-            $reportRows = $query->paginate($perPage)->withQueryString();
+            if ($perPage < 1 || $perPage > 200) {
+                $perPage = 20;
+            }
+            $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
             $analyticsRows = (clone $query)->get();
             $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
@@ -413,12 +443,13 @@ class ReportApiController extends Controller
             $overallPending = round((float) $analyticsRows->sum('outstanding_amount'), 2);
 
             $summary = [
-                'rows'                     => $analyticsRows->count(),
+                'rows'                     => $totalCount,
                 'total_collected_payment'  => $totalCollectedPayment,
                 'deal_value'               => $dealValue,
                 'new_renewals_received'    => $newRenewalsReceived,
                 'balance_received'         => $balanceReceived,
                 'new_renewals_pending'     => $newRenewalsPending,
+                // Backward-compatible keys
                 'total_amount'             => $dealValue,
                 'received_amount'          => $totalCollectedPayment,
                 'outstanding_amount'       => $overallPending,
@@ -428,7 +459,7 @@ class ReportApiController extends Controller
 
             $paymentModes = LeadProduct::PAYMENT_MODES; // [key => label]
             $customers = $this->paymentCollectionCustomerOptions();
-            $salesExecutives = $this->visibility->visibleAssignableUsers();
+            $salesExecutives = $this->paymentCollectionSalesExecutives();
             $branches = Branch::query()
                 ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
                 ->orderBy('name')
@@ -445,21 +476,25 @@ class ReportApiController extends Controller
                 };
 
                 return [
-                    'payment_id'            => $row->payment_id,
-                    'payment_code'          => 'PMT-' . $code,
-                    'receipt_no'            => 'RCT-' . $code,
-                    'payment_date'          => $paymentDate?->toDateString(),
-                    'customer_id'           => $row->customer_id,
-                    'customer_code'         => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
-                    'customer_name'         => $row->customer_name ?: null,
-                    'collection_type'       => $row->collection_type ?? null,
-                    'collection_type_label' => $typeLabel,
-                    'total_amount'          => round((float) ($row->total_amount ?? 0), 2),
-                    'received_amount'       => round((float) ($row->received_amount ?? 0), 2),
-                    'outstanding_amount'    => round((float) ($row->outstanding_amount ?? 0), 2),
-                    'payment_mode'          => $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
-                    'transaction_reference' => $row->transaction_reference ?: null,
-                    'received_by'           => $row->received_by ?: null,
+                    'payment_id'             => $row->payment_id,
+                    'payment_code'           => 'PMT-' . $code,
+                    'receipt_no'             => 'RCT-' . $code,
+                    'payment_date'           => $paymentDate?->toDateString(),
+                    'customer_id'            => $row->customer_id,
+                    'customer_code'          => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
+                    'customer_name'          => $row->customer_name ?: null,
+                    'company_name'           => $row->company_name ?: null,
+                    'branch_name'            => $row->branch_name ?: null,
+                    'product_name'           => $row->product_name ?: null,
+                    'collection_type'        => $row->collection_type ?? null,
+                    'collection_type_label'  => $typeLabel,
+                    'total_amount'           => round((float) ($row->total_amount ?? 0), 2),
+                    'received_amount'        => round((float) ($row->received_amount ?? 0), 2),
+                    'outstanding_amount'     => round((float) ($row->outstanding_amount ?? 0), 2),
+                    'payment_mode'           => $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
+                    'transaction_reference'  => $row->transaction_reference ?: null,
+                    'received_by'            => $row->received_by ?: null,
+                    'received_by_department' => $row->received_by_department ?: null,
                 ];
             })->values();
 
@@ -470,6 +505,11 @@ class ReportApiController extends Controller
                 'summary' => $summary,
                 'analytics' => $analytics,
                 'filters' => [
+                    'collection_types' => [
+                        ['key' => 'new_sales',       'label' => 'New Sales'],
+                        ['key' => 'balance_payment', 'label' => 'Balance Payment'],
+                        ['key' => 'renewals',        'label' => 'Renewals'],
+                    ],
                     'payment_modes' => collect($paymentModes)->map(fn($label, $key) => [
                         'key'   => $key,
                         'label' => $label,
@@ -540,6 +580,87 @@ class ReportApiController extends Controller
         return $query->get();
     }
 
+    private function paymentCollectionSalesExecutives()
+    {
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+
+        $query = User::query()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereHas('roles.department', function ($dq) {
+                    $dq->whereIn(DB::raw('LOWER(name)'), [
+                        'sales',
+                        'crm',
+                        'business development',
+                        'marketing',
+                        'telecalling',
+                        'customer support',
+                        'customer support team',
+                        'customer success',
+                        'customer success team',
+                        'cst',
+                        'support',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales',
+                        'crm',
+                        'business_development',
+                        'marketing',
+                        'telecalling',
+                        'customer_support',
+                        'customer_support_team',
+                        'customer_success',
+                        'customer_success_team',
+                        'cst',
+                        'support',
+                    ]);
+                })
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereIn(DB::raw('LOWER(name)'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                        'customer_support_team_tl',
+                        'customer_support_team_executive',
+                        'senior_customer_success_team_executive',
+                        'customer_success_executive',
+                        'cst_executive',
+                        'cst_tl',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'sales_manager',
+                        'sales_executive',
+                        'sales_tl',
+                        'sales_intern',
+                        'bde',
+                        'business_development_executive',
+                        'telecaller',
+                        'customer_support_team_tl',
+                        'customer_support_team_executive',
+                        'senior_customer_success_team_executive',
+                        'customer_success_executive',
+                        'cst_executive',
+                        'cst_tl',
+                    ]);
+                });
+            });
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($visibleUserIds !== null) {
+            $query->whereIn('id', $visibleUserIds);
+        }
+
+        return $query->orderBy('name')->get(['id', 'name']);
+    }
+
     private function getCollectionTypeSql(): string
     {
         return "
@@ -584,22 +705,31 @@ class ReportApiController extends Controller
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'lead_product_payments.lead_product_id')
             ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->leftJoin('users as collectors', 'collectors.id', '=', 'lead_product_payments.recorded_by')
-            ->leftJoinSub($paidSubquery, 'payment_totals', function ($join) {
-                $join->on('payment_totals.lead_product_id', '=', 'lead_products.id');
-            })
             ->select([
                 'lead_product_payments.id as payment_id',
+                'lead_product_payments.lead_id',
+                'lead_product_payments.lead_product_id',
                 'lead_product_payments.payment_date',
                 'lead_product_payments.payment_mode',
                 'lead_product_payments.reference_number as transaction_reference',
                 'lead_product_payments.amount as received_amount',
                 'leads.id as customer_id',
+                'leads.company_name',
                 'lead_products.product_name',
+                'branches.name as branch_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
+                DB::raw('(
+                    SELECT COALESCE(
+                        (SELECT d.name FROM departments d JOIN employee_onboardings eo ON eo.department_id = d.id WHERE eo.portal_user_id = collectors.id LIMIT 1),
+                        (SELECT d.name FROM departments d JOIN intern_joining_forms ijf ON ijf.department_id = d.id WHERE ijf.portal_user_id = collectors.id LIMIT 1),
+                        (SELECT d.name FROM departments d JOIN roles r ON r.department_id = d.id JOIN model_has_roles mhr ON mhr.role_id = r.id WHERE mhr.model_id = collectors.id AND mhr.model_type = "App\\\\Models\\\\User" LIMIT 1)
+                    )
+                ) as received_by_department'),
                 DB::raw("({$collectionTypeSql}) as collection_type"),
             ])
             ->orderByDesc('lead_product_payments.payment_date')
@@ -620,8 +750,13 @@ class ReportApiController extends Controller
             $query->where('leads.id', $request->customer_id);
         }
 
-        if ($request->filled('sales_executive_id')) {
-            $query->where('leads.assigned_to', $request->sales_executive_id);
+        if ($request->filled('company_name')) {
+            $query->where('leads.company_name', 'like', '%' . trim($request->company_name) . '%');
+        }
+
+        if ($request->filled('sales_executive_id') || $request->filled('user_id')) {
+            $salesExecId = $request->input('sales_executive_id') ?: $request->input('user_id');
+            $query->where('leads.assigned_to', $salesExecId);
         }
 
         if ($request->filled('payment_mode')) {

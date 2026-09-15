@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmployeeOnboarding;
+use App\Models\InternJoiningForm;
 use App\Models\RecruitmentCallUpdate;
 use App\Models\RecruitmentCandidate;
 use App\Models\RecruitmentInterview;
+use App\Models\RecruitmentReminder;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -75,6 +79,366 @@ class RecruitmentApiController extends Controller
                 'interview_modes'    => $this->toOptions(RecruitmentInterview::MODES),
                 'interview_statuses' => $this->toOptions(RecruitmentInterview::STATUSES),
                 'interviewers'       => $interviewers,
+            ],
+        ]);
+    }
+
+    // ── GET /api/mobile/hrms/recruitment/call-updates ────────────────────────
+    public function callUpdates(Request $request): JsonResponse
+    {
+        $request->validate([
+            'per_page'   => ['nullable', 'integer', 'min:1', 'max:50'],
+            'page'       => ['nullable', 'integer', 'min:1'],
+            'quick_date' => ['nullable', 'string', Rule::in(['today', 'yesterday', 'this_week', 'this_month', 'all_time'])],
+            'date_from'  => ['nullable', 'date'],
+            'date_to'    => ['nullable', 'date'],
+        ]);
+
+        $quickDate = $request->query('quick_date');
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+
+        if ($quickDate) {
+            match ($quickDate) {
+                'today'      => [$dateFrom = now()->startOfDay()->toDateString(), $dateTo = now()->endOfDay()->toDateString()],
+                'yesterday'  => [$dateFrom = now()->subDay()->startOfDay()->toDateString(), $dateTo = now()->subDay()->endOfDay()->toDateString()],
+                'this_week'  => [$dateFrom = now()->startOfWeek()->toDateString(), $dateTo = now()->endOfWeek()->toDateString()],
+                'this_month' => [$dateFrom = now()->startOfMonth()->toDateString(), $dateTo = now()->endOfMonth()->toDateString()],
+                'all_time'   => [$dateFrom = null, $dateTo = null],
+                default      => null,
+            };
+        } elseif (!$request->has('date_from') && !$request->has('date_to')) {
+            // Default to this_month if no date filters provided (matching web)
+            $dateFrom = now()->startOfMonth()->toDateString();
+            $dateTo = now()->endOfMonth()->toDateString();
+            $quickDate = 'this_month';
+        }
+
+        $query = RecruitmentCallUpdate::query()
+            ->with([
+                'candidate:id,candidate_no,name,mobile_number,email,job_title,location,candidate_type,status',
+                'user:id,name',
+            ])
+            ->latest('called_at');
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->query('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('notes', 'like', "%{$search}%")
+                    ->orWhereHas('candidate', function ($cq) use ($search) {
+                        $cq->where('id', $search)
+                            ->orWhere('candidate_no', 'like', "%{$search}%")
+                            ->orWhere('name', 'like', "%{$search}%")
+                            ->orWhere('mobile_number', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('job_title', 'like', "%{$search}%")
+                            ->orWhere('location', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->query('user_id'));
+        }
+
+        if ($request->filled('outcome')) {
+            $query->where('outcome', $request->query('outcome'));
+        }
+
+        if ($request->filled('call_type')) {
+            $query->where('call_type', $request->query('call_type'));
+        }
+
+        if ($request->filled('candidate_status')) {
+            $query->whereHas('candidate', function ($cq) use ($request) {
+                $cq->where('status', $request->query('candidate_status'));
+            });
+        }
+
+        if ($dateFrom) {
+            $query->whereDate('called_at', '>=', $dateFrom);
+        }
+
+        if ($dateTo) {
+            $query->whereDate('called_at', '<=', $dateTo);
+        }
+
+        if ($request->filled('follow_up_date')) {
+            $query->whereDate('next_follow_up_at', $request->query('follow_up_date'));
+        }
+
+        // Summary Counts
+        $baseCountQuery = RecruitmentCallUpdate::query();
+        if ($dateFrom) {
+            $baseCountQuery->whereDate('called_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $baseCountQuery->whereDate('called_at', '<=', $dateTo);
+        }
+
+        $counts = [
+            'total'      => (clone $baseCountQuery)->count(),
+            'today'      => RecruitmentCallUpdate::query()->whereDate('called_at', today())->count(),
+            'interested' => (clone $baseCountQuery)->whereIn('outcome', ['interested', 'screening', 'interview_planned'])->count(),
+            'follow_up'  => (clone $baseCountQuery)->where('outcome', 'follow_up')->count(),
+            'selected'   => (clone $baseCountQuery)->where('outcome', 'selected')->count(),
+        ];
+
+        $perPage = (int) $request->input('per_page', 15);
+        $callUpdates = $query->paginate($perPage);
+
+        // HR department users for the Caller / HR filter
+        $onboardingUserIds = EmployeeOnboarding::whereHas('department', function ($q) {
+            $q->where('name', 'LIKE', '%hr%')
+              ->orWhere('name', 'LIKE', '%human%');
+        })->pluck('portal_user_id')->filter()->toArray();
+
+        $internUserIds = InternJoiningForm::whereHas('department', function ($q) {
+            $q->where('name', 'LIKE', '%hr%')
+              ->orWhere('name', 'LIKE', '%human%');
+        })->pluck('portal_user_id')->filter()->toArray();
+
+        $callers = User::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->filter(function ($u) use ($onboardingUserIds, $internUserIds) {
+                return $u->belongsToHrDepartment()
+                    || $u->hasHrLikeRole()
+                    || in_array($u->id, $onboardingUserIds)
+                    || in_array($u->id, $internUserIds);
+            })
+            ->values();
+
+        if ($callers->isEmpty()) {
+            $userIds = RecruitmentCallUpdate::query()->distinct()->pluck('user_id')->filter();
+            $callers = User::whereIn('id', $userIds)->orderBy('name')->get(['id', 'name']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'items' => $callUpdates->getCollection()
+                    ->map(fn (RecruitmentCallUpdate $c) => [
+                        'id'                          => $c->id,
+                        'called_at'                   => $c->called_at?->toIso8601String(),
+                        'called_at_formatted'         => $c->called_at ? $c->called_at->format('d M Y, h:i A') : null,
+                        'call_type'                   => $c->call_type,
+                        'call_type_label'             => $c->call_type_label,
+                        'duration_minutes'            => $c->duration_minutes,
+                        'outcome'                     => $c->outcome,
+                        'outcome_label'               => $c->outcome_label,
+                        'notes'                       => $c->notes,
+                        'next_follow_up_at'           => $c->next_follow_up_at?->toIso8601String(),
+                        'next_follow_up_at_formatted' => $c->next_follow_up_at ? $c->next_follow_up_at->format('d M Y, h:i A') : null,
+                        'user_id'                     => $c->user_id,
+                        'user_name'                   => $c->user?->name ?? 'HR',
+                        'candidate'                   => $c->candidate ? [
+                            'id'             => $c->candidate->id,
+                            'candidate_no'   => $c->candidate->candidate_no,
+                            'name'           => $c->candidate->name,
+                            'initials'       => $c->candidate->initials,
+                            'mobile_number'  => $c->candidate->mobile_number,
+                            'email'          => $c->candidate->email,
+                            'job_title'      => $c->candidate->job_title,
+                            'location'       => $c->candidate->location,
+                            'candidate_type' => $c->candidate->candidate_type,
+                            'status'         => $c->candidate->status,
+                            'status_label'   => $c->candidate->status_label,
+                        ] : null,
+                    ])
+                    ->values(),
+                'pagination' => [
+                    'current_page' => $callUpdates->currentPage(),
+                    'last_page'    => $callUpdates->lastPage(),
+                    'per_page'     => $callUpdates->perPage(),
+                    'total'        => $callUpdates->total(),
+                    'has_more'     => $callUpdates->hasMorePages(),
+                ],
+                'counts'     => $counts,
+                'callers'    => $callers->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+                'outcomes'   => $this->toOptions(RecruitmentCallUpdate::OUTCOMES),
+                'call_types' => $this->toOptions(RecruitmentCallUpdate::CALL_TYPES),
+                'quick_date' => $quickDate,
+                'date_from'  => $dateFrom,
+                'date_to'    => $dateTo,
+            ],
+        ]);
+    }
+
+    // ── GET /api/mobile/hrms/recruitment/reminders ───────────────────────────
+    public function reminders(Request $request): JsonResponse
+    {
+        $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'page'     => ['nullable', 'integer', 'min:1'],
+            'tab'      => ['nullable', 'string', Rule::in(['today', 'tomorrow', 'overdue', 'completed'])],
+        ]);
+
+        // Self-healing sync for unsynced follow-up calls
+        $unsyncedCalls = RecruitmentCallUpdate::whereNotNull('next_follow_up_at')
+            ->whereDoesntHave('reminder')
+            ->with('candidate')
+            ->limit(100)
+            ->get();
+
+        foreach ($unsyncedCalls as $call) {
+            if ($call->candidate) {
+                RecruitmentReminder::create([
+                    'company_id'                 => $call->company_id,
+                    'recruitment_candidate_id'   => $call->recruitment_candidate_id,
+                    'recruitment_call_update_id' => $call->id,
+                    'user_id'                    => $call->user_id,
+                    'title'                      => 'Follow-up Call: ' . $call->candidate->name . ($call->candidate->job_title ? ' (' . $call->candidate->job_title . ')' : ''),
+                    'description'                => $call->notes,
+                    'remind_at'                  => $call->next_follow_up_at,
+                    'type'                       => 'follow_up',
+                    'priority'                   => 'high',
+                    'is_completed'               => false,
+                ]);
+            }
+        }
+
+        $activeTab = $request->input('tab', 'today');
+
+        $baseQuery = RecruitmentReminder::query()
+            ->with([
+                'candidate:id,candidate_no,name,mobile_number,email,job_title,location,candidate_type,status',
+                'user:id,name',
+                'completedBy:id,name',
+            ]);
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->search);
+            $baseQuery->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('candidate', function ($cq) use ($search) {
+                        $cq->where('id', $search)
+                            ->orWhere('candidate_no', 'like', "%{$search}%")
+                            ->orWhere('name', 'like', "%{$search}%")
+                            ->orWhere('mobile_number', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('job_title', 'like', "%{$search}%")
+                            ->orWhere('location', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->filled('user_id')) {
+            $baseQuery->where('user_id', $request->user_id);
+        }
+
+        if ($request->filled('type')) {
+            $baseQuery->where('type', $request->type);
+        }
+
+        if ($request->filled('priority')) {
+            $baseQuery->where('priority', $request->priority);
+        }
+
+        if ($request->filled('candidate_status')) {
+            $baseQuery->whereHas('candidate', function ($cq) use ($request) {
+                $cq->where('status', $request->candidate_status);
+            });
+        }
+
+        // Tab Counts — dynamic calculation!
+        $todayDate = Carbon::today()->toDateString();
+        $tomorrowDate = Carbon::tomorrow()->toDateString();
+
+        $todayCount     = (clone $baseQuery)->where('is_completed', false)->whereDate('remind_at', $todayDate)->count();
+        $tomorrowCount  = (clone $baseQuery)->where('is_completed', false)->whereDate('remind_at', $tomorrowDate)->count();
+        $overdueCount   = (clone $baseQuery)->where('is_completed', false)->whereDate('remind_at', '<', $todayDate)->count();
+        $completedCount = (clone $baseQuery)->where('is_completed', true)->count();
+
+        $query = clone $baseQuery;
+
+        if ($activeTab === 'tomorrow') {
+            $reminders = $query->where('is_completed', false)
+                ->whereDate('remind_at', $tomorrowDate)
+                ->orderBy('remind_at', 'asc')
+                ->paginate((int) $request->input('per_page', 20));
+        } elseif ($activeTab === 'overdue') {
+            $reminders = $query->where('is_completed', false)
+                ->whereDate('remind_at', '<', $todayDate)
+                ->orderBy('remind_at', 'asc')
+                ->paginate((int) $request->input('per_page', 20));
+        } elseif ($activeTab === 'completed') {
+            $reminders = $query->where('is_completed', true)
+                ->orderBy('completed_at', 'desc')
+                ->paginate((int) $request->input('per_page', 20));
+        } else {
+            // 'today' default
+            $activeTab = 'today';
+            $reminders = $query->where('is_completed', false)
+                ->whereDate('remind_at', $todayDate)
+                ->orderBy('remind_at', 'asc')
+                ->paginate((int) $request->input('per_page', 20));
+        }
+
+        $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'items' => $reminders->getCollection()
+                    ->map(fn (RecruitmentReminder $r) => [
+                        'id'                     => $r->id,
+                        'title'                  => $r->title,
+                        'description'            => $r->description,
+                        'remind_at'              => $r->remind_at?->toIso8601String(),
+                        'remind_at_formatted'    => $r->remind_at ? $r->remind_at->format('d M Y, h:i A') : null,
+                        'type'                   => $r->type,
+                        'type_label'             => $r->type_label,
+                        'type_icon'              => $r->type_icon,
+                        'priority'               => $r->priority,
+                        'priority_label'         => RecruitmentReminder::PRIORITIES[$r->priority] ?? ucfirst((string) $r->priority),
+                        'is_completed'           => (bool) $r->is_completed,
+                        'completed_at'           => $r->completed_at?->toIso8601String(),
+                        'completed_at_formatted' => $r->completed_at ? $r->completed_at->format('d M Y, h:i A') : null,
+                        'is_overdue'             => (bool) $r->is_overdue,
+                        'user_id'                => $r->user_id,
+                        'user_name'              => $r->user?->name ?? 'HR',
+                        'completed_by_id'        => $r->completed_by,
+                        'completed_by_name'      => $r->completedBy?->name,
+                        'candidate'              => $r->candidate ? [
+                            'id'             => $r->candidate->id,
+                            'candidate_no'   => $r->candidate->candidate_no,
+                            'name'           => $r->candidate->name,
+                            'initials'       => $r->candidate->initials,
+                            'mobile_number'  => $r->candidate->mobile_number,
+                            'email'          => $r->candidate->email,
+                            'job_title'      => $r->candidate->job_title,
+                            'location'       => $r->candidate->location,
+                            'candidate_type' => $r->candidate->candidate_type,
+                            'status'         => $r->candidate->status,
+                            'status_label'   => $r->candidate->status_label,
+                        ] : null,
+                    ])
+                    ->values(),
+                'pagination' => [
+                    'current_page' => $reminders->currentPage(),
+                    'last_page'    => $reminders->lastPage(),
+                    'per_page'     => $reminders->perPage(),
+                    'total'        => $reminders->total(),
+                    'has_more'     => $reminders->hasMorePages(),
+                ],
+                'counts' => [
+                    'today'     => $todayCount,
+                    'tomorrow'  => $tomorrowCount,
+                    'overdue'   => $overdueCount,
+                    'completed' => $completedCount,
+                ],
+                'active_tab' => $activeTab,
+                'users'      => $users->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+                'types'      => $this->toOptions(RecruitmentReminder::TYPES),
+                'priorities' => $this->toOptions(RecruitmentReminder::PRIORITIES),
             ],
         ]);
     }
@@ -206,10 +570,25 @@ class RecruitmentApiController extends Controller
             'next_follow_up_at'  => ['nullable', 'date'],
         ]);
 
-        $recruitment->callUpdates()->create(array_merge($validated, [
+        $callUpdate = $recruitment->callUpdates()->create(array_merge($validated, [
             'company_id' => $request->user()?->company_id,
             'user_id'    => $request->user()?->id,
         ]));
+
+        if (!empty($validated['next_follow_up_at'])) {
+            RecruitmentReminder::create([
+                'company_id'                 => $request->user()?->company_id,
+                'recruitment_candidate_id'   => $recruitment->id,
+                'recruitment_call_update_id' => $callUpdate->id,
+                'user_id'                    => $request->user()?->id,
+                'title'                      => 'Follow-up Call: ' . $recruitment->name . ($recruitment->job_title ? ' (' . $recruitment->job_title . ')' : ''),
+                'description'                => $validated['notes'] ?? null,
+                'remind_at'                  => $validated['next_follow_up_at'],
+                'type'                       => 'follow_up',
+                'priority'                   => 'high',
+                'is_completed'               => false,
+            ]);
+        }
 
         $this->syncCandidateStatusFromCallOutcome($request, $recruitment, $validated['outcome']);
 
@@ -246,6 +625,21 @@ class RecruitmentApiController extends Controller
             'company_id'    => $request->user()?->company_id,
             'scheduled_by'  => $request->user()?->id,
         ]));
+
+        if (!empty($validated['scheduled_at'])) {
+            $roundName = !empty($validated['round']) ? $validated['round'] : 'Interview Round';
+            RecruitmentReminder::create([
+                'company_id'               => $request->user()?->company_id,
+                'recruitment_candidate_id' => $recruitment->id,
+                'user_id'                  => !empty($validated['interviewer_id']) ? $validated['interviewer_id'] : $request->user()?->id,
+                'title'                    => 'Interview (' . $roundName . '): ' . $recruitment->name . ($recruitment->job_title ? ' (' . $recruitment->job_title . ')' : ''),
+                'description'              => $validated['notes'] ?? null,
+                'remind_at'                => $validated['scheduled_at'],
+                'type'                     => 'interview',
+                'priority'                 => 'high',
+                'is_completed'             => false,
+            ]);
+        }
 
         if (! in_array($recruitment->status, [
             RecruitmentCandidate::STATUS_SELECTED,
@@ -319,6 +713,81 @@ class RecruitmentApiController extends Controller
             'success' => true,
             'message' => 'Candidate moved to ' . $recruitment->status_label . '.',
             'data'    => $this->formatDetail($recruitment),
+        ]);
+    }
+
+    // ── POST /api/mobile/hrms/recruitment/{recruitment}/reminders ────────────
+    public function storeReminder(Request $request, RecruitmentCandidate $recruitment): JsonResponse
+    {
+        $validated = $request->validate([
+            'title'       => ['required', 'string', 'max:255'],
+            'remind_at'   => ['required', 'date'],
+            'type'        => ['required', Rule::in(array_keys(RecruitmentReminder::TYPES))],
+            'priority'    => ['required', Rule::in(array_keys(RecruitmentReminder::PRIORITIES))],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'user_id'     => ['nullable', 'exists:users,id'],
+        ]);
+
+        $reminder = $recruitment->reminders()->create([
+            'company_id'   => $request->user()?->company_id,
+            'user_id'      => $validated['user_id'] ?? $request->user()?->id,
+            'title'        => $validated['title'],
+            'description'  => $validated['description'] ?? null,
+            'remind_at'    => $validated['remind_at'],
+            'type'         => $validated['type'],
+            'priority'     => $validated['priority'],
+            'is_completed' => false,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reminder added successfully.',
+            'data'    => [
+                'id'        => $reminder->id,
+                'title'     => $reminder->title,
+                'remind_at' => $reminder->remind_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    // ── PATCH /api/mobile/hrms/recruitment/reminders/{reminder}/complete ─────
+    public function completeReminder(Request $request, RecruitmentReminder $reminder): JsonResponse
+    {
+        $reminder->update([
+            'is_completed' => true,
+            'completed_at' => now(),
+            'completed_by' => $request->user()?->id ?? auth()->id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reminder marked as completed.',
+        ]);
+    }
+
+    // ── PATCH /api/mobile/hrms/recruitment/reminders/{reminder}/incomplete ───
+    public function incompleteReminder(Request $request, RecruitmentReminder $reminder): JsonResponse
+    {
+        $reminder->update([
+            'is_completed' => false,
+            'completed_at' => null,
+            'completed_by' => null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reminder marked as pending.',
+        ]);
+    }
+
+    // ── DELETE /api/mobile/hrms/recruitment/reminders/{reminder} ─────────────
+    public function destroyReminder(Request $request, RecruitmentReminder $reminder): JsonResponse
+    {
+        $reminder->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reminder deleted successfully.',
         ]);
     }
 

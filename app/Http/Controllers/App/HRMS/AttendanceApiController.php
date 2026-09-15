@@ -99,7 +99,51 @@ class AttendanceApiController extends Controller
             || $user->hasRole('company_admin'));
     }
 
-    private function resolveActingBranchId(?Request $request = null): ?int
+    private function attendanceBranches(): \Illuminate\Support\Collection
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return collect();
+        }
+
+        $query = Branch::query()
+            ->where('is_active', true)
+            ->orderBy('name');
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($this->shouldFilterByBranch()) {
+            $branchIds = $user->getMyBranchIds() ?? [];
+            if (!empty($branchIds)) {
+                $query->whereIn('id', $branchIds);
+            } else {
+                return collect();
+            }
+        }
+
+        return $query->get(['id', 'name']);
+    }
+
+    private function attendanceDepartments(): \Illuminate\Support\Collection
+    {
+        $user = auth()->user();
+        $query = \App\Models\Department::query()
+            ->withoutGlobalScope('company')
+            ->orderBy('name');
+
+        if ($user?->company_id) {
+            $query->where(function ($q) use ($user) {
+                $q->where('company_id', $user->company_id)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        return $query->get(['id', 'name']);
+    }
+
+    private function resolveActingBranchIds(?Request $request = null): ?array
     {
         $user = auth()->user();
         if (! $user) {
@@ -107,20 +151,40 @@ class AttendanceApiController extends Controller
         }
 
         $request = $request ?? request();
-        $isCompanyAdmin = $this->isCompanyAdminUser($user);
+        $requestedBranchId = $request->input('branch_id');
 
-        if ($isCompanyAdmin) {
-            if ($request && $request->filled('branch_id')) {
-                $val = $request->input('branch_id');
-                if ($val === 'all') {
-                    return null;
-                }
-                return (int) $val;
+        // If user is branch-scoped (e.g. Branch Manager)
+        if ($this->shouldFilterByBranch()) {
+            $myBranchIds = $user->getMyBranchIds() ?? [];
+            if (empty($myBranchIds) && $user->branch_id) {
+                $myBranchIds = [(int) $user->branch_id];
             }
-            return $user->branch_id ? (int) $user->branch_id : null;
+
+            if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
+                $reqId = (int) $requestedBranchId;
+                if (in_array($reqId, $myBranchIds)) {
+                    return [$reqId];
+                }
+            }
+            return !empty($myBranchIds) ? $myBranchIds : null;
         }
 
-        return $user->branch_id ? (int) $user->branch_id : null;
+        // For exempt roles (Company Admin, CBO, COO, Super Admin, System Admin)
+        if ($this->canViewAllAttendance()) {
+            if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
+                return [(int) $requestedBranchId];
+            }
+            // 'all' or empty means ALL branches (no branch restriction)
+            return null;
+        }
+
+        return $user->branch_id ? [(int) $user->branch_id] : null;
+    }
+
+    private function resolveActingBranchId(?Request $request = null): ?int
+    {
+        $ids = $this->resolveActingBranchIds($request);
+        return (!empty($ids) && count($ids) === 1) ? $ids[0] : null;
     }
 
     private function currentEmployee(): ?EmployeeOnboarding
@@ -168,8 +232,12 @@ class AttendanceApiController extends Controller
      * - Regular Employee / Intern: only their own record
      * Each item: ['id', 'attendee_type', 'display_id', 'name', 'photo_url', 'select_key', 'branch_name', 'department_name']
      */
-    private function accessibleAttendees(?int $actingBranchId = null): \Illuminate\Support\Collection
+    private function accessibleAttendees(array|int|null $branchIds = null, ?int $departmentId = null): \Illuminate\Support\Collection
     {
+        if (is_int($branchIds)) {
+            $branchIds = [$branchIds];
+        }
+
         $employeeQuery = $this->withActivePortalAccount(
             EmployeeOnboarding::query()->with(['department', 'portalUser.branch'])->active()
         )->whereNotNull('name');
@@ -206,20 +274,33 @@ class AttendanceApiController extends Controller
 
         if ($this->canViewAllAttendance()) {
             if ($this->shouldFilterByBranch()) {
-                $branchIds = auth()->user()?->getMyBranchIds() ?? [];
+                $myBranchIds = auth()->user()?->getMyBranchIds() ?? [];
+                if (empty($myBranchIds) && auth()->user()?->branch_id) {
+                    $myBranchIds = [(int) auth()->user()->branch_id];
+                }
+
                 if (!empty($branchIds)) {
-                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
-                    $employeeQuery->where(function (Builder $q) use ($branchIds, $branchCodes) {
-                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                            $puQ->whereIn('branch_id', $branchIds);
+                    $targetBranchIds = array_values(array_intersect($branchIds, $myBranchIds));
+                    if (empty($targetBranchIds)) {
+                        $targetBranchIds = $myBranchIds;
+                    }
+                } else {
+                    $targetBranchIds = $myBranchIds;
+                }
+
+                if (!empty($targetBranchIds)) {
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $targetBranchIds)->pluck('code')->filter()->all();
+                    $employeeQuery->where(function (Builder $q) use ($targetBranchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($puQ) use ($targetBranchIds) {
+                            $puQ->whereIn('branch_id', $targetBranchIds);
                         });
                         foreach ($branchCodes as $code) {
                             $q->orWhere('employee_id', 'like', $code . '%');
                         }
                     });
-                    $internQuery->where(function (Builder $q) use ($branchIds, $branchCodes) {
-                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                            $puQ->whereIn('branch_id', $branchIds);
+                    $internQuery->where(function (Builder $q) use ($targetBranchIds, $branchCodes) {
+                        $q->whereHas('portalUser', function ($puQ) use ($targetBranchIds) {
+                            $puQ->whereIn('branch_id', $targetBranchIds);
                         });
                         foreach ($branchCodes as $code) {
                             $q->orWhere('intern_id', 'like', $code . '%');
@@ -227,28 +308,32 @@ class AttendanceApiController extends Controller
                     });
                 }
             } else {
-                $resolvedBranchId = func_num_args() > 0 ? $actingBranchId : $this->resolveActingBranchId();
-                if ($resolvedBranchId) {
-                    $branch = Branch::find($resolvedBranchId);
-                    $branchCode = $branch?->code;
-                    $employeeQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
-                        if ($branchCode) {
-                            $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                // Roles exempt from branch restriction (Company Admin, CBO, COO, Super Admin, System Admin)
+                if (!empty($branchIds)) {
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                    $employeeQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->whereIn('branch_id', $branchIds));
+                        foreach ($branchCodes as $code) {
+                            $sub->orWhere(function (Builder $q2) use ($code) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $code . '%');
                             });
                         }
                     });
-                    $internQuery->where(function (Builder $sub) use ($resolvedBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $resolvedBranchId));
-                        if ($branchCode) {
-                            $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                    $internQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->whereIn('branch_id', $branchIds));
+                        foreach ($branchCodes as $code) {
+                            $sub->orWhere(function (Builder $q2) use ($code) {
+                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $code . '%');
                             });
                         }
                     });
                 }
             }
+        }
+
+        if ($departmentId && $departmentId > 0) {
+            $employeeQuery->where('department_id', $departmentId);
+            $internQuery->where('department_id', $departmentId);
         }
 
         $employees = $employeeQuery
@@ -261,7 +346,9 @@ class AttendanceApiController extends Controller
                 'name'            => $e->name,
                 'photo_url'       => $e->photograph ? asset('storage/' . $e->photograph) : null,
                 'select_key'      => 'employee:' . $e->id,
+                'branch_id'       => $e->portalUser?->branch_id,
                 'branch_name'     => $e->portalUser?->branch?->name ?? '',
+                'department_id'   => $e->department_id,
                 'department_name' => $e->department?->name ?? '',
             ]);
 
@@ -275,7 +362,9 @@ class AttendanceApiController extends Controller
                 'name'            => $i->name,
                 'photo_url'       => $i->photograph ? asset('storage/' . $i->photograph) : null,
                 'select_key'      => 'intern:' . $i->id,
+                'branch_id'       => $i->portalUser?->branch_id,
                 'branch_name'     => $i->portalUser?->branch?->name ?? '',
+                'department_id'   => $i->department_id,
                 'department_name' => $i->department?->name ?? '',
             ]);
 
@@ -433,6 +522,7 @@ class AttendanceApiController extends Controller
             'per_page'        => ['nullable', 'integer', 'min:1', 'max:100'],
             'page'            => ['nullable', 'integer', 'min:1'],
             'branch_id'       => ['nullable', 'string'],
+            'department_id'   => ['nullable', 'string'],
         ];
 
         // HR/Admin/TL/Manager can filter by name, employee_id, attendee_type
@@ -467,30 +557,26 @@ class AttendanceApiController extends Controller
         $perPage            = (int) ($validated['per_page'] ?? 15);
         $page               = (int) ($validated['page']     ?? 1);
 
-        $actingBranchId      = $this->resolveActingBranchId($request);
-        $accessibleAttendees = $this->accessibleAttendees($actingBranchId);
+        $actingBranchIds     = $this->resolveActingBranchIds($request);
+        $departmentIdFilter  = null;
+        if ($request->filled('department_id') && $request->input('department_id') !== 'all') {
+            $departmentIdFilter = (int) $request->input('department_id');
+        }
+
+        $accessibleAttendees = $this->accessibleAttendees($actingBranchIds, $departmentIdFilter);
 
         if ($accessibleAttendees->isEmpty()) {
             $user = auth()->user();
-            $isCompanyAdmin = $this->isCompanyAdminUser($user);
-            $branches = [];
-            if ($isCompanyAdmin) {
-                $branchesQuery = Branch::where('is_active', true);
-                if ($user?->company_id) {
-                    $branchesQuery->where('company_id', $user->company_id);
-                }
-                $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
-            }
-
             return response()->json([
                 'status'             => true,
                 'message'            => 'No accessible records.',
                 'can_view_all'       => $this->canViewAllAttendance(),
                 'has_team_members'   => $this->hasMappedTeamMembers(),
                 'can_view_team'      => $this->canManageOrViewTeam(),
-                'is_company_admin'   => $isCompanyAdmin,
+                'is_company_admin'   => $this->isCompanyAdminUser($user),
                 'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
-                'branches'           => $branches,
+                'branches'           => $this->attendanceBranches(),
+                'departments'        => $this->attendanceDepartments(),
                 'stats'              => $this->emptyStats(),
                 'data'               => $this->emptyPagination($page, $perPage),
                 'selected_from_date' => $selectedFromDate,
@@ -586,21 +672,34 @@ class AttendanceApiController extends Controller
         $records = $records->filter(function (array $rec) use (
             $employeeNameFilter,
             $employeeIdFilter,
+            $departmentIdFilter,
+            $actingBranchIds,
             $loginTimingFilter,
             $attendeeTypeFilter,
             $outsideOfficeFilter,
         ) {
-            if (
-                $employeeNameFilter !== '' &&
-                ! str_contains($this->normalize($rec['employee_name']), $this->normalize($employeeNameFilter))
-            ) {
-                return false;
+            // Unified search: search by employee name OR employee ID (case-insensitive)
+            if ($employeeNameFilter !== '') {
+                $term = $this->normalize($employeeNameFilter);
+                $nameMatches = str_contains($this->normalize($rec['employee_name']), $term);
+                $idMatches   = str_contains($this->normalize((string) ($rec['employee_id'] ?? '')), $term);
+                if (! $nameMatches && ! $idMatches) {
+                    return false;
+                }
             }
 
             if (
                 $employeeIdFilter !== '' &&
                 ! str_contains($this->normalize((string) ($rec['employee_id'] ?? '')), $this->normalize($employeeIdFilter))
             ) {
+                return false;
+            }
+
+            if ($departmentIdFilter && (int) ($rec['department_id'] ?? 0) !== $departmentIdFilter) {
+                return false;
+            }
+
+            if ($actingBranchIds !== null && ! in_array((int) ($rec['branch_id'] ?? 0), $actingBranchIds, true)) {
                 return false;
             }
 
@@ -638,15 +737,6 @@ class AttendanceApiController extends Controller
         $paged = $records->forPage($page, $perPage)->values();
 
         $user = auth()->user();
-        $isCompanyAdmin = $this->isCompanyAdminUser($user);
-        $branches = [];
-        if ($isCompanyAdmin) {
-            $branchesQuery = Branch::where('is_active', true);
-            if ($user?->company_id) {
-                $branchesQuery->where('company_id', $user->company_id);
-            }
-            $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
-        }
 
         return response()->json([
             'status'             => true,
@@ -654,9 +744,10 @@ class AttendanceApiController extends Controller
             'can_view_all'       => $this->canViewAllAttendance(),
             'has_team_members'   => $this->hasMappedTeamMembers(),
             'can_view_team'      => $this->canManageOrViewTeam(),
-            'is_company_admin'   => $isCompanyAdmin,
+            'is_company_admin'   => $this->isCompanyAdminUser($user),
             'user_branch_id'     => $user?->branch_id ? (int) $user->branch_id : null,
-            'branches'           => $branches,
+            'branches'           => $this->attendanceBranches(),
+            'departments'        => $this->attendanceDepartments(),
             'stats'              => $stats,
             'data'               => [
                 'current_page' => $page,
@@ -1132,9 +1223,14 @@ class AttendanceApiController extends Controller
         $employeeName = $isIntern
             ? ($a->intern?->name ?: ($a->employee_name ?: 'Unknown Intern'))
             : ($a->employee?->name ?: ($a->employee_name ?: 'Unknown Employee'));
-        $branchName = $isIntern
-            ? ($a->intern?->portalUser?->branch?->name ?? '')
-            : ($a->employee?->portalUser?->branch?->name ?? '');
+        $branch = $isIntern
+            ? ($a->intern?->portalUser?->branch)
+            : ($a->employee?->portalUser?->branch);
+        $branchId = $branch?->id ?? ($isIntern ? $a->intern?->portalUser?->branch_id : $a->employee?->portalUser?->branch_id);
+        $branchName = $branch?->name ?? ($isIntern ? ($a->intern?->portalUser?->branch?->name ?? '') : ($a->employee?->portalUser?->branch?->name ?? ''));
+        $departmentId = $isIntern
+            ? $a->intern?->department_id
+            : $a->employee?->department_id;
         $departmentName = $isIntern
             ? ($a->intern?->department?->name ?? '')
             : ($a->employee?->department?->name ?? '');
@@ -1143,7 +1239,9 @@ class AttendanceApiController extends Controller
             'id'                    => $a->id,
             'employee_id'           => (string) $employeeId,
             'employee_name'         => $employeeName,
+            'branch_id'             => $branchId ? (int) $branchId : null,
             'branch_name'           => $branchName,
+            'department_id'         => $departmentId ? (int) $departmentId : null,
             'department_name'       => $departmentName,
             'attendee_type'         => $isIntern ? 'intern' : 'employee',
             'attendance_date'       => optional($a->attendance_date)->format('Y-m-d'),
@@ -1184,7 +1282,9 @@ class AttendanceApiController extends Controller
             'id'                    => null,
             'employee_id'           => $attendee['display_id'],
             'employee_name'         => $attendee['name'],
+            'branch_id'             => isset($attendee['branch_id']) ? (int) $attendee['branch_id'] : null,
             'branch_name'           => $attendee['branch_name'] ?? '',
+            'department_id'         => isset($attendee['department_id']) ? (int) $attendee['department_id'] : null,
             'department_name'       => $attendee['department_name'] ?? '',
             'attendee_type'         => $attendee['attendee_type'],
             'attendance_date'       => $date,
