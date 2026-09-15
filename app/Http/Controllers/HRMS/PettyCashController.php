@@ -20,6 +20,7 @@ class PettyCashController extends Controller
         // Date Range Filters (Default to Current Date / Today)
         $startDateInput = $request->input('start_date', Carbon::now()->toDateString());
         $endDateInput = $request->input('end_date', Carbon::now()->toDateString());
+        $category = $request->input('category');
 
         try {
             $startDate = Carbon::parse($startDateInput)->startOfDay();
@@ -29,7 +30,7 @@ class PettyCashController extends Controller
             $endDate = Carbon::now()->endOfDay();
         }
 
-        $reportData = $this->calculateReportData($companyId, $startDate, $endDate);
+        $reportData = $this->calculateReportData($companyId, $startDate, $endDate, $category);
 
         $raniEntries = \App\Models\RaniPettyCash::query()
             ->when($companyId, fn($q) => $q->where(fn($q2) => $q2->where('company_id', $companyId)->orWhereNull('company_id')))
@@ -48,6 +49,7 @@ class PettyCashController extends Controller
         return view('pages.hrms.petty_cash.index', array_merge($reportData, [
             'startDate' => $startDate->toDateString(),
             'endDate' => $endDate->toDateString(),
+            'selectedCategory' => $category,
             'raniEntries' => $raniEntries,
         ]));
     }
@@ -55,7 +57,7 @@ class PettyCashController extends Controller
     /**
      * Calculate DR & CR report statistics and transactions.
      */
-    public function calculateReportData($companyId, Carbon $startDate, Carbon $endDate): array
+    public function calculateReportData($companyId, Carbon $startDate, Carbon $endDate, ?string $category = null): array
     {
         // Opening Balance calculation: sum of previous credits & cash_in_hand (Cash IN) - debits (Cash OUT) prior to start date
         $priorQuery = PettyCashEntry::query();
@@ -63,6 +65,9 @@ class PettyCashController extends Controller
             $priorQuery->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)->orWhereNull('company_id');
             });
+        }
+        if (! empty($category) && in_array($category, ['petty_cash', 'house_keeping'], true)) {
+            $priorQuery->where('category', $category);
         }
 
         $priorCredits = (float) (clone $priorQuery)->where('entry_date', '<', $startDate->toDateString())
@@ -81,6 +86,9 @@ class PettyCashController extends Controller
             $txQuery->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)->orWhereNull('company_id');
             });
+        }
+        if (! empty($category) && in_array($category, ['petty_cash', 'house_keeping'], true)) {
+            $txQuery->where('category', $category);
         }
 
         $entries = $txQuery->whereDate('entry_date', '>=', $startDate->toDateString())
@@ -110,6 +118,8 @@ class PettyCashController extends Controller
                 'entry_date_formatted' => optional($entry->entry_date)->format('d M Y'),
                 'voucher_no' => $entry->voucher_no ?: '-',
                 'name' => $entry->name ?: '-',
+                'category' => $entry->category ?: 'petty_cash',
+                'category_label' => ($entry->category === 'house_keeping') ? 'House Keeping' : 'Petty Cash',
                 'particulars' => $entry->particulars,
                 'type' => $entry->type,
                 'type_label' => $entry->type === 'cash_in_hand' ? 'Cash In Hand' : ($entry->type === 'credit' ? 'Credit' : 'Debit'),
@@ -129,6 +139,7 @@ class PettyCashController extends Controller
             'totalCredit' => $totalCredit,
             'closingBalance' => $closingBalance,
             'transactions' => $transactions,
+            'category' => $category,
         ];
     }
 
@@ -144,6 +155,7 @@ class PettyCashController extends Controller
             'name' => ['nullable', 'string', 'max:255'],
             'particulars' => ['required', 'string', 'max:255'],
             'type' => ['required', 'in:cash_in_hand,credit,debit'],
+            'category' => ['nullable', 'string', 'in:petty_cash,house_keeping'],
             'amount' => ['required', 'numeric', 'min:0.01'],
         ]);
 
@@ -155,11 +167,12 @@ class PettyCashController extends Controller
             'name' => $request->name,
             'particulars' => $request->particulars,
             'type' => $request->type,
+            'category' => $request->input('category', 'petty_cash'),
             'amount' => $request->amount,
             'created_by' => Auth::id(),
         ]);
 
-        return redirect()->back()->with('success', 'Petty Cash transaction recorded successfully.');
+        return redirect()->back()->with('success', 'Transaction recorded successfully.');
     }
 
     /**
@@ -178,6 +191,7 @@ class PettyCashController extends Controller
             'name' => ['nullable', 'string', 'max:255'],
             'particulars' => ['required', 'string', 'max:255'],
             'type' => ['required', 'in:cash_in_hand,credit,debit'],
+            'category' => ['nullable', 'string', 'in:petty_cash,house_keeping'],
             'amount' => ['required', 'numeric', 'min:0.01'],
         ]);
 
@@ -187,10 +201,33 @@ class PettyCashController extends Controller
             'name' => $request->name,
             'particulars' => $request->particulars,
             'type' => $request->type,
+            'category' => $request->input('category', $entry->category ?? 'petty_cash'),
             'amount' => $request->amount,
         ]);
 
-        return redirect()->back()->with('success', 'Petty Cash transaction updated successfully.');
+        return redirect()->back()->with('success', 'Transaction updated successfully.');
+    }
+
+    /**
+     * Delete an existing Petty Cash transaction
+     */
+    public function destroy(PettyCashEntry $entry)
+    {
+        $companyId = Auth::user()?->company_id;
+        if ($companyId && $entry->company_id && (int) $entry->company_id !== (int) $companyId) {
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized action.'], 403);
+            }
+            abort(403, 'Unauthorized action.');
+        }
+
+        $entry->delete();
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json(['success' => true, 'message' => 'Transaction deleted successfully.']);
+        }
+
+        return redirect()->back()->with('success', 'Transaction deleted successfully.');
     }
 
     /**
@@ -201,13 +238,15 @@ class PettyCashController extends Controller
         $companyId = Auth::user()?->company_id;
         $startDateInput = $request->input('start_date', Carbon::now()->toDateString());
         $endDateInput = $request->input('end_date', Carbon::now()->toDateString());
+        $category = $request->input('category');
 
         $startDate = Carbon::parse($startDateInput)->startOfDay();
         $endDate = Carbon::parse($endDateInput)->endOfDay();
 
-        $data = $this->calculateReportData($companyId, $startDate, $endDate);
+        $data = $this->calculateReportData($companyId, $startDate, $endDate, $category);
 
-        $filename = 'Petty_Cash_Report_' . $startDate->format('Ymd') . '_to_' . $endDate->format('Ymd') . '.csv';
+        $categorySuffix = $category ? '_' . $category : '';
+        $filename = 'Petty_Cash_Report' . $categorySuffix . '_' . $startDate->format('Ymd') . '_to_' . $endDate->format('Ymd') . '.csv';
 
         $headers = [
             'Content-Type' => 'text/csv',
@@ -218,17 +257,19 @@ class PettyCashController extends Controller
             $file = fopen('php://output', 'w');
 
             // Header info rows
-            fputcsv($file, ['PETTY CASH ACCOUNT REPORT (DR & CR)']);
+            fputcsv($file, ['PETTY CASH & HOUSE KEEPING ACCOUNT REPORT (DR & CR)']);
             fputcsv($file, ['Date Range:', $startDate->format('d M Y') . ' to ' . $endDate->format('d M Y')]);
+            fputcsv($file, ['Category:', !empty($data['category']) ? (($data['category'] === 'house_keeping') ? 'House Keeping' : 'Petty Cash') : 'All Ledgers (Combined)']);
             fputcsv($file, ['Generated On:', Carbon::now()->format('d M Y h:i A')]);
             fputcsv($file, []);
 
             // Table Headers
-            fputcsv($file, ['Date', 'Voucher / Ref No', 'Name / Paid To / Received From', 'Particulars / Narration', 'Debit (DR) INR', 'Credit (CR) INR', 'Balance INR']);
+            fputcsv($file, ['Date', 'Category', 'Voucher / Ref No', 'Name / Paid To / Received From', 'Particulars / Narration', 'Debit (DR) INR', 'Credit (CR) INR', 'Balance INR']);
 
             // Opening Balance Row
             fputcsv($file, [
                 $startDate->format('d M Y'),
+                '-',
                 '-',
                 '-',
                 'OPENING BALANCE',
@@ -241,6 +282,7 @@ class PettyCashController extends Controller
             foreach ($data['transactions'] as $tx) {
                 fputcsv($file, [
                     $tx['entry_date_formatted'],
+                    $tx['category_label'],
                     $tx['voucher_no'],
                     $tx['name'],
                     $tx['particulars'],
@@ -255,6 +297,7 @@ class PettyCashController extends Controller
             fputcsv($file, [
                 'TOTALS',
                 '',
+                '',
                 'TOTAL TRANSACTIONS',
                 '',
                 number_format($data['totalDebit'], 2, '.', ''),
@@ -265,6 +308,7 @@ class PettyCashController extends Controller
             // Closing Balance Row
             fputcsv($file, [
                 'CLOSING BALANCE',
+                '',
                 '',
                 'FINAL STATEMENT BALANCE',
                 '',
@@ -286,15 +330,17 @@ class PettyCashController extends Controller
         $companyId = Auth::user()?->company_id;
         $startDateInput = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
         $endDateInput = $request->input('end_date', Carbon::now()->toDateString());
+        $category = $request->input('category');
 
         $startDate = Carbon::parse($startDateInput)->startOfDay();
         $endDate = Carbon::parse($endDateInput)->endOfDay();
 
-        $data = $this->calculateReportData($companyId, $startDate, $endDate);
+        $data = $this->calculateReportData($companyId, $startDate, $endDate, $category);
 
         return view('pages.hrms.petty_cash.pdf', array_merge($data, [
             'startDate' => $startDate->format('d M Y'),
             'endDate' => $endDate->format('d M Y'),
+            'selectedCategory' => $category,
         ]));
     }
 
@@ -317,6 +363,18 @@ class PettyCashController extends Controller
             'entry_date' => $validated['entry_date'],
             'amount'     => $validated['amount'],
             'notes'      => $validated['notes'] ?? null,
+        ]);
+
+        // Keep unified ledger in sync
+        PettyCashEntry::create([
+            'company_id'  => $companyId,
+            'entry_date'  => $validated['entry_date'],
+            'name'        => 'House Keeping',
+            'particulars' => $validated['notes'] ?: 'House Keeping Expense',
+            'type'        => 'debit',
+            'category'    => 'house_keeping',
+            'amount'      => $validated['amount'],
+            'created_by'  => Auth::id(),
         ]);
 
         return redirect()

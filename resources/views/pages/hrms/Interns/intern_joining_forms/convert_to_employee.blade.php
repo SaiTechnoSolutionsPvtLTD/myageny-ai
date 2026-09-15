@@ -141,6 +141,7 @@
                                                     data-department-id="{{ $role->department_id }}"
                                                     data-parent-role-id="{{ $role->roleParentMapping?->parent_role_id }}"
                                                     data-parent-role-name="{{ $role->roleParentMapping?->parentRole?->display_name ?: $role->roleParentMapping?->parentRole?->name }}"
+                                                    data-ancestor-role-ids="{{ implode(',', $role->ancestor_role_ids ?? []) }}"
                                                     @selected((string) old('role_id') === (string) $role->id)>
                                                     {{ $role->display_name ?: $role->name }}{{ $role->department ? ' - ' . $role->department->name : '' }}
                                                 </option>
@@ -228,12 +229,29 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function isTlUserExecutiveOrAdmin(tlUser) {
+        const roleLabelLower = (tlUser.role_label || '').toLowerCase();
+        return Boolean(
+            tlUser.is_super_admin ||
+            tlUser.is_company_admin ||
+            tlUser.is_executive ||
+            roleLabelLower.includes('company admin') ||
+            roleLabelLower.includes('chief business officer') ||
+            roleLabelLower.includes('cheif business officer') ||
+            roleLabelLower.includes('cbo') ||
+            roleLabelLower.includes('coo') ||
+            roleLabelLower.includes('super admin')
+        );
+    }
+
     function filterTlOptions() {
         if (!tlSelect) return;
         const selectedDeptId = departmentSelect ? departmentSelect.value : '';
         const selectedBranchId = branchSelect ? branchSelect.value : '';
         const selectedRoleOpt = roleSelect && roleSelect.selectedIndex >= 0 ? roleSelect.options[roleSelect.selectedIndex] : null;
         const parentRoleId = selectedRoleOpt ? selectedRoleOpt.getAttribute('data-parent-role-id') : null;
+        const ancestorRoleIdsStr = selectedRoleOpt ? selectedRoleOpt.getAttribute('data-ancestor-role-ids') : '';
+        const ancestorRoleIds = (ancestorRoleIdsStr ? ancestorRoleIdsStr.split(',') : []).map(id => id.trim()).filter(Boolean);
         const previousVal = tlSelect.value || tlSelect.getAttribute('data-selected-tl') || '';
 
         tlSelect.innerHTML = '';
@@ -242,18 +260,61 @@ document.addEventListener('DOMContentLoaded', function () {
         placeholder.textContent = 'Select Team Lead';
         tlSelect.appendChild(placeholder);
 
-        const filtered = tlUsersData.filter(user => {
-            const matchesBranch = !selectedBranchId || !user.branch_id || String(user.branch_id) === String(selectedBranchId) || user.is_super_admin;
-            const depts = Array.isArray(user.department_ids) ? user.department_ids.map(String) : [];
-            const matchesDept = !selectedDeptId || depts.includes(String(selectedDeptId)) || depts.includes('') || user.is_super_admin;
+        function baseUserFilter(user) {
+            const isExec = isTlUserExecutiveOrAdmin(user);
+            return !selectedBranchId || !user.branch_id || String(user.branch_id) === String(selectedBranchId) || isExec;
+        }
 
-            let matchesRoleMapping = true;
-            if (parentRoleId && Array.isArray(user.role_ids)) {
-                matchesRoleMapping = user.role_ids.map(String).includes(String(parentRoleId)) || user.is_super_admin;
+        let filtered = [];
+
+        // Tier 1: Direct parent role
+        if (parentRoleId) {
+            filtered = tlUsersData.filter(user => {
+                if (!baseUserFilter(user)) return false;
+                const roleIds = Array.isArray(user.role_ids) ? user.role_ids.map(String) : [];
+                return roleIds.includes(String(parentRoleId));
+            });
+        }
+
+        // Tier 2: Ancestor roles
+        if (filtered.length === 0 && ancestorRoleIds.length > 0) {
+            for (let i = 0; i < ancestorRoleIds.length; i++) {
+                const ancId = ancestorRoleIds[i];
+                const ancMatches = tlUsersData.filter(user => {
+                    if (!baseUserFilter(user)) return false;
+                    const roleIds = Array.isArray(user.role_ids) ? user.role_ids.map(String) : [];
+                    return roleIds.includes(String(ancId));
+                });
+                if (ancMatches.length > 0) {
+                    filtered = ancMatches;
+                    break;
+                }
             }
+        }
 
-            return matchesDept && matchesBranch && matchesRoleMapping;
-        });
+        // Tier 3: Department TL / Managers
+        if (filtered.length === 0 && selectedDeptId) {
+            filtered = tlUsersData.filter(user => {
+                if (!baseUserFilter(user)) return false;
+                const depts = Array.isArray(user.department_ids) ? user.department_ids.map(String) : [];
+                const matchesDept = depts.includes(String(selectedDeptId)) || depts.includes('') || isTlUserExecutiveOrAdmin(user);
+                if (!matchesDept) return false;
+                return user.is_branch_admin_or_manager || isTlUserExecutiveOrAdmin(user) || (/team lead|team leader|manager|coordinator|head|tl/i).test(user.role_label || '');
+            });
+        }
+
+        // Tier 4: Branch Admin & Managers
+        if (filtered.length === 0) {
+            filtered = tlUsersData.filter(user => {
+                if (!baseUserFilter(user)) return false;
+                return user.is_branch_admin_or_manager || isTlUserExecutiveOrAdmin(user);
+            });
+        }
+
+        // Tier 5: Executive fallback
+        if (filtered.length === 0) {
+            filtered = tlUsersData.filter(user => isTlUserExecutiveOrAdmin(user));
+        }
 
         filtered.forEach(user => {
             const opt = document.createElement('option');
@@ -268,31 +329,72 @@ document.addEventListener('DOMContentLoaded', function () {
         if (previousVal && !filtered.some(u => String(u.id) === String(previousVal))) {
             tlSelect.value = '';
         }
+
+        refreshSelect2(tlSelect);
     }
 
-    if (departmentSelect) {
-        departmentSelect.addEventListener('change', function () {
-            filterRolesByDepartment();
-            filterTlOptions();
-        });
-    }
-
-    if (roleSelect) {
-        roleSelect.addEventListener('change', function () {
-            const selectedOpt = roleSelect.options[roleSelect.selectedIndex];
-            if (selectedOpt && selectedOpt.value) {
-                const roleDeptId = selectedOpt.getAttribute('data-department-id');
-                if (roleDeptId && departmentSelect && !departmentSelect.value) {
-                    departmentSelect.value = roleDeptId;
-                    filterRolesByDepartment();
+    let isRefreshingSelect2 = false;
+    function refreshSelect2(element) {
+        if (!element || isRefreshingSelect2) return;
+        if (window.jQuery && $(element).hasClass('select2-hidden-accessible')) {
+            isRefreshingSelect2 = true;
+            try {
+                var val = element.value;
+                $(element).select2('destroy');
+                if (typeof window.initSelect2 === 'function') {
+                    window.initSelect2(element);
+                } else {
+                    $(element).select2({ width: '100%' });
                 }
+                if (val !== undefined && val !== null && val !== '') {
+                    $(element).val(val).trigger('change.select2');
+                }
+            } finally {
+                isRefreshingSelect2 = false;
             }
-            filterTlOptions();
-        });
+        }
     }
+
+    function onDepartmentChange() {
+        filterRolesByDepartment();
+        refreshSelect2(roleSelect);
+        filterTlOptions();
+    }
+
+    function onRoleChange() {
+        const selectedOpt = roleSelect.options[roleSelect.selectedIndex];
+        if (selectedOpt && selectedOpt.value) {
+            const roleDeptId = selectedOpt.getAttribute('data-department-id');
+            if (roleDeptId && departmentSelect && !departmentSelect.value) {
+                departmentSelect.value = roleDeptId;
+                refreshSelect2(departmentSelect);
+                filterRolesByDepartment();
+                refreshSelect2(roleSelect);
+            }
+        }
+        filterTlOptions();
+    }
+
+    if (window.jQuery) {
+        if (departmentSelect) $(departmentSelect).on('change', onDepartmentChange);
+        if (roleSelect) $(roleSelect).on('change', onRoleChange);
+        if (branchSelect) $(branchSelect).on('change', filterTlOptions);
+    }
+    if (departmentSelect) departmentSelect.addEventListener('change', onDepartmentChange);
+    if (roleSelect) roleSelect.addEventListener('change', onRoleChange);
+    if (branchSelect) branchSelect.addEventListener('change', filterTlOptions);
 
     filterRolesByDepartment();
+    refreshSelect2(roleSelect);
     filterTlOptions();
+
+    if (window.jQuery) {
+        $(document).ready(function () {
+            filterRolesByDepartment();
+            refreshSelect2(roleSelect);
+            filterTlOptions();
+        });
+    }
 });
 </script>
 @endpush

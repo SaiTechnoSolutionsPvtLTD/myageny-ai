@@ -106,13 +106,15 @@ class InternJoiningFormController extends Controller
     public function create(): View
     {
         $companyId = $this->currentCompanyId();
+        $roles = Role::with(['department', 'roleParentMapping.parentRole'])
+            ->where('company_id', $companyId)
+            ->orderByRaw('COALESCE(display_name, name)')
+            ->get();
+        $roles = $this->attachAncestorRoleIds($roles);
 
         return view('pages.hrms.Interns.intern_joining_forms.create', [
             'documentLabels' => self::DOCUMENT_LABELS,
-            'roles' => Role::with(['department', 'roleParentMapping.parentRole'])
-                ->where('company_id', $companyId)
-                ->orderByRaw('COALESCE(display_name, name)')
-                ->get(),
+            'roles' => $roles,
             'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'tlUsers' => $this->teamLeadUsers($companyId),
@@ -199,6 +201,7 @@ class InternJoiningFormController extends Controller
             })
             ->orderByRaw('COALESCE(display_name, name)')
             ->get();
+        $roles = $this->attachAncestorRoleIds($roles);
 
         return view('pages.hrms.Interns.intern_joining_forms.edit', [
             'form' => $intern,
@@ -317,6 +320,7 @@ class InternJoiningFormController extends Controller
             ->where('company_id', $companyId)
             ->orderByRaw('COALESCE(display_name, name)')
             ->get();
+        $roles = $this->attachAncestorRoleIds($roles);
 
         if ($intern->convertedEmployee) {
             return view('pages.hrms.Interns.intern_joining_forms.convert_to_employee', [
@@ -812,6 +816,28 @@ class InternJoiningFormController extends Controller
         );
     }
 
+    private function attachAncestorRoleIds(Collection $roles): Collection
+    {
+        $rolesById = $roles->keyBy('id');
+
+        foreach ($roles as $role) {
+            $ancestorIds = [];
+            $currentParentId = $role->roleParentMapping?->parent_role_id;
+            $visited = [$role->id];
+
+            while ($currentParentId && ! in_array($currentParentId, $visited, true)) {
+                $ancestorIds[] = (int) $currentParentId;
+                $visited[] = (int) $currentParentId;
+                $parentRole = $rolesById->get($currentParentId);
+                $currentParentId = $parentRole?->roleParentMapping?->parent_role_id;
+            }
+
+            $role->ancestor_role_ids = $ancestorIds;
+        }
+
+        return $roles;
+    }
+
     private function teamLeadUsers(?int $companyId = null): Collection
     {
         $companyId = $companyId ?: $this->currentCompanyId();
@@ -821,16 +847,19 @@ class InternJoiningFormController extends Controller
             $companySuperAdminId = optional(\App\Models\Company::find($companyId))->super_admin_user_id;
         }
 
-        return User::with(['roles.roleMapping', 'branch'])
+        return User::withoutGlobalScopes()
+            ->with(['roles.roleMapping', 'branch'])
             ->where('is_active', true)
             ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
             ->get()
-            ->filter(fn (User $user) => $user->roles->isNotEmpty() || (int) $user->id === (int) $companySuperAdminId || $user->isSuperAdmin())
+            ->filter(fn (User $user) => $user->roles->isNotEmpty() || (int) $user->id === (int) $companySuperAdminId || $user->isSuperAdmin() || $user->isCompanyAdmin())
             ->map(function (User $user) use ($companySuperAdminId) {
                 $teamLeadRoles = $user->roles->filter(fn (Role $role) => $this->roleLooksLikeTeamLead($role));
                 $displayRoles = $teamLeadRoles->isNotEmpty() ? $teamLeadRoles : $user->roles;
                 $isSuperAdmin = $user->isSuperAdmin() || (int) $user->id === (int) $companySuperAdminId;
+                $isCompanyAdmin = $user->isCompanyAdmin() || $isSuperAdmin || $user->hasRole('company_admin') || Str::contains($user->roles->pluck('name')->implode(','), 'company_admin');
+                $isExecutive = $isCompanyAdmin || $isSuperAdmin || $this->isExecutiveUser($user);
 
                 return [
                     'id' => (string) $user->id,
@@ -852,12 +881,51 @@ class InternJoiningFormController extends Controller
                         ->map(fn (Role $role) => $this->roleLabel($role))
                         ->filter()
                         ->unique()
-                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : 'Team Lead'),
+                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : ($isCompanyAdmin ? 'Company Admin' : 'Team Lead')),
                     'is_super_admin' => $isSuperAdmin,
+                    'is_company_admin' => $isCompanyAdmin,
+                    'is_executive' => $isExecutive,
                     'is_branch_admin_or_manager' => $this->isBranchAdminOrManager($user),
                 ];
             })
             ->values();
+    }
+
+    private function isExecutiveUser(User $user): bool
+    {
+        if ($user->isSuperAdmin() || $user->isCompanyAdmin() || $user->hasRole('company_admin')) {
+            return true;
+        }
+
+        $executiveKeys = [
+            'company_admin',
+            'super_admin',
+            'admin',
+            'chief_business_officer',
+            'cheif_business_officer',
+            'cbo',
+            'chief_operating_officer',
+            'cheif_operating_officer',
+            'coo',
+            'managing_director',
+            'director',
+            'president',
+            'vice_president',
+            'vp',
+        ];
+
+        return $user->roles->contains(function (Role $role) use ($executiveKeys) {
+            $roleKeys = collect([$role->name, $role->display_name])
+                ->filter()
+                ->flatMap(function (string $roleName) {
+                    $normalized = $this->normalizeRoleKey($roleName);
+
+                    return [$normalized, Str::afterLast($normalized, '__')];
+                })
+                ->unique();
+
+            return $roleKeys->intersect($executiveKeys)->isNotEmpty();
+        });
     }
 
     private function isBranchAdminOrManager(User $user): bool

@@ -334,6 +334,7 @@
                                                 data-department-id="{{ $role->department_id }}"
                                                 data-parent-role-id="{{ $role->roleParentMapping?->parent_role_id ?? '' }}"
                                                 data-parent-role-name="{{ $role->roleParentMapping?->parentRole?->display_name ?: $role->roleParentMapping?->parentRole?->name ?? '' }}"
+                                                data-ancestor-role-ids="{{ implode(',', $role->ancestor_role_ids ?? []) }}"
                                                 @selected((string) $portalRoleId === (string) $role->id)
                                             >
                                                 {{ $role->display_name ?: $role->name }}{{ $role->department ? ' - ' . $role->department->name : '' }}
@@ -611,6 +612,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tlHelp = document.getElementById('portalTlHelp');
     const portalSummary = document.getElementById('portalSummary');
     const tlUsers = @json($tlUsers ?? []);
+    const currentPortalUserId = @json($portalUser?->id ? (string) $portalUser->id : null);
     let activeIndex = 0;
 
     function updateReview() {
@@ -672,9 +674,32 @@ document.addEventListener('DOMContentLoaded', function () {
             label: option.textContent,
             departmentId: option.getAttribute('data-department-id') || '',
             parentRoleId: option.getAttribute('data-parent-role-id') || '',
-            parentRoleLabel: option.getAttribute('data-parent-role-name') || ''
+            parentRoleLabel: option.getAttribute('data-parent-role-name') || '',
+            ancestorRoleIds: option.getAttribute('data-ancestor-role-ids') || ''
         };
     }) : [];
+
+    let isRefreshingSelect2 = false;
+    function refreshSelect2(element) {
+        if (!element || isRefreshingSelect2) return;
+        if (window.jQuery && $(element).hasClass('select2-hidden-accessible')) {
+            isRefreshingSelect2 = true;
+            try {
+                var val = element.value;
+                $(element).select2('destroy');
+                if (typeof window.initSelect2 === 'function') {
+                    window.initSelect2(element);
+                } else {
+                    $(element).select2({ width: '100%' });
+                }
+                if (val !== undefined && val !== null && val !== '') {
+                    $(element).val(val).trigger('change.select2');
+                }
+            } finally {
+                isRefreshingSelect2 = false;
+            }
+        }
+    }
 
     function portalAccountEnabled() {
         return !!createPortalAccount?.checked;
@@ -714,6 +739,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (portalPasswordInput && !@json((bool) $portalUser)) {
             portalPasswordInput.required = true;
         }
+
+        refreshSelect2(branchSelect);
+        refreshSelect2(departmentSelect);
+        refreshSelect2(roleSelect);
+        refreshSelect2(tlSelect);
     }
 
     if (personalEmailInput && portalEmailInput) {
@@ -734,7 +764,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const selectedOption = roleSelect.options[roleSelect.selectedIndex];
-        const departmentId = selectedOption ? selectedOption.getAttribute('data-department-id') : '';
+        const savedOption = allRoleOptions.find(function (option) {
+            return String(option.value) === String(roleSelect.value);
+        });
+        const departmentId = selectedOption ? selectedOption.getAttribute('data-department-id') : (savedOption ? savedOption.departmentId : '');
 
         if (!departmentId) {
             return;
@@ -742,6 +775,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (force || !departmentSelect.value) {
             departmentSelect.value = departmentId;
+            refreshSelect2(departmentSelect);
         }
     }
 
@@ -776,6 +810,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (option.parentRoleLabel) {
                 optionElement.setAttribute('data-parent-role-name', option.parentRoleLabel);
             }
+            if (option.ancestorRoleIds) {
+                optionElement.setAttribute('data-ancestor-role-ids', option.ancestorRoleIds);
+            }
             if (option.value === selectedRoleId) {
                 optionElement.selected = true;
             }
@@ -786,6 +823,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!filteredRoleOptions.some(function (option) { return option.value === selectedRoleId; })) {
             roleSelect.value = '';
         }
+
+        refreshSelect2(roleSelect);
     }
 
     function selectedRoleMeta() {
@@ -794,15 +833,44 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const selectedOption = roleSelect.options[roleSelect.selectedIndex];
+        const savedOption = allRoleOptions.find(function (opt) {
+            return String(opt.value) === String(roleSelect.value);
+        });
+
+        const parentRoleId = selectedOption?.getAttribute('data-parent-role-id') || savedOption?.parentRoleId || '';
+        const parentRoleLabel = selectedOption?.getAttribute('data-parent-role-name') || savedOption?.parentRoleLabel || '';
+        const ancestorRoleIdsStr = selectedOption?.getAttribute('data-ancestor-role-ids') || savedOption?.ancestorRoleIds || '';
+        const ancestorRoleIds = (ancestorRoleIdsStr ? ancestorRoleIdsStr.split(',') : [])
+            .map(function (id) { return id.trim(); })
+            .filter(Boolean);
 
         return {
-            parentRoleId: selectedOption?.getAttribute('data-parent-role-id') || '',
-            parentRoleLabel: selectedOption?.getAttribute('data-parent-role-name') || ''
+            value: roleSelect.value,
+            label: selectedOption?.textContent.trim() || savedOption?.label || '',
+            departmentId: selectedOption?.getAttribute('data-department-id') || savedOption?.departmentId || '',
+            parentRoleId: parentRoleId,
+            parentRoleLabel: parentRoleLabel,
+            ancestorRoleIds: ancestorRoleIds
         };
     }
 
     function normalizedRoleLabel(label) {
         return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    function isTlUserExecutiveOrAdmin(tlUser) {
+        const roleLabelLower = (tlUser.role_label || '').toLowerCase();
+        return Boolean(
+            tlUser.is_super_admin ||
+            tlUser.is_company_admin ||
+            tlUser.is_executive ||
+            roleLabelLower.includes('company admin') ||
+            roleLabelLower.includes('chief business officer') ||
+            roleLabelLower.includes('cheif business officer') ||
+            roleLabelLower.includes('cbo') ||
+            roleLabelLower.includes('coo') ||
+            roleLabelLower.includes('super admin')
+        );
     }
 
     function tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel) {
@@ -813,8 +881,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const parentKey = normalizedRoleLabel(parentRoleLabel);
+        const isExecutive = isTlUserExecutiveOrAdmin(tlUser);
 
-        return Boolean(tlUser.is_super_admin && ['super_admin', 'admin'].includes(parentKey));
+        if (['super_admin', 'admin', 'company_admin'].includes(parentKey)) {
+            return isExecutive;
+        }
+
+        return Boolean(isExecutive && ['chief_business_officer', 'cheif_business_officer', 'cbo'].includes(parentKey));
     }
 
     function filteredTlUsersForSelection() {
@@ -823,19 +896,75 @@ document.addEventListener('DOMContentLoaded', function () {
         const selectedRole = selectedRoleMeta();
         const parentRoleId = selectedRole?.parentRoleId || '';
         const parentRoleLabel = selectedRole?.parentRoleLabel || '';
+        const ancestorRoleIds = selectedRole?.ancestorRoleIds || [];
 
-        return tlUsers.filter(function (tlUser) {
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || tlUser.is_super_admin;
-
-            if (parentRoleId) {
-                return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
+        function baseUserFilter(tlUser) {
+            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
+                return false;
             }
+            const isExec = isTlUserExecutiveOrAdmin(tlUser);
+            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExec;
+            return matchesBranch;
+        }
 
-            const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
-            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || tlUser.is_super_admin;
+        // Tier 1: Direct Parent Role Match
+        if (parentRoleId) {
+            const directMatches = tlUsers.filter(function (tlUser) {
+                if (!baseUserFilter(tlUser)) return false;
+                return tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
+            });
+            if (directMatches.length > 0) {
+                return { users: directMatches, matchType: 'parent' };
+            }
+        }
 
-            return matchesDepartment && matchesBranch;
+        // Tier 2: Ancestor Role Chain Match
+        if (ancestorRoleIds.length > 0) {
+            for (let i = 0; i < ancestorRoleIds.length; i++) {
+                const ancId = ancestorRoleIds[i];
+                const ancMatches = tlUsers.filter(function (tlUser) {
+                    if (!baseUserFilter(tlUser)) return false;
+                    const roleIds = Array.isArray(tlUser.role_ids) ? tlUser.role_ids.map(String) : [];
+                    return roleIds.includes(String(ancId));
+                });
+                if (ancMatches.length > 0) {
+                    return { users: ancMatches, matchType: 'ancestor' };
+                }
+            }
+        }
+
+        // Tier 3: Department Team Leads & Managers
+        if (selectedDepartmentId) {
+            const deptMatches = tlUsers.filter(function (tlUser) {
+                if (!baseUserFilter(tlUser)) return false;
+                const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
+                const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || isTlUserExecutiveOrAdmin(tlUser);
+                if (!matchesDepartment) return false;
+
+                const isExec = isTlUserExecutiveOrAdmin(tlUser);
+                const isTlOrManager = tlUser.is_branch_admin_or_manager || isExec || (/team lead|team leader|manager|coordinator|head|tl/i).test(tlUser.role_label || '');
+                return isTlOrManager;
+            });
+            if (deptMatches.length > 0) {
+                return { users: deptMatches, matchType: 'department' };
+            }
+        }
+
+        // Tier 4: Branch Admin & Branch Manager
+        const branchMatches = tlUsers.filter(function (tlUser) {
+            if (!baseUserFilter(tlUser)) return false;
+            return Boolean(tlUser.is_branch_admin_or_manager || isTlUserExecutiveOrAdmin(tlUser));
         });
+        if (branchMatches.length > 0) {
+            return { users: branchMatches, matchType: 'branch' };
+        }
+
+        // Tier 5: Executive Admins fallback
+        const execMatches = tlUsers.filter(function (tlUser) {
+            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) return false;
+            return isTlUserExecutiveOrAdmin(tlUser);
+        });
+        return { users: execMatches, matchType: 'executive' };
     }
 
     function updatePortalMappingSummary() {
@@ -847,7 +976,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const roleLabel = roleSelect.options[roleSelect.selectedIndex]?.textContent.trim() || 'No role selected';
         const selectedTlOption = tlSelect.options[tlSelect.selectedIndex];
         const selectedTlLabel = selectedTlOption && selectedTlOption.value ? selectedTlOption.textContent.trim() : null;
-        const filteredTlUsers = filteredTlUsersForSelection();
+        const selectionResult = filteredTlUsersForSelection();
+        const filteredTlUsers = selectionResult.users;
 
         portalSummary.textContent = selectedTlLabel
             ? 'Department: ' + departmentLabel + '. Role: ' + roleLabel + '. Selected TL: ' + selectedTlLabel + '.'
@@ -882,11 +1012,23 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const filteredTlUsers = filteredTlUsersForSelection();
+        const selectionResult = filteredTlUsersForSelection();
+        const filteredTlUsers = selectionResult.users;
+        const matchType = selectionResult.matchType;
 
-        placeholder.textContent = filteredTlUsers.length
-            ? (parentRoleId ? 'Select ' + parentRoleLabel : 'Select TL')
-            : (parentRoleId ? 'No user found with ' + parentRoleLabel + ' role' : 'No TL found for this department');
+        if (filteredTlUsers.length > 0) {
+            if (matchType === 'parent') {
+                placeholder.textContent = 'Select ' + parentRoleLabel;
+            } else if (matchType === 'ancestor') {
+                placeholder.textContent = 'Select Team Lead';
+            } else if (matchType === 'branch') {
+                placeholder.textContent = 'Select Team Lead / Branch Admin';
+            } else {
+                placeholder.textContent = 'Select Team Lead';
+            }
+        } else {
+            placeholder.textContent = 'No TL found for this selection';
+        }
         tlSelect.appendChild(placeholder);
 
         filteredTlUsers.forEach(function (tlUser) {
@@ -901,16 +1043,53 @@ document.addEventListener('DOMContentLoaded', function () {
             tlSelect.appendChild(option);
         });
 
-        if (!filteredTlUsers.some(function (tlUser) { return String(tlUser.id) === String(previousValue); })) {
+        if (filteredTlUsers.some(function (tlUser) { return String(tlUser.id) === String(previousValue); })) {
+            tlSelect.value = String(previousValue);
+        } else if (filteredTlUsers.length === 1) {
+            tlSelect.value = String(filteredTlUsers[0].id);
+        } else {
             tlSelect.value = '';
         }
 
         if (tlHelp) {
-            tlHelp.textContent = filteredTlUsers.length
-                ? filteredTlUsers.length + ' TL option' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the current selection.'
-                : 'No active TL users found for the current selection.';
+            if (filteredTlUsers.length === 0) {
+                tlHelp.textContent = 'No active TL users found for the current selection.';
+            } else if (matchType === 'parent') {
+                tlHelp.textContent = filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available from mapped parent role: ' + parentRoleLabel + '.';
+            } else if (matchType === 'ancestor') {
+                tlHelp.textContent = filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available from role hierarchy.';
+            } else if (matchType === 'department') {
+                tlHelp.textContent = filteredTlUsers.length + ' Team Lead' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the selected department.';
+            } else if (matchType === 'branch') {
+                tlHelp.textContent = 'No direct TL found for this role. ' + filteredTlUsers.length + ' Branch Admin / Manager' + (filteredTlUsers.length === 1 ? '' : 's') + ' available.';
+            } else {
+                tlHelp.textContent = 'No direct TL found. ' + filteredTlUsers.length + ' Executive Admin' + (filteredTlUsers.length === 1 ? '' : 's') + ' available.';
+            }
         }
 
+        refreshSelect2(tlSelect);
+        updatePortalMappingSummary();
+    }
+
+    function onRoleChange() {
+        syncDepartmentFromRole(true);
+        filterRolesByDepartment();
+        updateTlOptions();
+        updatePortalMappingSummary();
+    }
+
+    function onDepartmentChange() {
+        filterRolesByDepartment();
+        updateTlOptions();
+        updatePortalMappingSummary();
+    }
+
+    function onBranchChange() {
+        updateTlOptions();
+        updatePortalMappingSummary();
+    }
+
+    function onTlChange() {
         updatePortalMappingSummary();
     }
 
@@ -921,28 +1100,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (roleSelect) {
-        roleSelect.addEventListener('change', function () {
-            syncDepartmentFromRole(true);
-            filterRolesByDepartment();
-            updateTlOptions();
-        });
+    if (window.jQuery) {
+        if (roleSelect) $(roleSelect).on('change', onRoleChange);
+        if (departmentSelect) $(departmentSelect).on('change', onDepartmentChange);
+        if (branchSelect) $(branchSelect).on('change', onBranchChange);
+        if (tlSelect) $(tlSelect).on('change', onTlChange);
     }
-
-    if (departmentSelect) {
-        departmentSelect.addEventListener('change', function () {
-            filterRolesByDepartment();
-            updateTlOptions();
-        });
-    }
-
-    if (branchSelect) {
-        branchSelect.addEventListener('change', updateTlOptions);
-    }
-
-    if (tlSelect) {
-        tlSelect.addEventListener('change', updatePortalMappingSummary);
-    }
+    if (roleSelect) roleSelect.addEventListener('change', onRoleChange);
+    if (departmentSelect) departmentSelect.addEventListener('change', onDepartmentChange);
+    if (branchSelect) branchSelect.addEventListener('change', onBranchChange);
+    if (tlSelect) tlSelect.addEventListener('change', onTlChange);
 
     if (departmentSelect && !departmentSelect.value && roleSelect && roleSelect.value) {
         syncDepartmentFromRole(true);
@@ -951,6 +1118,13 @@ document.addEventListener('DOMContentLoaded', function () {
     filterRolesByDepartment();
     togglePortalFields();
     updateTlOptions();
+
+    if (window.jQuery) {
+        $(document).ready(function () {
+            filterRolesByDepartment();
+            updateTlOptions();
+        });
+    }
 
     function humanizeFieldName(name) {
         return (name || 'This field')
@@ -1065,6 +1239,14 @@ document.addEventListener('DOMContentLoaded', function () {
         prevButton.disabled = activeIndex === 0;
         nextButton.classList.toggle('d-none', activeIndex === panels.length - 1);
         submitButton.classList.toggle('d-none', activeIndex !== panels.length - 1);
+
+        if (panels[activeIndex].getAttribute('data-step-panel') === 'portal') {
+            refreshSelect2(branchSelect);
+            refreshSelect2(departmentSelect);
+            refreshSelect2(roleSelect);
+            refreshSelect2(tlSelect);
+            updateTlOptions();
+        }
 
         if (panels[activeIndex].getAttribute('data-step-panel') === 'review') {
             updateReview();

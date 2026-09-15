@@ -403,10 +403,16 @@ class LeadShowController extends Controller
             'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        $creator = auth()->user();
+        $autoApprove = (bool) ($creator?->canAutoApproveQuotation());
+
         $quotation = Quotation::create([
             'lead_id'          => $lead->id,
             'company_id'       => $lead->company_id,
-            'created_by'       => auth()->id(),
+            'created_by'       => $creator?->id ?? auth()->id(),
+            'is_approved'      => $autoApprove,
+            'approved_by'      => $autoApprove ? $creator->id : null,
+            'approved_at'      => $autoApprove ? now() : null,
             'quotation_date'   => $data['quotation_date'],
             'valid_until'      => $data['valid_until'] ?? null,
             'discount_amount'  => $data['discount_amount'] ?? 0,

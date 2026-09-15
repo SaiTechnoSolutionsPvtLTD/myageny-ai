@@ -171,6 +171,9 @@ class QuotationController extends Controller
                 ?: Quotation::DEFAULT_SELLER_STATE;
             $taxBreakup = Quotation::calculateTaxBreakup($subtotal, $customerState, $sellerState);
 
+            $creator = auth()->user();
+            $autoApprove = (bool) ($creator?->canAutoApproveQuotation());
+
             $quotation = Quotation::create([
                 'quotation_no'    => Quotation::generateQuotationNo($companyId),
                 'quotation_date'  => $validated['quotation_date'],
@@ -182,7 +185,9 @@ class QuotationController extends Controller
                 'lead_id'         => $validated['lead_id'] ?? null,
                 'company_id'      => $companyId,
                 'notes'           => $validated['notes'] ?? null,
-                'is_approved'     => false,
+                'is_approved'     => $autoApprove,
+                'approved_by'     => $autoApprove ? $creator->id : null,
+                'approved_at'     => $autoApprove ? now() : null,
                 'created_by'      => auth()->id(),
                 'bill_to_address' => $request->bill_to_address,
                 'ship_to_address' => $request->ship_to_address,
@@ -424,6 +429,9 @@ class QuotationController extends Controller
                 ?: Quotation::DEFAULT_SELLER_STATE;
             $taxBreakup = Quotation::calculateTaxBreakup($subtotal, $customerState, $sellerState);
 
+            $creator = $request->user() ?: ($request->user_id ? User::find($request->user_id) : auth()->user());
+            $autoApprove = (bool) ($creator?->canAutoApproveQuotation());
+
             $quotation = Quotation::create([
                 'quotation_no'   => Quotation::generateQuotationNo($companyId),
                 'quotation_date' => $request->quotation_date,
@@ -435,8 +443,10 @@ class QuotationController extends Controller
                 'lead_id'        => $request->lead_id,
                 'company_id'     => $companyId,
                 'notes'          => $request->notes,
-                'is_approved'    => false,
-                'created_by'     => $request->user_id,
+                'is_approved'    => $autoApprove,
+                'approved_by'    => $autoApprove ? $creator->id : null,
+                'approved_at'    => $autoApprove ? now() : null,
+                'created_by'     => $creator?->id ?? $request->user_id,
                 'bill_to_address' => $request->bill_to_address,
                 'ship_to_address' => $request->ship_to_address,
                 'gst_number'     => strtoupper((string) ($request->gst_number ?? '')) ?: null,

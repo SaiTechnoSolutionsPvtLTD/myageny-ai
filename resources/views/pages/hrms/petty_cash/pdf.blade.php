@@ -127,7 +127,7 @@
 
     <div class="header">
         <div>
-            <div class="title">Petty Cash Account Report (DR & CR)</div>
+            <div class="title">Petty Cash & House Keeping Ledger (DR & CR)</div>
             <div class="subtitle">Official Statement of Debit & Credit Cash Transactions</div>
         </div>
         <div style="text-align: right;">
@@ -140,6 +140,18 @@
         <div class="meta-item">
             <label>Statement Period</label>
             <span>{{ $startDate }} to {{ $endDate }}</span>
+        </div>
+        <div class="meta-item">
+            <label>Ledger Category</label>
+            <span>
+                @if(!empty($selectedCategory) && $selectedCategory === 'house_keeping')
+                    House Keeping Only
+                @elseif(!empty($selectedCategory) && $selectedCategory === 'petty_cash')
+                    Petty Cash Only
+                @else
+                    All Ledgers (Combined)
+                @endif
+            </span>
         </div>
         <div class="meta-item">
             <label>Total Transactions</label>
@@ -169,19 +181,21 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 90px;">Date</th>
-                <th style="width: 110px;">Voucher / Ref</th>
-                <th style="width: 140px;">Name (Person / Vendor)</th>
+                <th style="width: 85px;">Date</th>
+                <th style="width: 105px;">Category</th>
+                <th style="width: 100px;">Voucher / Ref</th>
+                <th style="width: 130px;">Name (Person / Vendor)</th>
                 <th>Particulars / Narration</th>
-                <th class="text-right" style="width: 100px;">Debit (DR)</th>
-                <th class="text-right" style="width: 100px;">Credit (CR)</th>
-                <th class="text-right" style="width: 120px;">Balance</th>
+                <th class="text-right" style="width: 95px;">Debit (DR)</th>
+                <th class="text-right" style="width: 95px;">Credit (CR)</th>
+                <th class="text-right" style="width: 110px;">Balance</th>
             </tr>
         </thead>
         <tbody>
             <!-- Opening Balance Row -->
             <tr class="bg-opening">
                 <td>{{ $startDate }}</td>
+                <td class="text-center">-</td>
                 <td class="text-center">-</td>
                 <td class="text-center">-</td>
                 <td>OPENING BALANCE B/F</td>
@@ -193,6 +207,9 @@
             @forelse($transactions as $tx)
                 <tr>
                     <td>{{ $tx['entry_date_formatted'] }}</td>
+                    <td style="font-weight: bold; color: {{ ($tx['category'] ?? 'petty_cash') === 'house_keeping' ? '#c2410c' : '#1d4ed8' }};">
+                        {{ ($tx['category'] ?? 'petty_cash') === 'house_keeping' ? 'House Keeping' : 'Petty Cash' }}
+                    </td>
                     <td>{{ $tx['voucher_no'] }}</td>
                     <td>{{ $tx['name'] }}</td>
                     <td>{{ $tx['particulars'] }}</td>
@@ -208,7 +225,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="text-center" style="padding: 20px; color: #94a3b8;">
+                    <td colspan="8" class="text-center" style="padding: 20px; color: #94a3b8;">
                         No transactions recorded within this date range.
                     </td>
                 </tr>
@@ -216,7 +233,7 @@
 
             <!-- Totals Row -->
             <tr class="bg-total">
-                <td colspan="4" class="text-right">TOTAL DEBIT & CREDIT</td>
+                <td colspan="5" class="text-right">TOTAL DEBIT & CREDIT</td>
                 <td class="text-right" style="color: #b91c1c;">₹ {{ number_format($totalDebit, 2) }}</td>
                 <td class="text-right" style="color: #047857;">₹ {{ number_format($totalCredit, 2) }}</td>
                 <td class="text-right">-</td>
@@ -224,7 +241,7 @@
 
             <!-- Closing Balance Row -->
             <tr class="bg-closing">
-                <td colspan="4" class="text-right">CLOSING BALANCE C/F</td>
+                <td colspan="5" class="text-right">CLOSING BALANCE C/F</td>
                 <td class="text-right" colspan="2">Net Statement Balance</td>
                 <td class="text-right" style="color: #c2410c; font-size: 14px;">₹ {{ number_format($closingBalance, 2) }}</td>
             </tr>

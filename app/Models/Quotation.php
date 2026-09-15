@@ -31,6 +31,30 @@ class Quotation extends Model
             }
         });
 
+        static::creating(function (Quotation $quotation) {
+            if (! $quotation->created_by && auth()->check()) {
+                $quotation->created_by = auth()->id();
+            }
+
+            if (! $quotation->is_approved) {
+                $creator = null;
+                if ($quotation->created_by) {
+                    $creator = $quotation->relationLoaded('createdBy')
+                        ? $quotation->createdBy
+                        : User::find($quotation->created_by);
+                }
+                if (! $creator && auth()->check()) {
+                    $creator = auth()->user();
+                }
+
+                if ($creator && method_exists($creator, 'canAutoApproveQuotation') && $creator->canAutoApproveQuotation()) {
+                    $quotation->is_approved = true;
+                    $quotation->approved_by = $quotation->approved_by ?: $creator->id;
+                    $quotation->approved_at = $quotation->approved_at ?: now();
+                }
+            }
+        });
+
         static::deleting(function (Quotation $quotation) {
             if ($quotation->isForceDeleting()) {
                 $quotation->items()->withTrashed()->forceDelete();
