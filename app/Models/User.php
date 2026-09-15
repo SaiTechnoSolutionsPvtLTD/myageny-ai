@@ -246,6 +246,32 @@ class User extends Authenticatable
         return $this->hasExactRoleName(Role::tenantRoleName('company_admin', $this->company_id));
     }
 
+    public function isCompanyAdminRole(): bool
+    {
+        if ($this->isCompanyAdmin()) {
+            return true;
+        }
+
+        return collect($this->roleKeys()->all())->contains('company_admin');
+    }
+
+    public function isCbo(): bool
+    {
+        return collect($this->roleKeys()->all())->intersect([
+            'cbo',
+            'chief_business_officer',
+            'cheif_business_officer',
+        ])->isNotEmpty();
+    }
+
+    public function canAutoApproveQuotation(): bool
+    {
+        return $this->isSuperAdmin()
+            || $this->isSystemAdmin()
+            || $this->isCompanyAdminRole()
+            || $this->isCbo();
+    }
+
     public function isBranchAdmin(): bool
     {
         if ($this->company_id !== null && $this->hasExactRoleName(Role::tenantRoleName('branch_admin', $this->company_id))) {

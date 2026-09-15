@@ -3,7 +3,7 @@
     $endDateDefault = \Carbon\Carbon::now()->toDateString();
 @endphp
 
-<div class="hrms-card hrms-panel" style="grid-column: span 3; background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.03);">
+<div class="hrms-card hrms-panel" style="grid-column: span 12; width: 100%; background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.03);">
     <!-- Header -->
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -11,8 +11,8 @@
                 <i class="bi bi-wallet2"></i>
             </div>
             <div>
-                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a;">Petty Cash Account Report (DR & CR)</h3>
-                <p style="margin: 2px 0 0; font-size: 13px; color: #64748b;">Ledger report showing Debit, Credit, and Running Balances.</p>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a;">Petty Cash & House Keeping Ledger (DR & CR)</h3>
+                <p style="margin: 2px 0 0; font-size: 13px; color: #64748b;">Unified ledger statement showing Petty Cash and House Keeping transactions with running balances.</p>
             </div>
         </div>
 
@@ -30,7 +30,7 @@
     </div>
 
     <!-- Filters Bar -->
-    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) 130px; gap: 14px; align-items: end;">
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) 130px; gap: 14px; align-items: end;">
         <div>
             <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Start Date</label>
             <input type="date" id="pc_start_date" value="{{ $startDateDefault }}" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 13px; color: #0f172a; background: #fff;">
@@ -39,6 +39,15 @@
         <div>
             <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">End Date</label>
             <input type="date" id="pc_end_date" value="{{ $endDateDefault }}" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 13px; color: #0f172a; background: #fff;">
+        </div>
+
+        <div>
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px;">Ledger Category</label>
+            <select id="pc_category" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 13px; color: #0f172a; background: #fff;">
+                <option value="all">All Ledgers (Combined)</option>
+                <option value="petty_cash">💼 Petty Cash Only</option>
+                <option value="house_keeping">👑 House Keeping Only</option>
+            </select>
         </div>
 
         <div>
@@ -80,20 +89,21 @@
         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
             <thead>
                 <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 110px;">Date</th>
-                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 130px;">Voucher / Ref</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 105px;">Date</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 140px;">Category</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 120px;">Voucher / Ref</th>
                     <th style="padding: 12px 16px; font-weight: 700; color: #475569; width: 160px;">Name (Person / Vendor)</th>
                     <th style="padding: 12px 16px; font-weight: 700; color: #475569;">Particulars / Narration</th>
-                    <th style="padding: 12px 16px; font-weight: 700; color: #b91c1c; text-align: right; width: 130px;">Debit (DR)</th>
-                    <th style="padding: 12px 16px; font-weight: 700; color: #047857; text-align: right; width: 130px;">Credit (CR)</th>
-                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; text-align: right; width: 150px;">Balance</th>
-                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; text-align: center; width: 90px;">Actions</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #b91c1c; text-align: right; width: 120px;">Debit (DR)</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #047857; text-align: right; width: 120px;">Credit (CR)</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; text-align: right; width: 130px;">Balance</th>
+                    <th style="padding: 12px 16px; font-weight: 700; color: #475569; text-align: center; width: 130px;">Actions</th>
                 </tr>
             </thead>
             <tbody id="pc_table_body">
                 <tr>
-                    <td colspan="8" style="padding: 30px; text-align: center; color: #94a3b8;">
-                        Loading Petty Cash Account data...
+                    <td colspan="9" style="padding: 30px; text-align: center; color: #94a3b8;">
+                        Loading Petty Cash & House Keeping Ledger data...
                     </td>
                 </tr>
             </tbody>
@@ -101,14 +111,14 @@
     </div>
 </div>
 
-<!-- ADD PETTY CASH TRANSACTION MODAL -->
+<!-- ADD TRANSACTION MODAL -->
 <div id="addPettyCashModal" class="support-modal" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 9999;">
-    <div style="background: #ffffff; border-radius: 20px; width: 540px; max-width: calc(100vw - 32px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden;">
+    <div style="background: #ffffff; border-radius: 20px; width: 560px; max-width: calc(100vw - 32px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden;">
         <form id="addPettyCashForm" method="POST" action="{{ route('hrms.petty-cash.store') }}">
             @csrf
             <div style="background: #fafbfe; border-bottom: 1px solid #e5e7eb; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
                 <h4 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                    <i class="bi bi-wallet-fill text-orange"></i> Record Petty Cash Transaction
+                    <i class="bi bi-wallet-fill text-orange"></i> Record Transaction
                 </h4>
                 <button type="button" onclick="closePettyCashModal()" style="background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</button>
             </div>
@@ -120,24 +130,22 @@
                         <input type="date" name="entry_date" value="{{ date('Y-m-d') }}" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                     </div>
                     <div>
-                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Transaction Type <span style="color: #ef4444;">*</span></label>
-                        <select name="type" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
-                            <option value="cash_in_hand">Cash In Hand (Initial Allocation / Top-Up)</option>
-                            <option value="credit">Credit (CR - Cash IN)</option>
-                            <option value="debit">Debit (DR - Expense / Cash OUT)</option>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Ledger Category <span style="color: #ef4444;">*</span></label>
+                        <select name="category" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                            <option value="petty_cash" selected>💼 Petty Cash</option>
+                            <option value="house_keeping">👑 House Keeping</option>
                         </select>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Name (Paid To / Received From)</label>
-                    <input type="text" name="name" placeholder="Enter person or vendor name..." class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
-                </div>
-
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                     <div>
-                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Voucher / Ref No</label>
-                        <input type="text" name="voucher_no" placeholder="e.g. VCH-00123" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Transaction Type <span style="color: #ef4444;">*</span></label>
+                        <select name="type" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                            <option value="cash_in_hand">Cash In Hand (Initial Allocation / Top-Up)</option>
+                            <option value="credit">Credit (CR - Cash IN)</option>
+                            <option value="debit" selected>Debit (DR - Expense / Cash OUT)</option>
+                        </select>
                     </div>
                     <div>
                         <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Amount (₹) <span style="color: #ef4444;">*</span></label>
@@ -145,9 +153,20 @@
                     </div>
                 </div>
 
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Name (Paid To / Received From)</label>
+                        <input type="text" name="name" placeholder="Enter person or vendor name..." class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Voucher / Ref No</label>
+                        <input type="text" name="voucher_no" placeholder="e.g. VCH-00123" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 0;">
                     <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Particulars / Narration <span style="color: #ef4444;">*</span></label>
-                    <textarea name="particulars" rows="3" placeholder="Enter reason or details of expense/top-up..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
+                    <textarea name="particulars" rows="3" placeholder="Enter reason or details of transaction..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
                 </div>
             </div>
 
@@ -159,15 +178,15 @@
     </div>
 </div>
 
-<!-- EDIT PETTY CASH TRANSACTION MODAL -->
+<!-- EDIT TRANSACTION MODAL -->
 <div id="editPettyCashModal" class="support-modal" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 9999;">
-    <div style="background: #ffffff; border-radius: 20px; width: 540px; max-width: calc(100vw - 32px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden;">
+    <div style="background: #ffffff; border-radius: 20px; width: 560px; max-width: calc(100vw - 32px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden;">
         <form id="editPettyCashForm" method="POST" action="">
             @csrf
             @method('PUT')
             <div style="background: #fafbfe; border-bottom: 1px solid #e5e7eb; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
                 <h4 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                    <i class="bi bi-pencil-square text-orange"></i> Edit Petty Cash Transaction
+                    <i class="bi bi-pencil-square text-orange"></i> Edit Transaction
                 </h4>
                 <button type="button" onclick="closeEditPettyCashModal()" style="background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer;">&times;</button>
             </div>
@@ -179,6 +198,16 @@
                         <input type="date" id="edit_pc_entry_date" name="entry_date" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                     </div>
                     <div>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Ledger Category <span style="color: #ef4444;">*</span></label>
+                        <select id="edit_pc_category" name="category" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                            <option value="petty_cash">💼 Petty Cash</option>
+                            <option value="house_keeping">👑 House Keeping</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
                         <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Transaction Type <span style="color: #ef4444;">*</span></label>
                         <select id="edit_pc_type" name="type" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                             <option value="cash_in_hand">Cash In Hand (Initial Allocation / Top-Up)</option>
@@ -186,27 +215,26 @@
                             <option value="debit">Debit (DR - Expense / Cash OUT)</option>
                         </select>
                     </div>
-                </div>
-
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Name (Paid To / Received From)</label>
-                    <input type="text" id="edit_pc_name" name="name" placeholder="Enter person or vendor name..." class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Voucher / Ref No</label>
-                        <input type="text" id="edit_pc_voucher_no" name="voucher_no" placeholder="e.g. VCH-00123" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
-                    </div>
                     <div>
                         <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Amount (₹) <span style="color: #ef4444;">*</span></label>
                         <input type="number" step="0.01" min="0.01" id="edit_pc_amount" name="amount" placeholder="0.00" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                     </div>
                 </div>
 
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Name (Paid To / Received From)</label>
+                        <input type="text" id="edit_pc_name" name="name" placeholder="Enter person or vendor name..." class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Voucher / Ref No</label>
+                        <input type="text" id="edit_pc_voucher_no" name="voucher_no" placeholder="e.g. VCH-00123" class="form-control" style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 0;">
                     <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Particulars / Narration <span style="color: #ef4444;">*</span></label>
-                    <textarea id="edit_pc_particulars" name="particulars" rows="3" placeholder="Enter reason or details of expense/top-up..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
+                    <textarea id="edit_pc_particulars" name="particulars" rows="3" placeholder="Enter reason or details of transaction..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
                 </div>
             </div>
 
@@ -268,8 +296,6 @@
         if (modal) modal.style.display = 'none';
     }
 
-    window.pettyCashTxMap = {};
-
     function openEditPettyCashModalById(id) {
         const tx = window.pettyCashTxMap ? window.pettyCashTxMap[id] : null;
         if (!tx) {
@@ -282,6 +308,7 @@
         form.action = '/hrms/petty-cash/' + tx.id;
 
         const dateEl = document.getElementById('edit_pc_entry_date');
+        const catEl = document.getElementById('edit_pc_category');
         const typeEl = document.getElementById('edit_pc_type');
         const nameEl = document.getElementById('edit_pc_name');
         const voucherEl = document.getElementById('edit_pc_voucher_no');
@@ -289,6 +316,7 @@
         const particularsEl = document.getElementById('edit_pc_particulars');
 
         if (dateEl) dateEl.value = tx.entry_date ? tx.entry_date.substring(0, 10) : '';
+        if (catEl) catEl.value = tx.category || 'petty_cash';
         if (typeEl) typeEl.value = tx.type || 'debit';
         if (nameEl) nameEl.value = (tx.name === '-' || !tx.name) ? '' : tx.name;
         if (voucherEl) voucherEl.value = (tx.voucher_no === '-' || !tx.voucher_no) ? '' : tx.voucher_no;
@@ -307,13 +335,55 @@
         if (modal) modal.style.display = 'flex';
     }
 
-    function openEditPettyCashModal(id, date, type, name, voucher, amount, particulars) {
-        openEditPettyCashModalById(id);
-    }
-
     function closeEditPettyCashModal() {
         const modal = document.getElementById('editPettyCashModal');
         if (modal) modal.style.display = 'none';
+    }
+
+    function deletePettyCashEntry(id) {
+        if (!confirm('Are you sure you want to delete this transaction? This will update running balances.')) {
+            return;
+        }
+
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+        fetch('/hrms/petty-cash/' + id, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ _method: 'DELETE' })
+        })
+        .then(res => res.json())
+        .then(res => {
+            if (res.success) {
+                loadPettyCashReport();
+            } else {
+                alert(res.message || 'Failed to delete transaction.');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            // Fallback: standard form submit if fetch fails
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/hrms/petty-cash/' + id;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = '_token';
+            csrfInput.value = token;
+            form.appendChild(csrfInput);
+            const methodInput = document.createElement('input');
+            methodInput.type = 'hidden';
+            methodInput.name = '_method';
+            methodInput.value = 'DELETE';
+            form.appendChild(methodInput);
+            document.body.appendChild(form);
+            form.submit();
+        });
     }
 
     function escapeHtml(str) {
@@ -333,18 +403,19 @@
     function loadPettyCashReport() {
         const startDate = document.getElementById('pc_start_date').value;
         const endDate = document.getElementById('pc_end_date').value;
+        const category = document.getElementById('pc_category')?.value || 'all';
 
         const tableBody = document.getElementById('pc_table_body');
         tableBody.innerHTML = `
             <tr>
-                <td colspan="8" style="padding: 30px; text-align: center; color: #64748b;">
+                <td colspan="9" style="padding: 30px; text-align: center; color: #64748b;">
                     <i class="bi bi-arrow-repeat spin" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
                     Fetching report data...
                 </td>
             </tr>
         `;
 
-        const url = `/hrms/petty-cash?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+        const url = `/hrms/petty-cash?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&category=${encodeURIComponent(category)}`;
 
         fetch(url, {
             headers: {
@@ -371,6 +442,7 @@
                     <td style="padding: 12px 16px;">${escapeHtml(startDate)}</td>
                     <td style="padding: 12px 16px; text-align: center;">-</td>
                     <td style="padding: 12px 16px; text-align: center;">-</td>
+                    <td style="padding: 12px 16px; text-align: center;">-</td>
                     <td style="padding: 12px 16px; color: #1d4ed8;">OPENING BALANCE B/F</td>
                     <td style="padding: 12px 16px; text-align: right;">-</td>
                     <td style="padding: 12px 16px; text-align: right;">-</td>
@@ -382,8 +454,8 @@
             if (!data.transactions || data.transactions.length === 0) {
                 html += `
                     <tr>
-                        <td colspan="8" style="padding: 30px; text-align: center; color: #94a3b8;">
-                            No transactions found for the selected date range.
+                        <td colspan="9" style="padding: 30px; text-align: center; color: #94a3b8;">
+                            No transactions found for the selected date range and filter.
                         </td>
                     </tr>
                 `;
@@ -391,25 +463,38 @@
                 data.transactions.forEach(tx => {
                     window.pettyCashTxMap[tx.id] = tx;
 
+                    let catBadge = '';
+                    if (tx.category === 'house_keeping') {
+                        catBadge = `<span style="display: inline-flex; align-items: center; gap: 4px; background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">👑 House Keeping</span>`;
+                    } else {
+                        catBadge = `<span style="display: inline-flex; align-items: center; gap: 4px; background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">💼 Petty Cash</span>`;
+                    }
+
                     html += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 12px 16px; color: #334155;">${escapeHtml(tx.entry_date_formatted)}</td>
+                            <td style="padding: 12px 16px; color: #334155; white-space: nowrap;">${escapeHtml(tx.entry_date_formatted)}</td>
+                            <td style="padding: 12px 16px; white-space: nowrap;">${catBadge}</td>
                             <td style="padding: 12px 16px; color: #475569; font-family: monospace;">${escapeHtml(tx.voucher_no)}</td>
                             <td style="padding: 12px 16px; color: #0f172a; font-weight: 600;">${escapeHtml(tx.name)}</td>
                             <td style="padding: 12px 16px; color: #334155;">${escapeHtml(tx.particulars)}</td>
-                            <td style="padding: 12px 16px; text-align: right; color: #b91c1c; font-weight: 700;">
+                            <td style="padding: 12px 16px; text-align: right; color: #b91c1c; font-weight: 700; white-space: nowrap;">
                                 ${tx.debit > 0 ? '₹ ' + formatINR(tx.debit) : '-'}
                             </td>
-                            <td style="padding: 12px 16px; text-align: right; color: #047857; font-weight: 700;">
+                            <td style="padding: 12px 16px; text-align: right; color: #047857; font-weight: 700; white-space: nowrap;">
                                 ${tx.credit > 0 ? '₹ ' + formatINR(tx.credit) : '-'}
                             </td>
-                            <td style="padding: 12px 16px; text-align: right; font-weight: 800; color: #0f172a;">
+                            <td style="padding: 12px 16px; text-align: right; font-weight: 800; color: #0f172a; white-space: nowrap;">
                                 ₹ ${formatINR(tx.running_balance)}
                             </td>
-                            <td style="padding: 12px 16px; text-align: center;">
-                                <button type="button" onclick="openEditPettyCashModalById(${tx.id})" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 6px; cursor: pointer;" title="Edit Transaction">
-                                    <i class="bi bi-pencil-square"></i> Edit
-                                </button>
+                            <td style="padding: 12px 16px; text-align: center; white-space: nowrap;">
+                                <div style="display: inline-flex; gap: 6px;">
+                                    <button type="button" onclick="openEditPettyCashModalById(${tx.id})" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer;" title="Edit Transaction">
+                                        <i class="bi bi-pencil-square"></i> Edit
+                                    </button>
+                                    <button type="button" onclick="deletePettyCashEntry(${tx.id})" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer;" title="Delete Transaction">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -419,14 +504,14 @@
             // Totals Row
             html += `
                 <tr style="background: #f1f5f9; font-weight: 700; border-top: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
-                    <td colspan="4" style="padding: 12px 16px; text-align: right; color: #334155; text-transform: uppercase;">Total Debit & Credit</td>
+                    <td colspan="5" style="padding: 12px 16px; text-align: right; color: #334155; text-transform: uppercase;">Total Debit & Credit</td>
                     <td style="padding: 12px 16px; text-align: right; color: #b91c1c; font-size: 14px;">₹ ${formatINR(data.totalDebit)}</td>
                     <td style="padding: 12px 16px; text-align: right; color: #047857; font-size: 14px;">₹ ${formatINR(data.totalCredit)}</td>
                     <td style="padding: 12px 16px; text-align: right;">-</td>
                     <td style="padding: 12px 16px;"></td>
                 </tr>
                 <tr style="background: #fff7ed; font-weight: 800; border-bottom: 2px solid #ffedd5;">
-                    <td colspan="4" style="padding: 12px 16px; text-align: right; color: #c2410c; text-transform: uppercase;">Closing Balance C/F</td>
+                    <td colspan="5" style="padding: 12px 16px; text-align: right; color: #c2410c; text-transform: uppercase;">Closing Balance C/F</td>
                     <td colspan="2" style="padding: 12px 16px; text-align: right; color: #9a3412;">Statement Net Balance</td>
                     <td style="padding: 12px 16px; text-align: right; color: #c2410c; font-size: 15px;">₹ ${formatINR(data.closingBalance)}</td>
                     <td style="padding: 12px 16px;"></td>
@@ -439,8 +524,8 @@
             console.error(err);
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="8" style="padding: 30px; text-align: center; color: #ef4444;">
-                        Failed to load Petty Cash report. Please refresh and try again.
+                    <td colspan="9" style="padding: 30px; text-align: center; color: #ef4444;">
+                        Failed to load ledger report. Please refresh and try again.
                     </td>
                 </tr>
             `;
@@ -450,13 +535,15 @@
     function exportPettyCashExcel() {
         const startDate = document.getElementById('pc_start_date').value;
         const endDate = document.getElementById('pc_end_date').value;
-        window.location.href = `/hrms/petty-cash/export-excel?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+        const category = document.getElementById('pc_category')?.value || 'all';
+        window.location.href = `/hrms/petty-cash/export-excel?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&category=${encodeURIComponent(category)}`;
     }
 
     function exportPettyCashPdf() {
         const startDate = document.getElementById('pc_start_date').value;
         const endDate = document.getElementById('pc_end_date').value;
-        window.open(`/hrms/petty-cash/export-pdf?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`, '_blank');
+        const category = document.getElementById('pc_category')?.value || 'all';
+        window.open(`/hrms/petty-cash/export-pdf?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&category=${encodeURIComponent(category)}`, '_blank');
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -474,7 +561,14 @@
             });
         }
 
+        // Auto trigger report load on category change
+        const categorySelect = document.getElementById('pc_category');
+        if (categorySelect) {
+            categorySelect.addEventListener('change', loadPettyCashReport);
+        }
+
         loadPettyCashReport();
     });
 </script>
 @endpush
+

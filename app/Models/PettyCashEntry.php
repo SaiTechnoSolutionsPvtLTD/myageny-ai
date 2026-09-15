@@ -21,9 +21,15 @@ class PettyCashEntry extends Model
         'name',
         'particulars',
         'type',
+        'category',
         'amount',
         'created_by',
     ];
+
+    public function getCategoryLabelAttribute(): string
+    {
+        return $this->category === 'house_keeping' ? 'House Keeping' : 'Petty Cash';
+    }
 
     protected function casts(): array
     {

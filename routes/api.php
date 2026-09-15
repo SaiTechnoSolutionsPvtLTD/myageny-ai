@@ -274,6 +274,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::get('petty-cash', [PettyCashApiController::class, 'report'])->name('petty-cash.report');
         Route::post('petty-cash', [PettyCashApiController::class, 'store'])->name('petty-cash.store');
         Route::put('petty-cash/{entry}', [PettyCashApiController::class, 'update'])->name('petty-cash.update');
+        Route::delete('petty-cash/{entry}', [PettyCashApiController::class, 'destroy'])->name('petty-cash.destroy');
 
         Route::get('petty-cash/rani', [PettyCashApiController::class, 'raniIndex'])->name('petty-cash.rani.index');
         Route::post('petty-cash/rani', [PettyCashApiController::class, 'raniStore'])->name('petty-cash.rani.store');

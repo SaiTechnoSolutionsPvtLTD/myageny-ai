@@ -46,6 +46,7 @@ class PettyCashApiController extends Controller
 
             $startDateInput = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
             $endDateInput = $request->input('end_date', Carbon::now()->toDateString());
+            $category = $request->input('category');
 
             try {
                 $startDate = Carbon::parse($startDateInput)->startOfDay();
@@ -59,13 +60,14 @@ class PettyCashApiController extends Controller
                 [$startDate, $endDate] = [$endDate->copy()->startOfDay(), $startDate->copy()->endOfDay()];
             }
 
-            $reportData = $this->calculateReportData($companyId, $startDate, $endDate);
+            $reportData = $this->calculateReportData($companyId, $startDate, $endDate, $category);
 
             return response()->json([
                 'success' => true,
                 'data' => array_merge($reportData, [
                     'start_date' => $startDate->toDateString(),
                     'end_date' => $endDate->toDateString(),
+                    'category' => $category,
                 ]),
             ]);
         } catch (Throwable $e) {
@@ -81,13 +83,16 @@ class PettyCashApiController extends Controller
      * Identical math to web's PettyCashController::calculateReportData() —
      * see that file for the source of truth this mirrors.
      */
-    private function calculateReportData($companyId, Carbon $startDate, Carbon $endDate): array
+    private function calculateReportData($companyId, Carbon $startDate, Carbon $endDate, ?string $category = null): array
     {
         $priorQuery = PettyCashEntry::query();
         if ($companyId) {
             $priorQuery->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)->orWhereNull('company_id');
             });
+        }
+        if (! empty($category) && in_array($category, ['petty_cash', 'house_keeping'], true)) {
+            $priorQuery->where('category', $category);
         }
 
         $priorCredits = (float) (clone $priorQuery)->where('entry_date', '<', $startDate->toDateString())
@@ -105,6 +110,9 @@ class PettyCashApiController extends Controller
             $txQuery->where(function ($q) use ($companyId) {
                 $q->where('company_id', $companyId)->orWhereNull('company_id');
             });
+        }
+        if (! empty($category) && in_array($category, ['petty_cash', 'house_keeping'], true)) {
+            $txQuery->where('category', $category);
         }
 
         $entries = $txQuery->whereDate('entry_date', '>=', $startDate->toDateString())
@@ -133,6 +141,8 @@ class PettyCashApiController extends Controller
                 'entry_date_formatted' => optional($entry->entry_date)->format('d M Y'),
                 'voucher_no' => $entry->voucher_no ?: '-',
                 'name' => $entry->name ?: '-',
+                'category' => $entry->category ?: 'petty_cash',
+                'category_label' => ($entry->category === 'house_keeping') ? 'House Keeping' : 'Petty Cash',
                 'particulars' => $entry->particulars,
                 'type' => $entry->type,
                 'type_label' => $entry->type === 'cash_in_hand' ? 'Cash In Hand' : ($entry->type === 'credit' ? 'Credit' : 'Debit'),
@@ -152,6 +162,7 @@ class PettyCashApiController extends Controller
             'totalCredit' => $totalCredit,
             'closingBalance' => $closingBalance,
             'transactions' => $transactions,
+            'category' => $category,
         ];
     }
 
@@ -166,6 +177,7 @@ class PettyCashApiController extends Controller
                 'name' => ['nullable', 'string', 'max:255'],
                 'particulars' => ['required', 'string', 'max:255'],
                 'type' => ['required', 'in:cash_in_hand,credit,debit'],
+                'category' => ['nullable', 'string', 'in:petty_cash,house_keeping'],
                 'amount' => ['required', 'numeric', 'min:0.01'],
             ]);
 
@@ -177,6 +189,7 @@ class PettyCashApiController extends Controller
                 'name' => $validated['name'] ?? null,
                 'particulars' => $validated['particulars'],
                 'type' => $validated['type'],
+                'category' => $validated['category'] ?? 'petty_cash',
                 'amount' => $validated['amount'],
                 'created_by' => Auth::id(),
             ]);
@@ -216,6 +229,7 @@ class PettyCashApiController extends Controller
                 'name' => ['nullable', 'string', 'max:255'],
                 'particulars' => ['required', 'string', 'max:255'],
                 'type' => ['required', 'in:cash_in_hand,credit,debit'],
+                'category' => ['nullable', 'string', 'in:petty_cash,house_keeping'],
                 'amount' => ['required', 'numeric', 'min:0.01'],
             ]);
 
@@ -225,6 +239,7 @@ class PettyCashApiController extends Controller
                 'name' => $validated['name'] ?? null,
                 'particulars' => $validated['particulars'],
                 'type' => $validated['type'],
+                'category' => $validated['category'] ?? $entry->category ?? 'petty_cash',
                 'amount' => $validated['amount'],
             ]);
 
@@ -243,6 +258,30 @@ class PettyCashApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to update the transaction. Please try again.',
+            ], 500);
+        }
+    }
+
+    // ── DELETE /mobile/hrms/petty-cash/{entry} ───────────────────────────────
+    public function destroy(Request $request, PettyCashEntry $entry): JsonResponse
+    {
+        try {
+            $companyId = Auth::user()?->company_id;
+            if ($companyId && $entry->company_id && (int) $entry->company_id !== (int) $companyId) {
+                return response()->json(['success' => false, 'message' => 'Transaction not found.'], 404);
+            }
+
+            $entry->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Petty cash transaction deleted successfully.',
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to delete the transaction. Please try again.',
             ], 500);
         }
     }
@@ -290,6 +329,23 @@ class PettyCashApiController extends Controller
                 'amount'     => $validated['amount'],
                 'notes'      => $validated['notes'] ?? null,
             ]);
+
+            // Sync into petty_cash_entries so it appears in unified ledger
+            try {
+                PettyCashEntry::create([
+                    'company_id'  => Auth::user()?->company_id,
+                    'entry_date'  => $validated['entry_date'],
+                    'voucher_no'  => 'RANI-' . $entry->id,
+                    'name'        => 'House Keeping',
+                    'particulars' => ! empty($validated['notes']) ? 'House Keeping: ' . $validated['notes'] : 'House Keeping Expense',
+                    'type'        => 'debit',
+                    'category'    => 'house_keeping',
+                    'amount'      => $validated['amount'],
+                    'created_by'  => Auth::id(),
+                ]);
+            } catch (Throwable $e) {
+                report($e);
+            }
 
             return response()->json([
                 'success' => true,

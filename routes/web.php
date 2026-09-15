@@ -433,6 +433,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'report'])->name('hrms.petty-cash.index');
     Route::post('/hrms/petty-cash', [\App\Http\Controllers\HRMS\PettyCashController::class, 'store'])->name('hrms.petty-cash.store');
     Route::put('/hrms/petty-cash/{entry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'update'])->name('hrms.petty-cash.update');
+    Route::delete('/hrms/petty-cash/{entry}', [\App\Http\Controllers\HRMS\PettyCashController::class, 'destroy'])->name('hrms.petty-cash.destroy');
     Route::get('/hrms/petty-cash/export-excel', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportExcel'])->name('hrms.petty-cash.export-excel');
     Route::get('/hrms/petty-cash/export-pdf', [\App\Http\Controllers\HRMS\PettyCashController::class, 'exportPdf'])->name('hrms.petty-cash.export-pdf');
 

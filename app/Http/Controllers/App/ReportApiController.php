@@ -432,6 +432,7 @@ class ReportApiController extends Controller
             }
             $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
+>>>>>>>>> Temporary merge branch 2
             $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
             $balanceRows = $analyticsRows->where('collection_type', 'balance_payment');
 
@@ -697,18 +698,24 @@ class ReportApiController extends Controller
                   )
             ) THEN 'balance_payment'
             WHEN (
-                COALESCE(products.is_this_renewal_product, 0) = 1
-                OR COALESCE(products.count_wise_report, 0) = 1
-                OR LOWER(COALESCE(lead_products.deal_name, '')) LIKE '%renewal%'
-                OR LOWER(COALESCE(lead_products.product_name, '')) LIKE '%renewal%'
-                OR EXISTS (
+                (
+                    COALESCE(products.is_this_renewal_product, 0) = 1
+                    OR EXISTS (
+                        SELECT 1 FROM products pm 
+                        WHERE (pm.id = lead_products.product_id OR LOWER(pm.package_name) = LOWER(lead_products.product_name))
+                          AND pm.is_this_renewal_product = 1
+                    )
+                    OR LOWER(COALESCE(lead_products.deal_name, '')) LIKE '%renewal%'
+                    OR LOWER(COALESCE(lead_products.product_name, '')) LIKE '%renewal%'
+                )
+                AND EXISTS (
                     SELECT 1 FROM lead_products lp_prior
                     WHERE lp_prior.lead_id = lead_products.lead_id
                       AND lp_prior.id != lead_products.id
                       AND lp_prior.created_at < lead_products.created_at
                       AND (
                           (lead_products.product_id IS NOT NULL AND lp_prior.product_id = lead_products.product_id)
-                          OR (lead_products.product_name IS NOT NULL AND lp_prior.product_name = lead_products.product_name)
+                          OR (lead_products.product_name IS NOT NULL AND LOWER(lp_prior.product_name) = LOWER(lead_products.product_name))
                       )
                 )
             ) THEN 'renewals'
@@ -719,6 +726,13 @@ class ReportApiController extends Controller
     private function buildPaymentCollectionQuery(Request $request)
     {
         $collectionTypeSql = $this->getCollectionTypeSql();
+<<<<<<<<< Temporary merge branch 1
+
+        $paidSubquery = LeadProductPayment::query()
+            ->selectRaw('lead_product_id, SUM(amount) as total_received')
+            ->groupBy('lead_product_id');
+=========
+>>>>>>>>> Temporary merge branch 2
 
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')

@@ -12,9 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quotations', function (Blueprint $table) {
-            $table->text('bill_to_address')->nullable();
-            $table->text('ship_to_address')->nullable();
-            $table->text('gst_number')->nullable();
+            if (! Schema::hasColumn('quotations', 'bill_to_address')) {
+                $table->text('bill_to_address')->nullable();
+            }
+            if (! Schema::hasColumn('quotations', 'ship_to_address')) {
+                $table->text('ship_to_address')->nullable();
+            }
+            if (! Schema::hasColumn('quotations', 'gst_number')) {
+                $table->text('gst_number')->nullable();
+            }
         });
     }
 

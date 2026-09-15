@@ -11,11 +11,13 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::table('employee_onboardings', function (Blueprint $table) {
-            $table->foreignId('portal_user_id')
-                ->nullable()
-                ->after('id')
-                ->constrained('users')
-                ->nullOnDelete();
+            if (! Schema::hasColumn('employee_onboardings', 'portal_user_id')) {
+                $table->foreignId('portal_user_id')
+                    ->nullable()
+                    ->after('id')
+                    ->constrained('users')
+                    ->nullOnDelete();
+            }
         });
     }
 
