@@ -85,9 +85,10 @@ class DailyAttendanceController extends Controller
             }
 
             $allowedRadius = (float) ($branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50));
+            $gpsTolerance = (float) config('hrms.attendance_gps_tolerance_meters', 15.0);
 
-            if ($distance <= $allowedRadius) {
-                // Employee is physically within office range (e.g. <= 50m).
+            if ($distance <= ($allowedRadius + $gpsTolerance)) {
+                // Employee is physically within office range (e.g. <= 50m + 15m tolerance buffer).
                 // Even if an older mobile app sent is_outside_office = 1,
                 // accurately classify as inside office and record attendance directly!
                 $isOutsideOfficeCheckIn = false;
@@ -273,9 +274,10 @@ class DailyAttendanceController extends Controller
             }
 
             $allowedRadius = (float) ($branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50));
+            $gpsTolerance = (float) config('hrms.attendance_gps_tolerance_meters', 15.0);
 
-            if ($distance <= $allowedRadius) {
-                // Employee is physically within office range (e.g. <= 50m).
+            if ($distance <= ($allowedRadius + $gpsTolerance)) {
+                // Employee is physically within office range (e.g. <= 50m + 15m tolerance buffer).
                 $isOutsideOfficeCheckOut = false;
             } else {
                 $isOutsideOfficeCheckOut = true;

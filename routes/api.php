@@ -299,6 +299,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('facility-management.destroy');
 
         Route::get('visitor-management',              [VisitorManagementApiController::class, 'index'])->name('visitor-management.index');
+        Route::get('visitor-management/qr-code',      [VisitorManagementApiController::class, 'qrCode'])->name('visitor-management.qr-code');
         Route::post('visitor-management',             [VisitorManagementApiController::class, 'store'])->name('visitor-management.store');
         Route::get('visitor-management/{id}',         [VisitorManagementApiController::class, 'show'])->name('visitor-management.show');
         Route::put('visitor-management/{id}',         [VisitorManagementApiController::class, 'update'])->name('visitor-management.update');

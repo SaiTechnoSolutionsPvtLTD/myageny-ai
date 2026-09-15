@@ -82,6 +82,8 @@ class ProductionTaskApiController extends Controller
                     'email' => $u->email,
                 ])->values(),
                 'today' => Carbon::today()->toDateString(),
+                'is_task_creation_allowed' => $this->isTaskCreationAllowed(),
+                'cutoff_info' => $this->getTaskCutoffInfo(),
             ],
         ]);
     }
@@ -93,44 +95,130 @@ class ProductionTaskApiController extends Controller
     {
         $user = auth()->user();
         $isAdminLike = $user->hasAdminLikeRole();
+        $isCompanyAdmin = (bool) ($user && ($user->isCompanyAdmin() || $user->isSuperAdmin() || $user->hasAdminLikeRole()));
 
         $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->get(['users.id']);
         $accessibleUserIds = $isAdminLike
             ? null
             : array_values(array_unique(array_merge([$user->id], $managedUsers->pluck('id')->all())));
 
+        $quickDate = trim((string) $request->query('quick_date', ''));
+        $dateFrom = trim((string) $request->query('date_from', ''));
+        $dateTo = trim((string) $request->query('date_to', ''));
+        $filterDate = trim((string) $request->query('filter_date', ''));
+
+        // Handle quick_date presets if dates not explicitly passed
+        if ($quickDate !== '' && $quickDate !== 'all' && $quickDate !== 'custom') {
+            $now = Carbon::now('Asia/Kolkata');
+            if ($quickDate === 'today') {
+                $dateFrom = $now->toDateString();
+                $dateTo = $now->toDateString();
+            } elseif (in_array($quickDate, ['week', 'this_week', 'weekly'], true)) {
+                $dateFrom = $now->copy()->startOfWeek()->toDateString();
+                $dateTo = $now->copy()->endOfWeek()->toDateString();
+            } elseif (in_array($quickDate, ['month', 'this_month', 'monthly'], true)) {
+                $dateFrom = $now->copy()->startOfMonth()->toDateString();
+                $dateTo = $now->copy()->endOfMonth()->toDateString();
+            } elseif (in_array($quickDate, ['quarter', 'this_quarter', 'quarterly'], true)) {
+                $dateFrom = $now->copy()->startOfQuarter()->toDateString();
+                $dateTo = $now->copy()->endOfQuarter()->toDateString();
+            } elseif (in_array($quickDate, ['year', 'this_year', 'yearly'], true)) {
+                $dateFrom = $now->copy()->startOfYear()->toDateString();
+                $dateTo = $now->copy()->endOfYear()->toDateString();
+            }
+        } elseif ($filterDate !== '' && $dateFrom === '' && $dateTo === '') {
+            $dateFrom = $filterDate;
+            $dateTo = $filterDate;
+        }
+
+        $filterLeadId = trim((string) $request->query('filter_lead_id', ''));
+        $filterProjectId = trim((string) $request->query('filter_project_id', ''));
+        $filterUserId = trim((string) $request->query('filter_user_id', ''));
+        $filterStatus = trim((string) $request->query('filter_status', ''));
+        $filterDepartment = strtolower(trim((string) $request->query('filter_department', '')));
+
         $filters = [
-            'filter_date' => trim((string) $request->query('filter_date', '')),
-            'filter_lead_id' => trim((string) $request->query('filter_lead_id', '')),
-            'filter_project_id' => trim((string) $request->query('filter_project_id', '')),
-            'filter_user_id' => trim((string) $request->query('filter_user_id', '')),
-            'filter_status' => trim((string) $request->query('filter_status', '')),
+            'quick_date' => $quickDate,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'filter_date' => $filterDate,
+            'filter_lead_id' => $filterLeadId,
+            'filter_project_id' => $filterProjectId,
+            'filter_user_id' => $filterUserId,
+            'filter_status' => $filterStatus,
+            'filter_department' => $filterDepartment,
         ];
 
-        $applyFilters = function ($query) use ($filters, $isAdminLike, $accessibleUserIds, $user) {
+        $applyFilters = function ($query) use ($dateFrom, $dateTo, $filterLeadId, $filterProjectId, $filterUserId, $filterStatus, $isAdminLike, $accessibleUserIds, $user) {
             if (! $isAdminLike) {
                 $query->where(function ($q) use ($accessibleUserIds, $user) {
                     $q->whereIn('assigned_to', $accessibleUserIds)
                       ->orWhere('created_by', $user->id);
                 });
             }
-            if ($filters['filter_date'] !== '') {
+            if ($dateFrom !== '' && $dateTo !== '') {
                 try {
-                    $query->whereDate('task_date', Carbon::parse($filters['filter_date'])->toDateString());
-                } catch (\Throwable) {
+                    $from = Carbon::parse($dateFrom)->startOfDay()->toDateString();
+                    $to = Carbon::parse($dateTo)->endOfDay()->toDateString();
+                    $query->whereBetween('task_date', [$from, $to]);
+                } catch (\Throwable) {}
+            } elseif ($dateFrom !== '' && $dateTo === '') {
+                try {
+                    $query->whereDate('task_date', '>=', Carbon::parse($dateFrom)->toDateString());
+                } catch (\Throwable) {}
+            } elseif ($dateFrom === '' && $dateTo !== '') {
+                try {
+                    $query->whereDate('task_date', '<=', Carbon::parse($dateTo)->toDateString());
+                } catch (\Throwable) {}
+            }
+            if ($filterLeadId !== '') {
+                $query->where('lead_id', (int) $filterLeadId);
+            }
+            if ($filterProjectId !== '') {
+                $query->where('production_initiation_id', (int) $filterProjectId);
+            }
+            if ($filterUserId !== '') {
+                $query->where('assigned_to', (int) $filterUserId);
+            }
+            if ($filterStatus !== '') {
+                $query->where('status', $filterStatus);
+            }
+            return $query;
+        };
+
+        // Department counts across matching tasks for company admins
+        $deptCounts = [
+            'all' => 0,
+            'development' => 0,
+            'designing' => 0,
+            'digital_marketing' => 0,
+        ];
+
+        $deptFilteredTaskIds = null;
+        if ($isCompanyAdmin) {
+            $tasksForDepts = $applyFilters(
+                ProductionTask::query()->with(['assignedUser.roles.department', 'project.department'])
+            )->get();
+
+            $deptCounts['all'] = $tasksForDepts->count();
+            foreach ($tasksForDepts as $t) {
+                $slug = $this->resolveTaskDepartmentSlug($t);
+                if (isset($deptCounts[$slug])) {
+                    $deptCounts[$slug]++;
                 }
             }
-            if ($filters['filter_lead_id'] !== '') {
-                $query->where('lead_id', (int) $filters['filter_lead_id']);
+
+            if (in_array($filterDepartment, ['development', 'designing', 'digital_marketing'], true)) {
+                $deptFilteredTaskIds = $tasksForDepts->filter(function ($t) use ($filterDepartment) {
+                    return $this->resolveTaskDepartmentSlug($t) === $filterDepartment;
+                })->pluck('id')->all();
             }
-            if ($filters['filter_project_id'] !== '') {
-                $query->where('production_initiation_id', (int) $filters['filter_project_id']);
-            }
-            if ($filters['filter_user_id'] !== '') {
-                $query->where('assigned_to', (int) $filters['filter_user_id']);
-            }
-            if ($filters['filter_status'] !== '') {
-                $query->where('status', $filters['filter_status']);
+        }
+
+        $applyAllFilters = function ($query) use ($applyFilters, $deptFilteredTaskIds) {
+            $query = $applyFilters($query);
+            if ($deptFilteredTaskIds !== null) {
+                $query->whereIn('id', $deptFilteredTaskIds);
             }
             return $query;
         };
@@ -141,13 +229,13 @@ class ProductionTaskApiController extends Controller
         // 1) Count distinct (task_date, assigned_to) groups without loading
         //    task rows — this is the DB-level replacement for web's
         //    load-everything-then-groupBy approach.
-        $groupKeysQuery = $applyFilters(
+        $groupKeysQuery = $applyAllFilters(
             ProductionTask::query()->select('task_date', 'assigned_to')->distinct()
         );
         $totalGroups = DB::query()->fromSub($groupKeysQuery, 'g')->count();
 
         // 2) Fetch only this page's group keys.
-        $pageGroupKeys = $applyFilters(
+        $pageGroupKeys = $applyAllFilters(
             ProductionTask::query()->select('task_date', 'assigned_to')->distinct()
         )
             ->orderByDesc('task_date')
@@ -159,7 +247,7 @@ class ProductionTaskApiController extends Controller
         $groups = [];
         if ($pageGroupKeys->isNotEmpty()) {
             // 3) Fetch full task rows, but only for the groups on this page.
-            $tasks = ProductionTask::query()
+            $tasksQuery = ProductionTask::query()
                 ->with(['creator:id,name', 'assignedUser:id,name,email', 'lead:id,company_name', 'project:id,product_name,company_name'])
                 ->where(function ($q) use ($pageGroupKeys) {
                     foreach ($pageGroupKeys as $key) {
@@ -168,9 +256,13 @@ class ProductionTaskApiController extends Controller
                             $sq->whereDate('task_date', $dateStr)->where('assigned_to', $key->assigned_to);
                         });
                     }
-                })
-                ->latest('id')
-                ->get();
+                });
+
+            if ($deptFilteredTaskIds !== null) {
+                $tasksQuery->whereIn('id', $deptFilteredTaskIds);
+            }
+
+            $tasks = $tasksQuery->latest('id')->get();
 
             $groupedTasks = $tasks->groupBy(function (ProductionTask $t) {
                 return ($t->task_date ? $t->task_date->toDateString() : 'no_date') . '_' . $t->assigned_to;
@@ -209,6 +301,10 @@ class ProductionTaskApiController extends Controller
                     'has_more' => $paginator->hasMorePages(),
                 ],
                 'filters' => $filters,
+                'is_company_admin' => $isCompanyAdmin,
+                'dept_counts' => $deptCounts,
+                'is_task_creation_allowed' => $this->isTaskCreationAllowed(),
+                'cutoff_info' => $this->getTaskCutoffInfo(),
             ],
         ]);
     }
@@ -220,13 +316,20 @@ class ProductionTaskApiController extends Controller
     {
         $user = auth()->user();
 
+        if (! $this->isTaskCreationAllowed()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Daily task creation window closed at 11:00 AM. Tasks must be added and updated before 11:00 AM daily.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'task_date' => ['required', 'date'],
             'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
             'tasks' => ['required', 'array', 'min:1'],
             'tasks.*.lead_id' => ['required', 'integer', 'exists:leads,id'],
             'tasks.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
-            'tasks.*.task_description' => ['required', 'string', 'min:1'],
+            'tasks.*.task_description' => ['required', 'string', 'min:30'],
         ], [
             'task_date.required' => 'The date field is mandatory.',
             'assigned_to_user_id.required' => 'Selecting a team member is mandatory.',
@@ -234,6 +337,7 @@ class ProductionTaskApiController extends Controller
             'tasks.*.lead_id.required' => 'Lead is mandatory for all task rows.',
             'tasks.*.production_initiation_id.required' => 'Product / Project is mandatory for all task rows.',
             'tasks.*.task_description.required' => 'Task description is mandatory for all task rows.',
+            'tasks.*.task_description.min' => 'Task Description must be at least 30 characters for all task rows.',
         ]);
 
         $taskDate = Carbon::parse($validated['task_date'])->toDateString();
@@ -496,5 +600,90 @@ class ProductionTaskApiController extends Controller
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
+    }
+
+    /**
+     * Check if task creation is allowed today.
+     * Allowed only until 11:00 AM daily (Asia/Kolkata timezone).
+     */
+    protected function isTaskCreationAllowed(): bool
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        return $now->hour < 11;
+    }
+
+    /**
+     * Get detailed cutoff and countdown information for daily task creation.
+     */
+    protected function getTaskCutoffInfo(): array
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        $cutoffToday = $now->copy()->setTime(11, 0, 0);
+        $isAllowed = $now->lessThan($cutoffToday);
+
+        $secondsRemaining = $isAllowed ? $now->diffInSeconds($cutoffToday, false) : 0;
+        $minutesRemaining = $isAllowed ? (int) ceil($secondsRemaining / 60) : 0;
+
+        return [
+            'is_allowed' => $isAllowed,
+            'cutoff_time' => '11:00 AM',
+            'current_time' => $now->format('h:i A'),
+            'seconds_remaining' => max(0, $secondsRemaining),
+            'minutes_remaining' => max(0, $minutesRemaining),
+            'formatted_remaining' => $minutesRemaining > 60
+                ? floor($minutesRemaining / 60) . 'h ' . ($minutesRemaining % 60) . 'm'
+                : $minutesRemaining . 'm',
+        ];
+    }
+
+    /**
+     * Resolves the department slug ('development', 'designing', 'digital_marketing', 'other') for a given ProductionTask.
+     */
+    public function resolveTaskDepartmentSlug(ProductionTask $task): string
+    {
+        // 1. Check assigned user's role department
+        $userDepts = $task->assignedUser?->roles->map(function ($r) {
+            return strtolower(trim($r->department?->name ?? ''));
+        })->filter()->all() ?? [];
+
+        foreach ($userDepts as $deptName) {
+            if (str_contains($deptName, 'develop') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app')) {
+                return 'development';
+            }
+            if (str_contains($deptName, 'design') || str_contains($deptName, 'video')) {
+                return 'designing';
+            }
+            if (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm') || str_contains($deptName, 'smm') || str_contains($deptName, 'seo')) {
+                return 'digital_marketing';
+            }
+        }
+
+        // 2. Check project department
+        $projDeptName = strtolower(trim($task->project?->department?->name ?? ''));
+        $projDeptId = (int) ($task->project?->department_id ?? 0);
+
+        if ($projDeptId === 1 || str_contains($projDeptName, 'develop') || str_contains($projDeptName, 'software') || str_contains($projDeptName, 'web') || str_contains($projDeptName, 'app')) {
+            return 'development';
+        }
+        if ($projDeptId === 2 || str_contains($projDeptName, 'design') || str_contains($projDeptName, 'video')) {
+            return 'designing';
+        }
+        if ($projDeptId === 3 || str_contains($projDeptName, 'digital') || str_contains($projDeptName, 'marketing') || str_contains($projDeptName, 'dm') || str_contains($projDeptName, 'smm') || str_contains($projDeptName, 'seo')) {
+            return 'digital_marketing';
+        }
+
+        // 3. Fallback to product name
+        $productName = strtolower(trim($task->product_name ?: ($task->project?->product_name ?: '')));
+        if (str_contains($productName, 'design') || str_contains($productName, 'poster') || str_contains($productName, 'logo') || str_contains($productName, 'video') || str_contains($productName, 'creative')) {
+            return 'designing';
+        }
+        if (str_contains($productName, 'seo') || str_contains($productName, 'social media') || str_contains($productName, 'smm') || str_contains($productName, 'campaign') || str_contains($productName, 'marketing')) {
+            return 'digital_marketing';
+        }
+        if (str_contains($productName, 'develop') || str_contains($productName, 'website') || str_contains($productName, 'app') || str_contains($productName, 'software')) {
+            return 'development';
+        }
+
+        return 'other';
     }
 }

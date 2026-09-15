@@ -53,14 +53,14 @@ return [
             ['key' => 'projects.list',      'label' => 'Projects Details',   'section' => 'PROJECTS', 'order' => 20],
             [
                 'key' => 'projects.smm_sheet',
-                'label' => 'SMM Sheet',
+                'label' => 'Organic Campaigns',
                 'section' => 'PROJECTS',
                 'order' => 21,
                 'require_any_method' => ['belongsToDesigningDepartment', 'belongsToDigitalMarketingDepartment', 'hasAdminLikeRole', 'canViewProjectsDashboardSwitcher'],
             ],
             [
                 'key' => 'projects.campaigns',
-                'label' => 'Campaigns',
+                'label' => 'Paid Campaigns',
                 'section' => 'PROJECTS',
                 'order' => 22,
                 'require_any_method' => ['belongsToDigitalMarketingDepartment', 'hasAdminLikeRole'],
@@ -108,14 +108,14 @@ return [
     // modules_menu.* grants but still need to be able to mark attendance.
     // No sub-items: the module is a single Mark Attendance flow reached
     // directly from the Modules-tab tile, not a per-item drawer menu.
-    'face_attendance' => [
-        'label' => 'Face Attendance',
-        'order' => 35,
-        'gate' => null,
-        'items' => [
-            ['key' => 'face_attendance.mark', 'label' => 'Mark Attendance', 'section' => 'FACE ATTENDANCE', 'order' => 10],
-        ],
-    ],
+    // 'face_attendance' => [
+    //     'label' => 'Face Attendance',
+    //     'order' => 35,
+    //     'gate' => null,
+    //     'items' => [
+    //         ['key' => 'face_attendance.mark', 'label' => 'Mark Attendance', 'section' => 'FACE ATTENDANCE', 'order' => 10],
+    //     ],
+    // ],
 
     // ── HRMS (NEW) ───────────────────────────────────────────────────────
     'hrms' => [
@@ -259,19 +259,19 @@ return [
             // above — employees must never see or reach this item (ticket
             // section 2: "Employees should not have access to register or
             // update their own face"). See FaceRegistrationApiController.
-            [
-                'key' => 'hrms.face_registration',
-                'label' => 'Face Registration',
-                'section' => 'HRMS',
-                'order' => 96,
-                'require_any_method' => [
-                    'isSystemAdmin',
-                    'belongsToHrDepartment',
-                    'hasHrLikeRole',
-                    'isCompanyAdmin',
-                    'isBranchAdmin',
-                ],
-            ],
+            // [
+            //     'key' => 'hrms.face_registration',
+            //     'label' => 'Face Registration',
+            //     'section' => 'HRMS',
+            //     'order' => 96,
+            //     'require_any_method' => [
+            //         'isSystemAdmin',
+            //         'belongsToHrDepartment',
+            //         'hasHrLikeRole',
+            //         'isCompanyAdmin',
+            //         'isBranchAdmin',
+            //     ],
+            // ],
             // Matches sidebar.blade.php's `@if(! $hrmsSelfService) @can('petty_cash.menuview')`
             // gate exactly — petty_cash.menuview already exists as a real
             // Spatie permission (it already gates the live web page), so
