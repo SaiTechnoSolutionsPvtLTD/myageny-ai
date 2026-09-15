@@ -679,6 +679,15 @@ class QuotationController extends Controller
         if ($request->filled('end_date')) {
             $query->whereDate('quotation_date', '<=', $request->end_date);
         }
+        if ($request->filled('customer_response')) {
+            if ($request->customer_response === 'pending') {
+                $query->where(function ($q) {
+                    $q->whereNull('customer_response')->orWhere('customer_response', 'pending');
+                });
+            } else {
+                $query->where('customer_response', $request->customer_response);
+            }
+        }
 
         $quotations = $query->paginate(15)->withQueryString();
         $approvers  = $this->visibility->visibleAssignableUsers();

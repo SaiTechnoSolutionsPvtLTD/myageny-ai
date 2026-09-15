@@ -238,8 +238,10 @@ class ProjectApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'page'     => ['nullable', 'integer', 'min:1'],
+            'per_page'   => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page'       => ['nullable', 'integer', 'min:1'],
+            'quick_date' => ['nullable', 'string'],
+            'date_type'  => ['nullable', 'string', 'in:delivery,onboarding'],
         ]);
 
         $user    = auth()->user();
@@ -249,9 +251,48 @@ class ProjectApiController extends Controller
         $due          = trim((string) $request->query('due', ''));
         $page         = (int) $request->input('page', 1);
         $perPage      = (int) $request->input('per_page', 15);
+        $quickDate    = trim((string) $request->query('quick_date', ''));
+        $dateType     = trim((string) $request->query('date_type', 'delivery'));
+        if (!in_array($dateType, ['delivery', 'onboarding'], true)) {
+            $dateType = 'delivery';
+        }
 
         $isContributorScopedView = $this->shouldLimitToEmployeeProjects($user);
         $isTlScopedView          = $this->shouldLimitToAssignedProjects($user);
+
+        if ($quickDate !== '' && !in_array($quickDate, ['all', 'custom'], true)) {
+            $now = Carbon::today();
+            switch ($quickDate) {
+                case 'today':
+                    $deliveryFrom = $now->toDateString();
+                    $deliveryTo   = $now->toDateString();
+                    break;
+                case 'week':
+                case 'this_week':
+                case 'weekly':
+                    $deliveryFrom = $now->copy()->startOfWeek()->toDateString();
+                    $deliveryTo   = $now->copy()->endOfWeek()->toDateString();
+                    break;
+                case 'month':
+                case 'this_month':
+                case 'monthly':
+                    $deliveryFrom = $now->copy()->startOfMonth()->toDateString();
+                    $deliveryTo   = $now->copy()->endOfMonth()->toDateString();
+                    break;
+                case 'quarter':
+                case 'this_quarter':
+                case 'quarterly':
+                    $deliveryFrom = $now->copy()->startOfQuarter()->toDateString();
+                    $deliveryTo   = $now->copy()->endOfQuarter()->toDateString();
+                    break;
+                case 'year':
+                case 'this_year':
+                case 'yearly':
+                    $deliveryFrom = $now->copy()->startOfYear()->toDateString();
+                    $deliveryTo   = $now->copy()->endOfYear()->toDateString();
+                    break;
+            }
+        }
 
         $query = $this->buildFilteredProjectsQuery($user, [
             'search'            => (string) $request->query('search', ''),
@@ -270,12 +311,25 @@ class ProjectApiController extends Controller
 
         // Computed once per row here (not written onto the model yet) so
         // filterByDeliveryAndDue() judges every project — contributor or
-        // bucket view alike — by the same effective delivery date. Whether
-        // that computed value actually overwrites the raw column for
-        // display purposes is decided per-branch below, to avoid changing
-        // what the Admin/TL card currently shows (see note there).
+        // bucket view alike — by the same effective delivery date.
         $deliveryDates = $candidates->mapWithKeys(fn (ProductionInitiation $p) => [$p->id => $this->projectDeliveryDate($p)]);
-        $candidates = $this->filterByDeliveryAndDue($candidates, $deliveryDates, $deliveryFrom, $deliveryTo, $due);
+
+        if ($dateType === 'onboarding') {
+            if ($deliveryFrom !== '' || $deliveryTo !== '') {
+                $from = $this->parseFilterDate($deliveryFrom);
+                $to   = $this->parseFilterDate($deliveryTo);
+                $candidates = $candidates->filter(function (ProductionInitiation $p) use ($from, $to) {
+                    $rawDate = $p->production_approval_reviewed_at ?: ($p->project_allocated_at ?: $p->created_at);
+                    if (!$rawDate) return false;
+                    $evalDate = Carbon::parse($rawDate)->startOfDay();
+                    if ($from && $evalDate->lt($from->copy()->startOfDay())) return false;
+                    if ($to && $evalDate->gt($to->copy()->endOfDay())) return false;
+                    return true;
+                })->values();
+            }
+        } else {
+            $candidates = $this->filterByDeliveryAndDue($candidates, $deliveryDates, $deliveryFrom, $deliveryTo, $due);
+        }
 
         $optionLists = [
             'categories'  => $this->categoryOptions($candidates),
@@ -284,6 +338,47 @@ class ProjectApiController extends Controller
             'statuses'    => self::EXECUTION_STATUSES,
             'employees'   => $this->employeeOptions($user),
         ];
+
+        $isAdminLike = $user->hasAdminLikeRole();
+        $canUserAllocate = $isAdminLike
+            || ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole()))
+            || $user->isDigitalMarketingTl()
+            || $user->isDevelopmentProjectCoordinator()
+            || $isTlScopedView;
+
+        $allocationUsers = collect();
+        if ($canUserAllocate) {
+            $allocationUsers = $isTlScopedView
+                ? $this->availableTeamMembers($user)
+                : User::query()
+                    ->where('is_active', true)
+                    ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'email']);
+        }
+
+        $allPending = $this->visibleProjectsQuery($user)->get()
+            ->filter(fn ($p) => $this->resolveBucketForUser($p, $user) === 'allocation_pending')
+            ->values();
+
+        $pendingProductsSummary = $allPending->groupBy(fn ($item) => (string) ($item->product_id ?: 0))
+            ->map(function ($items, $productId) {
+                $first = $items->first();
+                $productName = $first->product_name ?: ($first->leadProduct?->product_name ?: 'Product');
+                return [
+                    'product_id'   => (int) $productId,
+                    'product_name' => $productName,
+                    'count'        => $items->count(),
+                    'projects'     => $items->map(fn ($p) => [
+                        'id'           => $p->id,
+                        'product_name' => $p->product_name ?: 'Product',
+                        'client_name'  => $p->client_name ?: ($p->lead?->contact_name ?: 'No Client'),
+                        'company_name' => $p->company_name ?: ($p->lead?->company_name ?: ($p->client_name ?: 'No Company')),
+                        'lead_id'      => $p->lead_id ? 'LD-' . $p->lead_id : '',
+                        'date'         => optional($p->production_approval_reviewed_at ?: ($p->project_allocated_at ?: $p->created_at))->format('d M Y'),
+                    ])->values()->all(),
+                ];
+            })->values();
 
         if ($isContributorScopedView) {
             // Unchanged from before this rewrite: the contributor card
@@ -299,21 +394,19 @@ class ProjectApiController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => array_merge([
-                    'view_type'   => 'contributor',
-                    'projects'    => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
-                    'total'       => $paged->total(),
-                    'pagination'  => $this->paginationMeta($paged),
-                    'filters'     => $this->echoFilters($request),
+                    'view_type'                => 'contributor',
+                    'projects'                 => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
+                    'total'                    => $paged->total(),
+                    'pagination'               => $this->paginationMeta($paged),
+                    'filters'                  => $this->echoFilters($request),
+                    'can_user_allocate'        => $canUserAllocate,
+                    'allocation_users'         => $allocationUsers,
+                    'pending_products_summary' => $pendingProductsSummary,
                 ], $optionLists),
             ]);
         }
 
-        // TL / Admin view — bucket-based. Bucket membership depends on
-        // per-viewer role/department/allocation logic (resolveBucketForUser)
-        // that isn't a simple column value, so — same reasoning as the
-        // delivery-date filter — it stays an in-memory classification pass,
-        // but now runs over the already-SQL-filtered candidate set instead
-        // of every visible project in the company.
+        // TL / Admin view — bucket-based.
         $buckets = ['allocation_pending' => collect(), 'allocated' => collect()];
         foreach ($candidates as $initiation) {
             $b = $this->resolveBucketForUser($initiation, $user);
@@ -333,13 +426,16 @@ class ProjectApiController extends Controller
         return response()->json([
             'success' => true,
             'data' => array_merge([
-                'view_type'       => $isTlScopedView ? 'tl' : 'admin',
-                'selected_bucket' => $validBucket,
-                'bucket_counts'   => $bucketCounts,
-                'projects'        => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
-                'total'           => $paged->total(),
-                'pagination'      => $this->paginationMeta($paged),
-                'filters'         => $this->echoFilters($request),
+                'view_type'                => $isTlScopedView ? 'tl' : 'admin',
+                'selected_bucket'          => $validBucket,
+                'bucket_counts'            => $bucketCounts,
+                'projects'                 => $paged->getCollection()->map(fn ($p) => $this->serializeProjectSummary($p))->values(),
+                'total'                    => $paged->total(),
+                'pagination'               => $this->paginationMeta($paged),
+                'filters'                  => $this->echoFilters($request),
+                'can_user_allocate'        => $canUserAllocate,
+                'allocation_users'         => $allocationUsers,
+                'pending_products_summary' => $pendingProductsSummary,
             ], $optionLists),
         ]);
     }
@@ -558,6 +654,8 @@ class ProjectApiController extends Controller
             'created_to'       => (string) $request->query('created_to', ''),
             'due'              => (string) $request->query('due', ''),
             'my_projects'      => $request->boolean('my_projects'),
+            'quick_date'       => (string) $request->query('quick_date', ''),
+            'date_type'        => (string) $request->query('date_type', 'delivery'),
         ];
     }
 
@@ -886,6 +984,184 @@ class ProjectApiController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => 'Employees allocated successfully and notification email sent to assigned team members.']);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  POST /mobile/projects/bulk-allocate
+    // ─────────────────────────────────────────────────────────────────────────
+    public function bulkAllocate(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+        $isTlScopedView = $this->shouldLimitToAssignedProjects($user);
+
+        $canUserAllocate = $isAdminLike
+            || ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole()))
+            || $user->isDigitalMarketingTl()
+            || $user->isDevelopmentProjectCoordinator()
+            || $isTlScopedView;
+
+        if (! $canUserAllocate) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized to perform bulk allocation.'], 403);
+        }
+
+        $validated = $request->validate([
+            'user_id'          => ['required', 'integer', 'exists:users,id'],
+            'project_ids'      => ['required', 'array', 'min:1'],
+            'project_ids.*'    => ['integer', 'exists:production_initiations,id'],
+            'allocation_notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $assignedUserId = (int) $validated['user_id'];
+        $assignedUser   = User::findOrFail($assignedUserId);
+        $projectIds     = collect($validated['project_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+
+        $projects = $this->visibleProjectsQuery($user)
+            ->whereIn('id', $projectIds)
+            ->get();
+
+        if ($projects->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No eligible projects found to allocate.'], 422);
+        }
+
+        $allocatedCount = 0;
+        DB::transaction(function () use ($projects, $user, $assignedUserId, $assignedUser, $isTlScopedView, &$allocatedCount, $validated) {
+            $isAssignedUserTl = $this->isUserTl($assignedUser) || $assignedUser->hasTlLikeRole();
+
+            foreach ($projects as $project) {
+                if ($isTlScopedView) {
+                    $tlAllocations = $this->tlEmployeeAllocations($project);
+                    $tlAllocations->put((string) $user->id, $this->normalizeTlEmployeeAllocation([
+                        'tl_user_id'        => $user->id,
+                        'status'            => 'allocated',
+                        'allocated_at'      => Carbon::now()->toDateTimeString(),
+                        'allocated_by'      => $user->id,
+                        'employee_user_ids' => [$assignedUserId],
+                    ]));
+                    $allocationSummary = $this->summarizeTlEmployeeAllocations($tlAllocations->all());
+
+                    $project->update([
+                        'tl_employee_allocations' => $tlAllocations->all(),
+                        ...$allocationSummary,
+                    ]);
+                    $this->syncProductionCountReportAllocation($project->fresh(), $user->id);
+
+                    try {
+                        app(ProductionUpdateRecorder::class)->recordTeamAllocation(
+                            $project->fresh(),
+                            [$assignedUserId],
+                            $user
+                        );
+                    } catch (\Throwable $e) {}
+                } else {
+                    // Admin / Coordinator / Manager level allocation
+                    $existingTlAllocations = $this->tlEmployeeAllocations($project);
+
+                    if ($isAssignedUserTl) {
+                        $selectedTlIds = collect(Arr::wrap($project->project_allocated_tl_user_ids))
+                            ->push($assignedUserId)
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        $existingAllocation = $existingTlAllocations->get((string) $assignedUserId, []);
+                        $tlAllocations = collect($selectedTlIds)->mapWithKeys(function (int $tlId) use ($existingTlAllocations) {
+                            $ex = $existingTlAllocations->get((string) $tlId, []);
+                            return [
+                                (string) $tlId => $this->normalizeTlEmployeeAllocation([
+                                    'tl_user_id'        => $tlId,
+                                    'status'            => $ex['status'] ?? 'allocation_pending',
+                                    'allocated_at'      => $ex['allocated_at'] ?? null,
+                                    'allocated_by'      => $ex['allocated_by'] ?? null,
+                                    'employee_user_ids' => $ex['employee_user_ids'] ?? [],
+                                ]),
+                            ];
+                        })->all();
+
+                        $project->update([
+                            'project_allocation_status'    => 'allocated',
+                            'project_allocated_at'         => Carbon::now(),
+                            'project_allocated_by'         => $user->id,
+                            'project_allocated_tl_user_ids' => $selectedTlIds,
+                            'tl_employee_allocations'      => $tlAllocations,
+                            ...$this->summarizeTlEmployeeAllocations($tlAllocations),
+                        ]);
+                        $this->syncProductionCountReportAllocation($project->fresh(), $user->id);
+
+                        try {
+                            app(ProductionUpdateRecorder::class)->recordTlAllocation(
+                                $project->fresh(),
+                                $selectedTlIds,
+                                $user
+                            );
+                        } catch (\Throwable $e) {}
+                    } else {
+                        // Direct employee allocation
+                        $allocatedEmployees = collect(Arr::wrap($project->project_allocated_employee_user_ids))
+                            ->push($assignedUserId)
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        $project->update([
+                            'project_allocation_status'           => 'allocated',
+                            'project_allocated_at'                => Carbon::now(),
+                            'project_allocated_by'                => $user->id,
+                            'employee_allocation_status'          => 'allocated',
+                            'employee_allocated_at'               => Carbon::now(),
+                            'employee_allocated_by'               => $user->id,
+                            'project_allocated_employee_user_ids' => $allocatedEmployees,
+                        ]);
+                        $this->syncProductionCountReportAllocation($project->fresh(), $user->id);
+
+                        try {
+                            app(ProductionUpdateRecorder::class)->recordTeamAllocation(
+                                $project->fresh(),
+                                [$assignedUserId],
+                                $user
+                            );
+                        } catch (\Throwable $e) {}
+                    }
+                }
+
+                if (! empty($validated['allocation_notes'])) {
+                    try {
+                        ProjectUpdate::create([
+                            'production_initiation_id' => $project->id,
+                            'type'    => 'production_update',
+                            'content' => "Bulk Allocated to {$assignedUser->name}.\nNotes: " . $validated['allocation_notes'],
+                            'created_by' => $user->id,
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
+
+                $allocatedCount++;
+            }
+        });
+
+        try {
+            $this->notifications->notify(
+                $assignedUser,
+                'projects',
+                'project_bulk_allocated',
+                [
+                    'title'        => 'Bulk Project Allocation',
+                    'message'      => "You have been allocated to {$allocatedCount} projects by {$user->name}.",
+                    'priority'     => 'medium',
+                    'request_type' => 'project_allocation',
+                    'actor_name'   => $user->name,
+                    'status'       => 'allocated',
+                ]
+            );
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully allocated {$allocatedCount} project(s) to {$assignedUser->name}.",
+            'data'    => [
+                'allocated_count' => $allocatedCount,
+            ],
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

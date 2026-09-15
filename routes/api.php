@@ -36,6 +36,7 @@ use App\Http\Controllers\App\HRMS\FaceAttendanceApiController;
 use App\Http\Controllers\App\HRMS\FaceRegistrationApiController;
 use App\Http\Controllers\App\HRMS\TimesheetLopApiController;
 use App\Http\Controllers\App\HRMS\AnnouncementApiController;
+use App\Http\Controllers\App\HRMS\HouseKeepingApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -333,6 +334,43 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::put('announcements/{announcement}', [AnnouncementApiController::class, 'update'])->name('announcements.update');
         Route::delete('announcements/{announcement}', [AnnouncementApiController::class, 'destroy'])->name('announcements.destroy');
         Route::patch('announcements/{announcement}/toggle-status', [AnnouncementApiController::class, 'toggleStatus'])->name('announcements.toggle-status');
+
+        // ── House Keeping (HRMS) ──────────────────────────────────────────────
+        Route::prefix('house-keeping')->name('house-keeping.')->group(function () {
+            // Cleaning Sheet
+            Route::get('cleaning-sheet', [HouseKeepingApiController::class, 'cleaningSheet'])->name('cleaning-sheet');
+            Route::post('cleaning-sheet/toggle', [HouseKeepingApiController::class, 'toggleCompletion'])->name('cleaning-sheet.toggle');
+
+            // Employees
+            Route::get('employees', [HouseKeepingApiController::class, 'employees'])->name('employees.index');
+            Route::post('employees', [HouseKeepingApiController::class, 'storeEmployee'])->name('employees.store');
+            Route::put('employees/{id}', [HouseKeepingApiController::class, 'updateEmployee'])->name('employees.update');
+            Route::delete('employees/{id}', [HouseKeepingApiController::class, 'destroyEmployee'])->name('employees.destroy');
+
+            // Attendance
+            Route::get('attendances', [HouseKeepingApiController::class, 'attendances'])->name('attendances.index');
+            Route::post('attendances', [HouseKeepingApiController::class, 'saveAttendances'])->name('attendances.store');
+            Route::get('attendances/history', [HouseKeepingApiController::class, 'attendanceHistory'])->name('attendances.history');
+            Route::delete('attendances/{id}', [HouseKeepingApiController::class, 'destroyAttendance'])->name('attendances.destroy');
+
+            // Salaries
+            Route::get('salaries', [HouseKeepingApiController::class, 'salaries'])->name('salaries.index');
+            Route::post('salaries', [HouseKeepingApiController::class, 'saveSalary'])->name('salaries.store');
+            Route::get('salaries/history', [HouseKeepingApiController::class, 'salaryHistory'])->name('salaries.history');
+            Route::delete('salaries/{id}', [HouseKeepingApiController::class, 'destroySalary'])->name('salaries.destroy');
+
+            // Categories (Masters)
+            Route::get('categories', [HouseKeepingApiController::class, 'categories'])->name('categories.index');
+            Route::post('categories', [HouseKeepingApiController::class, 'storeCategory'])->name('categories.store');
+            Route::put('categories/{id}', [HouseKeepingApiController::class, 'updateCategory'])->name('categories.update');
+            Route::delete('categories/{id}', [HouseKeepingApiController::class, 'destroyCategory'])->name('categories.destroy');
+
+            // Works (Masters)
+            Route::get('works', [HouseKeepingApiController::class, 'works'])->name('works.index');
+            Route::post('works', [HouseKeepingApiController::class, 'storeWork'])->name('works.store');
+            Route::put('works/{id}', [HouseKeepingApiController::class, 'updateWork'])->name('works.update');
+            Route::delete('works/{id}', [HouseKeepingApiController::class, 'destroyWork'])->name('works.destroy');
+        });
     });
 
     // ── Face Attendance (new self-service module, separate from the
@@ -419,6 +457,9 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
         Route::post('updates/quick', [ProjectApiController::class, 'storeQuickUpdate'])
             ->name('updates.quick-store');
+
+        Route::post('bulk-allocate', [ProjectApiController::class, 'bulkAllocate'])
+            ->name('bulk-allocate');
 
         Route::get('my-accounts', [ProjectApiController::class, 'myAccounts'])
             ->name('mobile.projects.my-accounts.index');

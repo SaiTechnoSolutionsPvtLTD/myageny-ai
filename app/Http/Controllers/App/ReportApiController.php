@@ -391,6 +391,7 @@ class ReportApiController extends Controller
                 'branch_id'          => 'nullable|integer',
                 'collection_type'    => 'nullable|string|in:new_sales,balance_payment,renewals',
                 'quick_date'         => 'nullable|string|max:50',
+                'sort'               => 'nullable|string|in:latest,oldest,amount_high,amount_low',
                 'date_from'          => 'nullable|date',
                 'date_to'            => 'nullable|date',
                 'page'               => 'nullable|integer|min:1',
@@ -464,15 +465,22 @@ class ReportApiController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']);
 
+            $companyQuery = Lead::query()
+                ->whereNotNull('company_name')
+                ->where('company_name', '!=', '');
+            $companyId = $this->visibility->companyIdFor();
+            $visibleUserIds = $this->visibility->visibleUserIds();
+            if ($companyId) {
+                $companyQuery->where('company_id', $companyId);
+            }
+            if ($visibleUserIds !== null) {
+                $companyQuery->whereIn('assigned_to', $visibleUserIds);
+            }
+            $companyOptions = $companyQuery->distinct()->orderBy('company_name')->pluck('company_name');
+
             $rowsData = $reportRows->getCollection()->map(function ($row) use ($paymentModes) {
                 $paymentDate = $row->payment_date ? Carbon::parse($row->payment_date) : null;
                 $code = str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT);
-                $typeLabel = match($row->collection_type ?? '') {
-                    'new_sales' => 'New Sales',
-                    'balance_payment' => 'Balance Payment',
-                    'renewals' => 'Renewals',
-                    default => '-',
-                };
                 $typeLabel = match($row->collection_type ?? '') {
                     'new_sales' => 'New Sales',
                     'balance_payment' => 'Balance Payment',
@@ -489,6 +497,8 @@ class ReportApiController extends Controller
                     'customer_code'          => 'LD-' . str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT),
                     'customer_name'          => $row->customer_name ?: null,
                     'company_name'           => $row->company_name ?: null,
+                    'customer_phone'         => $row->customer_phone ?: null,
+                    'customer_email'         => $row->customer_email ?: null,
                     'branch_name'            => $row->branch_name ?: null,
                     'product_name'           => $row->product_name ?: null,
                     'collection_type'        => $row->collection_type ?? null,
@@ -498,6 +508,13 @@ class ReportApiController extends Controller
                     'outstanding_amount'     => round((float) ($row->outstanding_amount ?? 0), 2),
                     'payment_mode'           => $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                     'transaction_reference'  => $row->transaction_reference ?: null,
+                    'notes'                  => $row->notes ?: null,
+                    'attachment_name'        => $row->attachment_name ?: ($row->attachment_path ? basename($row->attachment_path) : null),
+                    'attachment_url'         => $row->attachment_path ? (
+                        (str_starts_with($row->attachment_path, 'uploads/') || str_starts_with($row->attachment_path, 'public/'))
+                            ? asset($row->attachment_path)
+                            : (file_exists(public_path($row->attachment_path)) ? asset($row->attachment_path) : \Illuminate\Support\Facades\Storage::disk('public')->url($row->attachment_path))
+                    ) : null,
                     'received_by'            => $row->received_by ?: null,
                     'received_by_department' => $row->received_by_department ?: null,
                 ];
@@ -528,6 +545,7 @@ class ReportApiController extends Controller
                         'name' => $u->name,
                     ])->values(),
                     'branches' => $branches->map(fn($b) => ['id' => $b->id, 'name' => $b->name])->values(),
+                    'companies' => $companyOptions->values(),
                 ],
                 'pagination' => [
                     'current_page' => $reportRows->currentPage(),
@@ -720,9 +738,12 @@ class ReportApiController extends Controller
                 'leads.company_name',
                 'lead_products.product_name',
                 'branches.name as branch_name',
+                'leads.mobile_number as customer_phone',
+                'leads.email as customer_email',
+                'lead_product_payments.notes',
+                'lead_product_payments.attachment_path',
+                'lead_product_payments.attachment_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
-                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
@@ -734,9 +755,15 @@ class ReportApiController extends Controller
                     )
                 ) as received_by_department'),
                 DB::raw("({$collectionTypeSql}) as collection_type"),
-            ])
-            ->orderByDesc('lead_product_payments.payment_date')
-            ->orderByDesc('lead_product_payments.id');
+            ]);
+
+        $sort = $request->input('sort', 'latest');
+        match ($sort) {
+            'oldest'      => $query->orderBy('lead_product_payments.payment_date')->orderBy('lead_product_payments.id'),
+            'amount_high' => $query->orderByDesc('lead_product_payments.amount')->orderByDesc('lead_product_payments.id'),
+            'amount_low'  => $query->orderBy('lead_product_payments.amount')->orderBy('lead_product_payments.id'),
+            default       => $query->orderByDesc('lead_product_payments.payment_date')->orderByDesc('lead_product_payments.id'),
+        };
 
         $companyId = $this->visibility->companyIdFor();
         $visibleUserIds = $this->visibility->visibleUserIds();

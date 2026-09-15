@@ -301,6 +301,14 @@ return [
                 'permission' => 'facility_management.menuview',
                 'forbid_method' => 'isHrmsAttendanceOnlyUser'
             ],
+            [
+                'key' => 'hrms.house_keeping',
+                'label' => 'House Keeping',
+                'section' => 'HRMS',
+                'order' => 105,
+                'permission' => 'house_keeping.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser',
+            ],
 
             ['key' => 'hrms.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 110],
         ],
