@@ -286,7 +286,7 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
         </div>
         <div class="lsp-hero-right">
-            @if($lead->deal_value)
+            @if($lead->converted_deal_value > 0 || $lead->deal_value)
             <span style="font-size:15px;font-weight:800;color:var(--text);">{{ $lead->formatted_deal_value }}</span>
             @endif
         </div>
@@ -453,7 +453,7 @@ tbody tr:last-child td { border-bottom: none; }
                             <div class="lsp-stat-grid">
                                 <div class="lsp-stat-box">
                                     <div class="lsp-il">Deal Value</div>
-                                    <div class="lsp-deal-big">₹{{ number_format($lead->products->sum('total_price'), 2) }}</div>
+                                    <div class="lsp-deal-big">₹{{ number_format($lead->converted_deal_value, 2) }}</div>
                                 </div>
                                 <div class="lsp-stat-box blue">
                                     <div class="lsp-il">Number Of Products</div>

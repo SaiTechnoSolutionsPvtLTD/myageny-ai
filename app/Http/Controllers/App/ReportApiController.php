@@ -473,6 +473,12 @@ class ReportApiController extends Controller
                     'renewals' => 'Renewals',
                     default => '-',
                 };
+                $typeLabel = match($row->collection_type ?? '') {
+                    'new_sales' => 'New Sales',
+                    'balance_payment' => 'Balance Payment',
+                    'renewals' => 'Renewals',
+                    default => '-',
+                };
 
                 return [
                     'payment_id'             => $row->payment_id,
@@ -717,6 +723,8 @@ class ReportApiController extends Controller
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
                 DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
+                DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
+                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
                 DB::raw('(
                     SELECT COALESCE(
@@ -760,6 +768,10 @@ class ReportApiController extends Controller
 
         if ($request->filled('branch_id')) {
             $query->where('leads.branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('collection_type')) {
+            $query->whereRaw("({$collectionTypeSql}) = ?", [$request->collection_type]);
         }
 
         if ($request->filled('collection_type')) {

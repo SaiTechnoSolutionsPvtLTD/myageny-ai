@@ -736,13 +736,10 @@ class LeadController extends Controller
         $reviewOnlyCount = $lead->cstUpdates->where('update_type', 'review')->count();
         $escalationOnlyCount = $lead->cstUpdates->where('update_type', 'escalation')->count();
 
+        $convertedStatusIds = LeadProduct::convertedStatusIds();
         $convertedProducts = $lead->products
-            ->filter(fn ($p) => strtolower((string) $p->product_status) === 'converted' || $p->product_status_key === 'converted')
+            ->filter(fn ($p) => $p->isConvertedProduct($convertedStatusIds))
             ->values();
-
-        if ($convertedProducts->isEmpty() && $lead->products->isNotEmpty()) {
-            $convertedProducts = $lead->products;
-        }
 
         $salesExecutives = $this->visibility->visibleAssignableUsers();
 

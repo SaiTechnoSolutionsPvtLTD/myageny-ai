@@ -15,13 +15,13 @@
 .crm-pay-btn:hover { border-color: #86efac; background: #f0fdf4; color: #047857; }
 .crm-pay-btn-primary { border-color: transparent; background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; box-shadow: 0 6px 18px rgba(22, 163, 74, 0.22); }
 .crm-pay-btn-primary:hover { color: #fff; border-color: transparent; background: linear-gradient(135deg, #15803d, #16a34a); }
-.crm-pay-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.crm-pay-stat { position: relative; overflow: hidden; padding: 20px; border-radius: 22px; border: 1px solid #e7e5e4; background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(248,250,252,.98) 100%); box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05); }
+.crm-pay-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.crm-pay-stat { position: relative; overflow: hidden; padding: 18px 16px; border-radius: 20px; border: 1px solid #e7e5e4; background: linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(248,250,252,.98) 100%); box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05); }
 .crm-pay-stat::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 5px; border-radius: 999px; background: var(--stat-accent, #16a34a); }
-.crm-pay-stat-label { margin-top: 12px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; }
-.crm-pay-stat-value { margin-top: 10px; font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -.03em; }
-.crm-pay-stat-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(226, 232, 240, .9); font-size: 12px; color: #64748b; }
-.crm-pay-stat-chip { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.88); color: var(--stat-accent, #16a34a); border: 1px solid color-mix(in srgb, var(--stat-accent, #16a34a) 22%, white 78%); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.crm-pay-stat-label { margin-top: 10px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #94a3b8; line-height: 1.35; min-height: 28px; display: flex; align-items: center; }
+.crm-pay-stat-value { margin-top: 8px; font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: -.03em; word-break: break-word; }
+.crm-pay-stat-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(226, 232, 240, .9); font-size: 11px; color: #64748b; line-height: 1.35; }
+.crm-pay-stat-chip { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 999px; background: rgba(255,255,255,.88); color: var(--stat-accent, #16a34a); border: 1px solid color-mix(in srgb, var(--stat-accent, #16a34a) 22%, white 78%); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .crm-pay-tabs { display: inline-flex; align-items: center; gap: 10px; padding: 10px; border-radius: 20px; background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 58%, #fff7ed 100%); border: 1px solid #bbf7d0; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,.9); width: fit-content; }
 .crm-pay-tab { padding: 12px 22px; border-radius: 14px; border: 1px solid transparent; background: rgba(255,255,255,.72); color: #475569; font-size: 13px; font-weight: 900; transition: all .18s ease; }
 .crm-pay-tab:hover { border-color: #86efac; background: #ffffff; color: #047857; transform: translateY(-1px); }
@@ -65,9 +65,15 @@
 .crm-pay-analytics-subtitle { margin-top: 4px; font-size: 12px; color: #6b7280; }
 .crm-pay-analytics-chart { position: relative; min-height: 290px; }
 .crm-pay-analytics-chart.tall { min-height: 340px; }
+@media (max-width: 1400px) {
+    .crm-pay-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 1280px) {
-    .crm-pay-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .crm-pay-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .crm-pay-form, .crm-pay-analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+    .crm-pay-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
     .crm-pay-page { padding: 18px; }
@@ -117,8 +123,78 @@
     padding: 9px 12px;
 }
 .select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
-    background: #22c55e;
-    color: #fff;
+    background: #22c55e !important;
+    color: #fff !important;
+}
+.crm-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+.crm-type-badge.new-sales {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+.crm-type-badge.new-sales .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+}
+.crm-type-badge.balance-payment {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+}
+.crm-type-badge.balance-payment .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ea580c;
+}
+.crm-type-badge.renewals {
+    background: #f5f3ff;
+    color: #7c3aed;
+    border: 1px solid #ddd6fe;
+}
+.crm-type-badge.renewals .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #8b5cf6;
+}
+
+.crm-type-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    background: #ffffff;
+    color: #475569;
+    border: 1.5px solid #e2e8f0;
+    transition: all 0.15s ease;
+}
+.crm-type-pill:hover {
+    border-color: #cbd5e1;
+    color: #0f172a;
+    background: #f8fafc;
+}
+.crm-type-pill.is-active {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
 }
 </style>
 @endpush
@@ -131,6 +207,7 @@
         || request()->filled('sales_executive_id')
         || request()->filled('payment_mode')
         || request()->filled('branch_id')
+        || request()->filled('collection_type')
         || (request()->has('quick_date') && request('quick_date') !== 'month')
         || (request()->has('date_from') && request('date_from') !== $defaultFromDate)
         || (request()->has('date_to') && request('date_to') !== $defaultToDate);
@@ -163,29 +240,52 @@
         </div>
 
         <div class="crm-pay-stats">
-            <div class="crm-pay-stat" style="--stat-accent:#16a34a;">
+            {{-- 1. Payment Rows --}}
+            <div class="crm-pay-stat" style="--stat-accent:#0f172a;">
                 <span class="crm-pay-stat-chip">Receipts</span>
                 <div class="crm-pay-stat-label">Payment Rows</div>
                 <div class="crm-pay-stat-value">{{ number_format($summary['rows']) }}</div>
-                <div class="crm-pay-stat-note">Visible payment entries for the selected filters.</div>
+                <div class="crm-pay-stat-note">Visible payment entries for selected filters.</div>
             </div>
+
+            {{-- 2. Total Collected Payment --}}
+            <div class="crm-pay-stat" style="--stat-accent:#16a34a;">
+                <span class="crm-pay-stat-chip">Overall Collected</span>
+                <div class="crm-pay-stat-label">Total Collected Payment</div>
+                <div class="crm-pay-stat-value">Rs {{ number_format($summary['total_collected_payment'], 2) }}</div>
+                <div class="crm-pay-stat-note">(New Sale + Renewals) Received + Balance Payment.</div>
+            </div>
+
+            {{-- 3. Deal Value (New Sale + Renewals) --}}
             <div class="crm-pay-stat" style="--stat-accent:#2563eb;">
-                <span class="crm-pay-stat-chip">Total</span>
-                <div class="crm-pay-stat-label">Total Amount</div>
-                <div class="crm-pay-stat-value">Rs {{ number_format($summary['total_amount'], 2) }}</div>
-                <div class="crm-pay-stat-note">Sum of Received &amp; Pending amounts for visible rows.</div>
+                <span class="crm-pay-stat-chip">Deal Value</span>
+                <div class="crm-pay-stat-label">Deal Value (New Sale + Renewals)</div>
+                <div class="crm-pay-stat-value">Rs {{ number_format($summary['deal_value'], 2) }}</div>
+                <div class="crm-pay-stat-note">Total contract value for New Sales &amp; Renewals.</div>
             </div>
-            <div class="crm-pay-stat" style="--stat-accent:#047857;">
-                <span class="crm-pay-stat-chip">Collected</span>
-                <div class="crm-pay-stat-label">Received Amount</div>
-                <div class="crm-pay-stat-value">Rs {{ number_format($summary['received_amount'], 2) }}</div>
-                <div class="crm-pay-stat-note">Payment amount collected in this report range.</div>
+
+            {{-- 4. (New Sale + Renewals) Total Received Amount --}}
+            <div class="crm-pay-stat" style="--stat-accent:#0d9488;">
+                <span class="crm-pay-stat-chip">New &amp; Renewal Received</span>
+                <div class="crm-pay-stat-label">(New Sale + Renewals) Received</div>
+                <div class="crm-pay-stat-value">Rs {{ number_format($summary['new_renewals_received'], 2) }}</div>
+                <div class="crm-pay-stat-note">Payment collected on New Sales &amp; Renewals.</div>
             </div>
+
+            {{-- 5. Balance Payment --}}
+            <div class="crm-pay-stat" style="--stat-accent:#ea580c;">
+                <span class="crm-pay-stat-chip">Balance Received</span>
+                <div class="crm-pay-stat-label">Balance Payment Received</div>
+                <div class="crm-pay-stat-value">Rs {{ number_format($summary['balance_received'], 2) }}</div>
+                <div class="crm-pay-stat-note">Amount collected on pending balance payments.</div>
+            </div>
+
+            {{-- 6. Outstanding Amount (New Sale + Renewals) --}}
             <div class="crm-pay-stat" style="--stat-accent:#dc2626;">
                 <span class="crm-pay-stat-chip">Pending</span>
-                <div class="crm-pay-stat-label">Outstanding Amount</div>
-                <div class="crm-pay-stat-value">Rs {{ number_format($summary['outstanding_amount'], 2) }}</div>
-                <div class="crm-pay-stat-note">Pending balance remaining for visible payment entries.</div>
+                <div class="crm-pay-stat-label">Outstanding (New Sale + Renewals)</div>
+                <div class="crm-pay-stat-value">Rs {{ number_format($summary['new_renewals_pending'], 2) }}</div>
+                <div class="crm-pay-stat-note">Pending balance on New Sales &amp; Renewals.</div>
             </div>
         </div>
 
@@ -276,6 +376,16 @@
                         </select>
                     </div>
 
+                    <div class="crm-pay-field">
+                        <label class="crm-pay-label" for="collection_type">Payment Type</label>
+                        <select id="collection_type" name="collection_type" class="crm-pay-select">
+                            <option value="">All Types</option>
+                            <option value="new_sales" @selected(request('collection_type') === 'new_sales')>New Sales (New Converted Product)</option>
+                            <option value="balance_payment" @selected(request('collection_type') === 'balance_payment')>Balance Payment</option>
+                            <option value="renewals" @selected(request('collection_type') === 'renewals')>Renewals</option>
+                        </select>
+                    </div>
+
                     @if(request()->filled('per_page'))
                         <input type="hidden" name="per_page" value="{{ request('per_page') }}">
                     @endif
@@ -311,6 +421,30 @@
                     @endif
                 </div>
 
+                <div style="padding:14px 20px 0 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <a href="{{ request()->fullUrlWithQuery(['collection_type' => null, 'page' => 1]) }}"
+                           class="crm-type-pill {{ !request('collection_type') ? 'is-active' : '' }}">
+                            <span>All Types</span>
+                        </a>
+                        <a href="{{ request()->fullUrlWithQuery(['collection_type' => 'new_sales', 'page' => 1]) }}"
+                           class="crm-type-pill {{ request('collection_type') === 'new_sales' ? 'is-active' : '' }}">
+                            <span style="width:7px; height:7px; border-radius:50%; background:#10b981;"></span>
+                            <span>New Sales</span>
+                        </a>
+                        <a href="{{ request()->fullUrlWithQuery(['collection_type' => 'balance_payment', 'page' => 1]) }}"
+                           class="crm-type-pill {{ request('collection_type') === 'balance_payment' ? 'is-active' : '' }}">
+                            <span style="width:7px; height:7px; border-radius:50%; background:#ea580c;"></span>
+                            <span>Balance Payment</span>
+                        </a>
+                        <a href="{{ request()->fullUrlWithQuery(['collection_type' => 'renewals', 'page' => 1]) }}"
+                           class="crm-type-pill {{ request('collection_type') === 'renewals' ? 'is-active' : '' }}">
+                            <span style="width:7px; height:7px; border-radius:50%; background:#8b5cf6;"></span>
+                            <span>Renewals</span>
+                        </a>
+                    </div>
+                </div>
+
                 @if($reportRows->isEmpty())
                     <div class="crm-pay-empty">
                         <strong>No payment records found</strong>
@@ -328,6 +462,7 @@
                                     <th>Branch</th>
                                     <th>Company Name</th>
                                     <th>Customer Name</th>
+                                    <th>Payment Type</th>
                                     <th>Total Amount</th>
                                     <th>Received Amount</th>
                                     <th>Outstanding Amount</th>
@@ -349,7 +484,7 @@
                                         <td><span class="crm-pay-code">RCT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
                                         <td>
                                             <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-code" style="color:#ea580c; font-weight:800; text-decoration:none;">
-                                                LD-{{ str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT) }}
+                                                 LD-{{ str_pad((string) $row->customer_id, 4, '0', STR_PAD_LEFT) }}
                                             </a>
                                         </td>
                                         <td>
@@ -365,7 +500,30 @@
                                                 {{ $row->customer_name ?: '-' }}
                                             </a>
                                         </td>
-                                        <td class="crm-pay-money">Rs {{ number_format($rowTotalAmount, 2) }}</td>
+                                        <td>
+                                            @if($row->collection_type === 'new_sales')
+                                                <span class="crm-type-badge new-sales">
+                                                    <span class="dot"></span> New Sales
+                                                </span>
+                                            @elseif($row->collection_type === 'balance_payment')
+                                                <span class="crm-type-badge balance-payment">
+                                                    <span class="dot"></span> Balance Payment
+                                                </span>
+                                            @elseif($row->collection_type === 'renewals')
+                                                <span class="crm-type-badge renewals">
+                                                    <span class="dot"></span> Renewals
+                                                </span>
+                                            @else
+                                                <span style="color:#94a3b8; font-size:12px;">-</span>
+                                            @endif
+                                        </td>
+                                        <td class="crm-pay-money">
+                                            @if($row->collection_type === 'balance_payment' || $rowTotalAmount <= 0)
+                                                <span style="color:#94a3b8; font-weight:600;">—</span>
+                                            @else
+                                                Rs {{ number_format($rowTotalAmount, 2) }}
+                                            @endif
+                                        </td>
                                         <td class="crm-pay-money" style="color:#047857;">Rs {{ number_format($rowReceivedAmount, 2) }}</td>
                                         <td class="crm-pay-money" style="color:#dc2626;">Rs {{ number_format($rowOutstandingAmount, 2) }}</td>
                                         <td><span class="crm-pay-mode">{{ $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)) }}</span></td>
@@ -383,7 +541,7 @@
                             </tbody>
                             <tfoot>
                                 <tr style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;">
-                                    <td colspan="7" style="text-align:right; padding:14px 16px; color:#475569; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
+                                    <td colspan="8" style="text-align:right; padding:14px 16px; color:#475569; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
                                         @if($reportRows->hasPages())
                                             Page Total ({{ $reportRows->count() }} rows):
                                         @else
@@ -391,7 +549,7 @@
                                         @endif
                                     </td>
                                     <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#0f172a;">
-                                        Rs {{ number_format($reportRows->sum(fn($r) => ((float)($r->total_amount ?? ((float)($r->received_amount ?? 0) + (float)($r->outstanding_amount ?? 0))))), 2) }}
+                                        Rs {{ number_format($reportRows->filter(fn($r) => $r->collection_type !== 'balance_payment')->sum(fn($r) => (float)($r->total_amount ?? 0)), 2) }}
                                     </td>
                                     <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#047857;">
                                         Rs {{ number_format($reportRows->sum('received_amount'), 2) }}
@@ -403,7 +561,7 @@
                                 </tr>
                                 @if($reportRows->hasPages())
                                     <tr style="background:#f1f5f9; font-weight:900; border-top:1px solid #cbd5e1;">
-                                        <td colspan="7" style="text-align:right; padding:14px 16px; color:#0f172a; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
+                                        <td colspan="8" style="text-align:right; padding:14px 16px; color:#0f172a; font-size:12px; letter-spacing:.05em; text-transform:uppercase;">
                                             Overall Report Total ({{ number_format($summary['rows']) }} rows):
                                         </td>
                                         <td class="crm-pay-money" style="padding:14px; font-size:14px; color:#0f172a;">

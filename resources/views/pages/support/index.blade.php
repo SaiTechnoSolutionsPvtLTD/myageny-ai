@@ -113,10 +113,63 @@
     box-shadow: 0 10px 30px rgba(15, 23, 42, 0.02);
     overflow: hidden;
 }
+.ticket-table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.ticket-table-responsive::-webkit-scrollbar {
+    height: 7px;
+}
+.ticket-table-responsive::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+.ticket-table-responsive::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+.ticket-table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
 .support-table {
     width: 100%;
+    min-width: 1050px;
     border-collapse: collapse;
     text-align: left;
+}
+.support-kpi-card {
+    background: #ffffff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    position: relative;
+}
+.support-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    border-color: #cbd5e1;
+}
+.support-kpi-card.active-filter {
+    border-color: #fe5f04 !important;
+    background: #fffaf5 !important;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.15), 0 8px 20px rgba(254, 95, 4, 0.08) !important;
+}
+.support-kpi-card.active-filter::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: #fe5f04;
+    border-radius: 3px 3px 0 0;
 }
 .support-table th {
     background: #f9fafb;
@@ -500,50 +553,55 @@
         </button>
     </div>
 
-    {{-- Company Admin KPI Summary Stats --}}
-    @if($isCompanyAdmin)
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-                <div>
-                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">All Company Tickets</div>
-                    <div style="font-size: 24px; font-weight: 900; color: #111827; margin-top: 4px;">{{ $allTickets->count() }}</div>
-                </div>
-                <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                    <i class="bi bi-collection-fill"></i>
-                </div>
+    {{-- KPI Summary Stats --}}
+    @php
+        $statsTickets = $isCompanyAdmin ? $allTickets : $receivedTickets->concat($createdTickets)->unique('id');
+        $statTotal = $statsTickets->count();
+        $statPending = $statsTickets->where('status', 'pending')->count();
+        $statOnProcess = $statsTickets->where('status', 'onprocess')->count();
+        $statResolved = $statsTickets->whereIn('status', ['resolved', 'closed'])->count();
+    @endphp
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="support-kpi-card active-filter" data-status-filter="all" onclick="filterByCardStatus('all')" title="Click to view all tickets">
+            <div>
+                <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">{{ $isCompanyAdmin ? 'All Company Tickets' : 'All Tickets' }}</div>
+                <div style="font-size: 24px; font-weight: 900; color: #111827; margin-top: 4px;">{{ $statTotal }}</div>
             </div>
-
-            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-                <div>
-                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Pending Tickets</div>
-                    <div style="font-size: 24px; font-weight: 900; color: #c2410c; margin-top: 4px;">{{ $allTickets->where('status', 'pending')->count() }}</div>
-                </div>
-                <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                    <i class="bi bi-hourglass-split"></i>
-                </div>
-            </div>
-
-            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-                <div>
-                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">On Process</div>
-                    <div style="font-size: 24px; font-weight: 900; color: #1d4ed8; margin-top: 4px;">{{ $allTickets->where('status', 'onprocess')->count() }}</div>
-                </div>
-                <div style="width: 44px; height: 44px; border-radius: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                    <i class="bi bi-gear-wide-connected"></i>
-                </div>
-            </div>
-
-            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-                <div>
-                    <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Resolved / Closed</div>
-                    <div style="font-size: 24px; font-weight: 900; color: #15803d; margin-top: 4px;">{{ $allTickets->whereIn('status', ['resolved', 'closed'])->count() }}</div>
-                </div>
-                <div style="width: 44px; height: 44px; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #15803d; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                    <i class="bi bi-check-circle-fill"></i>
-                </div>
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff1e8; border: 1px solid #fed7aa; color: #c2410c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                <i class="bi bi-collection-fill"></i>
             </div>
         </div>
-    @endif
+
+        <div class="support-kpi-card" data-status-filter="pending" onclick="filterByCardStatus('pending')" title="Click to filter pending tickets">
+            <div>
+                <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Pending Tickets</div>
+                <div style="font-size: 24px; font-weight: 900; color: #c2410c; margin-top: 4px;">{{ $statPending }}</div>
+            </div>
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+        </div>
+
+        <div class="support-kpi-card" data-status-filter="onprocess" onclick="filterByCardStatus('onprocess')" title="Click to filter on process tickets">
+            <div>
+                <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">On Process</div>
+                <div style="font-size: 24px; font-weight: 900; color: #1d4ed8; margin-top: 4px;">{{ $statOnProcess }}</div>
+            </div>
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                <i class="bi bi-gear-wide-connected"></i>
+            </div>
+        </div>
+
+        <div class="support-kpi-card" data-status-filter="resolved_closed" onclick="filterByCardStatus('resolved_closed')" title="Click to filter resolved & closed tickets">
+            <div>
+                <div style="font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Resolved / Closed</div>
+                <div style="font-size: 24px; font-weight: 900; color: #15803d; margin-top: 4px;">{{ $statResolved }}</div>
+            </div>
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #15803d; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                <i class="bi bi-check-circle-fill"></i>
+            </div>
+        </div>
+    </div>
 
     <!-- Tabs Toolbar & Search -->
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 22px;">
@@ -580,24 +638,25 @@
         {{-- ALL TICKETS PANEL (FOR COMPANY ADMIN) --}}
         <div id="all_tickets" class="tab-panel active">
             <div class="ticket-card">
-                <table class="support-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 80px;">Ticket ID</th>
-                            <th>Subject</th>
-                            <th style="width: 175px;">From User</th>
-                            <th style="width: 175px;">To User</th>
-                            <th style="width: 150px;">Created At</th>
-                            <th style="width: 110px;">Status</th>
-                            <th>Remark</th>
-                            <th style="width: 110px;">Attachment</th>
-                            <th style="width: 140px; text-align: center;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($allTickets as $ticket)
+                <div class="ticket-table-responsive">
+                    <table class="support-table">
+                        <thead>
                             <tr>
-                                <td><strong>#{{ $ticket->id }}</strong></td>
+                                <th style="width: 80px;">Ticket ID</th>
+                                <th>Subject</th>
+                                <th style="width: 175px;">From User</th>
+                                <th style="width: 175px;">To User</th>
+                                <th style="width: 150px;">Created At</th>
+                                <th style="width: 110px;">Status</th>
+                                <th>Remark</th>
+                                <th style="width: 110px;">Attachment</th>
+                                <th style="width: 140px; text-align: center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($allTickets as $ticket)
+                                <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                                    <td><strong>#{{ $ticket->id }}</strong></td>
                                 <td>
                                     <div>
                                         <a href="javascript:void(0)" class="ticket-subject-link"
@@ -696,6 +755,7 @@
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     @endif
@@ -703,24 +763,25 @@
     {{-- RECEIVED TICKETS PANEL --}}
     <div id="received" class="tab-panel {{ $isCompanyAdmin ? '' : 'active' }}">
         <div class="ticket-card">
-            <table class="support-table">
-                <thead>
-                    <tr>
-                        <th style="width: 80px;">Ticket ID</th>
-                        <th>Subject</th>
-                        <th style="width: 175px;">From User</th>
-                        <th style="width: 175px;">To User</th>
-                        <th style="width: 150px;">Created At</th>
-                        <th style="width: 110px;">Status</th>
-                        <th>Remark</th>
-                        <th style="width: 110px;">Attachment</th>
-                        <th style="width: 140px; text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($receivedTickets as $ticket)
+            <div class="ticket-table-responsive">
+                <table class="support-table">
+                    <thead>
                         <tr>
-                            <td><strong>#{{ $ticket->id }}</strong></td>
+                            <th style="width: 80px;">Ticket ID</th>
+                            <th>Subject</th>
+                            <th style="width: 175px;">From User</th>
+                            <th style="width: 175px;">To User</th>
+                            <th style="width: 150px;">Created At</th>
+                            <th style="width: 110px;">Status</th>
+                            <th>Remark</th>
+                            <th style="width: 110px;">Attachment</th>
+                            <th style="width: 140px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($receivedTickets as $ticket)
+                            <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                                <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
                                 <div>
                                     <a href="javascript:void(0)" class="ticket-subject-link"
@@ -818,30 +879,32 @@
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 
     {{-- CREATED TICKETS PANEL --}}
     <div id="created" class="tab-panel">
         <div class="ticket-card">
-            <table class="support-table">
-                <thead>
-                    <tr>
-                        <th style="width: 80px;">Ticket ID</th>
-                        <th>Subject</th>
-                        <th style="width: 175px;">From User</th>
-                        <th style="width: 175px;">To User</th>
-                        <th style="width: 150px;">Created At</th>
-                        <th style="width: 110px;">Status</th>
-                        <th>Remark</th>
-                        <th style="width: 110px;">Attachment</th>
-                        <th style="width: 140px; text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($createdTickets as $ticket)
+            <div class="ticket-table-responsive">
+                <table class="support-table">
+                    <thead>
                         <tr>
-                            <td><strong>#{{ $ticket->id }}</strong></td>
+                            <th style="width: 80px;">Ticket ID</th>
+                            <th>Subject</th>
+                            <th style="width: 175px;">From User</th>
+                            <th style="width: 175px;">To User</th>
+                            <th style="width: 150px;">Created At</th>
+                            <th style="width: 110px;">Status</th>
+                            <th>Remark</th>
+                            <th style="width: 110px;">Attachment</th>
+                            <th style="width: 140px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($createdTickets as $ticket)
+                            <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                                <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
                                 <div>
                                     <a href="javascript:void(0)" class="ticket-subject-link"
@@ -943,6 +1006,7 @@
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
@@ -1158,24 +1222,99 @@
         }
         evt.currentTarget.classList.add("active");
 
-        // Reapply search filter if search input has value
-        const searchInput = document.getElementById('ticketSearchInput');
-        if (searchInput && searchInput.value) {
-            filterSupportTickets(searchInput.value);
-        }
+        // Reapply active filters to the new tab
+        applySupportFilters();
     }
 
-    // Filter tickets in active tab
+    // Card status filter state
+    let currentCardStatusFilter = 'all';
+
+    function filterByCardStatus(status) {
+        if (currentCardStatusFilter === status && status !== 'all') {
+            currentCardStatusFilter = 'all'; // toggle back to all
+        } else {
+            currentCardStatusFilter = status;
+        }
+
+        // Update active class on KPI cards
+        document.querySelectorAll('.support-kpi-card').forEach(card => {
+            if (card.getAttribute('data-status-filter') === currentCardStatusFilter) {
+                card.classList.add('active-filter');
+            } else {
+                card.classList.remove('active-filter');
+            }
+        });
+
+        applySupportFilters();
+    }
+
+    // Filter tickets in active tab (search input)
     function filterSupportTickets(val) {
-        const q = (val || '').toLowerCase().trim();
+        applySupportFilters();
+    }
+
+    // Combined filter function for Search + KPI Card Status
+    function applySupportFilters() {
+        const searchInput = document.getElementById('ticketSearchInput');
+        const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
         const activePanel = document.querySelector('.tab-panel.active');
         if (!activePanel) return;
-        const rows = activePanel.querySelectorAll('tbody tr');
+
+        const rows = activePanel.querySelectorAll('tbody tr:not(.dynamic-filter-empty-row)');
+        let visibleCount = 0;
+
         rows.forEach(row => {
+            // Skip blade empty state rows if present
             if (row.querySelector('td[colspan]')) return;
-            const text = row.textContent.toLowerCase();
-            row.style.display = (!q || text.includes(q)) ? '' : 'none';
+
+            const rowStatus = (row.getAttribute('data-status') || '').toLowerCase().trim();
+            const rowText = row.textContent.toLowerCase();
+
+            // Status filter check
+            let matchesStatus = false;
+            if (currentCardStatusFilter === 'all') {
+                matchesStatus = true;
+            } else if (currentCardStatusFilter === 'resolved_closed') {
+                matchesStatus = (rowStatus === 'resolved' || rowStatus === 'closed');
+            } else {
+                matchesStatus = (rowStatus === currentCardStatusFilter);
+            }
+
+            // Search query check
+            let matchesSearch = (!q || rowText.includes(q));
+
+            if (matchesStatus && matchesSearch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
         });
+
+        // Dynamic empty state message if no rows match filter
+        let dynamicEmptyRow = activePanel.querySelector('.dynamic-filter-empty-row');
+        const tbody = activePanel.querySelector('tbody');
+        const hasBaseEmptyRow = tbody ? tbody.querySelector('td[colspan]:not(.dynamic-filter-empty-row td)') : null;
+
+        if (tbody && !hasBaseEmptyRow && rows.length > 0) {
+            if (visibleCount === 0) {
+                if (!dynamicEmptyRow) {
+                    dynamicEmptyRow = document.createElement('tr');
+                    dynamicEmptyRow.className = 'dynamic-filter-empty-row';
+                    dynamicEmptyRow.innerHTML = `
+                        <td colspan="9" style="text-align: center; padding: 40px 20px; color: #6b7280;">
+                            <i class="bi bi-funnel" style="font-size: 32px; display: block; margin-bottom: 8px; color: #9ca3af;"></i>
+                            <span style="font-weight: 700; font-size: 14px; color: #374151;">No tickets match the selected filter.</span>
+                            <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">Try selecting another card or clearing the search box.</div>
+                        </td>
+                    `;
+                    tbody.appendChild(dynamicEmptyRow);
+                }
+                dynamicEmptyRow.style.display = '';
+            } else if (dynamicEmptyRow) {
+                dynamicEmptyRow.style.display = 'none';
+            }
+        }
     }
 
     // Modal Control Logic
