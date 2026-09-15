@@ -432,7 +432,7 @@ class ReportApiController extends Controller
             }
             $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
->>>>>>>>> Temporary merge branch 2
+
             $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
             $balanceRows = $analyticsRows->where('collection_type', 'balance_payment');
 
