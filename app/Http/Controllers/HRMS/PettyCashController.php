@@ -7,6 +7,7 @@ use App\Models\PettyCashEntry;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PettyCashController extends Controller
 {
@@ -159,15 +160,57 @@ class PettyCashController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
         ]);
 
+        $companyId = Auth::user()?->company_id;
+        $category = $request->input('category', 'petty_cash');
+        $type = $request->type;
+        $particulars = trim((string) $request->particulars);
+
+        // When House Keeping category is credited, first debit from Petty Cash then credit into House Keeping
+        if ($category === 'house_keeping' && in_array($type, ['credit', 'cash_in_hand'], true)) {
+            DB::transaction(function () use ($request, $companyId, $particulars) {
+                $entryParticulars = $particulars !== '' ? $particulars : 'Amount provide house keeping';
+
+                // 1. First: Debit from Petty Cash (Cash Out)
+                PettyCashEntry::create([
+                    'company_id' => $companyId,
+                    'branch_id' => $request->branch_id,
+                    'entry_date' => $request->entry_date,
+                    'voucher_no' => $request->voucher_no,
+                    'name' => $request->name ?: 'House Keeping',
+                    'particulars' => 'Amount provide house keeping',
+                    'type' => 'debit',
+                    'category' => 'petty_cash',
+                    'amount' => $request->amount,
+                    'created_by' => Auth::id(),
+                ]);
+
+                // 2. Then: Credit into House Keeping (Cash In)
+                PettyCashEntry::create([
+                    'company_id' => $companyId,
+                    'branch_id' => $request->branch_id,
+                    'entry_date' => $request->entry_date,
+                    'voucher_no' => $request->voucher_no,
+                    'name' => $request->name ?: 'House Keeping',
+                    'particulars' => $entryParticulars,
+                    'type' => 'credit',
+                    'category' => 'house_keeping',
+                    'amount' => $request->amount,
+                    'created_by' => Auth::id(),
+                ]);
+            });
+
+            return redirect()->back()->with('success', 'Amount provided to house keeping recorded successfully. Petty cash debited and House keeping credited.');
+        }
+
         PettyCashEntry::create([
-            'company_id' => Auth::user()?->company_id,
+            'company_id' => $companyId,
             'branch_id' => $request->branch_id,
             'entry_date' => $request->entry_date,
             'voucher_no' => $request->voucher_no,
             'name' => $request->name,
-            'particulars' => $request->particulars,
-            'type' => $request->type,
-            'category' => $request->input('category', 'petty_cash'),
+            'particulars' => $particulars,
+            'type' => $type,
+            'category' => $category,
             'amount' => $request->amount,
             'created_by' => Auth::id(),
         ]);

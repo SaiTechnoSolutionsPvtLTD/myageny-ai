@@ -107,14 +107,28 @@ class DataVisibilityService
             return false;
         }
 
+        if ($user->isBranchManager()) {
+            return false;
+        }
+
         if ($user->isBranchAdmin()) {
             return true;
         }
 
         return $user->roles->contains(function ($role) {
-            return in_array($this->roleKey($role->name), ['branch_admin', 'branch_manager'], true)
-                || in_array($this->roleKey((string) $role->display_name), ['branch_admin', 'branch_manager'], true);
+            return in_array($this->roleKey($role->name), ['branch_admin'], true)
+                || in_array($this->roleKey((string) $role->display_name), ['branch_admin'], true);
         });
+    }
+
+    public function hasBranchManagerRole(?User $user = null): bool
+    {
+        $user ??= auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        return $user->isBranchManager();
     }
 
     public function visibleUserIds(?User $user = null): ?array
@@ -123,6 +137,25 @@ class DataVisibilityService
 
         if (! $user) {
             return null;
+        }
+
+        if ($this->hasBranchManagerRole($user)) {
+            $branchIds = $user->getMyBranchIds();
+            $teamIds = $this->descendantUserIds($user)->push($user->id)->unique()->values();
+
+            try {
+                return User::query()
+                    ->where('is_active', true)
+                    ->whereIn('id', $teamIds)
+                    ->when(!empty($branchIds), fn ($query) => $query->where(function ($q) use ($branchIds, $user) {
+                        $q->whereIn('branch_id', $branchIds)
+                          ->orWhere('id', $user->id);
+                    }))
+                    ->pluck('id')
+                    ->all();
+            } catch (\Throwable $e) {
+                return [$user->id];
+            }
         }
 
         if ($this->hasBranchAdminRole($user)) {

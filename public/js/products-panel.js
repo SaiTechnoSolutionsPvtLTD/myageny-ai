@@ -250,7 +250,7 @@
         var dealInp = el('pp-deal-name');
         if (dealInp) dealInp.value = p.deal_name || '';
 
-        var origPrice = p.original_unit_price != null ? parseFloat(p.original_unit_price) : (p.product ? parseFloat(p.product.final_price || p.product.price || 0) : parseFloat(p.unit_price || 0));
+        var origPrice = p.original_unit_price != null ? parseFloat(p.original_unit_price) : (p.product ? parseFloat(p.product.base_price || p.product.final_price || p.product.price || 0) : parseFloat(p.unit_price || 0));
 
         ppState.selected[p.product_id || p.id] = {
             id           : p.product_id || p.id,
@@ -262,7 +262,7 @@
             previousPrice: parseFloat(p.unit_price || 0),
             qty          : parseInt(p.quantity || 1, 10),
             disc         : parseFloat(p.discount_percent || 0),
-            remarks      : p.remarks || '',
+            gst          : parseFloat(p.gst_percent || 0),
         };
 
         if (ppState.products.length === 0) {
@@ -342,7 +342,8 @@
 
     function buildSelectedProductState(product, current) {
         current = current || {};
-        var basePrice = parseFloat(product.price || 0);
+        var basePrice = parseFloat(product.base_price != null && product.base_price > 0 ? product.base_price : (product.price || 0));
+        var defaultGst = product.tax_value != null ? parseFloat(product.tax_value) : 18;
 
         return {
             id            : product.id,
@@ -353,7 +354,7 @@
             originalPrice : current.originalPrice != null ? parseFloat(current.originalPrice) || 0 : basePrice,
             qty           : current.qty != null ? parseInt(current.qty, 10) || 1 : 1,
             disc          : current.disc != null ? parseFloat(current.disc) || 0 : parseFloat(product.discount_percent || 0),
-            remarks       : current.remarks || '',
+            gst           : current.gst != null ? parseFloat(current.gst) || 0 : defaultGst,
         };
     }
 
@@ -377,7 +378,7 @@
             leadProductId: current && current.leadProductId,
             qty          : current && current.qty,
             disc         : current && current.disc,
-            remarks      : current && current.remarks,
+            gst          : current && current.gst,
         });
     }
 
@@ -422,29 +423,29 @@
 
         tbody.innerHTML = ids.map(function (pid) {
             var p = ppState.selected[pid];
-            var total = p.price * p.qty * (1 - p.disc / 100);
+            var subtotal = p.price * p.qty * (1 - p.disc / 100);
+            var total = subtotal * (1 + (p.gst || 0) / 100);
             return '<tr data-pid="' + pid + '">' +
                 '<td class="pp-td-name"><strong>' + escHtml(p.name) + '</strong>' +
                     '<div class="pp-td-desc">' + escHtml(p.description) + '</div></td>' +
                 '<td class="pp-td-price">' +
                     '<input type="number" class="ppf-inp ni" value="' + p.price + '" step="0.01" min="0" ' +
-                    'data-pid="' + pid + '" onchange="PP.ppUpdateRow(this,\'price\')">' +
+                    'data-pid="' + pid + '" oninput="PP.ppUpdateRow(this,\'price\')" onchange="PP.ppUpdateRow(this,\'price\')">' +
                     '<div class="pp-td-desc">Base ' + fmt(p.originalPrice) + '</div>' +
                 '</td>' +
                 '<td class="pp-td-qty">' +
                     '<input type="number" class="ppf-inp ni pp-qty-inp" value="' + p.qty + '" ' +
-                    'min="1" data-pid="' + pid + '" onchange="PP.ppUpdateRow(this,\'qty\')">' +
+                    'min="1" data-pid="' + pid + '" oninput="PP.ppUpdateRow(this,\'qty\')" onchange="PP.ppUpdateRow(this,\'qty\')">' +
                 '</td>' +
                 '<td class="pp-td-disc">' +
                     '<input type="number" class="ppf-inp ni pp-disc-inp" value="' + p.disc + '" ' +
-                    'min="0" max="100" data-pid="' + pid + '" onchange="PP.ppUpdateRow(this,\'disc\')">' +
+                    'min="0" max="100" data-pid="' + pid + '" oninput="PP.ppUpdateRow(this,\'disc\')" onchange="PP.ppUpdateRow(this,\'disc\')">' +
+                '</td>' +
+                '<td class="pp-td-gst">' +
+                    '<input type="number" class="ppf-inp ni pp-gst-inp" value="' + (p.gst != null ? p.gst : 0) + '" ' +
+                    'min="0" max="100" step="0.01" data-pid="' + pid + '" oninput="PP.ppUpdateRow(this,\'gst\')" onchange="PP.ppUpdateRow(this,\'gst\')">' +
                 '</td>' +
                 '<td class="pp-td-total"><strong>' + fmt(total) + '</strong></td>' +
-                '<td class="pp-td-remarks">' +
-                    '<input type="text" class="ppf-inp ni" placeholder="Remarks…" ' +
-                    'value="' + escHtml(p.remarks) + '" data-pid="' + pid + '" ' +
-                    'onchange="PP.ppUpdateRow(this,\'remarks\')">' +
-                '</td>' +
                 '<td><button type="button" class="pp-remove-row" onclick="PP.ppRemoveSelected(' + pid + ')" title="Remove">' +
                     '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
                 '</button></td>' +
@@ -455,13 +456,14 @@
     PP.ppUpdateRow = function (inp, field) {
         var pid = inp.dataset.pid;
         if (!ppState.selected[pid]) return;
-        ppState.selected[pid][field] = field === 'remarks' ? inp.value : parseFloat(inp.value) || 0;
+        ppState.selected[pid][field] = parseFloat(inp.value) || 0;
         // Re-render just the total cell
         var row   = inp.closest('tr');
         var totalEl = row ? row.querySelector('.pp-td-total strong') : null;
         if (totalEl) {
             var p     = ppState.selected[pid];
-            var total = p.price * p.qty * (1 - p.disc / 100);
+            var subtotal = p.price * p.qty * (1 - p.disc / 100);
+            var total = subtotal * (1 + (p.gst || 0) / 100);
             totalEl.textContent = fmt(total);
         }
     };
@@ -541,7 +543,7 @@
                     unit_price       : p.price,
                     quantity         : p.qty,
                     discount_percent : p.disc,
-                    remarks          : p.remarks,
+                    gst_percent      : p.gst,
                 };
             }),
         })
@@ -576,7 +578,7 @@
             unit_price       : product.price,
             quantity         : product.qty,
             discount_percent : product.disc,
-            remarks          : product.remarks,
+            gst_percent      : product.gst,
         })
         .then(function () {
             PP.ppHideModal('pp-modal-add-product');
@@ -1106,10 +1108,17 @@
 
         ppState.activePayProdId = prodId;
 
-        setInner('pp-pay-name',    p.name);
-        setInner('pp-pay-total',   fmt(p.total));
-        setInner('pp-pay-paid',    fmt(p.paid));
-        setInner('pp-pay-balance', fmt(p.total - p.paid));
+        var basePrice = p.base_price != null ? p.base_price : (p.unit_price * p.quantity * (1 - (p.discount_percent || 0) / 100));
+        var gstPct = p.gst_percent != null ? p.gst_percent : 0;
+        var gstAmount = p.gst_amount != null ? p.gst_amount : Math.round(basePrice * (gstPct / 100) * 100) / 100;
+
+        setInner('pp-pay-name',        p.name);
+        setInner('pp-pay-base-price',  fmt(basePrice));
+        setInner('pp-pay-gst-pct',     gstPct);
+        setInner('pp-pay-gst-amount',  fmt(gstAmount));
+        setInner('pp-pay-total',       fmt(p.total));
+        setInner('pp-pay-paid',        fmt(p.paid));
+        setInner('pp-pay-balance',     fmt(p.total - p.paid));
 
         var amtInp = el('pp-pay-amount');
         if (amtInp) amtInp.value = (p.total - p.paid) > 0
@@ -1132,31 +1141,122 @@
         var notesInp = el('pp-pay-notes');
         if (notesInp) notesInp.value = '';
 
+        var typeInp = el('pp-pay-type');
+        if (typeInp) typeInp.value = '';
+
+        var tdsChk = el('pp-pay-deduct-tds');
+        if (tdsChk) tdsChk.checked = false;
+
+        var tdsPercentInp = el('pp-pay-tds-percent');
+        if (tdsPercentInp) tdsPercentInp.value = '';
+
+        var tdsContainer = el('pp-tds-container');
+        if (tdsContainer) tdsContainer.style.display = 'none';
+
+        var tdsBreakdown = el('pp-tds-breakdown');
+        if (tdsBreakdown) tdsBreakdown.style.display = 'none';
+
         var fileInp = el('pp-pay-attachment');
         if (fileInp) fileInp.value = '';
 
         ppShow('pp-modal-payment');
     };
 
-    PP.ppSubmitPayment = function () {
-        var pid    = ppState.activePayProdId;
-        var amount = parseFloat((el('pp-pay-amount') || {}).value || 0);
-        var mode   = (el('pp-mode-val')     || {}).value || 'upi';
-        var date   = (el('pp-pay-date')     || {}).value || todayStr();
-        var ref    = (el('pp-pay-ref')      || {}).value || '';
-        var notes  = (el('pp-pay-notes')    || {}).value || '';
-        var fileInp = el('pp-pay-attachment');
-        var file = fileInp && fileInp.files ? fileInp.files[0] : null;
+    PP.ppToggleTds = function (isChecked) {
+        var container = el('pp-tds-container');
+        var percentInp = el('pp-pay-tds-percent');
+        var breakdown = el('pp-tds-breakdown');
 
-        if (!pid)         { toast('No product selected.', 'error'); return; }
-        if (amount <= 0)  { toast('Enter a valid amount.', 'error'); return; }
+        if (isChecked) {
+            if (container) container.style.display = 'block';
+            if (percentInp && !percentInp.value) {
+                percentInp.focus();
+            }
+            PP.ppRecalculateTds();
+        } else {
+            if (container) container.style.display = 'none';
+            if (percentInp) percentInp.value = '';
+            if (breakdown) breakdown.style.display = 'none';
+        }
+    };
+
+    PP.ppRecalculateTds = function () {
+        var chk = el('pp-pay-deduct-tds');
+        if (!chk || !chk.checked) {
+            var bd = el('pp-tds-breakdown');
+            if (bd) bd.style.display = 'none';
+            return;
+        }
+
+        var p = findProduct(ppState.activePayProdId);
+        var basePrice = p ? (p.base_price != null ? p.base_price : (p.unit_price * p.quantity * (1 - (p.discount_percent || 0) / 100))) : 0;
+        var amount = parseFloat((el('pp-pay-amount') || {}).value || 0);
+        var percent = parseFloat((el('pp-pay-tds-percent') || {}).value || 0);
+        var breakdown = el('pp-tds-breakdown');
+
+        if (percent > 0 && basePrice > 0) {
+            var tdsAmount = Math.round((basePrice * percent / 100) * 100) / 100;
+            var netReceived = Math.round(Math.max(0, amount - tdsAmount) * 100) / 100;
+
+            setInner('pp-tds-disp-base', fmt(basePrice));
+            setInner('pp-tds-disp-percent', percent);
+            setInner('pp-tds-disp-amount', '- ' + fmt(tdsAmount));
+            setInner('pp-tds-disp-gross', fmt(amount));
+            setInner('pp-tds-disp-net', fmt(netReceived));
+
+            if (breakdown) breakdown.style.display = 'block';
+        } else {
+            if (breakdown) breakdown.style.display = 'none';
+        }
+    };
+
+    PP.ppSubmitPayment = function () {
+        var pid         = ppState.activePayProdId;
+        var paymentType = (el('pp-pay-type')    || {}).value || '';
+        var amount      = parseFloat((el('pp-pay-amount') || {}).value || 0);
+        var mode        = (el('pp-mode-val')     || {}).value || 'upi';
+        var date        = (el('pp-pay-date')     || {}).value || todayStr();
+        var ref         = (el('pp-pay-ref')      || {}).value || '';
+        var notes       = (el('pp-pay-notes')    || {}).value || '';
+        var fileInp     = el('pp-pay-attachment');
+        var file        = fileInp && fileInp.files ? fileInp.files[0] : null;
+
+        var isTds = !!(el('pp-pay-deduct-tds') && el('pp-pay-deduct-tds').checked);
+        var tdsPercent = isTds ? parseFloat((el('pp-pay-tds-percent') || {}).value || 0) : 0;
+        var tdsAmount = 0;
+        var netReceivedAmount = amount;
+
+        if (!pid)          { toast('No product selected.', 'error'); return; }
+        if (!paymentType)  { toast('Please select Payment Type.', 'error'); if (el('pp-pay-type')) el('pp-pay-type').focus(); return; }
+        if (amount <= 0)   { toast('Enter a valid amount.', 'error'); return; }
+
+        if (isTds) {
+            if (isNaN(tdsPercent) || tdsPercent <= 0 || tdsPercent > 100) {
+                toast('Please enter a valid TDS percentage (1 - 100%).', 'error');
+                if (el('pp-pay-tds-percent')) el('pp-pay-tds-percent').focus();
+                return;
+            }
+            var p = findProduct(pid);
+            var basePrice = p ? (p.base_price != null ? p.base_price : (p.unit_price * p.quantity * (1 - (p.discount_percent || 0) / 100))) : 0;
+            tdsAmount = Math.round((basePrice * tdsPercent / 100) * 100) / 100;
+            netReceivedAmount = Math.round(Math.max(0, amount - tdsAmount) * 100) / 100;
+        }
 
         var btnEl = el('pp-submit-pay-btn');
         if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Saving…'; }
 
         var formData = new FormData();
         formData.append('lead_product_id', pid);
-        formData.append('amount', amount);
+        formData.append('payment_type', paymentType);
+        formData.append('amount', isTds ? netReceivedAmount : amount);
+        formData.append('gross_amount', amount);
+        formData.append('net_amount', netReceivedAmount);
+        formData.append('is_tds_deducted', isTds ? '1' : '0');
+        if (isTds) {
+            formData.append('tds_percentage', tdsPercent);
+            formData.append('tds_amount', tdsAmount);
+            formData.append('after_tds_amount', netReceivedAmount);
+        }
         formData.append('payment_mode', mode);
         formData.append('payment_date', date);
         formData.append('reference_number', ref);
@@ -2016,13 +2116,28 @@
             '</div>';
         }
 
+        var typeBadgeLabel = pmt.payment_type_label || ({
+            'new_sale': 'New Sale',
+            'balance_payment': 'Balance Payment',
+            'renewals': 'Renewals'
+        }[pmt.payment_type]) || pmt.payment_type;
+
+        var tdsHtml = '';
+        if (pmt.is_tds_deducted && pmt.tds_amount) {
+            var netAmt = pmt.after_tds_amount !== null && pmt.after_tds_amount !== undefined ? pmt.after_tds_amount : (pmt.amount - pmt.tds_amount);
+            tdsHtml = '<div class="pp-hist-ref" style="color:#c2410c;font-weight:600;margin-top:2px;">' +
+                '✂️ TDS ' + (pmt.tds_percentage ? pmt.tds_percentage + '% ' : '') + '(-' + fmt(pmt.tds_amount) + ') · Net: ' + fmt(netAmt) +
+            '</div>';
+        }
+
         return '<div class="pp-hist-item">' +
             '<div class="pp-hist-mode-wrap" style="background:' + pmt.modeColor + '20">' + pmt.modeIcon + '</div>' +
             '<div class="pp-hist-info">' +
-                '<div class="pp-hist-mname">' + pmt.modeLabel + '</div>' +
+                '<div class="pp-hist-mname">' + pmt.modeLabel + (typeBadgeLabel ? ' <span style="display:inline-block;padding:1px 7px;font-size:11px;font-weight:700;border-radius:4px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;vertical-align:middle;margin-left:6px">' + escHtml(typeBadgeLabel) + '</span>' : '') + '</div>' +
                 '<div class="pp-hist-date">'  + pmt.date + ' · By ' + escHtml(pmt.by) + '</div>' +
                 (pmt.ref   ? '<div class="pp-hist-ref">Ref: ' + escHtml(pmt.ref)   + '</div>' : '') +
                 (pmt.notes ? '<div class="pp-hist-note">'     + escHtml(pmt.notes) + '</div>' : '') +
+                tdsHtml +
                 attHtml +
             '</div>' +
             '<div class="pp-hist-right">' +

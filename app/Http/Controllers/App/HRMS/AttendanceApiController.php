@@ -30,8 +30,10 @@ class AttendanceApiController extends Controller
             || $user->belongsToHrDepartment()
             || $user->hasHrLikeRole()
             || $user->isCompanyAdmin()
-            || $user->isBranchAdmin()
-            || app(DataVisibilityService::class)->hasBranchAdminRole($user)
+            || $user->isCbo()
+            || app(\App\Services\DataVisibilityService::class)->isCompanyWideUser($user)
+            || ($user->isBranchAdmin() && ! $user->isBranchManager())
+            || app(\App\Services\DataVisibilityService::class)->hasBranchAdminRole($user)
         ));
     }
 

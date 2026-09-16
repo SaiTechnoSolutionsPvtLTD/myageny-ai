@@ -9,6 +9,7 @@ use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
 use App\Models\PayrollSetting;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\RedirectResponse;
@@ -96,7 +97,7 @@ class AttendanceController extends Controller
 
     public function create(): View
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         return view('pages.hrms.attendance.create', [
             'attendees' => $this->accessibleAttendees(),
@@ -105,7 +106,7 @@ class AttendanceController extends Controller
 
     public function createCheckout(): View
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         return view('pages.hrms.attendance.checkout', [
             'attendees' => $this->accessibleAttendees(),
@@ -114,7 +115,7 @@ class AttendanceController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
@@ -256,7 +257,7 @@ class AttendanceController extends Controller
 
     public function storeCheckout(Request $request): RedirectResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key' => ['required', 'string'],
@@ -707,8 +708,15 @@ class AttendanceController extends Controller
             || $user->belongsToHrDepartment()
             || $user->hasHrLikeRole()
             || $user->isCompanyAdmin()
-            || $user->isBranchAdmin()
+            || $user->isCbo()
+            || app(\App\Services\DataVisibilityService::class)->isCompanyWideUser($user)
+            || ($user->isBranchAdmin() && ! $user->isBranchManager())
         ));
+    }
+
+    private function canManageAttendance(): bool
+    {
+        return $this->canViewAllAttendance() || (bool) auth()->user()?->isBranchManager();
     }
 
     private function shouldFilterByBranch(): bool

@@ -505,15 +505,71 @@
             @csrf
             <div class="pp-mbody">
 
+            <div class="ppf-r2">
                 <div class="ppf-grp">
-                    <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
+                    <label class="ppf-lbl">Payment Type <span class="ppf-req">*</span></label>
                     <div class="ppf-rel">
-                        <input type="number" name="amount" id="pp-pay-amount" class="ppf-inp" placeholder="0.00" step="0.01" min="0.01" required>
+                        <select id="pp-pay-type" name="payment_type" class="ppf-inp ni" required style="cursor: pointer;">
+                            <option value="">-- Select Payment Type --</option>
+                            <option value="new_sale">New Sale</option>
+                            <option value="balance_payment">Balance Payment</option>
+                            <option value="renewals">Renewals</option>
+                        </select>
                     </div>
                 </div>
 
                 <div class="ppf-grp">
-                    <label class="ppf-lbl">Payment Mode <span class="ppf-req">*</span></label>
+                    <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <input type="number" name="amount" id="pp-pay-amount" class="ppf-inp ni" placeholder="0.00" step="0.01" min="0.01" required oninput="if(window.PP && PP.ppRecalculateTds) PP.ppRecalculateTds()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deduct TDS Checkbox & Section -->
+            <div class="ppf-grp" style="margin-top: 14px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="pp-pay-deduct-tds" name="is_tds_deducted" value="1" style="width: 17px; height: 17px; accent-color: #fe5f04; cursor: pointer;" onchange="if(window.PP && PP.ppToggleTds) PP.ppToggleTds(this.checked)">
+                    <span>Deduct TDS</span>
+                </label>
+            </div>
+
+            <div id="pp-tds-container" style="display: none; background: #fff8f5; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
+                <div class="ppf-grp" style="margin-bottom: 8px;">
+                    <label class="ppf-lbl" style="color: #9a3412;">TDS Percentage (%) <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <input type="number" id="pp-pay-tds-percent" name="tds_percentage" class="ppf-inp ni"
+                               placeholder="Enter TDS % (e.g. 1, 2, 5, 10)" step="1" min="1" max="100" list="pp-tds-common-percentages"
+                               oninput="if(window.PP && PP.ppRecalculateTds) PP.ppRecalculateTds()" style="font-weight: 600;">
+                        <datalist id="pp-tds-common-percentages">
+                            <option value="1">1%</option>
+                            <option value="2">2%</option>
+                            <option value="5">5%</option>
+                            <option value="10">10%</option>
+                            <option value="20">20%</option>
+                        </datalist>
+                    </div>
+                </div>
+
+                <!-- Dynamic TDS Breakdown Box -->
+                <div id="pp-tds-breakdown" style="display: none; margin-top: 10px; padding: 10px 12px; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; font-size: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #475569;">
+                        <span>Amount Received (Gross):</span>
+                        <span id="pp-tds-disp-gross" style="font-weight: 600; color: #1e293b;">₹0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #ea580c;">
+                        <span>TDS Deducted (<span id="pp-tds-disp-percent">0</span>%):</span>
+                        <span id="pp-tds-disp-amount" style="font-weight: 600; color: #dc2626;">-₹0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 13px; font-weight: 700; color: #16a34a;">
+                        <span>After TDS Deduction (Net Received):</span>
+                        <span id="pp-tds-disp-net">₹0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ppf-grp">
+                <label class="ppf-lbl">Payment Mode <span class="ppf-req">*</span></label>
                     <div class="ppf-mode-grid">
                         @foreach(['cash'=>['💵','Cash'],'bank_transfer'=>['🏦','Bank Transfer'],'cheque'=>['📝','Cheque'],'upi'=>['📱','UPI'],'card'=>['💳','Card']] as $mk=>$mv)
                         <div class="ppf-mode-tile {{ $mk==='upi'?'pp-sel':'' }}" data-val="{{ $mk }}" onclick="ppPickMode(this)">

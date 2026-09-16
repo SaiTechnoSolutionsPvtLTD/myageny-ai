@@ -51,7 +51,7 @@ class LeadProduct extends Model
     protected $fillable = [
         'lead_id', 'product_id', 'deal_name',
         'product_name', 'description',
-        'unit_price', 'quantity', 'discount_percent',
+        'unit_price', 'quantity', 'discount_percent', 'gst_percent',
         'remarks', 'product_status', 'lead_status_id', 'lead_source_id',
         'amount_paid', 'created_by', 'company_id',
         'payment_status', 'converted_at',
@@ -61,6 +61,7 @@ class LeadProduct extends Model
         'unit_price'       => 'float',
         'quantity'         => 'integer',
         'discount_percent' => 'float',
+        'gst_percent'      => 'float',
         'total_price'      => 'float',
         'amount_paid'      => 'float',
         'lead_status_id'   => 'integer',
@@ -206,10 +207,10 @@ class LeadProduct extends Model
     {
         $rawAmount = (float) ($this->attributes['amount_paid'] ?? 0);
         if ($this->relationLoaded('payments')) {
-            $sum = (float) $this->payments->sum('amount');
+            $sum = (float) $this->payments->sum(fn($p) => (float)$p->amount + (float)($p->tds_amount ?? 0));
             return max($rawAmount, $sum);
         }
-        $sum = (float) $this->payments()->sum('amount');
+        $sum = (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
         return max($rawAmount, $sum);
     }
 
@@ -299,6 +300,8 @@ class LeadProduct extends Model
             ? $this->latestProductionInitiation
             : $this->latestProductionInitiation()->first();
         $productName = $product?->product_name ?: $this->product_name;
+        $basePrice = round((float) ($this->unit_price * $this->quantity * (1 - ($this->discount_percent / 100))), 2);
+        $gstAmount = round($basePrice * (($this->gst_percent ?? 0) / 100), 2);
 
         return [
             'id'       => $this->id,
@@ -309,6 +312,9 @@ class LeadProduct extends Model
             'unit_price' => (float) $this->unit_price,
             'quantity' => (int) $this->quantity,
             'discount_percent' => (float) $this->discount_percent,
+            'gst_percent' => (float) ($this->gst_percent ?? 0),
+            'base_price'  => $basePrice,
+            'gst_amount'  => $gstAmount,
             'remarks' => $this->remarks,
             'catalog_price' => $product ? (float) $product->final_price : (float) $this->unit_price,
             'status_id' => $this->lead_status_id,
@@ -339,7 +345,7 @@ class LeadProduct extends Model
 
     public function syncPaymentStatus(): void
 {
-    $paid = $this->payments()->sum('amount');
+    $paid = (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
     if ($paid <= 0) {
         $status = 'pending';
     } elseif ($paid >= $this->total_price) {
