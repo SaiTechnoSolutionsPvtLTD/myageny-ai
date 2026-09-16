@@ -600,6 +600,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
 
     // ── Static routes MUST come before {lead} wildcard ──────────────────────
     Route::get('meta',             [MobileLeadController::class, 'meta'])->name('meta');
+    Route::get('sources',          [MobileLeadController::class, 'sources'])->name('sources');
     Route::get('form-fields',      [MobileLeadController::class, 'customFields'])->name('form-fields'); // ← was 'lead-form-fields'
 
     // Lightweight, paginated employee lookup for "Assigned To" / employee

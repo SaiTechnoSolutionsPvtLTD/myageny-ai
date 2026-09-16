@@ -47,13 +47,37 @@ trait ScopesLeadStatusAndSourceToCompany
             ->toArray();
     }
 
-    /** Returns `[id => name]`, ordered by name, scoped to the user's company (+ global/NULL-company rows). */
+    /** Returns `[id => name]`, deduplicated by unique name, ordered by name, scoped to the user's company (+ global/NULL-company rows). */
     protected function companyScopedLeadSourceOptions(?User $user): array
     {
-        return $this->companyScopedLeadLookupQuery(LeadSource::query(), $user)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+        $rows = $this->companyScopedLeadLookupQuery(LeadSource::query(), $user)
+            ->orderByRaw('company_id IS NULL ASC')
+            ->orderBy('id ASC')
+            ->get(['id', 'name', 'company_id']);
+
+        $unique = [];
+        foreach ($rows as $row) {
+            $name = trim((string) $row->name);
+            if ($name === '') {
+                continue;
+            }
+            $key = strtolower($name);
+            if (!isset($unique[$key])) {
+                $unique[$key] = [
+                    'id'   => $row->id,
+                    'name' => $name,
+                ];
+            }
+        }
+
+        $result = [];
+        foreach ($unique as $item) {
+            $result[$item['id']] = $item['name'];
+        }
+
+        asort($result, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $result;
     }
 
     /**

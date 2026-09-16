@@ -188,18 +188,20 @@ class OvpModuleApiController extends Controller
      */
     public function filters(): JsonResponse
     {
+        $user = auth()->user();
+
         return response()->json([
             'success' => true,
-            'data' => $this->filterOptions(),
+            'data' => $this->filterOptions($user),
         ]);
     }
 
     /**
-     * Dropdown data for the mobile filter sheet — mirrors the four `$products`/
-     * `$departments`/`$users`/`$companies` variables web's OvpModuleController
-     * passes into the Blade view.
+     * Dropdown data for the mobile filter sheet.
+     * Restricts users strictly to eligible Customer Success Team executives
+     * matching the Allocation Executive logic.
      */
-    private function filterOptions(): array
+    private function filterOptions(?User $user = null): array
     {
         return [
             'products' => \App\Models\Product::orderBy('product_name')
@@ -210,11 +212,12 @@ class OvpModuleApiController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
                 ->all(),
-            'users' => \App\Models\User::where('user_status', 'active')
-                ->orderBy('name')
-                ->get(['id', 'name'])
-                ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
-                ->all(),
+            'users' => $this->availableExecutiveUsers($user)->map(fn($e) => [
+                'id'               => $e->id,
+                'name'             => $e->name,
+                'role_label'       => $e->role_label,
+                'department_label' => $e->department_label,
+            ])->values()->all(),
             'companies' => \App\Models\Company::orderBy('company_name')
                 ->get(['id', 'company_name'])
                 ->map(fn($c) => ['id' => $c->id, 'name' => $c->company_name])
@@ -752,25 +755,63 @@ class OvpModuleApiController extends Controller
 
         $format = function (Collection $candidates): Collection {
             return $candidates->filter(function (User $c) {
-                $isSelfTl = (int) $c->id === (int) auth()->id() && $this->isTlScopedUser($c);
-                return !$c->hasAdminLikeRole()
-                    && (!$this->isTlScopedUser($c) || $isSelfTl)
-                    && ($isSelfTl || $this->hasAnyRoleKey($c, self::OVP_EXECUTIVE_ROLE_KEYS) || $c->hasExecutiveLikeRole());
+                $isActive = (bool) $c->is_active && ($c->user_status ? $c->user_status === 'active' : true);
+                if (!$isActive) {
+                    return false;
+                }
+
+                if ($c->hasAdminLikeRole()) {
+                    return false;
+                }
+                // Strictly require that candidate belongs to the Customer Support / Customer Success
+                // department or has a Customer Support / Success role (excluding Sales, HR, etc.)
+                $belongsToCst = $c->belongsToCustomerSupportDepartment()
+                    || $c->hasCustomerSupportLikeRole();
+
+                if (!$belongsToCst) {
+                    return false;
+                }
+
+                return $this->hasAnyRoleKey($c, self::OVP_EXECUTIVE_ROLE_KEYS)
+                    || $c->hasCustomerSupportLikeRole()
+                    || $c->belongsToCustomerSupportDepartment();
             })->map(function (User $c) {
                 $roles = $c->resolvedRoles(withDepartment: true);
+                $departments = $roles
+                    ->map(fn($r) => $r->department?->name)
+                    ->filter()
+                    ->unique()
+                    ->values();
+
                 return (object) [
                     'id'               => $c->id,
                     'name'             => $c->name,
                     'role_label'       => $roles->map(fn($r) => $r->display_name ?: $r->name)->filter()->unique()->implode(', ') ?: 'Mapped User',
-                    'department_label' => $roles->map(fn($r) => $r->department?->name)->filter()->unique()->implode(', ') ?: 'All Departments',
+                    'department_label' => $departments->isNotEmpty()
+                        ? $departments->implode(', ')
+                        : 'Customer Success Team',
                 ];
             })->sortBy('name')->values();
         };
 
-        $managed = $user->hasAdminLikeRole() ? collect() : $user->managedUsers()->where('users.is_active', true)->with(['roles.department'])->get();
+        $managed = $user->hasAdminLikeRole()
+            ? collect()
+            : $user->managedUsers()->where('users.is_active', true)
+                ->where(function ($q) {
+                    $q->where('users.user_status', 'active')
+                        ->orWhereNull('users.user_status');
+                })
+                ->with(['roles.department'])
+                ->get();
+
         $company = User::where('is_active', true)
+            ->where(function ($q) {
+                $q->where('user_status', 'active')
+                    ->orWhereNull('user_status');
+            })
             ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
-            ->with(['roles.department'])->get();
+            ->with(['roles.department'])
+            ->get();
 
         $allCandidates = $managed->concat($company)->unique('id')->values();
 

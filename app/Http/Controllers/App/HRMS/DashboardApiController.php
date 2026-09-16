@@ -295,7 +295,9 @@ class DashboardApiController extends Controller
             'mode'    => 'organization',
             'data'    => [
                 'is_company_admin'   => $isCompanyAdmin,
+                'can_filter_branch'  => $this->canFilterBranch($user),
                 'branch_id'          => $actingBranchId,
+                'branches'           => $this->availableBranches($user),
                 'employees_total'    => $employees_total,
                 'employees_pending'  => $employees_pending,
                 'employees_verified' => $employees_verified,
@@ -826,6 +828,48 @@ class DashboardApiController extends Controller
             || $user->hasRole('company_admin'));
     }
 
+    private function canFilterBranch(?\App\Models\User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $this->isCompanyAdminUser($user)
+            || $user->isCbo()
+            || $user->isBranchAdmin();
+    }
+
+    private function availableBranches(?\App\Models\User $user): \Illuminate\Support\Collection
+    {
+        if (! $user || ! $this->canFilterBranch($user)) {
+            return collect();
+        }
+
+        $query = Branch::query()
+            ->where('is_active', true)
+            ->orderBy('name');
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        // Branch Manager only sees their own assigned branch(es)
+        $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
+        if ($isBranchManagerOnly) {
+            $branchIds = $user->getMyBranchIds() ?? [];
+            if (empty($branchIds) && $user->branch_id) {
+                $branchIds = [(int) $user->branch_id];
+            }
+            if (! empty($branchIds)) {
+                $query->whereIn('id', $branchIds);
+            } else {
+                return collect();
+            }
+        }
+
+        return $query->get(['id', 'name']);
+    }
+
     private function resolveActingBranchId(Request $request): ?int
     {
         $user = auth()->user();
@@ -833,16 +877,33 @@ class DashboardApiController extends Controller
             return null;
         }
 
-        $isCompanyAdmin = $this->isCompanyAdminUser($user);
-
-        if ($isCompanyAdmin) {
+        if ($this->canFilterBranch($user)) {
             if ($request->filled('branch_id')) {
                 $val = $request->input('branch_id');
+                $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
+
                 if ($val === 'all') {
+                    if ($isBranchManagerOnly) {
+                        return $user->branch_id ? (int) $user->branch_id : null;
+                    }
                     return null;
                 }
-                return (int) $val;
+
+                $reqId = (int) $val;
+                if ($isBranchManagerOnly) {
+                    $myBranchIds = $user->getMyBranchIds() ?? [];
+                    if (empty($myBranchIds) && $user->branch_id) {
+                        $myBranchIds = [(int) $user->branch_id];
+                    }
+                    if (in_array($reqId, $myBranchIds, true)) {
+                        return $reqId;
+                    }
+                    return $user->branch_id ? (int) $user->branch_id : null;
+                }
+
+                return $reqId;
             }
+
             return $user->branch_id ? (int) $user->branch_id : null;
         }
 
@@ -1064,41 +1125,41 @@ class DashboardApiController extends Controller
             })
             ->get();
 
-        $presentKeys = $attendanceRows
-            ->filter(function (DailyAttendance $attendance) {
-                return ($attendance->attendee_type === 'employee' && filled($attendance->employee_id))
-                    || ($attendance->attendee_type === 'intern' && filled($attendance->intern_joining_form_id));
-            })
-            ->map(function (DailyAttendance $attendance) {
-                $entityId = $attendance->attendee_type === 'intern'
-                    ? $attendance->intern_joining_form_id
-                    : $attendance->employee_id;
+        $employeeAttendanceRows = $attendanceRows->where('attendee_type', 'employee');
+        $internAttendanceRows   = $attendanceRows->where('attendee_type', 'intern');
 
-                return $attendance->attendee_type . ':' . $entityId;
-            })
+        $presentEmployeeKeys = $employeeAttendanceRows
+            ->filter(fn (DailyAttendance $attendance) => filled($attendance->employee_id) && $attendance->attendance_status === 'present')
+            ->pluck('employee_id')
             ->unique();
 
-        $totalPeople = $employees->count() + $interns->count();
+        $presentInternKeys = $internAttendanceRows
+            ->filter(fn (DailyAttendance $attendance) => filled($attendance->intern_joining_form_id) && $attendance->attendance_status === 'present')
+            ->pluck('intern_joining_form_id')
+            ->unique();
+
+        $employeeActiveCount = $employees->count();
+        $internActiveCount   = $interns->count();
 
         return [
-            'total_employees' => $totalPeople,
-            'employee_count'  => $employees->count(),
-            'intern_count'    => $interns->count(),
-            'present_count'   => $attendanceRows->where('attendance_status', 'present')->count(),
-            'leave_count'     => $attendanceRows->where('attendance_status', 'leave')->count(),
-            'absent_count'    => max(0, $totalPeople - $presentKeys->count()),
-            'late_count'      => $attendanceRows
+            'total_employees' => $employeeActiveCount,
+            'employee_count'  => $employeeActiveCount,
+            'intern_count'    => $internActiveCount,
+            'present_count'   => $employeeAttendanceRows->where('attendance_status', 'present')->count(),
+            'leave_count'     => $employeeAttendanceRows->where('attendance_status', 'leave')->count(),
+            'absent_count'    => max(0, $employeeActiveCount - $presentEmployeeKeys->count()),
+            'late_count'      => $employeeAttendanceRows
                 ->where('attendance_status', 'present')
                 ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'late')
                 ->count(),
-            'early_count' => $attendanceRows
+            'early_count' => $employeeAttendanceRows
                 ->where('attendance_status', 'present')
                 ->filter(fn (DailyAttendance $attendance) => $this->resolveLoginTiming($attendance->login_time) === 'early')
                 ->count(),
-            // Outside-office check-in/check-out counts for the same
-            // already-scoped $attendanceRows population used for
-            // present/late/absent above — guarantees the dashboard count and
-            // the Attendance list's "Outside Office" filter always agree.
+            'intern_present_count' => $internAttendanceRows->where('attendance_status', 'present')->count(),
+            'intern_absent_count'  => max(0, $internActiveCount - $presentInternKeys->count()),
+            'intern_leave_count'   => $internAttendanceRows->where('attendance_status', 'leave')->count(),
+            // Outside-office check-in/check-out counts across workforce
             'outside_office_checkins_count'  => $attendanceRows->where('is_outside_office_checkin', true)->count(),
             'outside_office_checkouts_count' => $attendanceRows->where('is_outside_office_checkout', true)->count(),
         ];

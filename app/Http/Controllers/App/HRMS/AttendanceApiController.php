@@ -174,8 +174,11 @@ class AttendanceApiController extends Controller
             if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
                 return [(int) $requestedBranchId];
             }
-            // 'all' or empty means ALL branches (no branch restriction)
-            return null;
+            if ($requestedBranchId === 'all') {
+                return null;
+            }
+            // Initially scope to the logged-in user's branch
+            return $user->branch_id ? [(int) $user->branch_id] : null;
         }
 
         return $user->branch_id ? [(int) $user->branch_id] : null;

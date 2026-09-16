@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
+use Carbon\Carbon;
 use App\Services\NotificationService;
 
 #[OA\Tag(name: "Leads", description: "Lead management endpoints for mobile app")]
@@ -68,10 +69,36 @@ class LeadController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to'   => ['nullable', 'date', 'after_or_equal:date_from'],
-            'per_page'  => ['nullable', 'integer', 'min:1', 'max:100'],
+            'date_from'  => ['nullable', 'date'],
+            'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
+            'quick_date' => ['nullable', 'string'],
+            'year'       => ['nullable', 'integer'],
+            'per_page'   => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
+
+        $dateFrom = null;
+        $dateTo   = null;
+
+        if ($request->filled('year')) {
+            $year = (int) $request->year;
+            $dateFrom = Carbon::create($year, 1, 1)->toDateString();
+            $dateTo   = Carbon::create($year, 12, 31)->toDateString();
+        } elseif ($request->filled('quick_date')) {
+            match ($request->quick_date) {
+                'all'       => [$dateFrom, $dateTo] = [null, null],
+                'today'     => [$dateFrom, $dateTo] = [today()->toDateString(), today()->toDateString()],
+                'yesterday' => [$dateFrom, $dateTo] = [today()->subDay()->toDateString(), today()->subDay()->toDateString()],
+                'week'      => [$dateFrom, $dateTo] = [now()->startOfWeek()->toDateString(), now()->endOfWeek()->toDateString()],
+                'month'     => [$dateFrom, $dateTo] = [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
+                'quarter'   => [$dateFrom, $dateTo] = [now()->startOfQuarter()->toDateString(), now()->endOfQuarter()->toDateString()],
+                'year'      => [$dateFrom, $dateTo] = [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+                'custom'    => [$dateFrom, $dateTo] = [$request->date_from, $request->date_to],
+                default     => [$dateFrom, $dateTo] = [$request->date_from, $request->date_to],
+            };
+        } elseif ($request->filled('date_from') || $request->filled('date_to')) {
+            $dateFrom = $request->date_from;
+            $dateTo   = $request->date_to;
+        }
 
         $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'leadSource:id,name', 'leadStatus:id,name'])
             ->orderByDesc('id');
@@ -111,14 +138,25 @@ class LeadController extends Controller
         // dropdown options from meta() below, whose keys are
         // Lead::sourceOptions()/statusOptions() — i.e. lead_sources.id /
         // lead_statuses.id (see Lead::sourceOptions() -> pluck('name','id')).
-        // So the value this endpoint receives here is always the numeric FK
-        // id, never the display name. Filtering against the plain
-        // 'lead_source'/'lead_status' string columns (as this used to) could
-        // never match that id, so selecting either filter silently returned
-        // zero/incorrect results — the actual leads.lead_source_id /
-        // lead_status_id FK columns are what line up with it (same columns
-        // web's own LeadController@index filters by for the same reason).
-        if ($request->filled('lead_source'))   $query->where('lead_source_id', $request->lead_source);
+        // Also supports string names/keys passed from the dashboard.
+        if ($request->filled('lead_source')) {
+            $sourceInput = $request->lead_source;
+            if (is_numeric($sourceInput)) {
+                $query->where('lead_source_id', (int) $sourceInput);
+            } else {
+                $sourceObj = LeadSource::where('name', $sourceInput)
+                    ->orWhere('id', $sourceInput)
+                    ->first();
+                if ($sourceObj) {
+                    $query->where('lead_source_id', $sourceObj->id);
+                } else {
+                    $query->where(function ($q) use ($sourceInput) {
+                        $q->whereHas('leadSource', fn($lsq) => $lsq->where('name', 'like', "%{$sourceInput}%"))
+                          ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+                    });
+                }
+            }
+        }
         // Matches web's LeadController@index lead_status handling: a lead
         // counts as this status either at its own top level OR via any of
         // its products (leads with multiple products can have a product
@@ -171,27 +209,28 @@ class LeadController extends Controller
         // Date filters check lead_date OR created_at — mirrors web LeadController@index
         // and SuperAdminDashboardController@dashboardData so the lead list and dashboard
         // counts stay strictly identical (leads with null lead_date are not dropped).
-        if ($request->filled('date_from')) {
-            $dateFrom = $request->date_from;
+        if (!empty($dateFrom)) {
             $query->where(function ($dq) use ($dateFrom) {
                 $dq->whereDate('lead_date', '>=', $dateFrom)
                    ->orWhereDate('created_at', '>=', $dateFrom);
             });
         }
-        if ($request->filled('date_to')) {
-            $dateTo = $request->date_to;
+        if (!empty($dateTo)) {
             $query->where(function ($dq) use ($dateTo) {
                 $dq->whereDate('lead_date', '<=', $dateTo)
                    ->orWhereDate('created_at', '<=', $dateTo);
             });
         }
 
+        // Stats for top cards — computed on all leads matching active filters (same as web index)
+        // NOTE: Must clone query and pluck activeLeadIds BEFORE paginate(), because paginate()
+        // modifies $query with limit and offset (which would truncate $activeLeadIds to just page 1's records).
+        $activeQuery = clone $query;
+        $activeLeadIds = (clone $activeQuery)->pluck('leads.id');
+        $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
+
         $perPage = (int) $request->input('per_page', 15);
         $leads   = $query->paginate($perPage);
-
-        // Stats for top cards — computed on leads matching active filters (same as web index)
-        $activeLeadIds = (clone $query)->pluck('leads.id');
-        $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
 
         $convertedStatusIds = LeadStatus::query()
             ->where(function ($q) {
@@ -215,8 +254,8 @@ class LeadController extends Controller
         $convertedValue         = (float) $convertedProducts->sum('total_price');
         $totalProductsCount     = $lpProducts->count();
         $totalPipeline          = (float) $lpProducts->sum('total_price');
-        $wonLeadsCount          = (clone $query)->converted()->count();
-        $untouchedCount         = (clone $query)->whereDoesntHave('callUpdates')->count();
+        $wonLeadsCount          = (clone $activeQuery)->converted()->count();
+        $untouchedCount         = (clone $activeQuery)->whereDoesntHave('callUpdates')->count();
 
         $stats = [
             'total'              => $activeLeadIds->count(),
@@ -229,8 +268,8 @@ class LeadController extends Controller
             'upcoming_amount'    => $upcomingAmount,
             'converted_value'    => $convertedValue,
             'won'                => $wonLeadsCount,
-            'lost'               => (clone $query)->lost()->count(),
-            'high_priority'      => (clone $query)->where('priority', 'high')->count(),
+            'lost'               => (clone $activeQuery)->lost()->count(),
+            'high_priority'      => (clone $activeQuery)->where('priority', 'high')->count(),
         ];
 
         return response()->json([
@@ -695,6 +734,31 @@ class LeadController extends Controller
                     ->orderBy('name')
                     ->get(['id', 'name']),
             ],
+        ]);
+    }
+
+    #[OA\Get(
+        path: "/api/mobile/leads/sources",
+        summary: "Get company-scoped lead sources",
+        security: [["sanctum" => []]],
+        tags: ["Leads"],
+        responses: [
+            new OA\Response(response: 200, description: "List of company-scoped lead sources"),
+            new OA\Response(response: 401, description: "Unauthenticated"),
+        ]
+    )]
+    public function sources(): JsonResponse
+    {
+        $user = request()->user();
+        $sourceOptions = $this->companyScopedLeadSourceOptions($user);
+        $data = collect($sourceOptions)->map(fn($name, $id) => [
+            'id'   => (int) $id,
+            'name' => $name,
+        ])->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $data,
         ]);
     }
 
