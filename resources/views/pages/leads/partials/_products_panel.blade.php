@@ -262,8 +262,7 @@
 .pp-td-desc{font-size:11px;color:#9e9e9e;margin-top:2px}
 .pp-td-price{font-weight:700;white-space:nowrap}
 .pp-td-total{font-weight:700;color:#fe5f04;white-space:nowrap}
-.pp-td-qty .ppf-inp,.pp-td-disc .ppf-inp{width:70px;padding:5px 8px;text-align:center}
-.pp-td-remarks .ppf-inp{width:140px;padding:5px 8px}
+.pp-td-qty .ppf-inp,.pp-td-disc .ppf-inp,.pp-td-gst .ppf-inp{width:70px;padding:5px 8px;text-align:center}
 
 /* ── Payment mode tiles ──────────────────────────────── */
 .ppf-mode-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:14px}
@@ -530,8 +529,8 @@
                             <th>Price</th>
                             <th>Qty</th>
                             <th>Disc %</th>
+                            <th>GST %</th>
                             <th>Total</th>
-                            <th>Remarks</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -580,10 +579,18 @@
             <button type="button" class="pp-mclose" onclick="PP.ppHideModal('pp-modal-payment')">✕</button>
         </div>
         <div class="pp-mmeta">
-            <div class="pp-mmeta-grid">
+            <div class="pp-mmeta-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;">
+                <div>
+                    <div class="pp-mmeta-lbl">Base Price</div>
+                    <div class="pp-mmeta-val" id="pp-pay-base-price" style="color:#2563eb">₹0.00</div>
+                </div>
+                <div>
+                    <div class="pp-mmeta-lbl">GST (<span id="pp-pay-gst-pct">0</span>%)</div>
+                    <div class="pp-mmeta-val" id="pp-pay-gst-amount" style="color:#7c3aed">₹0.00</div>
+                </div>
                 <div>
                     <div class="pp-mmeta-lbl">Total Value</div>
-                    <div class="pp-mmeta-val" id="pp-pay-total">₹0.00</div>
+                    <div class="pp-mmeta-val" id="pp-pay-total" style="color:#fe5f04">₹0.00</div>
                 </div>
                 <div>
                     <div class="pp-mmeta-lbl">Already Paid</div>
@@ -597,14 +604,77 @@
         </div>
         <div class="pp-mbody">
 
-            <div class="ppf-grp">
-                <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
-                <div class="ppf-rel">
-                    <svg class="ppf-ico" viewBox="0 0 24 24" aria-hidden="true">
-                        <text x="12" y="16" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">₹</text>
-                    </svg>
-                    <input type="number" id="pp-pay-amount" class="ppf-inp"
-                           placeholder="0.00" step="0.01" min="0.01">
+            <div class="ppf-r2">
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Payment Type <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <svg class="ppf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        <select id="pp-pay-type" name="payment_type" class="ppf-inp" required style="cursor: pointer; appearance: auto;">
+                            <option value="">-- Select Payment Type --</option>
+                            <option value="new_sale">New Sale</option>
+                            <option value="balance_payment">Balance Payment</option>
+                            <option value="renewals">Renewals</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Amount Received ₹ <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <svg class="ppf-ico" viewBox="0 0 24 24" aria-hidden="true">
+                            <text x="12" y="16" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">₹</text>
+                        </svg>
+                        <input type="number" id="pp-pay-amount" class="ppf-inp"
+                               placeholder="0.00" step="0.01" min="0.01" oninput="PP.ppRecalculateTds()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deduct TDS Checkbox & Section -->
+            <div class="ppf-grp" style="margin-top: 14px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="pp-pay-deduct-tds" name="is_tds_deducted" value="1" style="width: 17px; height: 17px; accent-color: #fe5f04; cursor: pointer;" onchange="PP.ppToggleTds(this.checked)">
+                    <span>Deduct TDS</span>
+                </label>
+            </div>
+
+            <div id="pp-tds-container" style="display: none; background: #fff8f5; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
+                <div class="ppf-grp" style="margin-bottom: 8px;">
+                    <label class="ppf-lbl" style="color: #9a3412;">TDS Percentage (%) <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <input type="number" id="pp-pay-tds-percent" name="tds_percentage" class="ppf-inp ni"
+                               placeholder="Enter TDS % (e.g. 1, 2, 5, 10)" step="0.01" min="0.01" max="100" list="pp-tds-common-percentages"
+                               oninput="PP.ppRecalculateTds()" style="font-weight: 600;">
+                        <datalist id="pp-tds-common-percentages">
+                            <option value="1">1%</option>
+                            <option value="2">2%</option>
+                            <option value="5">5%</option>
+                            <option value="10">10%</option>
+                            <option value="20">20%</option>
+                        </datalist>
+                    </div>
+                </div>
+
+                <!-- Dynamic TDS Breakdown Box -->
+                <div id="pp-tds-breakdown" style="display: none; margin-top: 12px; padding: 12px 14px; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #475569;">
+                        <span>Product Base Price:</span>
+                        <span id="pp-tds-disp-base" style="font-weight: 600; color: #1e293b;">₹0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #ea580c;">
+                        <span>TDS Deduction (<span id="pp-tds-disp-percent">0</span>% on Base Price):</span>
+                        <span id="pp-tds-disp-amount" style="font-weight: 700; color: #dc2626;">-₹0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #475569;">
+                        <span>Settlement (Gross) Amount:</span>
+                        <span id="pp-tds-disp-gross" style="font-weight: 600; color: #1e293b;">₹0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 14px; font-weight: 700; color: #16a34a;">
+                        <span>Net Amount Received (to be stored):</span>
+                        <span id="pp-tds-disp-net">₹0.00</span>
+                    </div>
                 </div>
             </div>
 

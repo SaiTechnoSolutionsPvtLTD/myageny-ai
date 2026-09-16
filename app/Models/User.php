@@ -283,6 +283,14 @@ class User extends Authenticatable
         return $keys->intersect(['branch_admin', 'branch_manager', 'bm'])->isNotEmpty();
     }
 
+    public function isBranchManager(): bool
+    {
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->intersect(['branch_manager', 'bm'])->isNotEmpty()
+            && $keys->intersect(['branch_admin'])->isEmpty();
+    }
+
     private function hasExactRoleName(string $roleName): bool
     {
         if ($this->relationLoaded('roles')) {

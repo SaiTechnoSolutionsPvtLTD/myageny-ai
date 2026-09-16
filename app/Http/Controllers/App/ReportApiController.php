@@ -432,7 +432,6 @@ class ReportApiController extends Controller
             }
             $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
->>>>>>>>> Temporary merge branch 2
             $newRenewalsRows = $analyticsRows->whereIn('collection_type', ['new_sales', 'renewals']);
             $balanceRows = $analyticsRows->where('collection_type', 'balance_payment');
 
@@ -726,13 +725,6 @@ class ReportApiController extends Controller
     private function buildPaymentCollectionQuery(Request $request)
     {
         $collectionTypeSql = $this->getCollectionTypeSql();
-<<<<<<<<< Temporary merge branch 1
-
-        $paidSubquery = LeadProductPayment::query()
-            ->selectRaw('lead_product_id, SUM(amount) as total_received')
-            ->groupBy('lead_product_id');
-=========
->>>>>>>>> Temporary merge branch 2
 
         $query = LeadProductPayment::query()
             ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')

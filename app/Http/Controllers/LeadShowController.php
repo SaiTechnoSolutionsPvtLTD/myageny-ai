@@ -292,12 +292,54 @@ class LeadShowController extends Controller
         }
 
         $data = $request->validate([
+            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
+            'is_tds_deducted'  => ['nullable'],
+            'tds_percentage'   => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'payment_mode'     => ['required', 'string', 'in:cash,bank_transfer,cheque,upi,card'],
             'payment_date'     => ['required', 'date'],
             'reference_number' => ['nullable', 'string', 'max:100'],
             'notes'            => ['nullable', 'string', 'max:500'],
         ]);
+
+        $rawType = (string) $data['payment_type'];
+        $data['payment_type'] = match(strtolower(str_replace([' ', '-'], '_', $rawType))) {
+            'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
+            'balancepayment', 'balance_payment'             => 'balance_payment',
+            'renewal', 'renewals'                           => 'renewals',
+            default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
+        };
+
+        $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
+        $data['is_tds_deducted'] = $isTdsDeducted;
+        $data['tds_percentage'] = null;
+        $data['tds_amount'] = null;
+        $data['after_tds_amount'] = null;
+
+        if ($isTdsDeducted) {
+            $tdsPercentage = (float) $request->input('tds_percentage', 0);
+            if ($tdsPercentage > 0) {
+                // Calculate TDS on the product base price (excluding GST)
+                $productBasePrice = (float) ($product->unit_price * $product->quantity * (1 - ($product->discount_percent / 100)));
+                $tdsAmount = round(($productBasePrice * $tdsPercentage) / 100, 2);
+
+                $enteredAmount = (float) $data['amount'];
+                if ($request->filled('net_amount')) {
+                    $netReceived = (float) $request->input('net_amount');
+                } elseif ($request->filled('gross_amount')) {
+                    $netReceived = round(max(0, (float) $request->input('gross_amount') - $tdsAmount), 2);
+                } else {
+                    $netReceived = round(max(0, $enteredAmount - $tdsAmount), 2);
+                }
+
+                $data['amount'] = $netReceived;
+                $data['tds_percentage'] = $tdsPercentage;
+                $data['tds_amount'] = $tdsAmount;
+                $data['after_tds_amount'] = $netReceived;
+            } else {
+                $data['is_tds_deducted'] = false;
+            }
+        }
 
         $data['lead_product_id'] = $product->id;
         $data['lead_id']         = $lead->id;

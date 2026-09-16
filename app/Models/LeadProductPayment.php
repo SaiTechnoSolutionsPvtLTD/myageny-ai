@@ -15,6 +15,11 @@ class LeadProductPayment extends Model
         'lead_product_id',
         'lead_id',
         'recorded_by',
+        'payment_type',
+        'is_tds_deducted',
+        'tds_percentage',
+        'tds_amount',
+        'after_tds_amount',
         'amount',
         'payment_mode',
         'payment_date',
@@ -24,9 +29,24 @@ class LeadProductPayment extends Model
         'attachment_name',
     ];
 
+    const PAYMENT_TYPES = [
+        'new_sale'        => 'New Sale',
+        'balance_payment' => 'Balance Payment',
+        'renewals'        => 'Renewals',
+    ];
+
+    public function getPaymentTypeLabelAttribute(): string
+    {
+        return self::PAYMENT_TYPES[$this->payment_type] ?? ucwords(str_replace('_', ' ', (string) $this->payment_type));
+    }
+
     protected $casts = [
-        'amount'       => 'decimal:2',
-        'payment_date' => 'date',
+        'amount'           => 'decimal:2',
+        'payment_date'     => 'date',
+        'is_tds_deducted'  => 'boolean',
+        'tds_percentage'   => 'decimal:2',
+        'tds_amount'       => 'decimal:2',
+        'after_tds_amount' => 'decimal:2',
     ];
 
     const PAYMENT_MODE_ICONS = [
@@ -96,11 +116,18 @@ class LeadProductPayment extends Model
         $modeLabel = \App\Models\LeadProduct::PAYMENT_MODES[$this->payment_mode] ?? ucfirst((string) $this->payment_mode);
         $modeIcon = self::PAYMENT_MODE_ICONS[$this->payment_mode] ?? '💰';
         $modeColor = self::PAYMENT_MODE_COLORS[$this->payment_mode] ?? '#7c7c7c';
+        $typeLabel = self::PAYMENT_TYPES[$this->payment_type] ?? ($this->payment_type ? ucwords(str_replace('_', ' ', (string) $this->payment_type)) : null);
 
         return [
             'id'                 => $this->id,
             'amount'             => (float) $this->amount,
             'formatted_amount'   => '₹' . number_format((float) $this->amount, 2),
+            'payment_type'       => $this->payment_type,
+            'payment_type_label' => $typeLabel,
+            'is_tds_deducted'    => (bool) $this->is_tds_deducted,
+            'tds_percentage'     => $this->tds_percentage !== null ? (float) $this->tds_percentage : null,
+            'tds_amount'         => $this->tds_amount !== null ? (float) $this->tds_amount : null,
+            'after_tds_amount'   => $this->after_tds_amount !== null ? (float) $this->after_tds_amount : null,
             'payment_mode'       => $this->payment_mode,
             'payment_mode_label' => $modeLabel,
             'payment_date'       => $this->payment_date?->format('Y-m-d'),
@@ -110,6 +137,8 @@ class LeadProductPayment extends Model
             'attachment_url'     => $this->attachment_url,
             'recorded_by'        => $this->recorded_by,
             'created_at'         => $this->created_at?->format('d M Y h:i A'),
+            'type'               => $this->payment_type,
+            'typeLabel'          => $typeLabel,
             'mode'               => $this->payment_mode,
             'modeLabel'          => $modeLabel,
             'modeIcon'           => $modeIcon,

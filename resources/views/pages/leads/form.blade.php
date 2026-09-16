@@ -146,9 +146,15 @@
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             <select name="assigned_to" class="lf-sel select2 {{ $errors->has('assigned_to') ? 'err' : '' }}" required>
                                 <option value="">— Unassigned —</option>
-                                @foreach($users as $user)
-                                <option value="{{ $user->id }}" {{ $old('assigned_to') == $user->id ? 'selected' : '' }}>
-                                    {{ $user->name }}
+                                @foreach($users as $userOption)
+                                @php
+                                    $optBranchIds = $userOption->getMyBranchIds();
+                                @endphp
+                                <option value="{{ $userOption->id }}" 
+                                        data-branch-ids="{{ json_encode($optBranchIds) }}"
+                                        data-is-company-wide="{{ ($userOption->isSystemAdmin() || $userOption->isCompanyAdmin()) ? '1' : '0' }}"
+                                        {{ (string) $old('assigned_to', $isEdit ? $lead->assigned_to : '') === (string) $userOption->id ? 'selected' : '' }}>
+                                    {{ $userOption->name }}
                                 </option>
                                 @endforeach
                             </select>
@@ -165,22 +171,49 @@
                         <div class="lf-iw">
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                             @php
-                                $userBranchId = auth()->user()?->branch_id;
-                                $selectedBranchId = $old('branch_id', $isEdit ? ($lead?->branch_id ?: $userBranchId) : $userBranchId);
-                                $isBranchLocked = !empty($userBranchId) || !auth()->user()?->isSystemAdmin();
+                                $currentUser = auth()->user();
+                                $isSuperOrCompanyAdmin = $currentUser && ($currentUser->isSystemAdmin() || $currentUser->isCompanyAdmin());
+
+                                $activeAssignedUserId = old('assigned_to', $isEdit ? $lead?->assigned_to : ($currentUser && $users->contains('id', $currentUser->id) ? $currentUser->id : null));
+                                $activeUser = $activeAssignedUserId ? $users->firstWhere('id', $activeAssignedUserId) : $currentUser;
+
+                                $accessibleBranchIds = null;
+                                if ($activeUser && !($activeUser->isSystemAdmin() || $activeUser->isCompanyAdmin())) {
+                                    $accessibleBranchIds = $activeUser->getMyBranchIds();
+                                } elseif (!$isSuperOrCompanyAdmin && $currentUser) {
+                                    $accessibleBranchIds = $currentUser->getMyBranchIds();
+                                }
+
+                                $selectedBranchId = old('branch_id');
+                                if ($selectedBranchId === null) {
+                                    if ($isEdit && $lead?->branch_id) {
+                                        $selectedBranchId = $lead->branch_id;
+                                    } elseif ($accessibleBranchIds !== null && count($accessibleBranchIds) === 1) {
+                                        $selectedBranchId = $accessibleBranchIds[0];
+                                    }
+                                }
+
+                                $isBranchLocked = ($accessibleBranchIds !== null && count($accessibleBranchIds) === 1 && !$isSuperOrCompanyAdmin);
                             @endphp
                             <select name="branch_id" 
+                                    id="leadBranchSelect"
                                     class="lf-sel no-select2 {{ $errors->has('branch_id') ? 'err' : '' }}" 
                                     data-no-select2
                                     required
                                     @if($isBranchLocked) style="pointer-events: none; background-color: #f3f4f6; color: #6b7280; opacity: 0.8;" tabindex="-1" @endif>
-                                <option value="">— No Branch —</option>
+                                <option value="">— Select Branch —</option>
                                 @foreach($branches as $branch)
-                                    @if($userBranchId && !auth()->user()?->isSystemAdmin() && $branch->id != $userBranchId && (!$isEdit || $branch->id != $lead?->branch_id))
+                                    @php
+                                        $isBranchAllowed = ($accessibleBranchIds === null) 
+                                            || in_array((int) $branch->id, array_map('intval', $accessibleBranchIds), true)
+                                            || ($isEdit && (int) $branch->id === (int) $lead?->branch_id);
+                                    @endphp
+                                    @if(!$isSuperOrCompanyAdmin && !$isBranchAllowed)
                                         @continue
                                     @endif
                                     <option value="{{ $branch->id }}" 
                                             data-company-id="{{ $branch->company_id }}" 
+                                            data-branch-id="{{ $branch->id }}"
                                             {{ (string) $selectedBranchId === (string) $branch->id ? 'selected' : '' }}>
                                         {{ $branch->name }}
                                     </option>
@@ -447,8 +480,79 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
+    const allBranchesData = {!! json_encode($branches->map(fn($b) => [
+        'id' => (int) $b->id,
+        'name' => $b->name,
+        'company_id' => $b->company_id,
+    ])->values()) !!};
+    const isCurrentSuperOrCompanyAdmin = {{ $isSuperOrCompanyAdmin ? 'true' : 'false' }};
+
+    function lockBranchSelect($el) {
+        $el.css({
+            'pointer-events': 'none',
+            'background-color': '#f3f4f6',
+            'color': '#6b7280',
+            'opacity': '0.8'
+        }).attr('tabindex', '-1');
+        $el.siblings('.lf-sel-caret').css('opacity', '0.5');
+    }
+
+    function unlockBranchSelect($el) {
+        $el.css({
+            'pointer-events': '',
+            'background-color': '',
+            'color': '',
+            'opacity': ''
+        }).removeAttr('tabindex');
+        $el.siblings('.lf-sel-caret').css('opacity', '');
+    }
+
+    function renderBranchOptions(allowedIds, selectedValue) {
+        const $branchSelect = $('#leadBranchSelect');
+        if (!$branchSelect.length) return;
+
+        const prevVal = selectedValue !== undefined && selectedValue !== null ? String(selectedValue) : String($branchSelect.val() || '');
+        
+        $branchSelect.empty();
+        $branchSelect.append(new Option('— Select Branch —', ''));
+
+        let availableCount = 0;
+        let lastAllowedId = '';
+
+        allBranchesData.forEach(function (b) {
+            const isAllowed = allowedIds === null || allowedIds.map(Number).includes(Number(b.id));
+            if (isAllowed) {
+                availableCount++;
+                lastAllowedId = String(b.id);
+                const opt = new Option(b.name, b.id, false, prevVal === String(b.id));
+                $(opt).attr('data-company-id', b.company_id || '');
+                $(opt).attr('data-branch-id', b.id);
+                $branchSelect.append(opt);
+            }
+        });
+
+        if (availableCount === 1) {
+            $branchSelect.val(lastAllowedId);
+            if (!isCurrentSuperOrCompanyAdmin) {
+                lockBranchSelect($branchSelect);
+            } else {
+                unlockBranchSelect($branchSelect);
+            }
+        } else {
+            if (prevVal && $branchSelect.find(`option[value="${prevVal}"]`).length) {
+                $branchSelect.val(prevVal);
+            } else {
+                $branchSelect.val('');
+            }
+            unlockBranchSelect($branchSelect);
+        }
+
+        $branchSelect.trigger('change');
+    }
+
+    const $assignedTo = $('select[name="assigned_to"]');
+
     if (window.jQuery && window.jQuery.fn.select2) {
-        const $assignedTo = $('select[name="assigned_to"]');
         if ($assignedTo.hasClass('select2-hidden-accessible')) {
             $assignedTo.select2('destroy');
         }
@@ -458,6 +562,46 @@ $(document).ready(function() {
             width: '100%'
         });
         $assignedTo.next('.select2-container').find('.select2-selection--single').addClass('lf-select2-selection');
+    }
+
+    $assignedTo.on('change', function () {
+        const selectedUserId = $(this).val();
+        const $branchSelect = $('#leadBranchSelect');
+        if (!$branchSelect.length) return;
+
+        if (!selectedUserId) {
+            if (isCurrentSuperOrCompanyAdmin) {
+                renderBranchOptions(null, $branchSelect.val());
+            }
+            return;
+        }
+
+        const selectedOption = this.options[this.selectedIndex];
+        if (!selectedOption) return;
+
+        const isCompanyWide = selectedOption.dataset.isCompanyWide === '1';
+        let branchIds = [];
+        try {
+            branchIds = JSON.parse(selectedOption.dataset.branchIds || '[]');
+        } catch (e) {
+            branchIds = [];
+        }
+
+        if (isCompanyWide) {
+            renderBranchOptions(null, $branchSelect.val());
+        } else if (branchIds.length > 0) {
+            renderBranchOptions(branchIds, branchIds.length === 1 ? branchIds[0] : $branchSelect.val());
+        } else {
+            renderBranchOptions([], '');
+        }
+    });
+
+    const $initialBranch = $('#leadBranchSelect');
+    if ($initialBranch.length) {
+        const validBranchOptions = $initialBranch.find('option').filter(function() { return $(this).val() !== ''; });
+        if (validBranchOptions.length === 1 && !$initialBranch.val()) {
+            $initialBranch.val(validBranchOptions.val()).trigger('change');
+        }
     }
 });
 </script>

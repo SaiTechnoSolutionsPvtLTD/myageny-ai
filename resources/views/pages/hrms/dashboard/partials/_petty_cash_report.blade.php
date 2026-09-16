@@ -131,7 +131,7 @@
                     </div>
                     <div>
                         <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Ledger Category <span style="color: #ef4444;">*</span></label>
-                        <select name="category" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                        <select id="add_pc_category" name="category" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                             <option value="petty_cash" selected>💼 Petty Cash</option>
                             <option value="house_keeping">👑 House Keeping</option>
                         </select>
@@ -141,7 +141,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                     <div>
                         <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Transaction Type <span style="color: #ef4444;">*</span></label>
-                        <select name="type" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
+                        <select id="add_pc_type" name="type" class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;">
                             <option value="cash_in_hand">Cash In Hand (Initial Allocation / Top-Up)</option>
                             <option value="credit">Credit (CR - Cash IN)</option>
                             <option value="debit" selected>Debit (DR - Expense / Cash OUT)</option>
@@ -166,7 +166,7 @@
 
                 <div style="margin-bottom: 0;">
                     <label style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px;">Particulars / Narration <span style="color: #ef4444;">*</span></label>
-                    <textarea name="particulars" rows="3" placeholder="Enter reason or details of transaction..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
+                    <textarea id="add_pc_particulars" name="particulars" rows="3" placeholder="Enter reason or details of transaction..." class="form-control" required style="width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; padding: 10px 12px; font-size: 14px;"></textarea>
                 </div>
             </div>
 
@@ -286,9 +286,29 @@
 
     window.pettyCashTxMap = {};
 
+    function updateAddModalParticulars() {
+        const catEl = document.getElementById('add_pc_category');
+        const typeEl = document.getElementById('add_pc_type');
+        const partEl = document.getElementById('add_pc_particulars');
+        if (!catEl || !typeEl || !partEl) return;
+
+        if (catEl.value === 'house_keeping' && typeEl.value === 'credit') {
+            if (!partEl.value || partEl.value.trim() === '' || partEl.dataset.autoFilled === 'true') {
+                partEl.value = 'Amount provide house keeping';
+                partEl.dataset.autoFilled = 'true';
+            }
+        } else if (partEl.dataset.autoFilled === 'true') {
+            partEl.value = '';
+            partEl.dataset.autoFilled = 'false';
+        }
+    }
+
     function openPettyCashModal() {
         const modal = document.getElementById('addPettyCashModal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) {
+            updateAddModalParticulars();
+            modal.style.display = 'flex';
+        }
     }
 
     function closePettyCashModal() {
@@ -565,6 +585,20 @@
         const categorySelect = document.getElementById('pc_category');
         if (categorySelect) {
             categorySelect.addEventListener('change', loadPettyCashReport);
+        }
+
+        const addCatEl = document.getElementById('add_pc_category');
+        const addTypeEl = document.getElementById('add_pc_type');
+        const addPartEl = document.getElementById('add_pc_particulars');
+
+        if (addCatEl) addCatEl.addEventListener('change', updateAddModalParticulars);
+        if (addTypeEl) addTypeEl.addEventListener('change', updateAddModalParticulars);
+        if (addPartEl) {
+            addPartEl.addEventListener('input', function() {
+                if (this.value !== 'Amount provide house keeping') {
+                    this.dataset.autoFilled = 'false';
+                }
+            });
         }
 
         loadPettyCashReport();

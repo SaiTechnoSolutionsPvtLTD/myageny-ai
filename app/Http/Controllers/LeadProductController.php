@@ -61,8 +61,11 @@ class LeadProductController extends Controller
                 'name'        => $p->package_name,
                 'category'    => $p->category?->name,
                 'description' => $p->description,
-                'price'       => (float) $p->final_price,
+                'price'       => (float) ($p->base_price > 0 ? $p->base_price : $p->final_price),
                 'base_price'  => (float) $p->base_price,
+                'final_price' => (float) $p->final_price,
+                'tax_type'    => $p->tax_type,
+                'tax_value'   => (float) ($p->tax_value ?? 0),
                 'discount_type' => $p->discount_type,
                 'discount_value' => (float) $p->discount_value,
                 'discount_percent' => $p->discount_type === 'percentage'
@@ -91,8 +94,11 @@ class LeadProductController extends Controller
                 'name'        => $product->package_name,
                 'category'    => $product->category?->name,
                 'description' => $product->description,
-                'price'       => (float) $product->final_price,
+                'price'       => (float) ($product->base_price > 0 ? $product->base_price : $product->final_price),
                 'base_price'  => (float) $product->base_price,
+                'final_price' => (float) $product->final_price,
+                'tax_type'    => $product->tax_type,
+                'tax_value'   => (float) ($product->tax_value ?? 0),
                 'discount_type' => $product->discount_type,
                 'discount_value' => (float) $product->discount_value,
                 'discount_percent' => $product->discount_type === 'percentage'
@@ -211,6 +217,7 @@ class LeadProductController extends Controller
             'products.*.unit_price' => ['nullable', 'numeric', 'min:0'],
             'products.*.quantity'   => ['nullable', 'integer', 'min:1'],
             'products.*.discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'products.*.gst_percent'      => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         if ($v->fails()) {
@@ -225,10 +232,10 @@ class LeadProductController extends Controller
             foreach ($request->products as $row) {
                 $product = Product::findOrFail($row['product_id']);
                 abort_unless($this->visibility->canAccessProduct($product), 403);
-                $requestedPrice = round((float) ($row['unit_price'] ?? $product->final_price), 2);
-                $defaultPrice = round((float) $product->final_price, 2);
+                $baselinePrice = round((float) ($product->base_price > 0 ? $product->base_price : $product->final_price), 2);
+                $requestedPrice = round((float) ($row['unit_price'] ?? $baselinePrice), 2);
 
-                if ($requestedPrice !== $defaultPrice) {
+                if ($requestedPrice !== $baselinePrice) {
                     return response()->json([
                         'message' => 'Price was changed. Please send a price change request for admin approval.',
                     ], 422);
@@ -236,14 +243,15 @@ class LeadProductController extends Controller
             }
         }
 
-        $created = DB::transaction(function () use ($request, $defaultStatus) {
+        $created = DB::transaction(function () use ($request, $defaultStatus, $lead) {
             $rows = [];
             foreach ($request->products as $row) {
                 $product  = Product::findOrFail($row['product_id']);
                 abort_unless($this->visibility->canAccessProduct($product), 403);
-                $unitPrice = $row['unit_price'] ?? $product->final_price;
+                $unitPrice = $row['unit_price'] ?? ($product->base_price > 0 ? $product->base_price : $product->final_price);
                 $qty       = $row['quantity'] ?? 1;
                 $disc      = $row['discount_percent'] ?? 0;
+                $gst       = $row['gst_percent'] ?? 0;
 
                 $rows[] = LeadProduct::create([
                     'lead_id'          => $request->lead_id,
@@ -255,6 +263,7 @@ class LeadProductController extends Controller
                     'company_id'       => $request->company_id ?? $lead->company_id ?? auth()->user()?->company_id,
                     'quantity'         => $qty,
                     'discount_percent' => $disc,
+                    'gst_percent'      => $gst,
                     'remarks'          => $row['remarks'] ?? null,
                     'product_status'   => LeadProduct::statusKey($defaultStatus?->name ?? 'new'),
                     'lead_status_id'   => $defaultStatus?->id,
@@ -358,6 +367,7 @@ class LeadProductController extends Controller
             'unit_price'       => ['required', 'numeric', 'min:0'],
             'quantity'         => ['required', 'integer', 'min:1'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'gst_percent'      => ['nullable', 'numeric', 'min:0', 'max:100'],
             'remarks'          => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -379,7 +389,7 @@ class LeadProductController extends Controller
         $currentPrice = round((float) $leadProduct->unit_price, 2);
         $baselinePrice = (int) $leadProduct->product_id === (int) $catalogProduct->id
             ? $currentPrice
-            : round((float) $catalogProduct->final_price, 2);
+            : round((float) ($catalogProduct->base_price > 0 ? $catalogProduct->base_price : $catalogProduct->final_price), 2);
 
         if ($user->allowsPriceRequests() && !$this->isAdmin($user) && $requestedPrice !== $baselinePrice) {
             return response()->json([
@@ -395,6 +405,7 @@ class LeadProductController extends Controller
             'unit_price'       => $requestedPrice,
             'quantity'         => (int) $request->quantity,
             'discount_percent' => (float) ($request->discount_percent ?? 0),
+            'gst_percent'      => (float) ($request->gst_percent ?? 0),
             'remarks'          => $request->remarks,
         ]);
 
@@ -906,7 +917,12 @@ class LeadProductController extends Controller
 
         $v = Validator::make($request->all(), [
             'lead_product_id' => ['required', 'exists:lead_products,id'],
+            'payment_type'    => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
             'amount'          => ['required', 'numeric', 'min:0.01'],
+            'is_tds_deducted' => ['nullable'],
+            'tds_percentage'  => ['nullable', 'numeric', 'min:0.01', 'max:100'],
+            'tds_amount'      => ['nullable', 'numeric', 'min:0'],
+            'after_tds_amount'=> ['nullable', 'numeric', 'min:0'],
             'payment_mode'    => ['required', 'in:cash,bank_transfer,cheque,upi,card'],
             'payment_date'    => ['required', 'date'],
             'reference_number'=> ['nullable', 'string', 'max:100'],
@@ -918,10 +934,34 @@ class LeadProductController extends Controller
             return response()->json(['errors' => $v->errors()], 422);
         }
 
+        $rawType = (string) $request->payment_type;
+        $paymentType = match(strtolower(str_replace([' ', '-'], '_', $rawType))) {
+            'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
+            'balancepayment', 'balance_payment'             => 'balance_payment',
+            'renewal', 'renewals'                           => 'renewals',
+            default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
+        };
+
+        $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
+        $tdsPercentage = null;
+        $tdsAmount = null;
+        $afterTdsAmount = null;
+
+        if ($isTdsDeducted) {
+            $tdsPercentage = (float) $request->input('tds_percentage', 0);
+            if ($tdsPercentage > 0) {
+                $grossAmount = (float) $request->amount;
+                $tdsAmount = round(($grossAmount * $tdsPercentage) / 100, 2);
+                $afterTdsAmount = round($grossAmount - $tdsAmount, 2);
+            } else {
+                $isTdsDeducted = false;
+            }
+        }
+
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
         // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
-        $payment = DB::transaction(function () use ($request, $lp, $actorId) {
+        $payment = DB::transaction(function () use ($request, $lp, $actorId, $paymentType, $isTdsDeducted, $tdsPercentage, $tdsAmount, $afterTdsAmount) {
             $attachment = $request->file('attachment');
             $attachmentPath = null;
             $attachmentName = null;
@@ -940,6 +980,11 @@ class LeadProductController extends Controller
             $p = LeadProductPayment::create([
                 'lead_product_id' => $lp->id,
                 'lead_id'         => $lp->lead_id,
+                'payment_type'    => $paymentType,
+                'is_tds_deducted' => $isTdsDeducted,
+                'tds_percentage'  => $tdsPercentage,
+                'tds_amount'      => $tdsAmount,
+                'after_tds_amount'=> $afterTdsAmount,
                 'amount'          => $request->amount,
                 'payment_mode'    => $request->payment_mode,
                 'payment_date'    => $request->payment_date,

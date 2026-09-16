@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -181,15 +182,61 @@ class PettyCashApiController extends Controller
                 'amount' => ['required', 'numeric', 'min:0.01'],
             ]);
 
+            $companyId = Auth::user()?->company_id;
+            $category = $validated['category'] ?? 'petty_cash';
+            $type = $validated['type'];
+            $particulars = trim((string) $validated['particulars']);
+
+            // When House Keeping category is credited, first debit from Petty Cash then credit into House Keeping
+            if ($category === 'house_keeping' && in_array($type, ['credit', 'cash_in_hand'], true)) {
+                $entry = DB::transaction(function () use ($validated, $companyId, $particulars) {
+                    $entryParticulars = $particulars !== '' ? $particulars : 'Amount provide house keeping';
+
+                    // 1. First: Debit from Petty Cash (Cash Out)
+                    PettyCashEntry::create([
+                        'company_id' => $companyId,
+                        'branch_id' => $validated['branch_id'] ?? null,
+                        'entry_date' => $validated['entry_date'],
+                        'voucher_no' => $validated['voucher_no'] ?? null,
+                        'name' => $validated['name'] ?: 'House Keeping',
+                        'particulars' => 'Amount provide house keeping',
+                        'type' => 'debit',
+                        'category' => 'petty_cash',
+                        'amount' => $validated['amount'],
+                        'created_by' => Auth::id(),
+                    ]);
+
+                    // 2. Then: Credit into House Keeping (Cash In)
+                    return PettyCashEntry::create([
+                        'company_id' => $companyId,
+                        'branch_id' => $validated['branch_id'] ?? null,
+                        'entry_date' => $validated['entry_date'],
+                        'voucher_no' => $validated['voucher_no'] ?? null,
+                        'name' => $validated['name'] ?: 'House Keeping',
+                        'particulars' => $entryParticulars,
+                        'type' => 'credit',
+                        'category' => 'house_keeping',
+                        'amount' => $validated['amount'],
+                        'created_by' => Auth::id(),
+                    ]);
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Amount provided to house keeping recorded successfully. Petty cash debited and House keeping credited.',
+                    'data' => ['id' => $entry->id],
+                ], 201);
+            }
+
             $entry = PettyCashEntry::create([
-                'company_id' => Auth::user()?->company_id,
+                'company_id' => $companyId,
                 'branch_id' => $validated['branch_id'] ?? null,
                 'entry_date' => $validated['entry_date'],
                 'voucher_no' => $validated['voucher_no'] ?? null,
                 'name' => $validated['name'] ?? null,
-                'particulars' => $validated['particulars'],
-                'type' => $validated['type'],
-                'category' => $validated['category'] ?? 'petty_cash',
+                'particulars' => $particulars,
+                'type' => $type,
+                'category' => $category,
                 'amount' => $validated['amount'],
                 'created_by' => Auth::id(),
             ]);
