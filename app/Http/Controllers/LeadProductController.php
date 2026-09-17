@@ -904,21 +904,12 @@ class LeadProductController extends Controller
             ], 422);
         }
 
-        // Calculate balance from payments table (dynamic)
-        $balancePayment = $lp->total_price - $lp->amount_paid;
-
-        if($balancePayment < $request->amount)
-            {
-        return response()->json([
-            'status'  => 'Error',
-            'message'  => 'Please Check you payment',
-        ], 500);
-            }
-
         $v = Validator::make($request->all(), [
             'lead_product_id' => ['required', 'exists:lead_products,id'],
             'payment_type'    => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
             'amount'          => ['required', 'numeric', 'min:0.01'],
+            'gross_amount'    => ['nullable', 'numeric', 'min:0.01'],
+            'net_amount'      => ['nullable', 'numeric', 'min:0.01'],
             'is_tds_deducted' => ['nullable'],
             'tds_percentage'  => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'tds_amount'      => ['nullable', 'numeric', 'min:0'],
@@ -946,22 +937,59 @@ class LeadProductController extends Controller
         $tdsPercentage = null;
         $tdsAmount = null;
         $afterTdsAmount = null;
+        $paymentAmount = (float) $request->amount;
+        $settlementGross = $paymentAmount;
 
         if ($isTdsDeducted) {
             $tdsPercentage = (float) $request->input('tds_percentage', 0);
             if ($tdsPercentage > 0) {
-                $grossAmount = (float) $request->amount;
-                $tdsAmount = round(($grossAmount * $tdsPercentage) / 100, 2);
-                $afterTdsAmount = round($grossAmount - $tdsAmount, 2);
+                // Calculate TDS on the product base price (excluding GST)
+                $basePrice = (float) ($lp->base_price ?? ($lp->unit_price * $lp->quantity * (1 - ($lp->discount_percent / 100))));
+                if ($basePrice <= 0) {
+                    $basePrice = (float) $lp->total_price;
+                }
+
+                if ($request->filled('tds_amount') && (float) $request->input('tds_amount') > 0) {
+                    $tdsAmount = round((float) $request->input('tds_amount'), 2);
+                } else {
+                    $tdsAmount = round(($basePrice * $tdsPercentage) / 100, 2);
+                }
+
+                if ($request->filled('gross_amount') && (float) $request->input('gross_amount') > 0) {
+                    $settlementGross = (float) $request->input('gross_amount');
+                    $netReceived = round(max(0, $settlementGross - $tdsAmount), 2);
+                } elseif ($request->filled('net_amount') && (float) $request->input('net_amount') > 0) {
+                    $netReceived = (float) $request->input('net_amount');
+                    $settlementGross = round($netReceived + $tdsAmount, 2);
+                } else {
+                    $entered = (float) $request->amount;
+                    $balanceDue = (float) ($lp->total_price - $lp->amount_paid);
+                    if (abs(($entered + $tdsAmount) - $balanceDue) < 0.05) {
+                        $netReceived = $entered;
+                        $settlementGross = round($netReceived + $tdsAmount, 2);
+                    } else {
+                        $settlementGross = $entered;
+                        $netReceived = round(max(0, $settlementGross - $tdsAmount), 2);
+                    }
+                }
+
+                $paymentAmount = $netReceived;
+                $afterTdsAmount = $netReceived;
             } else {
                 $isTdsDeducted = false;
             }
         }
 
-        $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
-        // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
+        // Calculate balance from payments table (dynamic) and ensure settlement does not exceed balance
+        $balancePayment = (float) ($lp->total_price - $lp->amount_paid);
+        if ($settlementGross > ($balancePayment + 0.05)) {
+            return response()->json([
+                'status'  => 'Error',
+                'message' => 'Payment amount (₹' . number_format($settlementGross, 2) . ') exceeds remaining balance (₹' . number_format($balancePayment, 2) . ').',
+            ], 422);
+        }
 
-        $payment = DB::transaction(function () use ($request, $lp, $actorId, $paymentType, $isTdsDeducted, $tdsPercentage, $tdsAmount, $afterTdsAmount) {
+        $payment = DB::transaction(function () use ($request, $lp, $actorId, $paymentType, $isTdsDeducted, $tdsPercentage, $tdsAmount, $afterTdsAmount, $paymentAmount) {
             $attachment = $request->file('attachment');
             $attachmentPath = null;
             $attachmentName = null;
@@ -985,7 +1013,7 @@ class LeadProductController extends Controller
                 'tds_percentage'  => $tdsPercentage,
                 'tds_amount'      => $tdsAmount,
                 'after_tds_amount'=> $afterTdsAmount,
-                'amount'          => $request->amount,
+                'amount'          => $paymentAmount,
                 'payment_mode'    => $request->payment_mode,
                 'payment_date'    => $request->payment_date,
                 'reference_number'=> $request->reference_number,
@@ -996,6 +1024,8 @@ class LeadProductController extends Controller
             ]);
             return $p;
         });
+
+        $lp->syncPaymentStatus();
 
         $payment->load(['recordedBy', 'leadProduct']);
 

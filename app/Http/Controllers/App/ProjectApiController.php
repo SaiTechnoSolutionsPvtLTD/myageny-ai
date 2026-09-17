@@ -779,6 +779,12 @@ class ProjectApiController extends Controller
                 'testing_details' => $testingDetails,
                 'bugs'            => $testingBugs,
                 'testing_tl_users' => $testingTlUsers,
+                'can_add_bug'     => $user && (
+                    $user->belongsToTestingDepartment() ||
+                    $user->hasTestingLikeRole() ||
+                    $user->isSuperAdmin() ||
+                    $user->isCompanyAdmin()
+                ),
             ],
         ]);
     }
@@ -3122,15 +3128,17 @@ class ProjectApiController extends Controller
         $ongoingCount = $testingHandovers->where('status', 'ongoing')->count();
         $retestingCount = $testingHandovers->where('status', 'retesting')->count();
         $completedCount = $testingHandovers->where('status', 'completed')->count();
+        $readyLaunchCount = $testingHandovers->whereIn('status', ['ready_launch', 'ready_to_launch'])->count();
 
         $filteredHandovers = match ($activeStatus) {
             'ongoing' => $testingHandovers->where('status', 'ongoing'),
             'retesting' => $testingHandovers->where('status', 'retesting'),
             'completed' => $testingHandovers->where('status', 'completed'),
+            'ready_launch', 'ready_to_launch' => $testingHandovers->filter(fn ($h) => in_array($h->status, ['ready_launch', 'ready_to_launch'], true)),
             default => $testingHandovers->filter(fn ($h) => in_array($h->status, ['moved_to_testing', 'open'], true)),
         };
 
-        if (! in_array($activeStatus, ['open', 'ongoing', 'retesting', 'completed'], true)) {
+        if (! in_array($activeStatus, ['open', 'ongoing', 'retesting', 'completed', 'ready_launch', 'ready_to_launch'], true)) {
             $activeStatus = 'open';
         }
 
@@ -3143,6 +3151,7 @@ class ProjectApiController extends Controller
                     'ongoing' => $ongoingCount,
                     'retesting' => $retestingCount,
                     'completed' => $completedCount,
+                    'ready_launch' => $readyLaunchCount,
                 ],
                 'handovers' => $filteredHandovers->values()->map(fn ($h) => $this->serializeTestingHandover($h))->all(),
             ],
@@ -3186,22 +3195,106 @@ class ProjectApiController extends Controller
     public function updateTestingStatus(Request $request, ProductionInitiation $productionInitiation): JsonResponse
     {
         $validated = $request->validate([
-            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed'])],
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed', 'ready_launch', 'ready_to_launch'])],
         ]);
+
+        $status = $validated['status'];
+        if ($status === 'ready_to_launch') {
+            $status = 'ready_launch';
+        }
 
         $latestHandover = $productionInitiation->testingDetails()->latest()->first();
         if (! $latestHandover) {
             return response()->json(['success' => false, 'message' => 'No testing handover found for this project.'], 404);
         }
 
-        $latestHandover->update(['status' => $validated['status']]);
+        $latestHandover->update(['status' => $status]);
         $latestHandover->load(['movedBy', 'testingTl']);
+
+        if ($status === 'ready_launch') {
+            $this->sendReadyLaunchNotification($productionInitiation, $latestHandover);
+        }
+
+        $message = $status === 'ready_launch'
+            ? 'QA Status updated to Ready Launch! Notification email sent to Developer, TL, and Project Coordinator.'
+            : 'Testing status updated successfully.';
 
         return response()->json([
             'success' => true,
-            'message' => 'Testing status updated successfully.',
+            'message' => $message,
             'data' => $this->serializeHandoverDetail($latestHandover),
         ]);
+    }
+
+    private function sendReadyLaunchNotification(ProductionInitiation $project, \App\Models\ProjectTestingDetail $testingDetail): void
+    {
+        try {
+            $project->loadMissing(['leadProduct', 'product', 'lead', 'bugs']);
+            $testingDetail->loadMissing(['movedBy', 'testingTl']);
+
+            // 1. Developers
+            $devUsers = collect();
+            if ($testingDetail->movedBy) {
+                $devUsers->push($testingDetail->movedBy);
+            }
+            if (! empty($project->project_allocated_employee_user_ids)) {
+                $allocatedDevs = User::whereIn('id', (array) $project->project_allocated_employee_user_ids)
+                    ->where('is_active', true)
+                    ->get();
+                $devUsers = $devUsers->merge($allocatedDevs);
+            }
+            $devEmails = $devUsers->pluck('email')->filter()->unique()->values()->all();
+
+            // 2. Developer TLs
+            $tlUsers = collect();
+            if (! empty($project->project_allocated_tl_user_ids)) {
+                $allocatedTls = User::whereIn('id', (array) $project->project_allocated_tl_user_ids)
+                    ->where('is_active', true)
+                    ->get();
+                $tlUsers = $tlUsers->merge($allocatedTls);
+            }
+            foreach ($devUsers as $devUser) {
+                if (is_object($devUser) && method_exists($devUser, 'mappedManagers')) {
+                    $tlUsers = $tlUsers->merge($devUser->mappedManagers()->get());
+                }
+            }
+            $devTlEmails = $tlUsers->pluck('email')->filter()->unique()->values()->all();
+
+            // 3. Developer Project Coordinators
+            $coordinatorUsers = User::where('is_active', true)
+                ->get()
+                ->filter(fn ($u) => $u->isDevelopmentProjectCoordinator());
+            $coordinatorEmails = $coordinatorUsers->pluck('email')
+                ->filter()
+                ->merge(['projects@saitechnosolutions.net'])
+                ->unique()
+                ->values()
+                ->all();
+
+            // Recipients: Developers & TLs as TO, Coordinator as CC
+            $toEmails = array_values(array_unique(array_filter(array_merge($devEmails, $devTlEmails))));
+            if (empty($toEmails)) {
+                $toEmails = $coordinatorEmails;
+            }
+
+            $primaryTo = array_shift($toEmails) ?: 'projects@saitechnosolutions.net';
+            $ccEmails = array_values(array_unique(array_filter(array_merge(
+                $toEmails,
+                $coordinatorEmails,
+                ['projects@saitechnosolutions.net']
+            ))));
+
+            $ccEmails = array_values(array_diff($ccEmails, [$primaryTo]));
+
+            Mail::to($primaryTo)
+                ->cc($ccEmails)
+                ->send(new \App\Mail\ProjectReadyLaunchMail($project, $testingDetail));
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Project Ready Launch notification mail: ' . $e->getMessage(), [
+                'project_id' => $project->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -3213,6 +3306,21 @@ class ProjectApiController extends Controller
      */
     public function storeBug(Request $request, ProductionInitiation $productionInitiation): JsonResponse
     {
+        $user = $request->user();
+        $canAddBug = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole() ||
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+
+        if (! $canAddBug) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only Testing Department can report bugs.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'description'   => ['required', 'string', 'max:5000'],
             'priority'      => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
@@ -3296,7 +3404,10 @@ class ProjectApiController extends Controller
             'attachment_path'          => $firstAttachmentPath,
             'attachment_original_name' => $firstAttachmentName,
             'attachments'              => ! empty($storedAttachments) ? $storedAttachments : null,
-            'status'                   => 'open',
+            'status'                   => 'pending',
+            'developer_status'         => 'pending',
+            'tester_status'            => 'pending',
+            'reopen_count'             => 0,
             'created_by_user_id'       => auth()->id(),
         ]);
 
@@ -3313,16 +3424,89 @@ class ProjectApiController extends Controller
      */
     public function updateBugStatus(Request $request, ProjectBug $bug): JsonResponse
     {
-        $validated = $request->validate([
-            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'fixed', 'closed'])],
-        ]);
+        $user = $request->user();
+        $isAdmin = $user && (
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+        $isTestingUser = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole()
+        );
+        $isDevUser = $user && ! $isTestingUser && (
+            $user->belongsToDevelopmentDepartment() ||
+            $user->hasDevelopmentLikeRole() ||
+            $user->isDevelopmentProjectCoordinator() ||
+            $user->isDevelopmentTeam()
+        );
 
-        $bug->update(['status' => $validated['status']]);
+        $canEditDeveloperStatus = ! $isTestingUser && ($isDevUser || $isAdmin);
+        $canEditTesterStatus = $isTestingUser || $isAdmin;
+
+        $remarks = trim((string) $request->input('remarks', ''));
+        if (empty($remarks) || mb_strlen($remarks) < 2) {
+            return response()->json(['success' => false, 'message' => 'Remarks is mandatory when updating bug status (minimum 2 characters).'], 422);
+        }
+
+        $messages = [];
+        $updatedAny = false;
+
+        // Check developer status update
+        $rawDev = $request->input('developer_status');
+        if (! $rawDev && $request->input('status_type') === 'developer') {
+            $rawDev = $request->input('status');
+        }
+        if ($rawDev) {
+            $valDev = strtolower(trim((string) $rawDev));
+            if (in_array($valDev, ['ongoing', 'pending', 'completed'], true)) {
+                if (! $canEditDeveloperStatus) {
+                    return response()->json(['success' => false, 'message' => 'Only Development team can update Developer status.'], 403);
+                }
+                $oldDev = $bug->developer_status ?: 'pending';
+                $bug->developer_status = $valDev;
+                $bug->status = $valDev;
+                $bug->addStatusHistory($user, 'developer', $oldDev, $valDev, $remarks);
+                $messages[] = 'Dev: ' . ucfirst($valDev);
+                $updatedAny = true;
+            }
+        }
+
+        // Check tester status update
+        $rawTester = $request->input('tester_status');
+        if (! $rawTester && $request->input('status_type') === 'tester') {
+            $rawTester = $request->input('status');
+        }
+        if ($rawTester) {
+            $valTester = strtolower(trim((string) $rawTester));
+            if (in_array($valTester, ['closed', 'reopen', 'pending'], true)) {
+                if (! $canEditTesterStatus) {
+                    return response()->json(['success' => false, 'message' => 'Only Testing Department can update Tester status.'], 403);
+                }
+                if ($valTester === 'reopen' && $bug->tester_status !== 'reopen') {
+                    $bug->increment('reopen_count');
+                }
+                $oldTester = $bug->tester_status ?: 'pending';
+                $bug->tester_status = $valTester;
+                $bug->status = $valTester;
+                $bug->addStatusHistory($user, 'tester', $oldTester, $valTester, $remarks);
+                $messages[] = 'Tester: ' . ucfirst($valTester);
+                $updatedAny = true;
+            }
+        }
+
+        if (! $updatedAny) {
+            $roleType = $isTestingUser ? 'tester' : 'developer';
+            $curStatus = $roleType === 'developer' ? ($bug->developer_status ?: 'pending') : ($bug->tester_status ?: 'pending');
+            $bug->addStatusHistory($user, $roleType, $curStatus, $curStatus, $remarks);
+            $messages[] = 'Remarks recorded';
+        }
+
+        $bug->save();
 
         return response()->json([
             'success' => true,
             'message' => 'Bug status updated successfully.',
-            'data' => $this->serializeBug($bug->load('createdBy')),
+            'data' => $this->serializeBug($bug->fresh(['createdBy'])),
         ]);
     }
 
@@ -3445,6 +3629,9 @@ class ProjectApiController extends Controller
             'description' => $bug->description,
             'priority' => $bug->priority,
             'status' => $bug->status,
+            'developer_status' => $bug->developer_status ?: 'pending',
+            'tester_status' => $bug->tester_status ?: 'pending',
+            'reopen_count' => (int) ($bug->reopen_count ?? 0),
             'attachment_url' => $bug->attachment_path ? asset($bug->attachment_path) : null,
             'attachment_name' => $bug->attachment_original_name,
             'created_at' => optional($bug->created_at)->toIso8601String(),

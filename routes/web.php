@@ -347,6 +347,10 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.bugs.store');
         Route::get('/testing-details/{productionInitiation}', [ProjectController::class, 'testingDetails'])
             ->name('projects.testing-details');
+        Route::get('/testing-details/{productionInitiation}/summary-report', [ProjectController::class, 'testingSummaryReport'])
+            ->name('projects.testing-summary-report');
+        Route::get('/testing-details/{productionInitiation}/summary-report/export-pdf', [ProjectController::class, 'exportTestingSummaryReportPdf'])
+            ->name('projects.testing-summary-report.export-pdf');
         Route::post('/testing-details/{productionInitiation}/status', [ProjectController::class, 'updateTestingStatus'])
             ->name('projects.testing-details.update-status');
         Route::patch('/testing-details/bugs/{bug}/status', [ProjectController::class, 'updateBugStatus'])

@@ -79,9 +79,10 @@
 .ps-modal-note strong { font-size:13px; color:#0f172a; }
 .ps-modal-note span { font-size:12px; color:#64748b; line-height:1.6; }
 .ps-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.42); z-index:1200; display:none; }
-.ps-modal-overlay.is-open { display:block; }
+.ps-modal-overlay.is-open { display:block !important; }
 .ps-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(860px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:24px; box-shadow:0 24px 60px rgba(15,23,42,.22); z-index:1210; display:none; }
-.ps-modal.is-open { display:block; }
+.ps-modal.is-open { display:block !important; }
+#bug-status-modal.is-open, #bug-history-modal.is-open { display:flex !important; flex-direction:column !important; }
 .ps-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px; border-bottom:1px solid #eef2f7; background:#fffdfb; }
 .ps-modal-close { width:42px; height:42px; border-radius:14px; border:1px solid #e5e7eb; background:#fff; color:#334155; font-size:16px; cursor:pointer; }
 .ps-modal-body { padding:22px; }
@@ -233,110 +234,6 @@
 .cc-cell-link { color:#2563eb; font-weight:700; text-decoration:none; border-bottom:1px dashed #bfdbfe; transition:color .12s,border-color .12s; }
 .cc-cell-link:hover { color:#1d4ed8; border-bottom-color:#1d4ed8; }
 </style>
-<script>
-const allProjectCustomerCampaigns = @json($customerCampaigns ?? []);
-
-function openProjectExtendModal(campaignOrId) {
-    let campaign = null;
-    if (typeof campaignOrId === 'object' && campaignOrId !== null) {
-        campaign = campaignOrId;
-    } else if (typeof campaignOrId === 'number' || typeof campaignOrId === 'string') {
-        campaign = allProjectCustomerCampaigns.find(c => c.id == campaignOrId);
-    }
-    if (!campaign) {
-        console.warn('Campaign not found for ID:', campaignOrId);
-        return;
-    }
-
-    const form = document.getElementById('projectExtendForm');
-    if (!form) return;
-    form.action = '/projects/campaigns/' + campaign.id + '/extend';
-
-    const parentNameEl = document.getElementById('projectExtendParentName');
-    if (parentNameEl) {
-        parentNameEl.textContent = campaign.campaign_name || ('Campaign #' + campaign.id);
-    }
-
-    let rawName = campaign.campaign_name || 'Campaign';
-    let cleanBase = rawName.replace(/\s*\((Renewal|Extension)(\s*#?\d*)?\)/gi, '').trim();
-
-    let extensionsCount = campaign.extensions ? campaign.extensions.length : 0;
-    let nextIndex = extensionsCount + 1;
-    let suggestedName = nextIndex > 1 ? `${cleanBase} (Renewal #${nextIndex})` : `${cleanBase} (Renewal)`;
-
-    const nameInput = document.getElementById('proj_extend_campaign_name');
-    if (nameInput) nameInput.value = suggestedName;
-
-    const adAccInput = document.getElementById('proj_extend_ad_account_name');
-    if (adAccInput) adAccInput.value = campaign.ad_account_name || '';
-
-    const platformInput = document.getElementById('proj_extend_platform');
-    if (platformInput) platformInput.value = campaign.platform || 'Facebook / Meta';
-
-    const statusInput = document.getElementById('proj_extend_status');
-    if (statusInput) statusInput.value = 'active';
-
-    const budgetInput = document.getElementById('proj_extend_budget_amount');
-    if (budgetInput) budgetInput.value = campaign.budget_amount || '';
-
-    const budgetTypeInput = document.getElementById('proj_extend_budget_type');
-    if (budgetTypeInput) budgetTypeInput.value = campaign.budget_type || 'Monthly';
-
-    let nextStartDate = '';
-    if (campaign.end_date) {
-        let d = new Date(campaign.end_date);
-        d.setDate(d.getDate() + 1);
-        nextStartDate = d.toISOString().substring(0, 10);
-    } else {
-        nextStartDate = new Date().toISOString().substring(0, 10);
-    }
-    const startInput = document.getElementById('proj_extend_start_date');
-    if (startInput) startInput.value = nextStartDate;
-
-    const endInput = document.getElementById('proj_extend_end_date');
-    if (endInput) endInput.value = '';
-
-    const remarksInput = document.getElementById('proj_extend_remarks');
-    if (remarksInput) remarksInput.value = 'Renewal from ' + cleanBase;
-
-    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
-    const modal = document.getElementById('projectExtendCampaignModal');
-    if (overlay) {
-        overlay.classList.add('is-open');
-        overlay.style.display = 'block';
-    }
-    if (modal) {
-        modal.classList.add('is-open');
-        modal.style.display = 'block';
-    }
-}
-
-function closeProjectExtendModal() {
-    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
-    const modal = document.getElementById('projectExtendCampaignModal');
-    if (overlay) {
-        overlay.classList.remove('is-open');
-        overlay.style.display = 'none';
-    }
-    if (modal) {
-        modal.classList.remove('is-open');
-        modal.style.display = 'none';
-    }
-}
-
-document.addEventListener('click', function(e) {
-    const overlay = document.getElementById('projectExtendCampaignModalOverlay');
-    if (overlay && e.target === overlay) {
-        closeProjectExtendModal();
-    }
-});
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        closeProjectExtendModal();
-    }
-});
-</script>
 @endpush
 
 @section('content')
@@ -439,22 +336,38 @@ document.addEventListener('keydown', function(e) {
     $isContentCalendarDept = in_array($deptName, ['designing', 'digital marketing'], true);
     $contentCalendarSheetUrl = (string) ($projectItem->content_calendar_sheet_url ?? '');
 
-    // Testing Tab: show ONLY for Development department / Development team
+    // Testing Tab: show for Development department / Development team or Testing department
     $currentUser = auth()->user();
-    $isDevUser = $currentUser && (
-        $currentUser->belongsToDevelopmentDepartment() ||
-        $currentUser->hasDevelopmentLikeRole() ||
-        $currentUser->isDevelopmentTeam() ||
+    $isSuperOrCompanyAdmin = $currentUser && (
         $currentUser->isSuperAdmin() ||
         $currentUser->isCompanyAdmin()
     );
 
+    $isTestingMember = $currentUser && (
+        $currentUser->belongsToTestingDepartment() ||
+        $currentUser->hasTestingLikeRole()
+    );
+
+    $isDevMember = $currentUser && ! $isTestingMember && (
+        $currentUser->belongsToDevelopmentDepartment() ||
+        $currentUser->hasDevelopmentLikeRole() ||
+        $currentUser->isDevelopmentProjectCoordinator() ||
+        $currentUser->isDevelopmentTeam()
+    );
+
+    $isDevUser = $isDevMember || $isSuperOrCompanyAdmin;
+    $isTestingUser = $isTestingMember;
+
+    $canAddBug = $isTestingMember || $isSuperOrCompanyAdmin;
+    $canEditDeveloperStatus = ! $isTestingMember && ($isDevMember || $isSuperOrCompanyAdmin);
+    $canEditTesterStatus = $isTestingMember || $isSuperOrCompanyAdmin;
+
     $isDevDept = str_contains($deptName, 'development') || str_contains($deptName, 'dev') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app');
-        $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
+    $isNonDevDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'design') || str_contains($deptName, 'dm');
     $isDmDept = str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm');
     $customerCampaigns = $customerCampaigns ?? collect();
 
-    $canSeeTestingTab = ($isDevDept || $isDevUser) && ! $isNonDevDept;
+    $canSeeTestingTab = ($isDevDept || $isDevUser || $isTestingUser) && ! $isNonDevDept;
 
     if ($activeTab === 'testing' && ! $canSeeTestingTab) {
         $activeTab = 'overview';
@@ -1515,9 +1428,11 @@ document.addEventListener('keydown', function(e) {
                         <div class="ps-card-sub">Development team testing links, credentials, and QA status logs.</div>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
+                        @if($canAddBug)
                         <button type="button" class="ps-btn" style="background: #dc2626; color: #ffffff; border: none; font-weight: 700; padding: 10px 18px; border-radius: 999px; box-shadow: 0 4px 12px rgba(220,38,38,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddBugModal()">
                             <i class="bi bi-bug-fill"></i> + Add Bug
                         </button>
+                        @endif
                         <button type="button" class="ps-btn" style="background: linear-gradient(135deg, #fe5f04, #ff8a3d); color: #ffffff; border: none; font-weight: 700; padding: 10px 20px; border-radius: 999px; box-shadow: 0 4px 12px rgba(254,95,4,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;" onclick="openMoveToTestingModal()">
                             <i class="bi bi-send-check-fill"></i> Move to Testing
                         </button>
@@ -1530,13 +1445,26 @@ document.addEventListener('keydown', function(e) {
                             
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
                                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 30px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 12px; font-weight: 700;">
-                                        <i class="bi bi-bug-fill"></i> Moved to Testing
+                                    @php
+                                        $dtStatus = $detail->status ?? 'moved_to_testing';
+                                        $dtBadge = match($dtStatus) {
+                                            'ready_launch', 'ready_to_launch' => ['bg' => '#ecfdf5', 'color' => '#047857', 'border' => '#a7f3d0', 'label' => '🚀 Ready Launch', 'icon' => 'bi-rocket-takeoff-fill'],
+                                            'completed' => ['bg' => '#ecfdf5', 'color' => '#047857', 'border' => '#a7f3d0', 'label' => 'QA Completed', 'icon' => 'bi-check-circle-fill'],
+                                            'retesting' => ['bg' => '#f5f3ff', 'color' => '#6d28d9', 'border' => '#ddd6fe', 'label' => 'Retesting Phase', 'icon' => 'bi-arrow-repeat'],
+                                            'ongoing' => ['bg' => '#f0f9ff', 'color' => '#0369a1', 'border' => '#bae6fd', 'label' => 'Ongoing Testing', 'icon' => 'bi-play-circle-fill'],
+                                            default => ['bg' => '#fff7ed', 'color' => '#c2410c', 'border' => '#fed7aa', 'label' => 'Moved to Testing', 'icon' => 'bi-bug-fill'],
+                                        };
+                                    @endphp
+                                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 30px; background: {{ $dtBadge['bg'] }}; color: {{ $dtBadge['color'] }}; border: 1px solid {{ $dtBadge['border'] }}; font-size: 12px; font-weight: 700;">
+                                        <i class="bi {{ $dtBadge['icon'] }}"></i> {{ $dtBadge['label'] }}
                                     </span>
                                     <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 30px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600;">
                                         <i class="bi bi-clock-history"></i>
                                         {{ $detail->created_at?->format('d M Y, h:i A') }}
                                     </span>
+                                    <a href="{{ route('projects.testing-details', $projectItem) }}" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #0284c7; background: #f0f9ff; padding: 4px 10px; border-radius: 8px; border: 1px solid #bae6fd; text-decoration: none;">
+                                        <i class="bi bi-box-arrow-up-right"></i> QA Details
+                                    </a>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 12px;">
                                     @if($detail->testingTl)
@@ -1590,10 +1518,11 @@ document.addEventListener('keydown', function(e) {
                             </div>
 
                             <div style="display: grid; gap: 12px;">
+                                @php $allBugDataMap = []; @endphp
                                 @foreach($bugs as $bug)
                                     <div style="background: #ffffff; border-radius: 12px; padding: 16px; border: 1px solid #fecaca; box-shadow: 0 2px 8px rgba(220,38,38,0.04);">
                                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                                 @php
                                                     $priorityBadge = match($bug->priority) {
                                                         'High' => ['bg' => '#fef2f2', 'color' => '#dc2626', 'border' => '#fecaca', 'icon' => 'bi-exclamation-triangle-fill'],
@@ -1607,14 +1536,123 @@ document.addEventListener('keydown', function(e) {
                                                 <span style="font-size: 12px; color: #64748b;">
                                                     <i class="bi bi-clock-history"></i> {{ $bug->created_at?->format('d M Y, h:i A') }}
                                                 </span>
+                                                @if(($bug->reopen_count ?? 0) > 0)
+                                                    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-size: 11px; font-weight: 800;" title="Reopened {{ $bug->reopen_count }} {{ $bug->reopen_count === 1 ? 'time' : 'times' }}">
+                                                        <i class="bi bi-arrow-repeat"></i> Reopened: {{ $bug->reopen_count }} {{ $bug->reopen_count === 1 ? 'time' : 'times' }}
+                                                    </span>
+                                                @endif
                                             </div>
 
-                                            <div style="font-size: 12px; color: #475569; font-weight: 600;">
-                                                👤 Reported by {{ $bug->createdBy?->name ?? 'Tester' }}
+                                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                                <div style="font-size: 12px; color: #475569; font-weight: 600;">
+                                                    👤 Reported by {{ $bug->createdBy?->name ?? 'Tester' }}
+                                                </div>
+
+                                                @php
+                                                    $rawDevStatus = strtolower(trim((string) ($bug->developer_status ?: ($bug->status === 'ongoing' ? 'ongoing' : (in_array($bug->status, ['completed', 'fixed', 'closed']) ? 'completed' : 'pending')))));
+                                                    if (! in_array($rawDevStatus, ['ongoing', 'pending', 'completed'], true)) {
+                                                        $rawDevStatus = 'pending';
+                                                    }
+                                                    $devStatusInfo = match($rawDevStatus) {
+                                                        'ongoing' => ['color' => '#0284c7', 'border' => '#bae6fd', 'bg' => '#f0f9ff', 'label' => 'Ongoing', 'icon' => '🔄'],
+                                                        'completed' => ['color' => '#16a34a', 'border' => '#bbf7d0', 'bg' => '#f0fdf4', 'label' => 'Completed', 'icon' => '✅'],
+                                                        default => ['color' => '#ea580c', 'border' => '#fed7aa', 'bg' => '#fff7ed', 'label' => 'Pending', 'icon' => '⏳'],
+                                                    };
+
+                                                    $rawTesterStatus = strtolower(trim((string) ($bug->tester_status ?: ($bug->status === 'closed' ? 'closed' : ($bug->status === 'reopen' ? 'reopen' : 'pending')))));
+                                                    if (! in_array($rawTesterStatus, ['closed', 'reopen', 'pending'], true)) {
+                                                        $rawTesterStatus = 'pending';
+                                                    }
+                                                    $testerStatusInfo = match($rawTesterStatus) {
+                                                        'reopen' => ['color' => '#dc2626', 'border' => '#fecaca', 'bg' => '#fef2f2', 'label' => 'Reopen', 'icon' => '🔁'],
+                                                        'closed' => ['color' => '#475569', 'border' => '#cbd5e1', 'bg' => '#f8fafc', 'label' => 'Closed', 'icon' => '🔒'],
+                                                        default => ['color' => '#ea580c', 'border' => '#fed7aa', 'bg' => '#fff7ed', 'label' => 'Pending', 'icon' => '⏳'],
+                                                    };
+
+                                                    $bugHistory = is_array($bug->status_history) ? $bug->status_history : [];
+                                                    $bugModalData = [
+                                                        'id' => $bug->id,
+                                                        'index' => $loop->iteration,
+                                                        'priority' => $bug->priority,
+                                                        'priority_badge' => $priorityBadge,
+                                                        'description' => $bug->description,
+                                                        'created_by' => $bug->createdBy?->name ?? 'QA Tester',
+                                                        'created_at' => $bug->created_at?->format('d M Y, h:i A'),
+                                                        'dev_status' => $rawDevStatus,
+                                                        'tester_status' => $rawTesterStatus,
+                                                        'dev_status_info' => $devStatusInfo,
+                                                        'tester_status_info' => $testerStatusInfo,
+                                                        'can_edit_dev' => $canEditDeveloperStatus,
+                                                        'can_edit_tester' => $canEditTesterStatus,
+                                                        'update_url' => route('projects.bugs.update-status', $bug),
+                                                        'reopen_count' => (int) ($bug->reopen_count ?? 0),
+                                                        'developer_remarks' => $bug->developer_remarks,
+                                                        'tester_remarks' => $bug->tester_remarks,
+                                                        'latest_remarks' => $bug->latest_remarks,
+                                                        'status_history' => $bugHistory,
+                                                        'attachments' => $bug->attachment_list,
+                                                    ];
+                                                    $allBugDataMap[$bug->id] = $bugModalData;
+                                                @endphp
+
+                                                {{-- 1. Developer Status: Ongoing, Pending, Completed --}}
+                                                <div style="display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; padding: 4px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Dev:</span>
+                                                    <button type="button" 
+                                                        onclick="openBugStatusModalById({{ $bug->id }}, 'developer')" 
+                                                        style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 800; border: 1.5px solid {{ $devStatusInfo['border'] }}; background: {{ $devStatusInfo['bg'] }}; color: {{ $devStatusInfo['color'] }}; cursor: pointer; transition: all 0.2s ease;"
+                                                        title="{{ $canEditDeveloperStatus ? 'Click to update Developer Status & Remarks' : 'Click to view Bug Status & Remarks (Read-only for Testing)' }}">
+                                                        <span>{{ $devStatusInfo['icon'] }} {{ $devStatusInfo['label'] }}</span>
+                                                        @if($canEditDeveloperStatus)
+                                                            <i class="bi bi-pencil-square" style="font-size: 10px; opacity: 0.7;"></i>
+                                                        @else
+                                                            <i class="bi bi-eye" style="font-size: 10px; opacity: 0.7;"></i>
+                                                        @endif
+                                                    </button>
+                                                </div>
+
+                                                {{-- 2. Tester Status: Closed, Reopen, Pending --}}
+                                                <div style="display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; padding: 4px 10px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                                                    <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Tester:</span>
+                                                    <button type="button" 
+                                                        onclick="openBugStatusModalById({{ $bug->id }}, 'tester')" 
+                                                        style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 800; border: 1.5px solid {{ $testerStatusInfo['border'] }}; background: {{ $testerStatusInfo['bg'] }}; color: {{ $testerStatusInfo['color'] }}; cursor: pointer; transition: all 0.2s ease;"
+                                                        title="{{ $canEditTesterStatus ? 'Click to update Tester Status & Remarks' : 'Click to view Bug Status & Remarks (Read-only for Development)' }}">
+                                                        <span>{{ $testerStatusInfo['icon'] }} {{ $testerStatusInfo['label'] }}</span>
+                                                        @if($canEditTesterStatus)
+                                                            <i class="bi bi-pencil-square" style="font-size: 10px; opacity: 0.7;"></i>
+                                                        @else
+                                                            <i class="bi bi-eye" style="font-size: 10px; opacity: 0.7;"></i>
+                                                        @endif
+                                                    </button>
+                                                </div>
+
+                                                {{-- 3. Audit History Button --}}
+                                                <button type="button" 
+                                                    onclick="openBugHistoryModalById({{ $bug->id }})"
+                                                    style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: #4338ca; background: #eef2ff; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
+                                                    <i class="bi bi-clock-history"></i> History ({{ count($bugHistory) }})
+                                                </button>
                                             </div>
                                         </div>
 
                                         <div style="font-size: 13.5px; color: #1e293b; line-height: 1.6; white-space: pre-line;">{!! e($bug->description) !!}</div>
+
+                                        {{-- Developer & Tester Remarks Display --}}
+                                        @if($bug->developer_remarks || $bug->tester_remarks)
+                                            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                                                @if($bug->developer_remarks)
+                                                    <div style="font-size: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 6px 12px; color: #0369a1;">
+                                                        <strong>🛠️ Dev Fix Remarks:</strong> {{ $bug->developer_remarks }}
+                                                    </div>
+                                                @endif
+                                                @if($bug->tester_remarks)
+                                                    <div style="font-size: 12px; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 6px 12px; color: #6d28d9;">
+                                                        <strong>🧪 QA Verification Remarks:</strong> {{ $bug->tester_remarks }}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
 
                                         @php
                                             $showAttList = $bug->attachment_list;
@@ -1631,6 +1669,12 @@ document.addEventListener('keydown', function(e) {
                                     </div>
                                 @endforeach
                             </div>
+                            @if(!empty($allBugDataMap))
+                                <script>
+                                window._bugDataMap = window._bugDataMap || {};
+                                Object.assign(window._bugDataMap, @json($allBugDataMap));
+                                </script>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -1638,6 +1682,161 @@ document.addEventListener('keydown', function(e) {
         </section>
         @endif
 
+    </div>
+</div>
+
+{{-- Bug Status Update & Mandatory Remarks Modal --}}
+<div id="bug-status-modal-overlay" class="ps-modal-overlay" onclick="closeBugStatusModal()"></div>
+<div id="bug-status-modal" class="ps-modal" style="max-width: 560px; width: calc(100vw - 32px); border-radius: 24px; padding: 0; border: 1px solid #e2e8f0; box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35); overflow: hidden;">
+    <form id="bugStatusForm" method="POST" action="" style="margin: 0; display: flex; flex-direction: column; width: 100%;">
+        @csrf
+        @method('PATCH')
+        <input type="hidden" id="bsmStatusType" name="status_type" value="">
+        <input type="hidden" id="bsmBugId" name="bug_id" value="">
+
+        <div style="padding: 20px 24px; background: #ffffff; border-bottom: 1.5px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div id="bsmRoleIcon" style="width: 44px; height: 44px; border-radius: 14px; background: #f0f9ff; color: #0284c7; font-size: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid #bae6fd;">
+                    🔄
+                </div>
+                <div>
+                    <div id="bsmTitle" style="font-size: 17px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em;">
+                        Update Bug Status
+                    </div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                        Select development/testing status &amp; provide mandatory remarks.
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="ps-modal-close" onclick="closeBugStatusModal()" aria-label="Close modal" style="position: static; width: 34px; height: 34px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #64748b; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                <i class="bi bi-x-lg" style="font-size: 13px;"></i>
+            </button>
+        </div>
+
+        <div style="padding: 20px 24px; max-height: calc(85vh - 140px); overflow-y: auto;">
+            {{-- Bug Summary Card --}}
+            <div style="margin-bottom: 16px; padding: 12px 16px; border-radius: 14px; background: #f8fafc; border: 1.5px solid #e2e8f0;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+                    <div id="bsmPriorityBadge"></div>
+                    <div id="bsmIndexText" style="font-size: 11.5px; font-weight: 800; color: #64748b;"></div>
+                </div>
+                <div id="bsmDescSnippet" style="font-size: 13px; color: #1e293b; line-height: 1.5; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;"></div>
+            </div>
+
+            {{-- Two-column Status Selectors: Developer Status & Testing Status --}}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                {{-- Development Status Box --}}
+                <div id="bsmDevBox" style="background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 14px; padding: 12px 14px; transition: all 0.2s ease;">
+                    <label for="bsmDevStatus" style="display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
+                        <span>🛠️ Dev Status</span>
+                        <span id="bsmDevPermBadge" style="font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #e0f2fe; color: #0369a1; font-weight: 800;">Developer</span>
+                    </label>
+                    <select id="bsmDevStatus" name="developer_status" style="width: 100%; border-radius: 10px; border: 1.5px solid #93c5fd; padding: 7px 10px; font-size: 13px; font-weight: 800; color: #0f172a; background: #ffffff; cursor: pointer; outline: none;">
+                        <option value="pending">⏳ Pending</option>
+                        <option value="ongoing">🔄 Ongoing</option>
+                        <option value="completed">✅ Completed</option>
+                    </select>
+                    <div id="bsmDevStatusDisabled" style="display: none; padding: 7px 10px; border-radius: 10px; background: #e2e8f0; color: #475569; font-size: 12px; font-weight: 700; border: 1px solid #cbd5e1;"></div>
+                </div>
+
+                {{-- Testing / QA Status Box --}}
+                <div id="bsmTesterBox" style="background: #faf5ff; border: 1.5px solid #e9d5ff; border-radius: 14px; padding: 12px 14px; transition: all 0.2s ease;">
+                    <label for="bsmTesterStatus" style="display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 800; color: #6d28d9; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
+                        <span>🧪 QA / Tester Status</span>
+                        <span id="bsmTesterPermBadge" style="font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #f3e8ff; color: #7e22ce; font-weight: 800;">QA Tester</span>
+                    </label>
+                    <select id="bsmTesterStatus" name="tester_status" style="width: 100%; border-radius: 10px; border: 1.5px solid #d8b4fe; padding: 7px 10px; font-size: 13px; font-weight: 800; color: #0f172a; background: #ffffff; cursor: pointer; outline: none;">
+                        <option value="pending">⏳ Pending</option>
+                        <option value="reopen">🔁 Reopen</option>
+                        <option value="closed">🔒 Closed</option>
+                    </select>
+                    <div id="bsmTesterStatusDisabled" style="display: none; padding: 7px 10px; border-radius: 10px; background: #e2e8f0; color: #475569; font-size: 12px; font-weight: 700; border: 1px solid #cbd5e1;"></div>
+                </div>
+            </div>
+
+            {{-- Previous Remarks Preview (if available) --}}
+            <div id="bsmPrevRemarksBox" style="display: none; margin-bottom: 16px; padding: 10px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; font-size: 12px;">
+                <div style="font-weight: 800; color: #64748b; font-size: 10.5px; text-transform: uppercase; margin-bottom: 5px;">Previous Remarks on Record:</div>
+                <div id="bsmPrevDevRemarks" style="display: none; color: #0369a1; margin-bottom: 4px; line-height: 1.4;"><strong>🛠️ Dev:</strong> <span></span></div>
+                <div id="bsmPrevTesterRemarks" style="display: none; color: #6d28d9; line-height: 1.4;"><strong>🧪 QA:</strong> <span></span></div>
+            </div>
+
+            {{-- Mandatory Remarks Textarea --}}
+            <div>
+                <label for="bsmRemarksInput" style="display: block; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">
+                    Mandatory Remarks / Update Notes <span style="color: #dc2626; font-size: 14px;">*</span>
+                </label>
+                <textarea id="bsmRemarksInput" name="remarks" rows="3" placeholder="Explain fixes, changes made, test verification results, or reason for status update (Mandatory)..." required style="width: 100%; border-radius: 12px; border: 1.5px solid #cbd5e1; padding: 10px 14px; font-size: 13.5px; color: #0f172a; outline: none; transition: border-color 0.2s ease; box-sizing: border-box; resize: vertical;" oninput="document.getElementById('bsmRemarksError').style.display = 'none';"></textarea>
+                <div id="bsmRemarksError" style="display: none; color: #dc2626; font-size: 11.5px; font-weight: 700; margin-top: 5px;">
+                    <i class="bi bi-exclamation-circle-fill"></i> Please provide remarks explaining this status change (minimum 2 characters).
+                </div>
+            </div>
+        </div>
+
+        <div style="padding: 14px 24px; background: #f8fafc; border-top: 1.5px solid #f1f5f9; display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="ps-btn" onclick="closeBugStatusModal()" style="padding: 9px 20px; border-radius: 12px; background: #f1f5f9; color: #475569; border: 1.5px solid #cbd5e1; font-weight: 700; cursor: pointer;">
+                Cancel
+            </button>
+            <button type="button" id="bsmSubmitBtn" onclick="submitBugStatusWithRemarks()" class="ps-btn" style="padding: 9px 22px; border-radius: 12px; background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; font-weight: 800; cursor: pointer; box-shadow: 0 4px 14px rgba(2,132,199,0.3); display: inline-flex; align-items: center; gap: 6px;">
+                <i class="bi bi-check2-circle"></i> Confirm &amp; Save
+            </button>
+        </div>
+    </form>
+</div>
+
+{{-- Bug History & Remarks Modal --}}
+<div id="bug-history-modal-overlay" class="ps-modal-overlay" onclick="closeBugHistoryModal()"></div>
+<div id="bug-history-modal" class="ps-modal" style="max-width: 640px; width: calc(100vw - 32px); max-height: 88vh; border-radius: 24px; padding: 0; border: 1px solid #e2e8f0; box-shadow: 0 25px 65px rgba(0,0,0,0.35); overflow: hidden;">
+    <div style="padding: 18px 24px; background: #ffffff; border-bottom: 1.5px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 14px; background: #eef2ff; color: #4338ca; font-size: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid #c7d2fe;">
+                📜
+            </div>
+            <div>
+                <div style="font-size: 17px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px;">
+                    <span>Bug Status &amp; Remarks History</span>
+                    <span id="bhmIndexBadge" style="font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">Bug #1</span>
+                </div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                    Full chronological audit log of Developer and Tester updates with remarks.
+                </div>
+            </div>
+        </div>
+        <button type="button" class="ps-modal-close" onclick="closeBugHistoryModal()" aria-label="Close modal" style="position: static; width: 34px; height: 34px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #64748b; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <i class="bi bi-x-lg" style="font-size: 13px;"></i>
+        </button>
+    </div>
+
+    <div style="padding: 20px 24px; overflow-y: auto; flex: 1; max-height: calc(85vh - 130px);">
+        {{-- Bug Summary Snippet --}}
+        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 12px 16px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+                <div id="bhmPriorityBadge" style="font-size: 11px; font-weight: 800;"></div>
+                <div id="bhmReporter" style="font-size: 11.5px; color: #64748b; font-weight: 600;"></div>
+            </div>
+            <div id="bhmDescSnippet" style="font-size: 13px; color: #1e293b; line-height: 1.5; font-weight: 500;"></div>
+        </div>
+
+        {{-- Latest Remarks Highlights --}}
+        <div id="bhmLatestRemarksContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px;">
+            {{-- Dynamically populated with Dev and QA latest remarks cards --}}
+        </div>
+
+        {{-- Timeline Container --}}
+        <div>
+            <div style="font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                <i class="bi bi-clock-history"></i> Audit Trail Timeline
+            </div>
+            <div id="bhmTimelineList" style="position: relative;">
+                {{-- Dynamically populated via JS --}}
+            </div>
+        </div>
+    </div>
+
+    <div style="padding: 14px 24px; background: #f8fafc; border-top: 1.5px solid #f1f5f9; display: flex; justify-content: flex-end;">
+        <button type="button" class="ps-btn" onclick="closeBugHistoryModal()" style="padding: 8px 22px; border-radius: 12px; background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1; font-weight: 800; cursor: pointer;">
+            Close
+        </button>
     </div>
 </div>
 
@@ -1709,6 +1908,7 @@ document.addEventListener('keydown', function(e) {
 </div>
 
 {{-- Add Bug Modal --}}
+@if($canAddBug)
 <div class="ps-modal-overlay" id="add-bug-modal-overlay" onclick="closeAddBugModal()"></div>
 <div class="ps-modal" id="add-bug-modal" style="max-width: 560px; overflow: hidden;">
     <div class="ps-modal-head">
@@ -1769,6 +1969,7 @@ document.addEventListener('keydown', function(e) {
         </form>
     </div>
 </div>
+@endif
 
 <style>
 @keyframes psSpin {
@@ -1819,12 +2020,16 @@ function openAddBugModal() {
     const fileInp = document.getElementById('bugAttachmentsInputShow');
     if (fileInp) fileInp.value = '';
 
-    document.getElementById('add-bug-modal-overlay').classList.add('is-open');
-    document.getElementById('add-bug-modal').classList.add('is-open');
+    const overlay = document.getElementById('add-bug-modal-overlay');
+    const modal = document.getElementById('add-bug-modal');
+    if (overlay) overlay.classList.add('is-open');
+    if (modal) modal.classList.add('is-open');
 }
 function closeAddBugModal() {
-    document.getElementById('add-bug-modal-overlay').classList.remove('is-open');
-    document.getElementById('add-bug-modal').classList.remove('is-open');
+    const overlay = document.getElementById('add-bug-modal-overlay');
+    const modal = document.getElementById('add-bug-modal');
+    if (overlay) overlay.classList.remove('is-open');
+    if (modal) modal.classList.remove('is-open');
 }
 function handleAddBugSubmit(event, form) {
     const btn = document.getElementById('btnSubmitBugShow');
@@ -1841,6 +2046,29 @@ function handleAddBugSubmit(event, form) {
         if (icon) icon.innerHTML = '<i class="bi bi-arrow-repeat ps-spin-icon"></i>';
         if (text) text.textContent = ' Submitting Bug Report...';
     }
+}
+function handleBugStatusChange(selectElem) {
+    const newStatus = selectElem.value;
+    const oldStatus = selectElem.getAttribute('data-current');
+    if (newStatus === oldStatus) return;
+
+    const statusTitle = selectElem.getAttribute('data-title') || 'status';
+    const statusLabels = {
+        'pending': 'Pending',
+        'ongoing': 'Ongoing',
+        'completed': 'Completed',
+        'reopen': 'Reopen',
+        'closed': 'Closed'
+    };
+    const label = statusLabels[newStatus] || newStatus;
+
+    const confirmed = confirm('Are you sure you want to update ' + statusTitle + ' to "' + label + '"?');
+    if (!confirmed) {
+        selectElem.value = oldStatus;
+        return false;
+    }
+
+    selectElem.form.submit();
 }
 function openMoveToTestingModal() {
     const overlay = document.getElementById('moveToTestingLoadingOverlay');
@@ -2911,7 +3139,457 @@ document.addEventListener('click', function(e) {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeProjectExtendModal();
+        closeBugStatusModal();
+        closeBugHistoryModal();
     }
 });
+
+/* ==========================================================================
+   Bug Status Update & Remarks Modal (Developer & Tester)
+   ========================================================================== */
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+let currentBugModalData = null;
+
+function openBugStatusModalById(bugId, targetRole) {
+    try {
+        const bug = (window._bugDataMap && window._bugDataMap[bugId]) ? window._bugDataMap[bugId] : null;
+        if (!bug) {
+            console.error('Bug not found in _bugDataMap for ID:', bugId);
+            return;
+        }
+        openBugStatusModalWithData(bug, targetRole);
+    } catch (e) {
+        console.error('Error in openBugStatusModalById:', e);
+    }
+}
+
+function openBugStatusModalDirect(btn, targetRole) {
+    try {
+        if (typeof btn === 'number' || (typeof btn === 'string' && !isNaN(btn))) {
+            openBugStatusModalById(Number(btn), targetRole);
+            return;
+        }
+        let bug = null;
+        const raw = btn ? btn.getAttribute('data-bug') : null;
+        if (raw) {
+            bug = JSON.parse(raw);
+        } else if (btn && btn.getAttribute('data-bug-id')) {
+            const bId = btn.getAttribute('data-bug-id');
+            bug = window._bugDataMap ? window._bugDataMap[bId] : null;
+        }
+        if (!bug) return;
+        openBugStatusModalWithData(bug, targetRole, btn ? btn.getAttribute('data-update-url') : null);
+    } catch (e) {
+        console.error('Error opening status modal:', e);
+    }
+}
+
+function openBugStatusModalWithData(bug, targetRole, customUpdateUrl = null) {
+    try {
+        currentBugModalData = bug;
+
+        const updateUrl = customUpdateUrl || bug.update_url;
+        const form = document.getElementById('bugStatusForm');
+        if (form && updateUrl) {
+            form.action = updateUrl;
+        }
+
+        const idInput = document.getElementById('bsmBugId');
+        if (idInput) idInput.value = bug.id;
+
+        const typeInput = document.getElementById('bsmStatusType');
+        if (typeInput) typeInput.value = targetRole || '';
+
+        const title = document.getElementById('bsmTitle');
+        if (title) {
+            title.textContent = 'Update Bug Status (Bug #' + bug.index + ')';
+        }
+
+        const indexText = document.getElementById('bsmIndexText');
+        if (indexText) {
+            indexText.textContent = 'Bug #' + bug.index;
+        }
+
+        const descElem = document.getElementById('bsmDescSnippet');
+        if (descElem) {
+            descElem.textContent = bug.description || 'No description provided.';
+        }
+
+        const pBadge = document.getElementById('bsmPriorityBadge');
+        if (pBadge && bug.priority_badge) {
+            pBadge.innerHTML = `<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; background:${bug.priority_badge.bg}; color:${bug.priority_badge.color}; border:1px solid ${bug.priority_badge.border}; font-size:11px; font-weight:800;"><i class="bi ${bug.priority_badge.icon}"></i> ${escapeHtml(bug.priority)} Priority</span>`;
+        }
+
+        // Developer Status setup
+        const devSelect = document.getElementById('bsmDevStatus');
+        const devDisabled = document.getElementById('bsmDevStatusDisabled');
+        const devBox = document.getElementById('bsmDevBox');
+        const canEditDev = (bug.can_edit_dev === true || bug.can_edit_dev === 1);
+
+        if (devSelect && devDisabled) {
+            if (canEditDev) {
+                devSelect.style.display = 'block';
+                devSelect.disabled = false;
+                devDisabled.style.display = 'none';
+                devSelect.value = bug.dev_status || 'pending';
+            } else {
+                devSelect.style.display = 'none';
+                devSelect.disabled = true;
+                devDisabled.style.display = 'block';
+                const dLabel = bug.dev_status_info ? bug.dev_status_info.label : (bug.dev_status || 'Pending');
+                const dIcon = bug.dev_status_info ? bug.dev_status_info.icon : '⏳';
+                devDisabled.innerHTML = `${dIcon} ${dLabel} <span style="font-size:10px; opacity:0.75; font-weight:500;">(Non-editable in Testing login)</span>`;
+            }
+        }
+
+        // Tester Status setup
+        const testerSelect = document.getElementById('bsmTesterStatus');
+        const testerDisabled = document.getElementById('bsmTesterStatusDisabled');
+        const testerBox = document.getElementById('bsmTesterBox');
+        const canEditTester = (bug.can_edit_tester === true || bug.can_edit_tester === 1);
+
+        if (testerSelect && testerDisabled) {
+            if (canEditTester) {
+                testerSelect.style.display = 'block';
+                testerSelect.disabled = false;
+                testerDisabled.style.display = 'none';
+                testerSelect.value = bug.tester_status || 'pending';
+            } else {
+                testerSelect.style.display = 'none';
+                testerSelect.disabled = true;
+                testerDisabled.style.display = 'block';
+                const tLabel = bug.tester_status_info ? bug.tester_status_info.label : (bug.tester_status || 'Pending');
+                const tIcon = bug.tester_status_info ? bug.tester_status_info.icon : '⏳';
+                testerDisabled.innerHTML = `${tIcon} ${tLabel} <span style="font-size:10px; opacity:0.75; font-weight:500;">(Non-editable in Developer login)</span>`;
+            }
+        }
+
+        // Highlight based on target role
+        if (devBox) devBox.style.borderColor = (targetRole === 'developer') ? '#0284c7' : '#bae6fd';
+        if (testerBox) testerBox.style.borderColor = (targetRole === 'tester') ? '#7c3aed' : '#e9d5ff';
+
+        // Previous Remarks display
+        const prevBox = document.getElementById('bsmPrevRemarksBox');
+        const prevDev = document.getElementById('bsmPrevDevRemarks');
+        const prevTester = document.getElementById('bsmPrevTesterRemarks');
+        let hasPrev = false;
+
+        if (prevDev) {
+            if (bug.developer_remarks) {
+                prevDev.style.display = 'block';
+                prevDev.querySelector('span').textContent = bug.developer_remarks;
+                hasPrev = true;
+            } else {
+                prevDev.style.display = 'none';
+            }
+        }
+        if (prevTester) {
+            if (bug.tester_remarks) {
+                prevTester.style.display = 'block';
+                prevTester.querySelector('span').textContent = bug.tester_remarks;
+                hasPrev = true;
+            } else {
+                prevTester.style.display = 'none';
+            }
+        }
+        if (prevBox) {
+            prevBox.style.display = hasPrev ? 'block' : 'none';
+        }
+
+        // Reset Remarks Input
+        const remarksInput = document.getElementById('bsmRemarksInput');
+        const remarksError = document.getElementById('bsmRemarksError');
+        if (remarksInput) {
+            remarksInput.value = '';
+            remarksInput.style.borderColor = '#cbd5e1';
+            if (targetRole === 'developer') {
+                remarksInput.placeholder = 'Explain fixes applied, code modifications, or development progress (Mandatory)...';
+            } else if (targetRole === 'tester') {
+                remarksInput.placeholder = 'Explain QA verification findings, edge cases tested, or reopen/close reason (Mandatory)...';
+            } else {
+                remarksInput.placeholder = 'Enter reason or update notes (Mandatory)...';
+            }
+        }
+        if (remarksError) {
+            remarksError.style.display = 'none';
+        }
+
+        const overlay = document.getElementById('bug-status-modal-overlay');
+        const modal = document.getElementById('bug-status-modal');
+        if (overlay) {
+            overlay.style.display = '';
+            overlay.classList.add('is-open');
+        }
+        if (modal) {
+            modal.style.display = '';
+            modal.classList.add('is-open');
+        }
+
+        setTimeout(() => {
+            if (targetRole === 'developer' && canEditDev && devSelect) {
+                devSelect.focus();
+            } else if (targetRole === 'tester' && canEditTester && testerSelect) {
+                testerSelect.focus();
+            } else if (remarksInput) {
+                remarksInput.focus();
+            }
+        }, 80);
+    } catch (e) {
+        console.error('Error opening status modal with data:', e);
+    }
+}
+
+function handleBugStatusChange(selectElem) {
+    const isDev = (selectElem.getAttribute('data-title') || '').toLowerCase().includes('dev');
+    openBugStatusModalDirect(selectElem, isDev ? 'developer' : 'tester');
+}
+
+function closeBugStatusModal() {
+    currentBugModalData = null;
+    const overlay = document.getElementById('bug-status-modal-overlay');
+    const modal = document.getElementById('bug-status-modal');
+    if (overlay) {
+        overlay.classList.remove('is-open');
+        overlay.style.display = '';
+    }
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.style.display = '';
+    }
+}
+
+function submitBugStatusWithRemarks() {
+    const remarksInput = document.getElementById('bsmRemarksInput');
+    const remarksError = document.getElementById('bsmRemarksError');
+    const val = remarksInput ? remarksInput.value.trim() : '';
+
+    if (!val || val.length < 2) {
+        if (remarksError) remarksError.style.display = 'block';
+        if (remarksInput) {
+            remarksInput.focus();
+            remarksInput.style.borderColor = '#dc2626';
+        }
+        return;
+    }
+
+    const form = document.getElementById('bugStatusForm');
+    if (!form) return;
+
+    closeBugStatusModal();
+    const submitBtn = document.getElementById('bsmSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="bi bi-arrow-repeat ps-spin-icon"></i> Updating...';
+    }
+    form.submit();
+}
+
+function openBugHistoryModalById(bugId) {
+    try {
+        const bug = (window._bugDataMap && window._bugDataMap[bugId]) ? window._bugDataMap[bugId] : null;
+        if (!bug) {
+            console.error('Bug not found for ID:', bugId);
+            return;
+        }
+        openBugHistoryModalWithData(bug);
+    } catch (e) {
+        console.error('Error in openBugHistoryModalById:', e);
+    }
+}
+
+function openBugHistoryModal(btn) {
+    try {
+        if (typeof btn === 'number' || (typeof btn === 'string' && !isNaN(btn))) {
+            openBugHistoryModalById(Number(btn));
+            return;
+        }
+        let bug = null;
+        const raw = btn ? btn.getAttribute('data-bug') : null;
+        if (raw) {
+            bug = JSON.parse(raw);
+        } else if (btn && btn.getAttribute('data-bug-id')) {
+            const bId = btn.getAttribute('data-bug-id');
+            bug = window._bugDataMap ? window._bugDataMap[bId] : null;
+        }
+        if (!bug) return;
+        openBugHistoryModalWithData(bug);
+    } catch (e) {
+        console.error('Error opening bug history modal:', e);
+    }
+}
+
+function openBugHistoryModalWithData(bug) {
+    try {
+        const indexBadge = document.getElementById('bhmIndexBadge');
+        if (indexBadge) indexBadge.textContent = 'Bug #' + bug.index;
+
+        const pBadge = document.getElementById('bhmPriorityBadge');
+        if (pBadge && bug.priority_badge) {
+            pBadge.innerHTML = `<span style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:12px; background:${bug.priority_badge.bg}; color:${bug.priority_badge.color}; border:1px solid ${bug.priority_badge.border}; font-size:11px; font-weight:800;"><i class="bi ${bug.priority_badge.icon}"></i> ${escapeHtml(bug.priority)} Priority</span>`;
+        }
+
+        const repElem = document.getElementById('bhmReporter');
+        if (repElem) repElem.textContent = 'Reported by ' + (bug.created_by || 'QA Tester') + ' • ' + (bug.created_at || 'Recently');
+
+        const descElem = document.getElementById('bhmDescSnippet');
+        if (descElem) descElem.textContent = bug.description || 'No description';
+
+        renderBugTimeline(bug.status_history, bug);
+
+        const overlay = document.getElementById('bug-history-modal-overlay');
+        const modal = document.getElementById('bug-history-modal');
+        if (overlay) {
+            overlay.style.display = '';
+            overlay.classList.add('is-open');
+        }
+        if (modal) {
+            modal.style.display = '';
+            modal.classList.add('is-open');
+        }
+    } catch (e) {
+        console.error('Error opening bug history modal with data:', e);
+    }
+}
+
+function closeBugHistoryModal() {
+    const overlay = document.getElementById('bug-history-modal-overlay');
+    const modal = document.getElementById('bug-history-modal');
+    if (overlay) {
+        overlay.classList.remove('is-open');
+        overlay.style.display = '';
+    }
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.style.display = '';
+    }
+}
+
+function renderBugTimeline(history, bug) {
+    const remarksContainer = document.getElementById('bhmLatestRemarksContainer');
+    if (remarksContainer) {
+        let rHtml = '';
+        if (bug.developer_remarks) {
+            rHtml += `
+                <div style="background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 12px; padding: 10px 14px;">
+                    <div style="font-size: 11px; font-weight: 800; color: #0369a1; text-transform: uppercase; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                        <span>🛠️</span> Latest Developer Remarks
+                    </div>
+                    <div style="font-size: 13px; color: #0c4a6e; font-weight: 600; line-height: 1.5;">${escapeHtml(bug.developer_remarks)}</div>
+                </div>
+            `;
+        }
+        if (bug.tester_remarks) {
+            rHtml += `
+                <div style="background: #faf5ff; border: 1.5px solid #e9d5ff; border-radius: 12px; padding: 10px 14px;">
+                    <div style="font-size: 11px; font-weight: 800; color: #7e22ce; text-transform: uppercase; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                        <span>🧪</span> Latest Tester Remarks
+                    </div>
+                    <div style="font-size: 13px; color: #581c87; font-weight: 600; line-height: 1.5;">${escapeHtml(bug.tester_remarks)}</div>
+                </div>
+            `;
+        }
+        remarksContainer.innerHTML = rHtml;
+        remarksContainer.style.display = rHtml ? 'flex' : 'none';
+    }
+
+    const list = document.getElementById('bhmTimelineList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const entries = Array.isArray(history) ? history : [];
+    if (entries.length === 0) {
+        if (bug.developer_remarks || bug.tester_remarks) {
+            let html = '';
+            if (bug.developer_remarks) {
+                html += createTimelineItemHtml({
+                    role_type: 'developer',
+                    user_name: 'Developer',
+                    formatted_date: 'Recorded',
+                    from_status: 'pending',
+                    to_status: bug.dev_status?.label || 'ongoing',
+                    remarks: bug.developer_remarks
+                });
+            }
+            if (bug.tester_remarks) {
+                html += createTimelineItemHtml({
+                    role_type: 'tester',
+                    user_name: bug.created_by || 'QA Tester',
+                    formatted_date: 'Recorded',
+                    from_status: 'pending',
+                    to_status: bug.tester_status?.label || 'pending',
+                    remarks: bug.tester_remarks
+                });
+            }
+            list.innerHTML = html;
+            return;
+        }
+
+        list.innerHTML = `
+            <div style="text-align: center; padding: 28px 16px; background: #f8fafc; border-radius: 14px; border: 1.5px dashed #cbd5e1; color: #64748b;">
+                <div style="font-size: 26px; margin-bottom: 6px;">📝</div>
+                <div style="font-size: 13.5px; font-weight: 700; color: #334155;">No Status Updates Recorded Yet</div>
+                <div style="font-size: 12px; margin-top: 4px;">When a Developer or Tester updates the status with mandatory remarks, each step will be logged here in chronological order.</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '<div style="position: absolute; top: 12px; bottom: 12px; left: 19px; width: 2px; background: #e2e8f0; z-index: 0;"></div>';
+    entries.forEach((item) => {
+        html += createTimelineItemHtml(item);
+    });
+    list.innerHTML = html;
+}
+
+function createTimelineItemHtml(item) {
+    const isDev = (item.role_type === 'developer');
+    const roleIcon = isDev ? '👨‍💻' : '🧪';
+    const roleBadgeBg = isDev ? '#f0f9ff' : '#f5f3ff';
+    const roleBadgeColor = isDev ? '#0284c7' : '#6d28d9';
+    const roleBadgeBorder = isDev ? '#bae6fd' : '#ddd6fe';
+    const roleName = isDev ? 'Developer' : 'QA Tester';
+
+    const fromLabel = escapeHtml(item.from_status || 'pending');
+    const toLabel = escapeHtml(item.to_status || 'updated');
+    const remarks = escapeHtml(item.remarks || '');
+    const dateStr = escapeHtml(item.formatted_date || item.created_at || 'Recently');
+    const userName = escapeHtml(item.user_name || (isDev ? 'Developer' : 'Tester'));
+
+    return `
+        <div style="position: relative; z-index: 1; display: flex; gap: 14px; margin-bottom: 18px;">
+            <div style="width: 40px; height: 40px; border-radius: 12px; background: ${roleBadgeBg}; border: 1.5px solid ${roleBadgeBorder}; color: ${roleBadgeColor}; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                ${roleIcon}
+            </div>
+            <div style="flex: 1; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 12px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; background: ${roleBadgeBg}; color: ${roleBadgeColor}; border: 1px solid ${roleBadgeBorder}; text-transform: uppercase;">
+                            ${roleName}
+                        </span>
+                        <strong style="font-size: 13px; color: #0f172a;">${userName}</strong>
+                    </div>
+                    <span style="font-size: 11.5px; color: #64748b; font-weight: 500;">
+                        <i class="bi bi-clock"></i> ${dateStr}
+                    </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px;">
+                    <span style="padding: 2px 7px; border-radius: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 11px; text-transform: capitalize;">${fromLabel}</span>
+                    <span style="color: #94a3b8;">➔</span>
+                    <span style="padding: 2px 7px; border-radius: 6px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; text-transform: capitalize;">${toLabel}</span>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-left: 3px solid ${roleBadgeColor}; border-radius: 6px; padding: 8px 12px; font-size: 12.5px; color: #1e293b; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">
+                    ${remarks}
+                </div>
+            </div>
+        </div>
+    `;
+}
 </script>
 @endpush

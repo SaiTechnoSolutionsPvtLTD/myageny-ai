@@ -643,6 +643,23 @@
                     </tbody>
                 </table>
             </div>
+
+            @if($ettEmployees->count() > 8)
+                <div id="ettEmpPaginationFooter" class="tjd-pagination-footer" style="padding:14px 22px; border-top:1px solid #e2e8f0; background:#ffffff; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                    <div id="ettEmpPaginationInfo" style="font-size:12.5px; font-weight:600; color:#64748b;">
+                        Showing <strong id="ettEmpStart">1</strong> to <strong id="ettEmpEnd">8</strong> of <strong id="ettEmpTotal">{{ $ettEmployees->count() }}</strong> members
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button type="button" id="ettEmpPrevBtn" class="tjd-page-btn" onclick="pjdChangeEmpPage(-1)" style="border:1px solid #e2e8f0; background:#f8fafc; cursor:pointer; width:34px; height:34px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+                        <span id="ettEmpPageIndicator" style="font-size:12px; font-weight:700; color:#1e293b; padding:0 8px;">Page 1</span>
+                        <button type="button" id="ettEmpNextBtn" class="tjd-page-btn" onclick="pjdChangeEmpPage(1)" style="border:1px solid #e2e8f0; background:#f8fafc; cursor:pointer; width:34px; height:34px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </div>
+                </div>
+            @endif
         @else
             <div class="ett-empty pjd-empty">
                 <div style="font-size:32px; margin-bottom:8px;">👥</div>
@@ -701,6 +718,71 @@
 </div>
 
 <script>
+let ettCurrentPage = 1;
+const ettPageSize = 8;
+
+function pjdInitEmpPagination() {
+    const rows = Array.from(document.querySelectorAll('.pjd-emp-row, .ett-emp-row'));
+    if (!rows.length) return;
+
+    const visibleRows = rows.filter(r => r.getAttribute('data-filtered-out') !== 'true');
+    const total = visibleRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / ettPageSize));
+    if (ettCurrentPage > totalPages) ettCurrentPage = totalPages;
+    if (ettCurrentPage < 1) ettCurrentPage = 1;
+
+    const startIdx = (ettCurrentPage - 1) * ettPageSize;
+    const endIdx = startIdx + ettPageSize;
+
+    visibleRows.forEach((r, idx) => {
+        if (idx >= startIdx && idx < endIdx) {
+            r.style.display = '';
+        } else {
+            r.style.display = 'none';
+        }
+    });
+
+    const startEl = document.getElementById('ettEmpStart');
+    const endEl = document.getElementById('ettEmpEnd');
+    const totalEl = document.getElementById('ettEmpTotal');
+    const pageInd = document.getElementById('ettEmpPageIndicator');
+    const prevBtn = document.getElementById('ettEmpPrevBtn');
+    const nextBtn = document.getElementById('ettEmpNextBtn');
+
+    if (startEl) startEl.textContent = total > 0 ? (startIdx + 1) : 0;
+    if (endEl) endEl.textContent = Math.min(endIdx, total);
+    if (totalEl) totalEl.textContent = total;
+    if (pageInd) pageInd.textContent = `Page ${ettCurrentPage} of ${totalPages}`;
+
+    if (prevBtn) {
+        if (ettCurrentPage <= 1) {
+            prevBtn.classList.add('is-disabled');
+            prevBtn.disabled = true;
+            prevBtn.style.opacity = '0.45';
+        } else {
+            prevBtn.classList.remove('is-disabled');
+            prevBtn.disabled = false;
+            prevBtn.style.opacity = '1';
+        }
+    }
+    if (nextBtn) {
+        if (ettCurrentPage >= totalPages) {
+            nextBtn.classList.add('is-disabled');
+            nextBtn.disabled = true;
+            nextBtn.style.opacity = '0.45';
+        } else {
+            nextBtn.classList.remove('is-disabled');
+            nextBtn.disabled = false;
+            nextBtn.style.opacity = '1';
+        }
+    }
+}
+
+function pjdChangeEmpPage(dir) {
+    ettCurrentPage += dir;
+    pjdInitEmpPagination();
+}
+
 function pjdFilterEmpRows(query) {
     const q = (query || '').toLowerCase().trim();
     const rows = document.querySelectorAll('.pjd-emp-row, .ett-emp-row');
@@ -708,12 +790,19 @@ function pjdFilterEmpRows(query) {
         const name = row.getAttribute('data-emp-name') || '';
         const projs = row.getAttribute('data-emp-projects') || '';
         if (!q || name.includes(q) || projs.includes(q)) {
-            row.style.display = '';
+            row.removeAttribute('data-filtered-out');
         } else {
+            row.setAttribute('data-filtered-out', 'true');
             row.style.display = 'none';
         }
     });
+    ettCurrentPage = 1;
+    pjdInitEmpPagination();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    pjdInitEmpPagination();
+});
 
 function openPjdEmpDetailsModal(emp) {
     if (!emp) return;

@@ -527,8 +527,8 @@
             </div>
 
             <!-- Deduct TDS Checkbox & Section -->
-            <div class="ppf-grp" style="margin-top: 14px; margin-bottom: 12px;">
-                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none;">
+            <div style="margin-top: 14px; margin-bottom: 12px; display: flex; align-items: center; width: fit-content;">
+                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none; width: fit-content; max-width: fit-content; margin: 0;">
                     <input type="checkbox" id="pp-pay-deduct-tds" name="is_tds_deducted" value="1" style="width: 17px; height: 17px; accent-color: #fe5f04; cursor: pointer;" onchange="if(window.PP && PP.ppToggleTds) PP.ppToggleTds(this.checked)">
                     <span>Deduct TDS</span>
                 </label>
@@ -539,7 +539,7 @@
                     <label class="ppf-lbl" style="color: #9a3412;">TDS Percentage (%) <span class="ppf-req">*</span></label>
                     <div class="ppf-rel">
                         <input type="number" id="pp-pay-tds-percent" name="tds_percentage" class="ppf-inp ni"
-                               placeholder="Enter TDS % (e.g. 1, 2, 5, 10)" step="1" min="1" max="100" list="pp-tds-common-percentages"
+                               placeholder="Enter TDS % (e.g. 1, 2, 5, 10)" step="0.01" min="0.01" max="100" list="pp-tds-common-percentages"
                                oninput="if(window.PP && PP.ppRecalculateTds) PP.ppRecalculateTds()" style="font-weight: 600;">
                         <datalist id="pp-tds-common-percentages">
                             <option value="1">1%</option>
@@ -554,15 +554,19 @@
                 <!-- Dynamic TDS Breakdown Box -->
                 <div id="pp-tds-breakdown" style="display: none; margin-top: 10px; padding: 10px 12px; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #475569;">
-                        <span>Amount Received (Gross):</span>
-                        <span id="pp-tds-disp-gross" style="font-weight: 600; color: #1e293b;">₹0.00</span>
+                        <span>Product Base Price:</span>
+                        <span id="pp-tds-disp-base" style="font-weight: 600; color: #1e293b;">₹0.00</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #ea580c;">
-                        <span>TDS Deducted (<span id="pp-tds-disp-percent">0</span>%):</span>
+                        <span>TDS Deduction (<span id="pp-tds-disp-percent">0</span>% on Base Price):</span>
                         <span id="pp-tds-disp-amount" style="font-weight: 600; color: #dc2626;">-₹0.00</span>
                     </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #475569;">
+                        <span>Settlement (Gross) Amount:</span>
+                        <span id="pp-tds-disp-gross" style="font-weight: 600; color: #1e293b;">₹0.00</span>
+                    </div>
                     <div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 13px; font-weight: 700; color: #16a34a;">
-                        <span>After TDS Deduction (Net Received):</span>
+                        <span>Net Bank Received (Stored Amount):</span>
                         <span id="pp-tds-disp-net">₹0.00</span>
                     </div>
                 </div>

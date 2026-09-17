@@ -704,9 +704,9 @@
                                     @php
                                         $rowReceivedAmount = (float) ($row->received_amount ?? 0);
                                         $rowOutstandingAmount = (float) ($row->outstanding_amount ?? 0);
-                                        $rowTotalAmount = (float) ($row->total_amount ?? ($rowReceivedAmount + $rowOutstandingAmount));
                                         $rowTdsAmount = (float) ($row->tds_amount ?? 0);
                                         $rowTdsPercent = (float) ($row->tds_percentage ?? 0);
+                                        $rowTotalAmount = (float) ($row->total_amount ?? ($rowReceivedAmount + $rowTdsAmount + $rowOutstandingAmount));
                                     @endphp
                                     <tr style="cursor:pointer;" onclick="window.location='{{ route('leads.show', $row->customer_id) }}'" title="Click to view lead details for {{ $row->company_name ?: $row->customer_name }}">
                                         <td><span class="crm-pay-code">PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}</span></td>
