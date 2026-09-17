@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\ProductionTask;
+use App\Models\ProjectTestingDetail;
 use App\Models\ProjectTimesheet;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -26,6 +27,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use App\Models\Company;
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Services\ProductionUpdateRecorder;
 
 class ProjectController extends Controller
@@ -73,28 +76,46 @@ class ProjectController extends Controller
         }
 
         if (in_array($selectedDashboard, ['testing', 'qa'], true)) {
-            $testingHandovers = \App\Models\ProjectTestingDetail::with([
+            $baseQuery = \App\Models\ProjectTestingDetail::query();
+
+            $openCount = (clone $baseQuery)->whereIn('status', ['moved_to_testing', 'open'])->count();
+            $ongoingCount = (clone $baseQuery)->where('status', 'ongoing')->count();
+            $retestingCount = (clone $baseQuery)->where('status', 'retesting')->count();
+            $completedCount = (clone $baseQuery)->where('status', 'completed')->count();
+            $readyLaunchCount = (clone $baseQuery)->whereIn('status', ['ready_launch', 'ready_to_launch'])->count();
+
+            $activeStatus = (string) $request->query('status', 'open');
+            $search = trim((string) $request->query('search', ''));
+            $perPage = max(5, min(100, (int) $request->query('per_page', 10)));
+
+            $query = \App\Models\ProjectTestingDetail::with([
                 'productionInitiation.leadProduct',
                 'productionInitiation.product',
                 'productionInitiation.lead',
                 'productionInitiation.bugs',
                 'movedBy',
                 'testingTl'
-            ])->latest()->get();
+            ]);
 
-            $activeStatus = (string) $request->query('status', 'open');
-
-            $openCount = $testingHandovers->whereIn('status', ['moved_to_testing', 'open'])->count();
-            $ongoingCount = $testingHandovers->where('status', 'ongoing')->count();
-            $retestingCount = $testingHandovers->where('status', 'retesting')->count();
-            $completedCount = $testingHandovers->where('status', 'completed')->count();
-
-            $filteredHandovers = match ($activeStatus) {
-                'ongoing' => $testingHandovers->where('status', 'ongoing'),
-                'retesting' => $testingHandovers->where('status', 'retesting'),
-                'completed' => $testingHandovers->where('status', 'completed'),
-                default => $testingHandovers->filter(fn($h) => in_array($h->status, ['moved_to_testing', 'open'], true)),
+            match ($activeStatus) {
+                'ongoing' => $query->where('status', 'ongoing'),
+                'retesting' => $query->where('status', 'retesting'),
+                'completed' => $query->where('status', 'completed'),
+                'ready_launch', 'ready_to_launch' => $query->whereIn('status', ['ready_launch', 'ready_to_launch']),
+                default => $query->whereIn('status', ['moved_to_testing', 'open']),
             };
+
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->whereHas('movedBy', fn($sub) => $sub->where('name', 'like', "%{$search}%"))
+                      ->orWhereHas('productionInitiation.lead', fn($sub) => $sub->where('company_name', 'like', "%{$search}%"))
+                      ->orWhereHas('productionInitiation.leadProduct', fn($sub) => $sub->where('name', 'like', "%{$search}%"))
+                      ->orWhereHas('productionInitiation.product', fn($sub) => $sub->where('name', 'like', "%{$search}%"))
+                      ->orWhere('production_initiation_id', 'like', "%{$search}%");
+                });
+            }
+
+            $handovers = $query->latest()->paginate($perPage, ['*'], 'projects_page')->withQueryString();
 
             $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, 'testing', $request->all());
 
@@ -106,7 +127,10 @@ class ProjectController extends Controller
                 'ongoingCount' => $ongoingCount,
                 'retestingCount' => $retestingCount,
                 'completedCount' => $completedCount,
-                'handovers' => $filteredHandovers->values(),
+                'readyLaunchCount' => $readyLaunchCount,
+                'handovers' => $handovers,
+                'search' => $search,
+                'perPage' => $perPage,
                 'employeeTimesheetTasks' => $employeeTimesheetTasks,
             ]);
         }
@@ -2131,6 +2155,13 @@ class ProjectController extends Controller
                 ->get();
         }
 
+        $canAddBug = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole() ||
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+
         return view('pages.projects.show', [
             'projectItem' => $productionInitiation,
             'projectDeliveryDate' => $projectDeliveryDate,
@@ -2151,12 +2182,27 @@ class ProjectController extends Controller
             'testingTlUsers' => $testingTlUsers,
             'testingDetails' => $testingDetails,
             'bugs' => $bugs,
+            'canAddBug' => $canAddBug,
             'customerCampaigns' => $customerCampaigns,
         ]);
     }
 
     public function storeBug(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
     {
+        $user = auth()->user();
+        $canAddBug = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole() ||
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+
+        if (! $canAddBug) {
+            return redirect()
+                ->back()
+                ->with('error', 'Only Testing Department can report bugs.');
+        }
+
         $validated = $request->validate([
             'description'    => ['required', 'string', 'max:5000'],
             'priority'       => ['required', \Illuminate\Validation\Rule::in(['High', 'Medium', 'Low'])],
@@ -2241,7 +2287,10 @@ class ProjectController extends Controller
             'attachment_path'          => $firstAttachmentPath,
             'attachment_original_name' => $firstAttachmentName,
             'attachments'              => ! empty($storedAttachments) ? $storedAttachments : null,
-            'status'                   => 'open',
+            'status'                   => 'pending',
+            'developer_status'         => 'pending',
+            'tester_status'            => 'pending',
+            'reopen_count'             => 0,
             'created_by_user_id'       => auth()->id(),
         ]);
 
@@ -2252,56 +2301,577 @@ class ProjectController extends Controller
 
     public function testingDetails(Request $request, ProductionInitiation $productionInitiation): View
     {
-        $productionInitiation->load([
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
+
+        return view('pages.projects.testing-details', [
+            'projectItem' => $productionInitiation,
+            'handover' => $summaryData['latestHandover'],
+            'bugs' => $summaryData['rawBugs'],
+            'summaryData' => $summaryData,
+        ]);
+    }
+
+    public function testingSummaryReport(Request $request, ProductionInitiation $productionInitiation): View
+    {
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
+
+        return view('pages.projects.testing-summary-report', $summaryData);
+    }
+
+    public function exportTestingSummaryReportPdf(Request $request, ProductionInitiation $productionInitiation)
+    {
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
+        $safeName = Str::slug($summaryData['projectName'] ?: 'Project-' . $productionInitiation->id);
+        $filename = 'Testing-Summary-' . $safeName . '-' . now()->format('Ymd_His') . '.pdf';
+
+        $pdf = Pdf::loadView('pages.projects.testing-summary-pdf', $summaryData)
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont' => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+            ]);
+
+        if ($request->query('view') === 'preview') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    private function buildTestingSummaryData(ProductionInitiation $project): array
+    {
+        $project->loadMissing([
             'leadProduct',
             'product',
             'lead',
+            'department',
             'testingDetails.movedBy',
             'testingDetails.testingTl',
             'bugs.createdBy',
         ]);
 
-        $latestHandover = $productionInitiation->testingDetails()->latest()->first();
-        $bugs = $productionInitiation->bugs()->with('createdBy')->latest()->get();
+        $latestHandover = $project->testingDetails()->latest()->first();
+        $bugs = $project->bugs()->with('createdBy')->latest()->get();
 
-        return view('pages.projects.testing-details', [
-            'projectItem' => $productionInitiation,
+        // Allocated Developers
+        $devUsers = collect();
+        if ($latestHandover?->movedBy) {
+            $devUsers->push($latestHandover->movedBy);
+        }
+        if (! empty($project->project_allocated_employee_user_ids)) {
+            $allocatedDevs = User::whereIn('id', (array) $project->project_allocated_employee_user_ids)
+                ->where('is_active', true)
+                ->get();
+            $devUsers = $devUsers->merge($allocatedDevs);
+        }
+        $devUsers = $devUsers->unique('id')->values();
+
+        // Allocated Team Leads
+        $tlUsers = collect();
+        if (! empty($project->project_allocated_tl_user_ids)) {
+            $allocatedTls = User::whereIn('id', (array) $project->project_allocated_tl_user_ids)
+                ->where('is_active', true)
+                ->get();
+            $tlUsers = $tlUsers->merge($allocatedTls);
+        }
+        $tlUsers = $tlUsers->unique('id')->values();
+
+        // Project Title
+        $projectName = $project->leadProduct?->name 
+            ?? $project->product?->name 
+            ?? ($project->lead?->company_name ? $project->lead->company_name . ' Project' : 'Project #' . $project->id);
+
+        // Client info
+        $clientName = $project->lead?->company_name 
+            ?? $project->lead?->contact_person_name 
+            ?? 'N/A';
+        $clientPhone = $project->lead?->phone_number;
+        $clientEmail = $project->lead?->email;
+
+        // QA Status
+        $qaRawStatus = $latestHandover?->status ?? 'open';
+        $qaStatusInfo = match($qaRawStatus) {
+            'ready_launch', 'ready_to_launch' => ['label' => 'Ready to Launch', 'icon' => '🚀', 'color' => '#047857', 'bg' => '#ecfdf5', 'border' => '#a7f3d0'],
+            'completed' => ['label' => 'Completed (QA Passed)', 'icon' => '✅', 'color' => '#15803d', 'bg' => '#f0fdf4', 'border' => '#bbf7d0'],
+            'retesting' => ['label' => 'Retesting Phase', 'icon' => '🟪', 'color' => '#6d28d9', 'bg' => '#f5f3ff', 'border' => '#ddd6fe'],
+            'ongoing' => ['label' => 'Ongoing Testing', 'icon' => '🟦', 'color' => '#0369a1', 'bg' => '#f0f9ff', 'border' => '#bae6fd'],
+            default => ['label' => 'Open (New Handover)', 'icon' => '🟧', 'color' => '#c2410c', 'bg' => '#fff7ed', 'border' => '#fed7aa'],
+        };
+
+        // Bug Metrics Breakdown
+        $totalBugs = $bugs->count();
+        $highBugs = $bugs->where('priority', 'High')->count();
+        $medBugs = $bugs->where('priority', 'Medium')->count();
+        $lowBugs = $bugs->where('priority', 'Low')->count();
+
+        $devCompleted = 0;
+        $devOngoing = 0;
+        $devPending = 0;
+
+        $testerClosed = 0;
+        $testerReopen = 0;
+        $testerPending = 0;
+        $totalReopens = 0;
+
+        $processedBugs = $bugs->map(function ($bug, $index) use (&$devCompleted, &$devOngoing, &$devPending, &$testerClosed, &$testerReopen, &$testerPending, &$totalReopens) {
+            $rawDev = strtolower(trim((string) ($bug->developer_status ?: ($bug->status === 'ongoing' ? 'ongoing' : (in_array($bug->status, ['completed', 'fixed', 'closed']) ? 'completed' : 'pending')))));
+            if (! in_array($rawDev, ['ongoing', 'pending', 'completed'], true)) {
+                $rawDev = 'pending';
+            }
+            if ($rawDev === 'completed') $devCompleted++;
+            elseif ($rawDev === 'ongoing') $devOngoing++;
+            else $devPending++;
+
+            $rawTester = strtolower(trim((string) ($bug->tester_status ?: ($bug->status === 'closed' ? 'closed' : ($bug->status === 'reopen' ? 'reopen' : 'pending')))));
+            if (! in_array($rawTester, ['closed', 'reopen', 'pending'], true)) {
+                $rawTester = 'pending';
+            }
+            if ($rawTester === 'closed') $testerClosed++;
+            elseif ($rawTester === 'reopen') $testerReopen++;
+            else $testerPending++;
+
+            $reopenCount = (int) ($bug->reopen_count ?? 0);
+            $totalReopens += $reopenCount;
+
+            $attList = $bug->attachment_list;
+            $enrichedAttachments = array_map(function ($att) {
+                $path = $att['path'] ?? '';
+                $name = $att['name'] ?? basename($path);
+                $isImg = (bool) preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $name ?: $path);
+                $base64 = null;
+                $localPath = public_path($path);
+                if ($isImg && file_exists($localPath) && is_file($localPath)) {
+                    $mime = mime_content_type($localPath) ?: 'image/jpeg';
+                    $data = file_get_contents($localPath);
+                    if ($data !== false && strlen($data) < 4 * 1024 * 1024) {
+                        $base64 = 'data:' . $mime . ';base64,' . base64_encode($data);
+                    }
+                }
+                return [
+                    'name' => $name,
+                    'url' => $att['url'] ?? asset($path),
+                    'path' => $path,
+                    'is_image' => $isImg,
+                    'base64' => $base64,
+                ];
+            }, $attList);
+
+            return [
+                'id' => $bug->id,
+                'index' => $index + 1,
+                'priority' => $bug->priority ?: 'Medium',
+                'description' => $bug->description,
+                'created_by' => $bug->createdBy?->name ?? 'QA Tester',
+                'created_at' => $bug->created_at?->format('d M Y, h:i A'),
+                'raw_dev_status' => $rawDev,
+                'raw_tester_status' => $rawTester,
+                'reopen_count' => $reopenCount,
+                'developer_remarks' => $bug->developer_remarks,
+                'tester_remarks' => $bug->tester_remarks,
+                'latest_remarks' => $bug->latest_remarks,
+                'status_history' => is_array($bug->status_history) ? $bug->status_history : [],
+                'attachments' => $enrichedAttachments,
+            ];
+        });
+
+        $company = $project->company ?? (auth()->user()?->company ?? Company::first());
+
+        $passRate = $totalBugs > 0 ? round(($testerClosed / $totalBugs) * 100) : 100;
+
+        return [
+            'project' => $project,
+            'projectItem' => $project,
+            'projectName' => $projectName,
+            'clientName' => $clientName,
+            'clientPhone' => $clientPhone,
+            'clientEmail' => $clientEmail,
+            'devUsers' => $devUsers,
+            'tlUsers' => $tlUsers,
+            'latestHandover' => $latestHandover,
             'handover' => $latestHandover,
-            'bugs' => $bugs,
-        ]);
+            'qaStatusInfo' => $qaStatusInfo,
+            'qaRawStatus' => $qaRawStatus,
+            'totalBugs' => $totalBugs,
+            'highBugs' => $highBugs,
+            'medBugs' => $medBugs,
+            'lowBugs' => $lowBugs,
+            'devCompleted' => $devCompleted,
+            'devOngoing' => $devOngoing,
+            'devPending' => $devPending,
+            'testerClosed' => $testerClosed,
+            'testerReopen' => $testerReopen,
+            'testerPending' => $testerPending,
+            'totalReopens' => $totalReopens,
+            'passRate' => $passRate,
+            'bugs' => $processedBugs,
+            'rawBugs' => $bugs,
+            'company' => $company,
+            'generatedAt' => now()->format('d M Y, h:i A'),
+            'testingBulletins' => $this->generateTestingBulletins($processedBugs, $qaRawStatus, $totalReopens),
+        ];
+    }
+
+    private function generateTestingBulletins($bugs, string $qaRawStatus, int $totalReopens): array
+    {
+        $categoriesMap = [
+            'ui' => [
+                'title' => 'UI / UX & Responsive Design',
+                'icon' => '🎨',
+                'keywords' => ['ui', 'ux', 'layout', 'design', 'css', 'align', 'alignment', 'button', 'color', 'modal', 'popup', 'font', 'spacing', 'responsive', 'mobile', 'screen', 'view', 'table', 'badge', 'logo', 'header', 'footer', 'overflow', 'scroll', 'padding', 'margin'],
+                'desc' => 'Visual presentation, component styling, responsive layouts across screen sizes, and modal popups.',
+            ],
+            'form' => [
+                'title' => 'Form Validation & Input Controls',
+                'icon' => '📝',
+                'keywords' => ['form', 'input', 'field', 'validation', 'dropdown', 'select', 'upload', 'attachment', 'submit', 'checkbox', 'radio', 'required', 'email', 'phone', 'empty', 'char', 'length', 'file', 'image', 'preview'],
+                'desc' => 'Interactive input controls, required validations, file attachments, and submit operations.',
+            ],
+            'nav' => [
+                'title' => 'Navigation & Route Integrity',
+                'icon' => '🧭',
+                'keywords' => ['nav', 'menu', 'link', 'route', 'redirect', 'tab', 'pagination', 'url', 'back', 'sidebar', 'breadcrumb', 'href', 'forward'],
+                'desc' => 'Link routing, navigation workflows, tab switching, and redirection consistency.',
+            ],
+            'auth' => [
+                'title' => 'Authentication & Access Control',
+                'icon' => '🔐',
+                'keywords' => ['login', 'signup', 'auth', 'password', 'role', 'permission', 'session', 'token', 'logout', 'user', 'access', 'security', 'privilege', 'admin'],
+                'desc' => 'User credentials, authentication states, role permissions, and access privileges.',
+            ],
+            'workflow' => [
+                'title' => 'Workflow & Core Business Logic',
+                'icon' => '⚙️',
+                'keywords' => ['status', 'save', 'update', 'delete', 'calculate', 'price', 'total', 'order', 'lead', 'invoice', 'report', 'export', 'download', 'pdf', 'mail', 'email', 'notification', 'filter', 'search', 'process', 'stage', 'phase', 'handover'],
+                'desc' => 'Business rules execution, data updates, status transitions, notifications, and document exports.',
+            ],
+            'performance' => [
+                'title' => 'Performance & Error Handling',
+                'icon' => '⚡',
+                'keywords' => ['slow', 'load', 'preloader', 'loading', 'crash', 'error', 'exception', '500', '404', 'blank', 'freeze', 'bug', 'fail', 'broken', 'timeout', 'query', 'speed'],
+                'desc' => 'System load times, preloaders, exception traps, and application stability.',
+            ],
+        ];
+
+        $detectedCategories = [];
+        $keyFindings = [];
+
+        foreach ($bugs as $bug) {
+            $desc = trim((string) ($bug['description'] ?? ''));
+            if ($desc === '') continue;
+
+            $descLower = strtolower($desc);
+            $matchedAny = false;
+
+            foreach ($categoriesMap as $catKey => $catMeta) {
+                foreach ($catMeta['keywords'] as $kw) {
+                    if (str_contains($descLower, $kw)) {
+                        $detectedCategories[$catKey] = true;
+                        $matchedAny = true;
+                        break;
+                    }
+                }
+            }
+
+            if (! $matchedAny) {
+                $detectedCategories['workflow'] = true;
+            }
+
+            // Generate clean single-sentence finding summary
+            $firstSentence = preg_split('/(\. |\n|\r)/', $desc)[0] ?? $desc;
+            $cleanSnippet = Str::limit(trim($firstSentence), 140, '...');
+
+            $keyFindings[] = [
+                'index' => $bug['index'] ?? 1,
+                'priority' => $bug['priority'] ?? 'Medium',
+                'summary' => $cleanSnippet,
+                'full_description' => $desc,
+                'raw_dev_status' => $bug['raw_dev_status'] ?? 'pending',
+                'raw_tester_status' => $bug['raw_tester_status'] ?? 'pending',
+                'reopen_count' => (int) ($bug['reopen_count'] ?? 0),
+                'developer_remarks' => $bug['developer_remarks'] ?? null,
+                'tester_remarks' => $bug['tester_remarks'] ?? null,
+                'status_history' => $bug['status_history'] ?? [],
+            ];
+        }
+
+        // Build modules tested
+        $modulesCovered = [];
+        if (! empty($detectedCategories)) {
+            foreach ($detectedCategories as $catKey => $val) {
+                if (isset($categoriesMap[$catKey])) {
+                    $modulesCovered[] = $categoriesMap[$catKey];
+                }
+            }
+        } else {
+            // Default baseline modules when 0 bugs or generic test
+            $modulesCovered = [
+                $categoriesMap['workflow'],
+                $categoriesMap['ui'],
+                $categoriesMap['form'],
+            ];
+        }
+
+        // Executive points
+        $total = count($bugs);
+        $closed = count(array_filter($keyFindings, fn($b) => $b['raw_tester_status'] === 'closed'));
+        $highCount = count(array_filter($keyFindings, fn($b) => $b['priority'] === 'High'));
+
+        $bulletinPoints = [];
+
+        // Point 1: Testing scope
+        $moduleNames = implode(', ', array_map(fn($m) => $m['title'], array_slice($modulesCovered, 0, 3)));
+        if ($total > 0) {
+            $bulletinPoints[] = "Comprehensive quality assessment executed across <strong>{$total} test scenarios</strong>, focusing on <strong>{$moduleNames}</strong>.";
+        } else {
+            $bulletinPoints[] = "Full end-to-end sanity and functional testing executed across core modules including <strong>{$moduleNames}</strong>.";
+        }
+
+        // Point 2: Defect breakdown & resolution
+        if ($total > 0) {
+            $resolutionRate = round(($closed / $total) * 100);
+            $bulletinPoints[] = "Logged <strong>{$total} defect(s)</strong> (including <strong>{$highCount} High Priority</strong>). Currently, <strong>{$closed} defect(s) ({$resolutionRate}%)</strong> are officially verified and closed by QA.";
+        } else {
+            $bulletinPoints[] = "Zero blocking defects or regressions were logged during testing. All evaluated workflows passed verification.";
+        }
+
+        // Point 3: Regression & Reopen analysis
+        if ($totalReopens > 0) {
+            $bulletinPoints[] = "<strong>{$totalReopens} reopen cycle(s)</strong> were conducted by QA to confirm all regression edge cases and developer fixes were thoroughly tested.";
+        } else {
+            $bulletinPoints[] = "All fixes resolved by the development team verified successfully without requiring reopen cycles.";
+        }
+
+        // Point 4: Developer & Tester Audit Remarks
+        $bugsWithRemarks = count(array_filter($bugs->toArray() ?? [], function ($b) {
+            return ! empty($b['developer_remarks']) || ! empty($b['tester_remarks']) || ! empty($b['status_history']);
+        }));
+        if ($bugsWithRemarks > 0) {
+            $bulletinPoints[] = "📝 <strong>Status Transition Audit:</strong> Mandatory developer resolution remarks and QA verification notes are recorded for <strong>{$bugsWithRemarks} defect item(s)</strong>.";
+        }
+
+        // Point 5: QA Status Verdict
+        $verdict = match($qaRawStatus) {
+            'ready_launch', 'ready_to_launch' => '🚀 <strong>QA Certified Ready for Launch:</strong> All acceptance criteria and critical bug resolutions have been validated. Project is cleared for production release.',
+            'completed' => '✅ <strong>QA Testing Completed:</strong> Core functionality and reported issues have been verified. Final deployment signoff is in progress.',
+            'retesting' => '🟪 <strong>Active Retesting Phase:</strong> Developer patches are currently undergoing secondary QA verification to confirm resolution.',
+            'ongoing' => '🟦 <strong>Ongoing QA Testing:</strong> Quality audit is actively in progress between QA and Development teams.',
+            default => '🟧 <strong>Initial Handover & Inspection:</strong> QA team is executing baseline test cases following development handover.',
+        };
+        $bulletinPoints[] = $verdict;
+
+        return [
+            'modulesCovered' => $modulesCovered,
+            'keyFindings' => $keyFindings,
+            'bulletinPoints' => $bulletinPoints,
+        ];
     }
 
     public function updateTestingStatus(Request $request, ProductionInitiation $productionInitiation): RedirectResponse
     {
         $validated = $request->validate([
-            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed'])],
+            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'moved_to_testing', 'ongoing', 'retesting', 'completed', 'ready_launch', 'ready_to_launch'])],
         ]);
+
+        $status = $validated['status'];
+        if ($status === 'ready_to_launch') {
+            $status = 'ready_launch';
+        }
 
         $latestHandover = $productionInitiation->testingDetails()->latest()->first();
         if ($latestHandover) {
             $latestHandover->update([
-                'status' => $validated['status'],
+                'status' => $status,
             ]);
+
+            if ($status === 'ready_launch') {
+                $this->sendReadyLaunchNotification($productionInitiation, $latestHandover);
+            }
         }
+
+        $message = $status === 'ready_launch'
+            ? 'QA Status updated to Ready Launch! Notification email sent to Developer, TL, and Project Coordinator.'
+            : 'Testing status updated successfully.';
 
         return redirect()
             ->back()
-            ->with('success', 'Testing status updated successfully.');
+            ->with('success', $message);
+    }
+
+    private function sendReadyLaunchNotification(ProductionInitiation $project, \App\Models\ProjectTestingDetail $testingDetail): void
+    {
+        try {
+            $project->loadMissing(['leadProduct', 'product', 'lead', 'bugs']);
+            $testingDetail->loadMissing(['movedBy', 'testingTl']);
+
+            // 1. Developers
+            $devUsers = collect();
+            if ($testingDetail->movedBy) {
+                $devUsers->push($testingDetail->movedBy);
+            }
+            if (! empty($project->project_allocated_employee_user_ids)) {
+                $allocatedDevs = User::whereIn('id', (array) $project->project_allocated_employee_user_ids)
+                    ->where('is_active', true)
+                    ->get();
+                $devUsers = $devUsers->merge($allocatedDevs);
+            }
+            $devEmails = $devUsers->pluck('email')->filter()->unique()->values()->all();
+
+            // 2. Developer TLs
+            $tlUsers = collect();
+            if (! empty($project->project_allocated_tl_user_ids)) {
+                $allocatedTls = User::whereIn('id', (array) $project->project_allocated_tl_user_ids)
+                    ->where('is_active', true)
+                    ->get();
+                $tlUsers = $tlUsers->merge($allocatedTls);
+            }
+            foreach ($devUsers as $devUser) {
+                if (is_object($devUser) && method_exists($devUser, 'mappedManagers')) {
+                    $tlUsers = $tlUsers->merge($devUser->mappedManagers()->get());
+                }
+            }
+            $devTlEmails = $tlUsers->pluck('email')->filter()->unique()->values()->all();
+
+            // 3. Developer Project Coordinators
+            $coordinatorUsers = User::where('is_active', true)
+                ->get()
+                ->filter(fn ($u) => $u->isDevelopmentProjectCoordinator());
+            $coordinatorEmails = $coordinatorUsers->pluck('email')
+                ->filter()
+                ->merge(['projects@saitechnosolutions.net'])
+                ->unique()
+                ->values()
+                ->all();
+
+            // Recipients: Developers & TLs as TO, Coordinator as CC
+            $toEmails = array_values(array_unique(array_filter(array_merge($devEmails, $devTlEmails))));
+            if (empty($toEmails)) {
+                $toEmails = $coordinatorEmails;
+            }
+
+            $primaryTo = array_shift($toEmails) ?: 'projects@saitechnosolutions.net';
+            $ccEmails = array_values(array_unique(array_filter(array_merge(
+                $toEmails,
+                $coordinatorEmails,
+                ['projects@saitechnosolutions.net']
+            ))));
+
+            $ccEmails = array_values(array_diff($ccEmails, [$primaryTo]));
+
+            Mail::to($primaryTo)
+                ->cc($ccEmails)
+                ->send(new \App\Mail\ProjectReadyLaunchMail($project, $testingDetail));
+        } catch (\Throwable $e) {
+            Log::error('Failed sending Project Ready Launch notification mail: ' . $e->getMessage(), [
+                'project_id' => $project->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function updateBugStatus(Request $request, \App\Models\ProjectBug $bug): RedirectResponse
     {
-        $validated = $request->validate([
-            'status' => ['required', \Illuminate\Validation\Rule::in(['open', 'fixed', 'closed'])],
-        ]);
+        $user = auth()->user();
+        $isAdmin = $user && (
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+        $isTestingUser = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole()
+        );
+        $isDevUser = $user && ! $isTestingUser && (
+            $user->belongsToDevelopmentDepartment() ||
+            $user->hasDevelopmentLikeRole() ||
+            $user->isDevelopmentProjectCoordinator() ||
+            $user->isDevelopmentTeam()
+        );
 
-        $bug->update([
-            'status' => $validated['status'],
+        $canEditDeveloperStatus = ! $isTestingUser && ($isDevUser || $isAdmin);
+        $canEditTesterStatus = $isTestingUser || $isAdmin;
+
+        $validatedData = $request->validate([
+            'remarks' => ['required', 'string', 'min:2', 'max:3000'],
+        ], [
+            'remarks.required' => 'Remarks is mandatory when updating bug status.',
+            'remarks.min' => 'Please enter at least 2 characters for remarks.',
         ]);
+        $remarks = trim($validatedData['remarks']);
+
+        $messages = [];
+        $updatedAny = false;
+
+        // Check developer status update
+        $rawDev = $request->input('developer_status');
+        if (! $rawDev && $request->input('status_type') === 'developer') {
+            $rawDev = $request->input('status');
+        }
+        if ($rawDev) {
+            $valDev = strtolower(trim((string) $rawDev));
+            if (in_array($valDev, ['ongoing', 'pending', 'completed'], true)) {
+                if (! $canEditDeveloperStatus) {
+                    return redirect()->back()->with('error', 'Only Development team can update Developer status.');
+                }
+                $oldDev = $bug->developer_status ?: 'pending';
+                $bug->developer_status = $valDev;
+                $bug->status = $valDev;
+                $bug->addStatusHistory($user, 'developer', $oldDev, $valDev, $remarks);
+                $messages[] = 'Dev: ' . ucfirst($valDev);
+                $updatedAny = true;
+            }
+        }
+
+        // Check tester status update
+        $rawTester = $request->input('tester_status');
+        if (! $rawTester && $request->input('status_type') === 'tester') {
+            $rawTester = $request->input('status');
+        }
+        if ($rawTester) {
+            $valTester = strtolower(trim((string) $rawTester));
+            if (in_array($valTester, ['closed', 'reopen', 'pending'], true)) {
+                if (! $canEditTesterStatus) {
+                    return redirect()->back()->with('error', 'Only Testing Department can update Tester status.');
+                }
+                if ($valTester === 'reopen' && $bug->tester_status !== 'reopen') {
+                    $bug->increment('reopen_count');
+                }
+                $oldTester = $bug->tester_status ?: 'pending';
+                $bug->tester_status = $valTester;
+                $bug->status = $valTester;
+                $bug->addStatusHistory($user, 'tester', $oldTester, $valTester, $remarks);
+                $messages[] = 'Tester: ' . ucfirst($valTester);
+                $updatedAny = true;
+            }
+        }
+
+        if (! $updatedAny) {
+            // If neither was changed or provided, record remarks under current role
+            $roleType = $isTestingUser ? 'tester' : 'developer';
+            $curStatus = $roleType === 'developer' ? ($bug->developer_status ?: 'pending') : ($bug->tester_status ?: 'pending');
+            $bug->addStatusHistory($user, $roleType, $curStatus, $curStatus, $remarks);
+            $messages[] = 'Remarks recorded';
+        }
+
+        $bug->save();
+        $msg = 'Bug status updated (' . implode(', ', $messages) . ') with remarks successfully.';
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $msg,
+                'bug' => $bug->fresh(),
+            ]);
+        }
+
+        $prevUrl = url()->previous();
+        if (str_contains($prevUrl, 'projects-details') && ! str_contains($prevUrl, 'tab=')) {
+            $prevUrl .= (str_contains($prevUrl, '?') ? '&' : '?') . 'tab=testing';
+            return redirect()->to($prevUrl)->with('success', $msg);
+        }
 
         return redirect()
             ->back()
-            ->with('success', 'Bug status updated successfully.');
+            ->with('success', $msg);
     }
 
     public function moveToTesting(Request $request, ProductionInitiation $productionInitiation): RedirectResponse

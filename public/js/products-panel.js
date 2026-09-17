@@ -2064,7 +2064,7 @@
     function renderHistoryBody(p, overall) {
         var progress  = p.total > 0 ? Math.min(100, Math.round((p.paid / p.total) * 100)) : 0;
         var progColor = progress >= 100 ? '#16a34a' : (progress > 0 ? '#fe5f04' : '#e1dee3');
-        var pending   = p.total - p.paid;
+        var pending   = Math.max(0, Math.round((p.total - p.paid) * 100) / 100);
         var html      = '';
 
         // Totals grid
@@ -2089,7 +2089,8 @@
             var running = 0;
             html += '<div class="pp-hist-list">';
             p.payments.forEach(function (pmt) {
-                running += pmt.amount;
+                var pmtGross = (pmt.is_tds_deducted && pmt.tds_amount) ? (Number(pmt.amount) + Number(pmt.tds_amount)) : Number(pmt.amount);
+                running += pmtGross;
                 html += renderHistItem(pmt, running);
             });
             html += '</div>';
@@ -2122,9 +2123,12 @@
             'renewals': 'Renewals'
         }[pmt.payment_type]) || pmt.payment_type;
 
+        var isTds = !!(pmt.is_tds_deducted && pmt.tds_amount);
+        var grossRowAmt = isTds ? (Number(pmt.amount) + Number(pmt.tds_amount)) : Number(pmt.amount);
+        var netAmt = pmt.after_tds_amount !== null && pmt.after_tds_amount !== undefined ? Number(pmt.after_tds_amount) : Number(pmt.amount);
+
         var tdsHtml = '';
-        if (pmt.is_tds_deducted && pmt.tds_amount) {
-            var netAmt = pmt.after_tds_amount !== null && pmt.after_tds_amount !== undefined ? pmt.after_tds_amount : (pmt.amount - pmt.tds_amount);
+        if (isTds) {
             tdsHtml = '<div class="pp-hist-ref" style="color:#c2410c;font-weight:600;margin-top:2px;">' +
                 '✂️ TDS ' + (pmt.tds_percentage ? pmt.tds_percentage + '% ' : '') + '(-' + fmt(pmt.tds_amount) + ') · Net: ' + fmt(netAmt) +
             '</div>';
@@ -2141,7 +2145,7 @@
                 attHtml +
             '</div>' +
             '<div class="pp-hist-right">' +
-                '<div class="pp-hist-amt">' + fmt(pmt.amount) + '</div>' +
+                '<div class="pp-hist-amt">' + fmt(grossRowAmt) + '</div>' +
                 '<div class="pp-hist-run">Cumulative: ' + fmt(running) + '</div>' +
             '</div>' +
         '</div>';

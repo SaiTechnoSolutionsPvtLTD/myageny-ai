@@ -633,8 +633,8 @@
             </div>
 
             <!-- Deduct TDS Checkbox & Section -->
-            <div class="ppf-grp" style="margin-top: 14px; margin-bottom: 12px;">
-                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none;">
+            <div style="margin-top: 14px; margin-bottom: 12px; display: flex; align-items: center; width: fit-content;">
+                <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none; width: fit-content; max-width: fit-content; margin: 0;">
                     <input type="checkbox" id="pp-pay-deduct-tds" name="is_tds_deducted" value="1" style="width: 17px; height: 17px; accent-color: #fe5f04; cursor: pointer;" onchange="PP.ppToggleTds(this.checked)">
                     <span>Deduct TDS</span>
                 </label>
@@ -672,7 +672,7 @@
                         <span id="pp-tds-disp-gross" style="font-weight: 600; color: #1e293b;">₹0.00</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 14px; font-weight: 700; color: #16a34a;">
-                        <span>Net Amount Received (to be stored):</span>
+                        <span>Net Bank Received (Stored Amount):</span>
                         <span id="pp-tds-disp-net">₹0.00</span>
                     </div>
                 </div>

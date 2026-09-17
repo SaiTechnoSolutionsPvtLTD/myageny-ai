@@ -22,11 +22,20 @@ class ProjectBug extends Model
         'attachment_original_name',
         'attachments',
         'status',
+        'developer_status',
+        'tester_status',
+        'developer_remarks',
+        'tester_remarks',
+        'latest_remarks',
+        'status_history',
+        'reopen_count',
         'created_by_user_id',
     ];
 
     protected $casts = [
         'attachments' => 'array',
+        'status_history' => 'array',
+        'reopen_count' => 'integer',
     ];
 
     public function productionInitiation(): BelongsTo
@@ -93,5 +102,33 @@ class ProjectBug extends Model
         }
 
         return $list;
+    }
+
+    /**
+     * Record a new status transition with mandatory remarks into history.
+     */
+    public function addStatusHistory($user, string $roleType, string $fromStatus, string $toStatus, string $remarks): void
+    {
+        $history = is_array($this->status_history) ? $this->status_history : [];
+        $entry = [
+            'id' => count($history) + 1,
+            'user_id' => $user?->id,
+            'user_name' => $user?->name ?? 'User',
+            'role_type' => $roleType, // 'developer' or 'tester'
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'remarks' => trim($remarks),
+            'created_at' => now()->format('Y-m-d H:i:s'),
+            'formatted_date' => now()->format('d M Y, h:i A'),
+        ];
+        $history[] = $entry;
+
+        $this->status_history = $history;
+        $this->latest_remarks = trim($remarks);
+        if ($roleType === 'developer') {
+            $this->developer_remarks = trim($remarks);
+        } else {
+            $this->tester_remarks = trim($remarks);
+        }
     }
 }
