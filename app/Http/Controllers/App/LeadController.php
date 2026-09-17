@@ -1012,40 +1012,64 @@ class LeadController extends Controller
 
             // ── Products with Payments ────────────────────────────────────────
             'products' => $lead->relationLoaded('products')
-                ? $lead->products->map(fn($p) => [
-                    'id'                => $p->id,
-                    'product_name'      => $p->product_name,
-                    'product_status'    => $p->product_status,
-                    'lead_status_id'    => $p->lead_status_id,
-                    'lead_status_name'  => $p->leadStatus?->name,
-                    'description'       => $p->description,
-                    'unit_price'        => $p->unit_price,
-                    'quantity'          => $p->quantity,
-                    'discount_percent'  => $p->discount_percent,
-                    'total_price'       => $p->total_price,
-                    'payment_status'    => $p->payment_status,
-                    'amount_paid'       => $p->amount_paid,
-                    'amount_pending'    => $p->amount_pending,
-                    'production'        => $this->formatProductionInitiation($p->latestProductionInitiation),
+                ? $lead->products->map(function ($p) {
+                    $basePrice = round((float) ($p->unit_price * $p->quantity * (1 - ($p->discount_percent / 100))), 2);
+                    $gstPercent = (float) ($p->gst_percent ?? 0);
+                    $gstAmount = round($basePrice * ($gstPercent / 100), 2);
 
-                    'payments' => $p->relationLoaded('payments')
-                        ? $p->payments->map(fn($pay) => [
-                            'id'               => $pay->id,
-                            'amount'           => $pay->amount,
-                            'formatted_amount' => $pay->formatted_amount,
-                            'payment_mode'     => $pay->payment_mode,
-                            'mode_label'       => $pay->mode_label,
-                            'mode_icon'        => $pay->mode_icon,
-                            'mode_color'       => $pay->mode_color,
-                            'payment_date'     => $pay->payment_date?->format('d M Y'),
-                            'reference_number' => $pay->reference_number,
-                            'notes'            => $pay->notes,
-                            'recorded_by'      => $pay->recordedBy
-                                ? ['id' => $pay->recordedBy->id, 'name' => $pay->recordedBy->name]
-                                : null,
-                        ])->values()
-                        : [],
-                ])->values()
+                    return [
+                        'id'                => $p->id,
+                        'product_id'        => $p->product_id,
+                        'deal_name'         => $p->deal_name,
+                        'product_name'      => $p->product_name,
+                        'product_status'    => $p->product_status,
+                        'lead_status_id'    => $p->lead_status_id,
+                        'lead_status_name'  => $p->leadStatus?->name,
+                        'description'       => $p->description,
+                        'unit_price'        => (float) $p->unit_price,
+                        'quantity'          => $p->quantity,
+                        'discount_percent'  => (float) $p->discount_percent,
+                        'gst_percent'       => $gstPercent,
+                        'base_price'        => $basePrice,
+                        'gst_amount'        => $gstAmount,
+                        'total_price'       => (float) $p->total_price,
+                        'payment_status'    => $p->payment_status,
+                        'amount_paid'       => (float) $p->amount_paid,
+                        'amount_pending'    => (float) $p->amount_pending,
+                        'production'        => $this->formatProductionInitiation($p->latestProductionInitiation),
+
+                        'payments' => $p->relationLoaded('payments')
+                            ? $p->payments->map(function ($pay) {
+                                $typeLabel = \App\Models\LeadProductPayment::PAYMENT_TYPES[$pay->payment_type]
+                                    ?? ($pay->payment_type ? ucwords(str_replace('_', ' ', (string) $pay->payment_type)) : null);
+
+                                return [
+                                    'id'                 => $pay->id,
+                                    'amount'             => (float) $pay->amount,
+                                    'formatted_amount'   => $pay->formatted_amount,
+                                    'payment_type'       => $pay->payment_type,
+                                    'payment_type_label' => $typeLabel,
+                                    'is_tds_deducted'    => (bool) $pay->is_tds_deducted,
+                                    'tds_percentage'     => $pay->tds_percentage !== null ? (float) $pay->tds_percentage : null,
+                                    'tds_amount'         => $pay->tds_amount !== null ? (float) $pay->tds_amount : null,
+                                    'after_tds_amount'   => $pay->after_tds_amount !== null ? (float) $pay->after_tds_amount : null,
+                                    'payment_mode'       => $pay->payment_mode,
+                                    'mode_label'         => $pay->mode_label,
+                                    'mode_icon'          => $pay->mode_icon,
+                                    'mode_color'         => $pay->mode_color,
+                                    'payment_date'       => $pay->payment_date?->format('d M Y'),
+                                    'reference_number'   => $pay->reference_number,
+                                    'notes'              => $pay->notes,
+                                    'attachment_name'    => $pay->attachment_name,
+                                    'attachment_url'     => $pay->attachment_url,
+                                    'recorded_by'        => $pay->recordedBy
+                                        ? ['id' => $pay->recordedBy->id, 'name' => $pay->recordedBy->name]
+                                        : null,
+                                ];
+                            })->values()
+                            : [],
+                    ];
+                })->values()
                 : [],
 
             // ── Quotations ────────────────────────────────────────────────────

@@ -687,6 +687,7 @@ class LeadShowController extends Controller
             'unit_price'       => ['required', 'numeric', 'min:0'],
             'quantity'         => ['required', 'integer', 'min:1'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'gst_percent'      => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         // Reused, not duplicated — identical helper the web edit form uses to
@@ -694,6 +695,7 @@ class LeadShowController extends Controller
         $catalogProduct = Product::with('category')->findOrFail($data['product_id']);
         $data['product_name']     = $this->leadProductName($catalogProduct);
         $data['discount_percent'] = $data['discount_percent'] ?? 0;
+        $data['gst_percent']      = $data['gst_percent'] ?? 0;
         // Changing the underlying product invalidates any custom lead-status
         // previously tied to the old product — same reset the web performs.
         $data['lead_status_id']   = null;
@@ -802,20 +804,86 @@ class LeadShowController extends Controller
             ], 422);
         }
 
+        $grossAmount = (float) $request->amount;
+        $balancePayment = $product->total_price - $product->amount_paid;
+        if ($balancePayment < $grossAmount) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Amount exceeds remaining balance of ₹' . number_format($balancePayment, 2),
+            ], 422);
+        }
+
         $data = $request->validate([
+            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
+            'is_tds_deducted'  => ['nullable'],
+            'tds_percentage'   => ['nullable', 'numeric', 'min:0.01', 'max:100'],
+            'tds_amount'       => ['nullable', 'numeric', 'min:0'],
+            'after_tds_amount' => ['nullable', 'numeric', 'min:0'],
             'payment_mode'     => ['required', 'string', 'in:cash,bank_transfer,cheque,upi,card'],
             'payment_date'     => ['required', 'date'],
             'reference_number' => ['nullable', 'string', 'max:100'],
             'notes'            => ['nullable', 'string', 'max:500'],
+            'attachment'       => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
         ]);
 
-        $data['lead_product_id'] = $product->id;
-        $data['lead_id']         = $lead->id;
-        $data['recorded_by']     = auth()->id();
+        $rawType = (string) $data['payment_type'];
+        $paymentType = match(strtolower(str_replace([' ', '-'], '_', $rawType))) {
+            'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
+            'balancepayment', 'balance_payment'             => 'balance_payment',
+            'renewal', 'renewals'                           => 'renewals',
+            default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
+        };
 
-        $payment = \App\Models\LeadProductPayment::create($data);
-        $payment->load('leadProduct');
+        $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
+        $tdsPercentage = null;
+        $tdsAmount = null;
+        $afterTdsAmount = null;
+
+        if ($isTdsDeducted) {
+            $tdsPercentage = (float) $request->input('tds_percentage', 0);
+            if ($tdsPercentage > 0) {
+                $basePrice = round((float) ($product->unit_price * $product->quantity * (1 - ($product->discount_percent / 100))), 2);
+                $tdsAmount = round(($basePrice * $tdsPercentage) / 100, 2);
+                $afterTdsAmount = round(max(0, $grossAmount - $tdsAmount), 2);
+            } else {
+                $isTdsDeducted = false;
+            }
+        }
+
+        $attachment = $request->file('attachment');
+        $attachmentPath = null;
+        $attachmentName = null;
+
+        if ($attachment) {
+            $attachmentName = $attachment->getClientOriginalName();
+            $filename = time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $attachment->getClientOriginalExtension();
+            $targetDir = public_path('uploads/lead-product-payments');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0777, true);
+            }
+            $attachment->move($targetDir, $filename);
+            $attachmentPath = 'uploads/lead-product-payments/' . $filename;
+        }
+
+        $payment = \App\Models\LeadProductPayment::create([
+            'lead_product_id'  => $product->id,
+            'lead_id'          => $lead->id,
+            'payment_type'     => $paymentType,
+            'is_tds_deducted'  => $isTdsDeducted,
+            'tds_percentage'   => $tdsPercentage,
+            'tds_amount'       => $tdsAmount,
+            'after_tds_amount' => $afterTdsAmount,
+            'amount'           => $isTdsDeducted ? $afterTdsAmount : $grossAmount,
+            'payment_mode'     => $data['payment_mode'],
+            'payment_date'     => $data['payment_date'],
+            'reference_number' => $data['reference_number'] ?? null,
+            'notes'            => $data['notes'] ?? null,
+            'attachment_path'  => $attachmentPath,
+            'attachment_name'  => $attachmentName,
+            'recorded_by'      => auth()->id(),
+        ]);
+        $payment->load(['recordedBy', 'leadProduct']);
 
         // Sync payment status on product
         $product->syncPaymentStatus();
@@ -826,7 +894,7 @@ class LeadShowController extends Controller
 
         return response()->json([
             'status'  => true,
-            'message' => 'Payment of ₹' . number_format($data['amount'], 2) . ' recorded.',
+            'message' => 'Payment of ₹' . number_format($grossAmount, 2) . ' recorded.',
             'data'    => $this->formatPayment($payment),
         ], 201);
     }
@@ -845,7 +913,7 @@ class LeadShowController extends Controller
         return response()->json([
             'status' => true,
             'data'   => [
-                'payments' => $payments,
+                'payments' => $payments->map(fn($p) => $this->formatPayment($p)),
                 'product'  => $this->formatProduct($product->fresh()),
             ],
         ]);
@@ -1292,8 +1360,14 @@ class LeadShowController extends Controller
 
     private function formatProduct(LeadProduct $product): array
     {
+        $basePrice = round((float) ($product->unit_price * $product->quantity * (1 - ($product->discount_percent / 100))), 2);
+        $gstPercent = (float) ($product->gst_percent ?? 0);
+        $gstAmount = round($basePrice * ($gstPercent / 100), 2);
+
         return [
             'id'               => $product->id,
+            'product_id'       => $product->product_id,
+            'deal_name'        => $product->deal_name,
             'product_name'     => $product->product_name,
             'product_status'   => $product->product_status,
             'lead_status_id'   => $product->lead_status_id,
@@ -1302,6 +1376,9 @@ class LeadShowController extends Controller
             'unit_price'       => (float) $product->unit_price,
             'quantity'         => $product->quantity,
             'discount_percent' => (float) $product->discount_percent,
+            'gst_percent'      => $gstPercent,
+            'base_price'       => $basePrice,
+            'gst_amount'       => $gstAmount,
             'total_price'      => (float) $product->total_price,
             'payment_status'   => $product->payment_status,
             'amount_paid'      => (float) $product->amount_paid,
@@ -1311,13 +1388,31 @@ class LeadShowController extends Controller
 
     private function formatPayment(LeadProductPayment $payment): array
     {
+        $typeLabel = LeadProductPayment::PAYMENT_TYPES[$payment->payment_type]
+            ?? ($payment->payment_type ? ucwords(str_replace('_', ' ', (string) $payment->payment_type)) : null);
+
         return [
-            'id'               => $payment->id,
-            'amount'           => (float) $payment->amount,
-            'payment_mode'     => $payment->payment_mode,
-            'payment_date'     => $payment->payment_date?->toDateString(),
-            'reference_number' => $payment->reference_number,
-            'notes'            => $payment->notes,
+            'id'                 => $payment->id,
+            'amount'             => (float) $payment->amount,
+            'formatted_amount'   => '₹' . number_format((float) $payment->amount, 2),
+            'payment_type'       => $payment->payment_type,
+            'payment_type_label' => $typeLabel,
+            'is_tds_deducted'    => (bool) $payment->is_tds_deducted,
+            'tds_percentage'     => $payment->tds_percentage !== null ? (float) $payment->tds_percentage : null,
+            'tds_amount'         => $payment->tds_amount !== null ? (float) $payment->tds_amount : null,
+            'after_tds_amount'   => $payment->after_tds_amount !== null ? (float) $payment->after_tds_amount : null,
+            'payment_mode'       => $payment->payment_mode,
+            'mode_label'         => $payment->mode_label,
+            'mode_icon'          => $payment->mode_icon,
+            'mode_color'         => $payment->mode_color,
+            'payment_date'       => $payment->payment_date?->toDateString(),
+            'reference_number'   => $payment->reference_number,
+            'notes'              => $payment->notes,
+            'attachment_name'    => $payment->attachment_name,
+            'attachment_url'     => $payment->attachment_url,
+            'recorded_by'        => $payment->recordedBy
+                ? ['id' => $payment->recordedBy->id, 'name' => $payment->recordedBy->name]
+                : null,
         ];
     }
 
