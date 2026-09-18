@@ -8,10 +8,12 @@
 ================================================================ --}}
 
 @php
-    $totalValue   = $lead->products->sum('total_price');
-    $totalPaid    = $lead->products->sum(fn($p) => $p->amount_paid);
-    $totalPending = $totalValue - $totalPaid;
+    $convertedProducts = $lead->products->filter(fn ($p) => $p->isConvertedProduct());
+    $totalValue   = (float) $convertedProducts->sum('total_price');
+    $totalPaid    = (float) $convertedProducts->sum(fn($p) => $p->amount_paid);
+    $totalPending = max(0, $totalValue - $totalPaid);
     $prodCount    = $lead->products->count();
+    $converted    = $convertedProducts->count();
     $leadStatusCompanyId = $lead->company_id ?? auth()->user()?->company_id;
     $leadProductStatuses = \App\Models\LeadStatus::query()
         ->when(
@@ -23,11 +25,6 @@
         )
         ->orderBy('name')
         ->get(['id', 'name']);
-    $convertedStatusIds = $leadProductStatuses
-        ->filter(fn ($status) => \App\Models\LeadProduct::statusKey($status->name) === 'converted')
-        ->pluck('id')
-        ->all();
-    $converted    = $lead->products->filter(fn ($product) => in_array($product->lead_status_id, $convertedStatusIds, true) || \App\Models\LeadProduct::statusKey($product->product_status) === 'converted')->count();
     $canApproveLeadPriceRequests = auth()->user()?->hasAnyRole(['super_admin', 'Super Admin', 'admin']);
 @endphp
 
@@ -395,7 +392,7 @@
     <div class="pp-sum-card pp-total">
         <div class="pp-sum-label">Total Products Value</div>
         <div class="pp-sum-value" id="pp-sum-total">₹{{ number_format($totalValue,2) }}</div>
-        <div class="pp-sum-sub" id="pp-sum-count">{{ $prodCount }} product(s)</div>
+        <div class="pp-sum-sub" id="pp-sum-count">{{ $converted }} converted product(s)</div>
     </div>
     <div class="pp-sum-card pp-paid" style="cursor:pointer" onclick="PP.ppShowReceivedPayments()">
         <div class="pp-sum-label">Amount Received </div>

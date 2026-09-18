@@ -13,12 +13,12 @@
 ================================================================ --}}
 
 @php
-    $totalValue   = $lead->products->sum('total_price');
-    $totalPaid    = $lead->products->sum(fn($p) => $p->total_paid);
-
-
-    $totalPending = $totalValue - $totalPaid;
+    $convertedProducts = $lead->products->filter(fn ($p) => $p->isConvertedProduct());
+    $totalValue   = (float) $convertedProducts->sum('total_price');
+    $totalPaid    = (float) $convertedProducts->sum(fn($p) => $p->amount_paid);
+    $totalPending = max(0, $totalValue - $totalPaid);
     $prodCount    = $lead->products->count();
+    $converted    = $convertedProducts->count();
 @endphp
 
 {{-- ═══════════════ STYLES ═══════════════ --}}
@@ -163,7 +163,7 @@
     <div class="pp-sum-card pp-total">
         <div class="pp-sum-label">Total Products Value</div>
         <div class="pp-sum-value">₹{{ number_format($totalValue,2) }}</div>
-        <div class="pp-sum-sub">{{ $prodCount }} product(s)</div>
+        <div class="pp-sum-sub">{{ $converted }} converted product(s)</div>
     </div>
     <div class="pp-sum-card pp-paid" style="cursor:pointer" onclick="PP.ppShowReceivedPayments()">
         <div class="pp-sum-label">Amount Received</div>
@@ -177,7 +177,7 @@
     </div>
     <div class="pp-sum-card pp-count" style="cursor:pointer" onclick="PP.ppShowConvertedProducts()">
         <div class="pp-sum-label">Converted</div>
-        <div class="pp-sum-value" id="pp-sum-converted" style="color:#7c3aed">{{ $lead->products->where('product_status','converted')->count() }}</div>
+        <div class="pp-sum-value" id="pp-sum-converted" style="color:#7c3aed">{{ $converted }}</div>
         <div class="pp-sum-sub">of {{ $prodCount }} total (Click to view)</div>
     </div>
 </div>

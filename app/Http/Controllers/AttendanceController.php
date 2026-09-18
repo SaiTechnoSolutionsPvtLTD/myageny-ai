@@ -27,6 +27,8 @@ class AttendanceController extends Controller
 
     public function index(Request $request): View
     {
+        $this->applyDefaultBranchForCompanyAdmin($request);
+
         $validated = $this->validateAttendanceFilters($request);
         $perPage = (int) ($validated['per_page'] ?? 10);
         $attendanceData = $this->buildAttendanceData($validated);
@@ -44,6 +46,7 @@ class AttendanceController extends Controller
             'branches' => $this->attendanceBranches(),
             'canViewAllAttendance' => $this->canViewAllAttendance(),
             'hasTeamMembers' => $this->hasMappedTeamMembers(),
+            'defaultBranchId' => $this->resolveDefaultBranchId(auth()->user()),
             'thresholds' => [
                 'early_before' => self::EARLY_LOGIN_BEFORE,
                 'late_after' => $this->graceLoginTime(),
@@ -53,6 +56,8 @@ class AttendanceController extends Controller
 
     public function export(Request $request): Response
     {
+        $this->applyDefaultBranchForCompanyAdmin($request);
+
         $validated = $this->validateAttendanceFilters($request);
         $attendanceData = $this->buildAttendanceData($validated);
         $selectedFromDate = Carbon::parse($attendanceData['selected_from_date']);
@@ -364,7 +369,11 @@ class AttendanceController extends Controller
     {
         $rules = [
             'employee_name' => ['nullable', 'string', 'max:255'],
-            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'branch_id' => ['nullable', function ($attribute, $value, $fail) {
+                if ($value !== null && $value !== '' && $value !== 'all' && ! Branch::withoutGlobalScopes()->where('id', $value)->exists()) {
+                    $fail('The selected branch is invalid.');
+                }
+            }],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'from_date' => ['nullable', 'date'],
             'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
@@ -385,7 +394,8 @@ class AttendanceController extends Controller
         $selectedFromDate = $validated['from_date'] ?? now()->toDateString();
         $selectedToDate = $validated['to_date'] ?? $selectedFromDate;
         $employeeNameFilter = trim((string) ($validated['employee_name'] ?? ''));
-        $branchIdFilter = isset($validated['branch_id']) ? (int) $validated['branch_id'] : 0;
+        $rawBranch = $validated['branch_id'] ?? null;
+        $branchIdFilter = ($rawBranch !== null && $rawBranch !== '' && $rawBranch !== 'all') ? (int) $rawBranch : 0;
         $departmentIdFilter = isset($validated['department_id']) ? (int) $validated['department_id'] : 0;
         $statusFilter = $validated['status'] ?? '';
         $loginTimingFilter = $validated['login_timing'] ?? '';
@@ -393,6 +403,25 @@ class AttendanceController extends Controller
         $sortBy = $validated['sort_by'] ?? 'employee_id';
         $sortDir = $validated['sort_dir'] ?? 'asc';
         $accessibleAttendees = $this->accessibleAttendees();
+
+        if ($branchIdFilter > 0) {
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn (array $att) => (int) ($att['branch_id'] ?? 0) === $branchIdFilter)
+                ->values();
+        }
+
+        if ($departmentIdFilter > 0) {
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn (array $att) => (int) ($att['department_id'] ?? 0) === $departmentIdFilter)
+                ->values();
+        }
+
+        if ($attendeeTypeFilter !== '') {
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn (array $att) => ($att['attendee_type'] ?? '') === $attendeeTypeFilter)
+                ->values();
+        }
+
         $selectedDates = collect(CarbonPeriod::create($selectedFromDate, $selectedToDate))
             ->map(fn (Carbon $date) => $date->format('Y-m-d'))
             ->values();
@@ -975,5 +1004,68 @@ class AttendanceController extends Controller
         $sessionLabel = $this->leaveSessionLabel($leaveSession);
 
         return $sessionLabel ? $categoryLabel . ' - ' . $sessionLabel : $categoryLabel;
+    }
+
+    private function isCompanyAdminUser(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return (bool) ($user->isCompanyAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->hasRole('company_admin'));
+    }
+
+    private function resolveDefaultBranchId(?User $user): ?int
+    {
+        if (! $user || ! $user->company_id) {
+            return null;
+        }
+
+        $branchId = Branch::withoutGlobalScopes()
+            ->where('company_id', $user->company_id)
+            ->where('is_active', true)
+            ->where('is_default', true)
+            ->value('id');
+
+        if (! $branchId && $user->branch_id) {
+            $branchId = Branch::withoutGlobalScopes()
+                ->where('company_id', $user->company_id)
+                ->where('is_active', true)
+                ->where('id', $user->branch_id)
+                ->value('id');
+        }
+
+        if (! $branchId) {
+            $branchId = Branch::withoutGlobalScopes()
+                ->where('company_id', $user->company_id)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->value('id');
+        }
+
+        if (! $branchId) {
+            $branch = Branch::ensureDefaultForCurrentCompany();
+            $branchId = $branch?->id;
+        }
+
+        return $branchId ? (int) $branchId : null;
+    }
+
+    private function applyDefaultBranchForCompanyAdmin(Request $request): void
+    {
+        $user = auth()->user();
+        if (! $this->isCompanyAdminUser($user)) {
+            return;
+        }
+
+        if (! $request->has('branch_id') && ! $request->query->has('branch_id')) {
+            $defaultBranchId = $this->resolveDefaultBranchId($user);
+            if ($defaultBranchId) {
+                $request->merge(['branch_id' => (string) $defaultBranchId]);
+                $request->query->set('branch_id', (string) $defaultBranchId);
+            }
+        }
     }
 }

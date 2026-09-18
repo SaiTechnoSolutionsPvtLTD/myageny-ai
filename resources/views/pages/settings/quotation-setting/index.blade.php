@@ -815,7 +815,7 @@
                         <div class="form-group">
                             <label class="form-label">Account Name</label>
                             <input type="text" name="account_name" class="form-input"
-                                   value="{{ $data['account_name'] ?? '' }}" placeholder="TTT">
+                                   value="{{ $data['account_name'] ?? '' }}" placeholder="Account Holder Name">
                         </div>
                         </div>
                         <div class="grid-2">
@@ -839,7 +839,7 @@
                             <div class="form-group">
                                 <label class="form-label">UPI</label>
                                 <input type="text" name="bank_upi" class="form-input"
-                                       value="{{ $data['bank_upi'] ?? '' }}" placeholder="test@oksbi" maxlength="15">
+                                       value="{{ $data['bank_upi'] ?? '' }}" placeholder="test@oksbi" maxlength="100">
                             </div>
                         </div>
                     </div>

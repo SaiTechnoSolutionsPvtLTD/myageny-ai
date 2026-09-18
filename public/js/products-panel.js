@@ -759,8 +759,8 @@
         setInner('pp-sum-total',   fmt(s.total_value));
         setInner('pp-sum-paid',    fmt(s.total_paid));
         setInner('pp-sum-pending', fmt(s.total_pending));
-        setInner('pp-sum-count',   s.product_count || 0);
-        setInner('pp-sum-converted', (s.converted || 0) + ' of ' + (s.product_count || 0));
+        setInner('pp-sum-count',   (s.converted || 0) + ' converted product(s)');
+        setInner('pp-sum-converted', s.converted || 0);
     }
 
     function renderDeals() {
@@ -1071,6 +1071,9 @@
     }
 
     function isConvertedProduct(product) {
+        if (product && typeof product.is_converted !== 'undefined') {
+            return Boolean(product.is_converted);
+        }
         return statusKey(product && (product.status_label || product.status_value || '')) === 'converted';
     }
 
@@ -1324,7 +1327,7 @@
         var payments = [];
         ppState.deals.forEach(function (deal) {
             deal.products.forEach(function (p) {
-                if (p.payments && p.payments.length > 0) {
+                if (isConvertedProduct(p) && p.payments && p.payments.length > 0) {
                     p.payments.forEach(function (pmt) {
                         payments.push({
                             payment: pmt,
@@ -1403,13 +1406,15 @@
         var pendingProducts = [];
         ppState.deals.forEach(function (deal) {
             deal.products.forEach(function (p) {
-                var due = p.total - p.paid;
-                if (due > 0) {
-                    pendingProducts.push({
-                        product: p,
-                        due: due,
-                        dealName: deal.deal_name
-                    });
+                if (isConvertedProduct(p)) {
+                    var due = p.total - p.paid;
+                    if (due > 0) {
+                        pendingProducts.push({
+                            product: p,
+                            due: due,
+                            dealName: deal.deal_name
+                        });
+                    }
                 }
             });
         });

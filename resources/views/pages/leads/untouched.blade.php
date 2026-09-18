@@ -595,7 +595,7 @@
                                     {{ $lead->source_label }}
                                 </span>
                             </td>
-                            <td><span class="ld-deal">{{ number_format($lead->products->sum('total_price'), 2) }}</span></td>
+                            <td><span class="ld-deal">{{ number_format($lead->converted_deal_value, 2) }}</span></td>
                             <td>
                                 @if($lead->assignedTo)
                                 <div class="ld-owner">

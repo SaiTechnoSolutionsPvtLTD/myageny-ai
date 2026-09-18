@@ -39,7 +39,7 @@ class LeadController extends Controller
 
         $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
-        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
+        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products.leadStatus'])
             ->latest('lead_date');
 
         $this->visibility->applyLeadVisibility($query);
@@ -323,7 +323,7 @@ class LeadController extends Controller
             }
         }
 
-        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products'])
+        $query = Lead::with(['branch', 'assignedTo', 'createdBy', 'preSaleExecutive', 'products.leadStatus'])
             ->whereDoesntHave('callUpdates')
             ->latest('lead_date');
 

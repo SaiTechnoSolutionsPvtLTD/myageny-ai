@@ -881,9 +881,7 @@ class LeadController extends Controller
 
     private function formatLeadSummary(Lead $lead): array
     {
-        $dealValue = $lead->products->sum(function ($product) {
-            return ($product->total_price ?? 0) * ($product->quantity ?? 0);
-        });
+        $dealValue = (float) $lead->converted_deal_value;
 
         $status = $lead->lead_status;
         $statusLabel = $lead->status_label;

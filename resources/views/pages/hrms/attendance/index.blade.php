@@ -678,7 +678,7 @@ details[open] summary.att-accordion-header {
             <div class="att-field">
                 <label class="att-label">Branch</label>
                 <select name="branch_id" class="att-select">
-                    <option value="">All Branches</option>
+                    <option value="all" @selected(request('branch_id') === 'all' || (request()->has('branch_id') && request('branch_id') === ''))>All Branches</option>
                     @foreach($branches as $branch)
                         <option value="{{ $branch->id }}" @selected((string) request('branch_id') === (string) $branch->id)>{{ $branch->name }}</option>
                     @endforeach
@@ -739,7 +739,8 @@ details[open] summary.att-accordion-header {
                 @if($managerAttendanceView)
                     <button type="submit" formaction="{{ route('attendance.export') }}" class="att-btn">Export Excel</button>
                 @endif
-                @if(request()->hasAny(['employee_name', 'branch_id', 'department_id', 'from_date', 'to_date', 'status', 'login_timing', 'attendee_type']))
+                @php($isFiltered = request()->hasAny(['employee_name', 'department_id', 'from_date', 'to_date', 'status', 'login_timing', 'attendee_type']) || (request()->has('branch_id') && (string) request('branch_id') !== (string) ($defaultBranchId ?? '')))
+                @if($isFiltered)
                     <a href="{{ route('attendance.index') }}" class="att-btn">Reset</a>
                 @endif
             </div>
