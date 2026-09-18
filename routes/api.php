@@ -487,6 +487,10 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('mobile.projects.testing-dashboard');
         Route::get('testing-dashboard/{productionInitiation}', [ProjectApiController::class, 'testingProjectDetails'])
             ->name('mobile.projects.testing-dashboard.show');
+        Route::get('testing-dashboard/{productionInitiation}/summary-report', [ProjectApiController::class, 'testingSummaryReport'])
+            ->name('mobile.projects.testing-dashboard.summary-report');
+        Route::get('testing-dashboard/{productionInitiation}/summary-report-pdf', [ProjectApiController::class, 'exportTestingSummaryReportPdf'])
+            ->name('mobile.projects.testing-dashboard.summary-report-pdf');
         Route::post('testing-dashboard/{productionInitiation}/status', [ProjectApiController::class, 'updateTestingStatus'])
             ->name('mobile.projects.testing-dashboard.update-status');
         Route::patch('bugs/{bug}/status', [ProjectApiController::class, 'updateBugStatus'])

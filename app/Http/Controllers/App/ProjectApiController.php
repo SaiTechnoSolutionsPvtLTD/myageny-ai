@@ -26,10 +26,13 @@ use App\Models\Product;
 use App\Models\DesignSettingTarget;
 use App\Models\ProjectTestingDetail;
 use App\Models\ProjectBug;
+use App\Models\CustomerCampaign;
+use App\Models\Company;
 use App\Services\ProductionUpdateRecorder;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use App\Services\NotificationService;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ProjectApiController extends Controller
 {
@@ -55,6 +58,34 @@ class ProjectApiController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+        $canViewSwitcher = $user->canViewProjectsDashboardSwitcher();
+        $selectedDashboard = null;
+
+        if ($canViewSwitcher) {
+            $selectedDashboard = $request->query('dashboard_type');
+        }
+
+        if (! $selectedDashboard) {
+            if ($user->belongsToTestingDepartment() || $user->hasTestingLikeRole()) {
+                $selectedDashboard = 'testing';
+            } elseif ($user->belongsToDesigningDepartment()) {
+                $selectedDashboard = 'design';
+            } elseif ($user->belongsToDigitalMarketingDepartment()) {
+                $selectedDashboard = 'dm';
+            } else {
+                $selectedDashboard = 'development';
+            }
+        }
+
+        if (in_array($selectedDashboard, ['testing', 'qa'], true)) {
+            return $this->testingDashboard($request);
+        }
+
+        if (in_array($selectedDashboard, ['design', 'designing'], true)) {
+            return $this->designingDashboard($request);
+        }
+
         $projects = $this->visibleProjectsQuery($user)
             ->get()
             ->map(function (ProductionInitiation $project) use ($user) {
@@ -73,6 +104,32 @@ class ProjectApiController extends Controller
                 return $project;
             })
             ->values();
+
+        $isDm = in_array($selectedDashboard, ['dm', 'digital_marketing'], true);
+        if ($isDm) {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+
+            $projects = $projects->filter(function ($project) use ($dmDeptIds) {
+                if ($project->department_id && in_array((int) $project->department_id, $dmDeptIds, true)) {
+                    return true;
+                }
+                $deptName = strtolower((string) ($project->department?->name ?? ''));
+                return str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm');
+            })->values();
+        } else {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+
+            $projects = $projects->filter(function ($project) use ($devDeptIds) {
+                if ($project->department_id && in_array((int) $project->department_id, $devDeptIds, true)) {
+                    return true;
+                }
+                return $this->isDevelopmentProject($project);
+            })->values();
+        }
 
         $dashboardFilters = [
             'date_from'      => trim((string) $request->query('date_from', '')),
@@ -99,10 +156,6 @@ class ProjectApiController extends Controller
             ->whereNull('project_allocated_at')
             ->count();
 
-        $allocationPendingProjects = ProductionInitiation::query()
-            ->whereNull('project_allocated_at')
-            ->count();
-
         [$deliverySectionTitle, $deliverySectionBadge] = $this->resolveDeliverySectionLabels($dashboardFilters);
 
         $quickUpdateProjects = $projects
@@ -125,10 +178,18 @@ class ProjectApiController extends Controller
 
         $sixMonthsRevenue = $this->sixMonthsRevenueTrend($projects);
 
+        $dmCampaignsData = $isDm ? $this->getDmCampaignsData($user, $dashboardFilters, $request) : null;
+        $technicalSeoData = $isDm ? $this->getActiveTechnicalSeoProjectsData($user, $dashboardFilters, $request) : ['count' => 0, 'items' => []];
+        $pendingWelcomeCallData = $this->getPendingWelcomeCallProjectsData($user, $isDm ? 'dm' : 'development', $dashboardFilters, $request);
+        $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, $isDm ? 'dm' : 'development', $dashboardFilters);
+
         return response()->json([
             'success' => true,
             'data'    => [
+                'selected_dashboard'           => $isDm ? 'dm' : 'development',
+                'can_view_projects_dashboard_switcher' => $canViewSwitcher,
                 'stats'                        => $stats,
+                'allocation_pending_count'     => $allocationPendingProjects,
                 'dashboard_filters'            => $dashboardFilters,
                 'project_options'              => $projects->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
                     ->values()
@@ -140,16 +201,15 @@ class ProjectApiController extends Controller
                 'is_tl_scoped_view'            => $this->shouldLimitToAssignedProjects($user),
                 'is_contributor_scoped_view'   => $this->shouldLimitToEmployeeProjects($user),
                 'can_quick_add_production_update' => $this->canQuickAddProductionUpdate($user),
-                // These three were already being computed above (lines
-                // 112-125) but never included in the response — the
-                // Flutter dashboard model/UI expects them (development_
-                // product_wise_stats / payment_stats / six_months_revenue)
-                // and hides its chart sections entirely when they're
-                // missing, which is why the graphs never rendered on
-                // mobile even though the web dashboard shows them.
                 'development_product_wise_stats' => $developmentProductWiseStats,
                 'payment_stats'                 => $paymentStats,
                 'six_months_revenue'            => $sixMonthsRevenue,
+                'dm_campaigns_data'            => $dmCampaignsData,
+                'active_technical_seo_count'   => $technicalSeoData['count'] ?? 0,
+                'active_technical_seo_projects' => $technicalSeoData['items'] ?? [],
+                'pending_welcome_call_count'   => $pendingWelcomeCallData['count'] ?? 0,
+                'pending_welcome_call_projects' => $pendingWelcomeCallData['items'] ?? [],
+                'employee_timesheet_tasks'     => $employeeTimesheetTasks,
             ],
         ]);
     }
@@ -2898,7 +2958,7 @@ class ProjectApiController extends Controller
     public function designingDashboard(Request $request): JsonResponse
     {
         $user = auth()->user();
-        abort_unless($user->belongsToDesigningDepartment(), 403);
+        abort_unless($user->belongsToDesigningDepartment() || $user->canViewProjectsDashboardSwitcher() || $user->hasAdminLikeRole(), 403);
 
         $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
 
@@ -3080,12 +3140,19 @@ class ProjectApiController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
+                'selected_dashboard' => 'design',
+                'can_view_projects_dashboard_switcher' => (bool) $user->canViewProjectsDashboardSwitcher(),
                 'stats' => $stats,
                 'design_projects' => $designProjects->map(fn($p) => ['id' => $p->id, 'product_name' => $p->product_name])->values(),
                 'today_planned_tasks' => $todayPlannedTasks,
                 'overdue_tasks_list' => $overdueTasksList,
                 'is_tl' => $isTl,
                 'team_members' => $isTl ? $this->availableTeamMembers($user) : [],
+                'employee_timesheet_tasks' => $this->getEmployeeTimesheetTasksData($user, 'design', [
+                    'date_from' => $filterDate,
+                    'date_to' => $filterDate,
+                    'project_id' => $filterAccountId,
+                ]),
                 'filters' => [
                     'project_id' => $filterAccountId,
                     'date' => $filterDate,
@@ -3111,7 +3178,7 @@ class ProjectApiController extends Controller
     public function testingDashboard(Request $request): JsonResponse
     {
         $user = auth()->user();
-        abort_unless($user->belongsToTestingDepartment() || $user->hasTestingLikeRole(), 403);
+        abort_unless($user->belongsToTestingDepartment() || $user->hasTestingLikeRole() || $user->canViewProjectsDashboardSwitcher() || $user->hasAdminLikeRole(), 403);
 
         $testingHandovers = ProjectTestingDetail::with([
             'productionInitiation.leadProduct',
@@ -3142,9 +3209,13 @@ class ProjectApiController extends Controller
             $activeStatus = 'open';
         }
 
+        $employeeTimesheetTasks = $this->getEmployeeTimesheetTasksData($user, 'testing', $request->all());
+
         return response()->json([
             'success' => true,
             'data' => [
+                'selected_dashboard' => 'testing',
+                'can_view_projects_dashboard_switcher' => (bool) $user->canViewProjectsDashboardSwitcher(),
                 'active_status' => $activeStatus,
                 'stats' => [
                     'open' => $openCount,
@@ -3154,6 +3225,7 @@ class ProjectApiController extends Controller
                     'ready_launch' => $readyLaunchCount,
                 ],
                 'handovers' => $filteredHandovers->values()->map(fn ($h) => $this->serializeTestingHandover($h))->all(),
+                'employee_timesheet_tasks' => $employeeTimesheetTasks,
             ],
         ]);
     }
@@ -3176,15 +3248,48 @@ class ProjectApiController extends Controller
 
         $latestHandover = $productionInitiation->testingDetails()->latest()->first();
         $bugs = $productionInitiation->bugs()->with('createdBy')->latest()->get();
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
 
         return response()->json([
             'success' => true,
             'data' => [
                 'project' => $this->serializeProjectSummary($productionInitiation),
                 'handover' => $latestHandover ? $this->serializeHandoverDetail($latestHandover) : null,
-                'bugs' => $bugs->map(fn ($b) => $this->serializeBug($b))->values()->all(),
+                'bugs' => $bugs->map(fn ($b) => $this->serializeBug($b, $request->user()))->values()->all(),
+                'summary_data' => $summaryData,
             ],
         ]);
+    }
+
+    public function testingSummaryReport(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
+
+        return response()->json([
+            'success' => true,
+            'data' => $summaryData,
+        ]);
+    }
+
+    public function exportTestingSummaryReportPdf(Request $request, ProductionInitiation $productionInitiation)
+    {
+        $summaryData = $this->buildTestingSummaryData($productionInitiation);
+        $safeName = Str::slug($summaryData['projectName'] ?: 'Project-' . $productionInitiation->id);
+        $filename = 'Testing-Summary-' . $safeName . '-' . now()->format('Ymd_His') . '.pdf';
+
+        $pdf = Pdf::loadView('pages.projects.testing-summary-pdf', $summaryData)
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont' => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+            ]);
+
+        if ($request->query('view') === 'preview') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
     }
 
     /**
@@ -3621,19 +3726,47 @@ class ProjectApiController extends Controller
         ];
     }
 
-    private function serializeBug(ProjectBug $bug): array
+    private function serializeBug(ProjectBug $bug, ?User $user = null): array
     {
+        if (! $user) {
+            $user = auth()->user();
+        }
+        $isAdmin = $user && (
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+        $isTestingUser = $user && (
+            $user->belongsToTestingDepartment() ||
+            $user->hasTestingLikeRole()
+        );
+        $isDevUser = $user && ! $isTestingUser && (
+            $user->belongsToDevelopmentDepartment() ||
+            $user->hasDevelopmentLikeRole() ||
+            $user->isDevelopmentProjectCoordinator() ||
+            $user->isDevelopmentTeam()
+        );
+
+        $canEditDeveloperStatus = ! $isTestingUser && ($isDevUser || $isAdmin);
+        $canEditTesterStatus = $isTestingUser || $isAdmin;
+
         return [
             'id' => $bug->id,
             'production_initiation_id' => $bug->production_initiation_id,
             'description' => $bug->description,
-            'priority' => $bug->priority,
+            'priority' => $bug->priority ?: 'Medium',
             'status' => $bug->status,
             'developer_status' => $bug->developer_status ?: 'pending',
             'tester_status' => $bug->tester_status ?: 'pending',
+            'developer_remarks' => $bug->developer_remarks,
+            'tester_remarks' => $bug->tester_remarks,
+            'latest_remarks' => $bug->latest_remarks,
             'reopen_count' => (int) ($bug->reopen_count ?? 0),
             'attachment_url' => $bug->attachment_path ? asset($bug->attachment_path) : null,
             'attachment_name' => $bug->attachment_original_name,
+            'attachments' => $bug->attachment_list,
+            'status_history' => is_array($bug->status_history) ? $bug->status_history : [],
+            'can_edit_developer_status' => $canEditDeveloperStatus,
+            'can_edit_tester_status' => $canEditTesterStatus,
             'created_at' => optional($bug->created_at)->toIso8601String(),
             'created_by' => $bug->createdBy ? [
                 'id' => $bug->createdBy->id,
@@ -3957,5 +4090,913 @@ class ProjectApiController extends Controller
         }
 
         return 'other';
+    }
+
+    private function buildTestingSummaryData(ProductionInitiation $project): array
+    {
+        $project->loadMissing([
+            'leadProduct',
+            'product',
+            'lead',
+            'department',
+            'testingDetails.movedBy',
+            'testingDetails.testingTl',
+            'bugs.createdBy',
+        ]);
+
+        $latestHandover = $project->testingDetails()->latest()->first();
+        $bugs = $project->bugs()->with('createdBy')->latest()->get();
+
+        // Allocated Developers
+        $devUsers = collect();
+        if ($latestHandover?->movedBy) {
+            $devUsers->push($latestHandover->movedBy);
+        }
+        if (! empty($project->project_allocated_employee_user_ids)) {
+            $allocatedDevs = User::whereIn('id', (array) $project->project_allocated_employee_user_ids)
+                ->where('is_active', true)
+                ->get();
+            $devUsers = $devUsers->merge($allocatedDevs);
+        }
+        $devUsers = $devUsers->unique('id')->values()->map(fn($u) => [
+            'id' => $u->id,
+            'name' => $u->name,
+            'email' => $u->email,
+        ]);
+
+        // Allocated Team Leads
+        $tlUsers = collect();
+        if (! empty($project->project_allocated_tl_user_ids)) {
+            $allocatedTls = User::whereIn('id', (array) $project->project_allocated_tl_user_ids)
+                ->where('is_active', true)
+                ->get();
+            $tlUsers = $tlUsers->merge($allocatedTls);
+        }
+        $tlUsers = $tlUsers->unique('id')->values()->map(fn($u) => [
+            'id' => $u->id,
+            'name' => $u->name,
+            'email' => $u->email,
+        ]);
+
+        // Project Title
+        $projectName = $project->leadProduct?->name 
+            ?? $project->product?->name 
+            ?? ($project->lead?->company_name ? $project->lead->company_name . ' Project' : 'Project #' . $project->id);
+
+        // Client info
+        $clientName = $project->lead?->company_name 
+            ?? $project->lead?->contact_person_name 
+            ?? 'N/A';
+        $clientPhone = $project->lead?->phone_number;
+        $clientEmail = $project->lead?->email;
+
+        // QA Status
+        $qaRawStatus = $latestHandover?->status ?? 'open';
+        $qaStatusInfo = match($qaRawStatus) {
+            'ready_launch', 'ready_to_launch' => ['label' => 'Ready to Launch', 'icon' => '🚀', 'color' => '#047857', 'bg' => '#ecfdf5', 'border' => '#a7f3d0'],
+            'completed' => ['label' => 'Completed (QA Passed)', 'icon' => '✅', 'color' => '#15803d', 'bg' => '#f0fdf4', 'border' => '#bbf7d0'],
+            'retesting' => ['label' => 'Retesting Phase', 'icon' => '🟪', 'color' => '#6d28d9', 'bg' => '#f5f3ff', 'border' => '#ddd6fe'],
+            'ongoing' => ['label' => 'Ongoing Testing', 'icon' => '🟦', 'color' => '#0369a1', 'bg' => '#f0f9ff', 'border' => '#bae6fd'],
+            default => ['label' => 'Open (New Handover)', 'icon' => '🟧', 'color' => '#c2410c', 'bg' => '#fff7ed', 'border' => '#fed7aa'],
+        };
+
+        // Bug Metrics Breakdown
+        $totalBugs = $bugs->count();
+        $highBugs = $bugs->where('priority', 'High')->count();
+        $medBugs = $bugs->where('priority', 'Medium')->count();
+        $lowBugs = $bugs->where('priority', 'Low')->count();
+
+        $devCompleted = 0;
+        $devOngoing = 0;
+        $devPending = 0;
+
+        $testerClosed = 0;
+        $testerReopen = 0;
+        $testerPending = 0;
+        $totalReopens = 0;
+
+        $processedBugs = $bugs->map(function ($bug, $index) use (&$devCompleted, &$devOngoing, &$devPending, &$testerClosed, &$testerReopen, &$testerPending, &$totalReopens) {
+            $rawDev = strtolower(trim((string) ($bug->developer_status ?: ($bug->status === 'ongoing' ? 'ongoing' : (in_array($bug->status, ['completed', 'fixed', 'closed']) ? 'completed' : 'pending')))));
+            if (! in_array($rawDev, ['ongoing', 'pending', 'completed'], true)) {
+                $rawDev = 'pending';
+            }
+            if ($rawDev === 'completed') $devCompleted++;
+            elseif ($rawDev === 'ongoing') $devOngoing++;
+            else $devPending++;
+
+            $rawTester = strtolower(trim((string) ($bug->tester_status ?: ($bug->status === 'closed' ? 'closed' : ($bug->status === 'reopen' ? 'reopen' : 'pending')))));
+            if (! in_array($rawTester, ['closed', 'reopen', 'pending'], true)) {
+                $rawTester = 'pending';
+            }
+            if ($rawTester === 'closed') $testerClosed++;
+            elseif ($rawTester === 'reopen') $testerReopen++;
+            else $testerPending++;
+
+            $reopenCount = (int) ($bug->reopen_count ?? 0);
+            $totalReopens += $reopenCount;
+
+            $attList = $bug->attachment_list;
+            $enrichedAttachments = array_map(function ($att) {
+                $path = $att['path'] ?? '';
+                $name = $att['name'] ?? basename($path);
+                $isImg = (bool) preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $name ?: $path);
+                return [
+                    'name' => $name,
+                    'url' => $att['url'] ?? asset($path),
+                    'path' => $path,
+                    'is_image' => $isImg,
+                ];
+            }, $attList);
+
+            return [
+                'id' => $bug->id,
+                'index' => $index + 1,
+                'priority' => $bug->priority ?: 'Medium',
+                'description' => $bug->description,
+                'created_by' => $bug->createdBy?->name ?? 'QA Tester',
+                'created_at' => $bug->created_at?->format('d M Y, h:i A'),
+                'raw_dev_status' => $rawDev,
+                'raw_tester_status' => $rawTester,
+                'reopen_count' => $reopenCount,
+                'developer_remarks' => $bug->developer_remarks,
+                'tester_remarks' => $bug->tester_remarks,
+                'latest_remarks' => $bug->latest_remarks,
+                'status_history' => is_array($bug->status_history) ? $bug->status_history : [],
+                'attachments' => $enrichedAttachments,
+            ];
+        });
+
+        $company = $project->company ?? (auth()->user()?->company ?? Company::first());
+        $passRate = $totalBugs > 0 ? round(($testerClosed / $totalBugs) * 100) : 100;
+
+        return [
+            'projectId' => $project->id,
+            'projectName' => $projectName,
+            'clientName' => $clientName,
+            'clientPhone' => $clientPhone,
+            'clientEmail' => $clientEmail,
+            'devUsers' => $devUsers,
+            'tlUsers' => $tlUsers,
+            'qaStatusInfo' => $qaStatusInfo,
+            'qaRawStatus' => $qaRawStatus,
+            'totalBugs' => $totalBugs,
+            'highBugs' => $highBugs,
+            'medBugs' => $medBugs,
+            'lowBugs' => $lowBugs,
+            'devCompleted' => $devCompleted,
+            'devOngoing' => $devOngoing,
+            'devPending' => $devPending,
+            'testerClosed' => $testerClosed,
+            'testerReopen' => $testerReopen,
+            'testerPending' => $testerPending,
+            'totalReopens' => $totalReopens,
+            'passRate' => $passRate,
+            'bugs' => $processedBugs,
+            'company' => $company ? ['id' => $company->id, 'name' => $company->name] : null,
+            'generatedAt' => now()->format('d M Y, h:i A'),
+            'testingBulletins' => $this->generateTestingBulletins($processedBugs, $qaRawStatus, $totalReopens),
+        ];
+    }
+
+    private function generateTestingBulletins($bugs, string $qaRawStatus, int $totalReopens): array
+    {
+        $categoriesMap = [
+            'ui' => [
+                'title' => 'UI / UX & Responsive Design',
+                'icon' => '🎨',
+                'keywords' => ['ui', 'ux', 'layout', 'design', 'css', 'align', 'alignment', 'button', 'color', 'modal', 'popup', 'font', 'spacing', 'responsive', 'mobile', 'screen', 'view', 'table', 'badge', 'logo', 'header', 'footer', 'overflow', 'scroll', 'padding', 'margin'],
+                'desc' => 'Visual presentation, component styling, responsive layouts across screen sizes, and modal popups.',
+            ],
+            'form' => [
+                'title' => 'Form Validation & Input Controls',
+                'icon' => '📝',
+                'keywords' => ['form', 'input', 'field', 'validation', 'dropdown', 'select', 'upload', 'attachment', 'submit', 'checkbox', 'radio', 'required', 'email', 'phone', 'empty', 'char', 'length', 'file', 'image', 'preview'],
+                'desc' => 'Interactive input controls, required validations, file attachments, and submit operations.',
+            ],
+            'nav' => [
+                'title' => 'Navigation & Route Integrity',
+                'icon' => '🧭',
+                'keywords' => ['nav', 'menu', 'link', 'route', 'redirect', 'tab', 'pagination', 'url', 'back', 'sidebar', 'breadcrumb', 'href', 'forward'],
+                'desc' => 'Link routing, navigation workflows, tab switching, and redirection consistency.',
+            ],
+            'auth' => [
+                'title' => 'Authentication & Access Control',
+                'icon' => '🔐',
+                'keywords' => ['login', 'signup', 'auth', 'password', 'role', 'permission', 'session', 'token', 'logout', 'user', 'access', 'security', 'privilege', 'admin'],
+                'desc' => 'User credentials, authentication states, role permissions, and access privileges.',
+            ],
+            'workflow' => [
+                'title' => 'Workflow & Core Business Logic',
+                'icon' => '⚙️',
+                'keywords' => ['status', 'save', 'update', 'delete', 'calculate', 'price', 'total', 'order', 'lead', 'invoice', 'report', 'export', 'download', 'pdf', 'mail', 'email', 'notification', 'filter', 'search', 'process', 'stage', 'phase', 'handover'],
+                'desc' => 'Business rules execution, data updates, status transitions, notifications, and document exports.',
+            ],
+            'performance' => [
+                'title' => 'Performance & Error Handling',
+                'icon' => '⚡',
+                'keywords' => ['slow', 'load', 'preloader', 'loading', 'crash', 'error', 'exception', '500', '404', 'blank', 'freeze', 'bug', 'fail', 'broken', 'timeout', 'query', 'speed'],
+                'desc' => 'System load times, preloaders, exception traps, and application stability.',
+            ],
+        ];
+
+        $detectedCategories = [];
+        $keyFindings = [];
+
+        foreach ($bugs as $bug) {
+            $desc = trim((string) ($bug['description'] ?? ''));
+            if ($desc === '') continue;
+
+            $descLower = strtolower($desc);
+            $matchedAny = false;
+
+            foreach ($categoriesMap as $catKey => $catMeta) {
+                foreach ($catMeta['keywords'] as $kw) {
+                    if (str_contains($descLower, $kw)) {
+                        $detectedCategories[$catKey] = true;
+                        $matchedAny = true;
+                        break;
+                    }
+                }
+            }
+
+            if (! $matchedAny) {
+                $detectedCategories['workflow'] = true;
+            }
+
+            $firstSentence = preg_split('/(\. |\n|\r)/', $desc)[0] ?? $desc;
+            $cleanSnippet = Str::limit(trim($firstSentence), 140, '...');
+
+            $keyFindings[] = [
+                'index' => $bug['index'] ?? 1,
+                'priority' => $bug['priority'] ?? 'Medium',
+                'summary' => $cleanSnippet,
+                'full_description' => $desc,
+                'raw_dev_status' => $bug['raw_dev_status'] ?? 'pending',
+                'raw_tester_status' => $bug['raw_tester_status'] ?? 'pending',
+                'reopen_count' => (int) ($bug['reopen_count'] ?? 0),
+                'developer_remarks' => $bug['developer_remarks'] ?? null,
+                'tester_remarks' => $bug['tester_remarks'] ?? null,
+                'status_history' => $bug['status_history'] ?? [],
+            ];
+        }
+
+        $modulesCovered = [];
+        if (! empty($detectedCategories)) {
+            foreach ($detectedCategories as $catKey => $val) {
+                if (isset($categoriesMap[$catKey])) {
+                    $modulesCovered[] = $categoriesMap[$catKey];
+                }
+            }
+        } else {
+            $modulesCovered = [
+                $categoriesMap['workflow'],
+                $categoriesMap['ui'],
+                $categoriesMap['form'],
+            ];
+        }
+
+        $total = count($bugs);
+        $closed = count(array_filter($keyFindings, fn($b) => $b['raw_tester_status'] === 'closed'));
+        $highCount = count(array_filter($keyFindings, fn($b) => $b['priority'] === 'High'));
+
+        $bulletinPoints = [];
+
+        $moduleNames = implode(', ', array_map(fn($m) => $m['title'], array_slice($modulesCovered, 0, 3)));
+        if ($total > 0) {
+            $bulletinPoints[] = "Comprehensive quality assessment executed across {$total} test scenarios, focusing on {$moduleNames}.";
+        } else {
+            $bulletinPoints[] = "Full end-to-end sanity and functional testing executed across core modules including {$moduleNames}.";
+        }
+
+        if ($total > 0) {
+            $resolutionRate = round(($closed / $total) * 100);
+            $bulletinPoints[] = "Logged {$total} defect(s) (including {$highCount} High Priority). Currently, {$closed} defect(s) ({$resolutionRate}%) are officially verified and closed by QA.";
+        } else {
+            $bulletinPoints[] = "Zero blocking defects or regressions were logged during testing. All evaluated workflows passed verification.";
+        }
+
+        if ($totalReopens > 0) {
+            $bulletinPoints[] = "{$totalReopens} reopen cycle(s) were conducted by QA to confirm all regression edge cases and developer fixes were thoroughly tested.";
+        } else {
+            $bulletinPoints[] = "All fixes resolved by the development team verified successfully without requiring reopen cycles.";
+        }
+
+        $bugsWithRemarks = count(array_filter($bugs->toArray() ?? [], function ($b) {
+            return ! empty($b['developer_remarks']) || ! empty($b['tester_remarks']) || ! empty($b['status_history']);
+        }));
+        if ($bugsWithRemarks > 0) {
+            $bulletinPoints[] = "Mandatory developer resolution remarks and QA verification notes are recorded for {$bugsWithRemarks} defect item(s).";
+        }
+
+        $verdict = match($qaRawStatus) {
+            'ready_launch', 'ready_to_launch' => 'QA Certified Ready for Launch: All acceptance criteria and critical bug resolutions have been validated. Project is cleared for production release.',
+            'completed' => 'QA Testing Completed: Core functionality and reported issues have been verified. Final deployment signoff is in progress.',
+            'retesting' => 'Active Retesting Phase: Developer patches are currently undergoing secondary QA verification to confirm resolution.',
+            'ongoing' => 'Ongoing QA Testing: Quality audit is actively in progress between QA and Development teams.',
+            default => 'Initial Handover & Inspection: QA team is executing baseline test cases following development handover.',
+        };
+        $bulletinPoints[] = $verdict;
+
+        return [
+            'modulesCovered' => $modulesCovered,
+            'keyFindings' => $keyFindings,
+            'bulletinPoints' => $bulletinPoints,
+        ];
+    }
+
+    private function getEmployeeTimesheetTasksData(User $viewer, string $deptType, array $filters = []): array
+    {
+        $isAdminLike = $viewer->hasAdminLikeRole();
+        $isTl = ! $isAdminLike && $this->isUserTl($viewer);
+        $isEmployeeOnly = ! $isAdminLike && ! $isTl;
+
+        $deptIds = match ($deptType) {
+            'design', 'designing' => Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->pluck('id')->toArray(),
+            'dm', 'digital_marketing' => Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray(),
+            'testing', 'qa' => Department::whereRaw('LOWER(name) LIKE ?', ['%testing%'])->orWhereRaw('LOWER(name) LIKE ?', ['%qa%'])->pluck('id')->toArray(),
+            default => Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray(),
+        };
+
+        if ($isEmployeeOnly) {
+            $scopedEmployees = collect([$viewer]);
+        } else {
+            $empQuery = User::query()
+                ->with(['roles.department'])
+                ->where('is_active', true)
+                ->when($viewer->company_id, fn ($q) => $q->where('company_id', $viewer->company_id));
+
+            $empQuery->where(function ($q) use ($deptIds, $deptType) {
+                $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                  ->orWhereHas('roles', function ($rq) use ($deptType) {
+                      match ($deptType) {
+                          'design', 'designing' => $rq->whereRaw('LOWER(name) LIKE ?', ['%design%']),
+                          'dm', 'digital_marketing' => $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']),
+                          'testing', 'qa' => $rq->whereRaw('LOWER(name) LIKE ?', ['%test%'])->orWhereRaw('LOWER(name) LIKE ?', ['%qa%']),
+                          default => $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])->orWhereRaw('LOWER(name) LIKE ?', ['%software%'])->orWhereRaw('LOWER(name) LIKE ?', ['%web%'])->orWhereRaw('LOWER(name) LIKE ?', ['%app%']),
+                      };
+                  })
+                  ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                  ->orWhereHas('internJoiningForm.department', fn ($dq) => $dq->whereIn('id', $deptIds));
+            });
+
+            $scopedEmployees = $empQuery->orderBy('name')->get();
+
+            if ($isTl) {
+                $tlProjectMemberIds = ProductionInitiation::query()
+                    ->where(function ($q) use ($viewer) {
+                        $q->whereJsonContains('project_allocated_tl_user_ids', $viewer->id)
+                          ->orWhere('initiated_by', $viewer->id);
+                    })
+                    ->get()
+                    ->flatMap(fn ($p) => Arr::wrap($p->project_allocated_employee_user_ids))
+                    ->map(fn ($id) => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->toArray();
+
+                if (!empty($tlProjectMemberIds)) {
+                    $additionalMembers = User::whereIn('id', $tlProjectMemberIds)
+                        ->where('is_active', true)
+                        ->where('company_id', $viewer->company_id)
+                        ->get();
+                    $scopedEmployees = $scopedEmployees->concat($additionalMembers);
+                }
+
+                if (! $scopedEmployees->contains('id', $viewer->id)) {
+                    $scopedEmployees->push($viewer);
+                }
+            }
+
+            $scopedEmployees = $scopedEmployees->reject(function ($e) use ($viewer) {
+                return (int)$e->id !== (int)$viewer->id && ($e->hasAdminLikeRole() || $e->isCompanyAdmin() || $e->hasRole('super_admin'));
+            });
+
+            $scopedEmployees = $scopedEmployees->unique('id')->sortBy('name')->values();
+        }
+
+        $filterEmployeeId = (int) ($filters['employee_id'] ?? ($filters['team_member_id'] ?? 0));
+        if ($filterEmployeeId > 0 && ($isAdminLike || $isTl)) {
+            $scopedEmployees = $scopedEmployees->filter(fn ($e) => (int) $e->id === $filterEmployeeId)->values();
+        }
+
+        $employeeIds = $scopedEmployees->pluck('id')->all();
+
+        $dateFrom = $filters['date_from'] ?? ($filters['date'] ?? null);
+        $dateTo = $filters['date_to'] ?? ($filters['date'] ?? null);
+
+        if (!$dateFrom && !$dateTo) {
+            $dateFrom = Carbon::now()->startOfMonth()->toDateString();
+            $dateTo = Carbon::now()->endOfMonth()->toDateString();
+        } elseif ($dateFrom && !$dateTo) {
+            $dateTo = $dateFrom;
+        } elseif (!$dateFrom && $dateTo) {
+            $dateFrom = $dateTo;
+        }
+
+        try {
+            $parsedFrom = Carbon::parse($dateFrom)->startOfDay()->toDateString();
+            $parsedTo = Carbon::parse($dateTo)->endOfDay()->toDateString();
+        } catch (\Throwable) {
+            $parsedFrom = Carbon::now()->startOfMonth()->toDateString();
+            $parsedTo = Carbon::now()->endOfMonth()->toDateString();
+        }
+
+        $allTasks = collect();
+        if (!empty($employeeIds)) {
+            $tasksQuery = ProductionTask::query()
+                ->with(['project:id,product_name,company_name,lead_id', 'project.lead:id,company_name,contact_name', 'creator:id,name'])
+                ->whereIn('assigned_to', $employeeIds);
+
+            if ($parsedFrom === $parsedTo) {
+                $tasksQuery->whereDate('task_date', $parsedFrom);
+            } else {
+                $tasksQuery->whereBetween('task_date', [$parsedFrom, $parsedTo]);
+            }
+
+            $allTasks = $tasksQuery->orderByDesc('task_date')->orderByDesc('id')->get();
+        }
+        $tasksByUser = $allTasks->groupBy('assigned_to');
+
+        $allTimesheets = collect();
+        if (!empty($employeeIds)) {
+            $timesheetQuery = ProjectTimesheet::query()
+                ->with(['project:id,product_name,company_name,lead_id', 'project.lead:id,company_name,contact_name'])
+                ->whereIn('user_id', $employeeIds);
+
+            if ($parsedFrom === $parsedTo) {
+                $timesheetQuery->whereDate('timesheet_date', $parsedFrom);
+            } else {
+                $timesheetQuery->whereBetween('timesheet_date', [$parsedFrom, $parsedTo]);
+            }
+
+            $allTimesheets = $timesheetQuery->orderByDesc('timesheet_date')->orderByDesc('id')->get();
+        }
+        $timesheetsByUser = $allTimesheets->groupBy('user_id');
+
+        $todayStr = Carbon::today()->toDateString();
+        $employeeRecords = $scopedEmployees->map(function (User $emp) use ($tasksByUser, $timesheetsByUser, $viewer, $todayStr) {
+            $empTasks = $tasksByUser->get($emp->id, collect());
+            $empTimesheets = $timesheetsByUser->get($emp->id, collect());
+
+            $totalTasks = $empTasks->count();
+            $completedTasks = $empTasks->where('status', 'completed')->count();
+            $pendingTasks = $totalTasks - $completedTasks;
+
+            $totalTimesheets = $empTimesheets->count();
+            $latestTimesheet = $empTimesheets->first();
+            $submittedToday = $empTimesheets->contains(fn ($ts) => ($ts->timesheet_date ? $ts->timesheet_date->toDateString() : '') === $todayStr);
+
+            $status = 'not_submitted';
+            if ($totalTimesheets > 0) {
+                $hasCompleted = $empTimesheets->contains(fn ($ts) => strtolower((string)$ts->status) === 'completed');
+                $hasOngoing = $empTimesheets->contains(fn ($ts) => strtolower((string)$ts->status) === 'ongoing');
+                if ($hasCompleted) {
+                    $status = 'completed';
+                } elseif ($hasOngoing) {
+                    $status = 'ongoing';
+                } else {
+                    $status = 'pending';
+                }
+            }
+
+            $projectNames = collect();
+            foreach ($empTasks as $t) {
+                $pName = $t->project?->product_name ?: $t->product_name;
+                if ($pName) $projectNames->push($pName);
+            }
+            foreach ($empTimesheets as $ts) {
+                $pName = $ts->project?->product_name;
+                if ($pName) $projectNames->push($pName);
+            }
+            $projectNames = $projectNames->unique()->values()->all();
+
+            $roleDisplayName = $emp->roles->first()?->display_name ?: ($emp->roles->first()?->name ?: 'Team Member');
+            $cleanRole = ucwords(str_replace(['company_1__', 'company_2__', 'company_3__', '_'], ['', '', '', ' '], $roleDisplayName));
+
+            return [
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'email' => $emp->email,
+                'designation' => $cleanRole,
+                'initials' => strtoupper(substr(trim($emp->name), 0, 2)),
+                'is_current_user' => (int) $emp->id === (int) $viewer->id,
+                'projects' => $projectNames,
+                'total_tasks' => $totalTasks,
+                'completed_tasks' => $completedTasks,
+                'pending_tasks' => $pendingTasks,
+                'tasks' => $empTasks->map(function ($t) {
+                    return [
+                        'id' => $t->id,
+                        'project_name' => $t->project?->product_name ?: ($t->product_name ?: 'General Task'),
+                        'company_name' => $t->project?->company_name ?: ($t->project?->lead?->company_name ?: ($t->lead?->company_name ?: '')),
+                        'task_date' => $t->task_date ? $t->task_date->format('d M Y') : '',
+                        'task_description' => $t->task_description ?: 'No description',
+                        'status' => strtolower((string)($t->status ?: 'pending')),
+                        'created_by' => $t->creator?->name ?: 'System',
+                    ];
+                })->values()->all(),
+                'total_timesheets' => $totalTimesheets,
+                'submitted_today' => $submittedToday,
+                'status' => $status,
+                'latest_update' => $latestTimesheet ? $latestTimesheet->day_closing_update : '',
+                'latest_date' => $latestTimesheet && $latestTimesheet->timesheet_date ? $latestTimesheet->timesheet_date->format('d M Y') : '',
+                'total_posters' => (int) $empTimesheets->sum('poster_count'),
+                'total_videos' => (int) $empTimesheets->sum('video_count'),
+                'timesheets' => $empTimesheets->map(function ($ts) {
+                    return [
+                        'id' => $ts->id,
+                        'project_name' => $ts->project?->product_name ?: 'General Project',
+                        'company_name' => $ts->project?->company_name ?: ($ts->project?->lead?->company_name ?: ''),
+                        'timesheet_date' => $ts->timesheet_date ? $ts->timesheet_date->format('d M Y') : '',
+                        'status' => strtolower((string)($ts->status ?: 'pending')),
+                        'day_closing_update' => $ts->day_closing_update ?: 'No update text',
+                        'poster_count' => (int) $ts->poster_count,
+                        'video_count' => (int) $ts->video_count,
+                    ];
+                })->values()->all(),
+            ];
+        });
+
+        $totalEmployees = $employeeRecords->count();
+        $submittedCount = $employeeRecords->filter(fn ($e) => $e['total_timesheets'] > 0)->count();
+        $notSubmittedCount = $totalEmployees - $submittedCount;
+        $totalTasksCount = $employeeRecords->sum('total_tasks');
+        $completedTasksCount = $employeeRecords->sum('completed_tasks');
+        $pendingTasksCount = $employeeRecords->sum('pending_tasks');
+
+        $deptLabel = match ($deptType) {
+            'design', 'designing' => 'Designing',
+            'dm', 'digital_marketing' => 'Digital Marketing',
+            'testing', 'qa' => 'Testing',
+            default => 'Development',
+        };
+
+        return [
+            'employees' => $employeeRecords->values()->all(),
+            'summary' => [
+                'total_employees' => $totalEmployees,
+                'submitted_count' => $submittedCount,
+                'not_submitted_count' => $notSubmittedCount,
+                'total_tasks' => $totalTasksCount,
+                'completed_tasks' => $completedTasksCount,
+                'pending_tasks' => $pendingTasksCount,
+            ],
+            'department_label' => $deptLabel,
+            'date_range' => [
+                'from' => $parsedFrom,
+                'to' => $parsedTo,
+                'label' => ($parsedFrom === $parsedTo) ? Carbon::parse($parsedFrom)->format('d M Y') : Carbon::parse($parsedFrom)->format('d M Y') . ' - ' . Carbon::parse($parsedTo)->format('d M Y'),
+            ],
+            'is_tl' => $isTl,
+            'is_admin' => $isAdminLike,
+            'is_contributor' => $isEmployeeOnly,
+        ];
+    }
+
+    private function getDmCampaignsData(User $viewer, array $filters, Request $request): array
+    {
+        $cmStart = Carbon::today()->startOfMonth()->toDateString();
+        $cmEnd = Carbon::today()->endOfMonth()->toDateString();
+        $today = Carbon::today()->startOfDay();
+
+        $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')
+            ->pluck('extended_from_id')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        $campaignsQuery = CustomerCampaign::query()
+            ->with([
+                'lead:id,company_name,contact_name,mobile_number,email',
+                'creator:id,name',
+                'productionInitiation:id,product_name,company_name,department_id,project_allocated_employee_user_ids,project_allocated_tl_user_ids,tl_employee_allocations',
+            ])
+            ->when($viewer->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $viewer->company_id));
+
+        $isAdminLike = $viewer->hasAdminLikeRole();
+        $isTl = ! $isAdminLike && $this->isUserTl($viewer);
+        $isEmployeeOnly = ! $isAdminLike && ! $isTl;
+
+        if ($isEmployeeOnly) {
+            $campaignsQuery->where(function ($q) use ($viewer) {
+                $q->where('customer_campaigns.created_by', $viewer->id)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($viewer) {
+                      $piq->whereJsonContains('project_allocated_employee_user_ids', $viewer->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $viewer->id . '"%');
+                  });
+            });
+        } elseif ($isTl) {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+
+            $empQuery = User::query()
+                ->where('is_active', true)
+                ->when($viewer->company_id, fn ($q) => $q->where('company_id', $viewer->company_id))
+                ->where(function ($q) use ($dmDeptIds) {
+                    $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds))
+                      ->orWhereHas('roles', function ($rq) {
+                          $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                             ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                             ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                      })
+                      ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds))
+                      ->orWhereHas('internJoiningForm.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds));
+                });
+
+            $dmEmpIds = $empQuery->pluck('id')->push($viewer->id)->unique()->filter()->values()->all();
+
+            $campaignsQuery->where(function ($q) use ($viewer, $dmEmpIds) {
+                $q->whereIn('customer_campaigns.created_by', $dmEmpIds)
+                  ->orWhere('customer_campaigns.created_by', $viewer->id)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($viewer, $dmEmpIds) {
+                      $piq->where(function ($sub) use ($viewer, $dmEmpIds) {
+                          foreach ($dmEmpIds as $mId) {
+                              $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId)
+                                  ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $mId . '"%');
+                          }
+                          $sub->orWhereJsonContains('project_allocated_tl_user_ids', $viewer->id);
+                      });
+                  });
+            });
+        }
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $campaignsQuery->where(function ($q) use ($search) {
+                $q->where('customer_campaigns.campaign_name', 'LIKE', "%{$search}%")
+                  ->orWhere('customer_campaigns.platform', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', function ($lq) use ($search) {
+                      $lq->where('company_name', 'LIKE', "%{$search}%")
+                         ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                         ->orWhere('mobile_number', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        $filterEmpId = (int) ($filters['employee_id'] ?? 0);
+        if ($filterEmpId > 0) {
+            $campaignsQuery->where(function ($q) use ($filterEmpId) {
+                $q->where('customer_campaigns.created_by', $filterEmpId)
+                  ->orWhereHas('productionInitiation', function ($piq) use ($filterEmpId) {
+                      $piq->whereJsonContains('project_allocated_employee_user_ids', $filterEmpId)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $filterEmpId . '"%');
+                  });
+            });
+        }
+
+        $allCampaigns = $campaignsQuery->latest('customer_campaigns.id')->get();
+
+        $renewalItems = $allCampaigns->filter(function (CustomerCampaign $c) use ($cmStart, $cmEnd) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $endsInCm = ($endDate && $endDate >= $cmStart && $endDate <= $cmEnd);
+            $extendedInCm = (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $cmStart && $createdAtDate <= $cmEnd);
+
+            return $endsInCm || $extendedInCm;
+        })->map(function (CustomerCampaign $c) use ($cmStart, $cmEnd, $today, $extendedParentIds) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $isRenewed = in_array($c->id, $extendedParentIds, true)
+                || (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $cmStart && $createdAtDate <= $cmEnd);
+
+            $daysRemaining = null;
+            $daysRemainingText = '—';
+            $isOverdue = false;
+            if ($c->end_date) {
+                $endCarbon = Carbon::parse($c->end_date)->startOfDay();
+                if ($endCarbon->isPast() && ! $endCarbon->isToday()) {
+                    $diff = $endCarbon->diffInDays($today);
+                    $daysRemaining = -$diff;
+                    $daysRemainingText = $diff . 'd ago';
+                    $isOverdue = true;
+                } elseif ($endCarbon->isToday()) {
+                    $daysRemaining = 0;
+                    $daysRemainingText = 'Today';
+                } else {
+                    $diff = $today->diffInDays($endCarbon);
+                    $daysRemaining = $diff;
+                    $daysRemainingText = $diff . 'd left';
+                }
+            }
+
+            return [
+                'id' => $c->id,
+                'campaign_name' => $c->campaign_name ?: 'Campaign #' . $c->id,
+                'platform' => $c->platform ?: 'meta',
+                'lead_id' => $c->lead_id,
+                'company_name' => $c->lead?->company_name ?: ($c->productionInitiation?->company_name ?: '—'),
+                'contact_name' => $c->lead?->contact_name ?: '—',
+                'mobile_number' => $c->lead?->mobile_number ?: '—',
+                'start_date' => $c->start_date ? $c->start_date->format('d M Y') : '—',
+                'end_date' => $c->end_date ? $c->end_date->format('d M Y') : '—',
+                'raw_end_date' => $endDate,
+                'days_remaining' => $daysRemaining,
+                'days_remaining_text' => $daysRemainingText,
+                'is_overdue' => $isOverdue,
+                'budget_amount' => (float) ($c->budget_amount ?? 0),
+                'budget_type' => ucfirst(strtolower($c->budget_type ?: 'monthly')),
+                'is_extended' => !empty($c->extended_from_id),
+                'is_renewed' => $isRenewed,
+                'renewal_status' => $isRenewed ? 'renewed' : 'due',
+                'renewal_badge_label' => $isRenewed ? 'Renewed' : 'Due for Renewal',
+                'campaign_status' => strtolower((string) ($c->status ?: 'active')),
+                'created_by_name' => $c->creator?->name ?: 'DM Team',
+            ];
+        })->sortBy(function ($item) {
+            return ($item['is_renewed'] ? 1 : 0) . '_' . ($item['raw_end_date'] ?: '9999-99-99');
+        })->values();
+
+        $expiredItems = $allCampaigns->filter(function (CustomerCampaign $c) {
+            return $c->isExpired();
+        })->map(function (CustomerCampaign $c) use ($today, $extendedParentIds) {
+            $isRenewed = in_array($c->id, $extendedParentIds, true);
+
+            $overdueText = 'Expired';
+            $overdueDays = 0;
+            if ($c->end_date) {
+                $endCarbon = Carbon::parse($c->end_date)->startOfDay();
+                if ($endCarbon->isPast()) {
+                    $diff = $endCarbon->diffInDays($today);
+                    $overdueDays = $diff;
+                    $overdueText = $diff === 0 ? 'Expired Today' : 'Expired ' . $diff . 'd ago';
+                }
+            }
+
+            return [
+                'id' => $c->id,
+                'campaign_name' => $c->campaign_name ?: 'Campaign #' . $c->id,
+                'platform' => $c->platform ?: 'meta',
+                'lead_id' => $c->lead_id,
+                'company_name' => $c->lead?->company_name ?: ($c->productionInitiation?->company_name ?: '—'),
+                'contact_name' => $c->lead?->contact_name ?: '—',
+                'mobile_number' => $c->lead?->mobile_number ?: '—',
+                'start_date' => $c->start_date ? $c->start_date->format('d M Y') : '—',
+                'end_date' => $c->end_date ? $c->end_date->format('d M Y') : '—',
+                'raw_end_date' => $c->end_date ? $c->end_date->toDateString() : '1970-01-01',
+                'overdue_text' => $overdueText,
+                'overdue_days' => $overdueDays,
+                'budget_amount' => (float) ($c->budget_amount ?? 0),
+                'budget_type' => ucfirst(strtolower($c->budget_type ?: 'monthly')),
+                'is_renewed' => $isRenewed,
+                'renewal_badge_label' => $isRenewed ? 'Renewed' : 'Pending Renewal',
+                'campaign_status' => strtolower((string) ($c->status ?: 'expired')),
+                'created_by_name' => $c->creator?->name ?: 'DM Team',
+            ];
+        })->sortByDesc('raw_end_date')->values();
+
+        return [
+            'renewal_campaigns' => $renewalItems->all(),
+            'expired_campaigns' => $expiredItems->all(),
+            'summary' => [
+                'total_renewals' => $renewalItems->count(),
+                'due_renewals' => $renewalItems->where('is_renewed', false)->count(),
+                'completed_renewals' => $renewalItems->where('is_renewed', true)->count(),
+                'total_expired' => $expiredItems->count(),
+                'unrenewed_expired' => $expiredItems->where('is_renewed', false)->count(),
+            ],
+            'current_month_label' => Carbon::today()->format('F Y'),
+        ];
+    }
+
+    private function getActiveTechnicalSeoProjectsData(User $user, array $dashboardFilters, Request $request): array
+    {
+        $query = ProductionInitiation::query()
+            ->with($this->projectRelations())
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->where(function ($q) {
+                $q->where('product_name', 'Technical SEO')
+                  ->orWhere('product_name', 'LIKE', '%Technical SEO%');
+            })
+            ->whereNotIn('project_execution_status', ['delivered', 'cancelled', 'completed']);
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($this->shouldLimitToAssignedProjects($user)) {
+            $query->whereJsonContains('project_allocated_tl_user_ids', $user->id);
+        } elseif ($this->shouldLimitToEmployeeProjects($user)) {
+            $query->whereJsonContains('project_allocated_employee_user_ids', $user->id);
+        }
+
+        if (!empty($dashboardFilters['search'])) {
+            $search = strtolower($dashboardFilters['search']);
+            $query->where(function ($sq) use ($search) {
+                $sq->where('company_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('product_name', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('company_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('mobile_number', 'LIKE', "%{$search}%"));
+            });
+        }
+
+        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
+            $project = $this->decorateProjectForUser($project, $user);
+            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+            $project->received_amount = $received;
+            $project->balance_amount = max(0, $project->project_value - $received);
+            $project->project_delivery_date = $this->projectDeliveryDate($project);
+            return $project;
+        });
+
+        return [
+            'count' => $allProjects->count(),
+            'items' => $allProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+        ];
+    }
+
+    private function getPendingWelcomeCallProjectsData(User $user, string $departmentType, array $dashboardFilters, Request $request): array
+    {
+        $query = ProductionInitiation::query()
+            ->with($this->projectRelations())
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->whereDoesntHave('projectUpdates', function ($q) {
+                $q->where('type', 'welcome_call_update');
+            });
+
+        if ($departmentType === 'design') {
+            $designDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($designDeptIds) {
+                if (!empty($designDeptIds)) {
+                    $q->whereIn('department_id', $designDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%design%']));
+            });
+        } elseif ($departmentType === 'dm') {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+            $query->where(function ($q) use ($dmDeptIds) {
+                if (!empty($dmDeptIds)) {
+                    $q->whereIn('department_id', $dmDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']));
+            });
+        } else {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $query->where(function ($q) use ($devDeptIds) {
+                if (!empty($devDeptIds)) {
+                    $q->whereIn('department_id', $devDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
+                  ->orWhere(function ($sq) {
+                      $sq->whereNull('department_id')
+                         ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+                  });
+            });
+        }
+
+        if ($user->company_id) {
+            $query->where('company_id', $user->company_id);
+        }
+
+        if ($this->shouldLimitToAssignedProjects($user)) {
+            $query->whereJsonContains('project_allocated_tl_user_ids', $user->id);
+        } elseif ($this->shouldLimitToEmployeeProjects($user)) {
+            $query->whereJsonContains('project_allocated_employee_user_ids', $user->id);
+        }
+
+        if (!empty($dashboardFilters['search'])) {
+            $search = strtolower($dashboardFilters['search']);
+            $query->where(function ($sq) use ($search) {
+                $sq->where('company_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('product_name', 'LIKE', "%{$search}%")
+                  ->orWhereHas('lead', fn ($lq) => $lq->where('company_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('contact_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('client_name', 'LIKE', "%{$search}%")
+                                                      ->orWhere('mobile_number', 'LIKE', "%{$search}%"));
+            });
+        }
+
+        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
+            $project = $this->decorateProjectForUser($project, $user);
+            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+            $project->received_amount = $received;
+            $project->balance_amount = max(0, $project->project_value - $received);
+            $project->project_delivery_date = $this->projectDeliveryDate($project);
+            return $project;
+        });
+
+        return [
+            'count' => $allProjects->count(),
+            'items' => $allProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+        ];
     }
 }

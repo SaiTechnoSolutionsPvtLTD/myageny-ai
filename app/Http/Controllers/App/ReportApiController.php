@@ -441,7 +441,16 @@ class ReportApiController extends Controller
             $newRenewalsReceived = round((float) $newRenewalsRows->sum('received_amount'), 2);
             $balanceReceived = round((float) $balanceRows->sum('received_amount'), 2);
             $newRenewalsPending = round((float) $newRenewalsRows->sum('outstanding_amount'), 2);
-            $overallPending = round((float) $analyticsRows->sum('outstanding_amount'), 2);
+            $tdsDeductionAmount = round((float) $analyticsRows->sum('tds_amount'), 2);
+
+            $collectionType = $request->input('collection_type');
+            if ($collectionType === 'balance_payment') {
+                $outstandingAmount = round((float) $balanceRows->sum('outstanding_amount'), 2);
+            } elseif (in_array($collectionType, ['new_sales', 'new_sale', 'renewals', 'renewal'])) {
+                $outstandingAmount = round((float) $analyticsRows->sum('outstanding_amount'), 2);
+            } else {
+                $outstandingAmount = $newRenewalsPending;
+            }
 
             $summary = [
                 'rows'                     => $totalCount,
@@ -450,10 +459,11 @@ class ReportApiController extends Controller
                 'new_renewals_received'    => $newRenewalsReceived,
                 'balance_received'         => $balanceReceived,
                 'new_renewals_pending'     => $newRenewalsPending,
+                'tds_deduction_amount'     => $tdsDeductionAmount,
                 // Backward-compatible keys
                 'total_amount'             => $dealValue,
                 'received_amount'          => $totalCollectedPayment,
-                'outstanding_amount'       => $overallPending,
+                'outstanding_amount'       => $outstandingAmount,
             ];
 
             $analytics = $this->buildPaymentCollectionAnalytics($analyticsRows);
@@ -482,11 +492,12 @@ class ReportApiController extends Controller
             $rowsData = $reportRows->getCollection()->map(function ($row) use ($paymentModes) {
                 $paymentDate = $row->payment_date ? Carbon::parse($row->payment_date) : null;
                 $code = str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT);
-                $typeLabel = match($row->collection_type ?? '') {
-                    'new_sales' => 'New Sales',
-                    'balance_payment' => 'Balance Payment',
-                    'renewals' => 'Renewals',
-                    default => '-',
+                $rowType = strtolower(str_replace([' ', '-'], '_', (string) ($row->payment_type ?: $row->collection_type)));
+                $typeLabel = match($rowType) {
+                    'new_sales', 'new_sale' => 'New Sales',
+                    'balance_payment'       => 'Balance Payment',
+                    'renewals', 'renewal'   => 'Renewals',
+                    default                 => ucwords(str_replace('_', ' ', (string) ($row->payment_type ?: $row->collection_type ?: '-'))),
                 };
 
                 return [
@@ -504,8 +515,12 @@ class ReportApiController extends Controller
                     'product_name'           => $row->product_name ?: null,
                     'collection_type'        => $row->collection_type ?? null,
                     'collection_type_label'  => $typeLabel,
+                    'payment_type'           => $row->payment_type ?? $row->collection_type,
                     'total_amount'           => round((float) ($row->total_amount ?? 0), 2),
                     'received_amount'        => round((float) ($row->received_amount ?? 0), 2),
+                    'tds_amount'             => round((float) ($row->tds_amount ?? 0), 2),
+                    'tds_percentage'         => round((float) ($row->tds_percentage ?? 0), 2),
+                    'is_tds_deducted'        => (bool) ($row->is_tds_deducted ?? ($row->tds_amount > 0)),
                     'outstanding_amount'     => round((float) ($row->outstanding_amount ?? 0), 2),
                     'payment_mode'           => $paymentModes[$row->payment_mode] ?? ucwords(str_replace('_', ' ', (string) $row->payment_mode)),
                     'transaction_reference'  => $row->transaction_reference ?: null,
@@ -689,36 +704,9 @@ class ReportApiController extends Controller
     {
         return "
         CASE
-            WHEN EXISTS (
-                SELECT 1 FROM lead_product_payments p_prev
-                WHERE p_prev.lead_product_id = lead_product_payments.lead_product_id
-                  AND (
-                      p_prev.payment_date < lead_product_payments.payment_date
-                      OR (p_prev.payment_date = lead_product_payments.payment_date AND p_prev.id < lead_product_payments.id)
-                  )
-            ) THEN 'balance_payment'
-            WHEN (
-                (
-                    COALESCE(products.is_this_renewal_product, 0) = 1
-                    OR EXISTS (
-                        SELECT 1 FROM products pm 
-                        WHERE (pm.id = lead_products.product_id OR LOWER(pm.package_name) = LOWER(lead_products.product_name))
-                          AND pm.is_this_renewal_product = 1
-                    )
-                    OR LOWER(COALESCE(lead_products.deal_name, '')) LIKE '%renewal%'
-                    OR LOWER(COALESCE(lead_products.product_name, '')) LIKE '%renewal%'
-                )
-                AND EXISTS (
-                    SELECT 1 FROM lead_products lp_prior
-                    WHERE lp_prior.lead_id = lead_products.lead_id
-                      AND lp_prior.id != lead_products.id
-                      AND lp_prior.created_at < lead_products.created_at
-                      AND (
-                          (lead_products.product_id IS NOT NULL AND lp_prior.product_id = lead_products.product_id)
-                          OR (lead_products.product_name IS NOT NULL AND LOWER(lp_prior.product_name) = LOWER(lead_products.product_name))
-                      )
-                )
-            ) THEN 'renewals'
+            WHEN LOWER(REPLACE(REPLACE(COALESCE(lead_product_payments.payment_type, ''), ' ', ''), '_', '')) IN ('newsale', 'newsales') THEN 'new_sales'
+            WHEN LOWER(REPLACE(REPLACE(COALESCE(lead_product_payments.payment_type, ''), ' ', ''), '_', '')) = 'balancepayment' THEN 'balance_payment'
+            WHEN LOWER(REPLACE(REPLACE(COALESCE(lead_product_payments.payment_type, ''), ' ', ''), '_', '')) IN ('renewal', 'renewals') THEN 'renewals'
             ELSE 'new_sales'
         END";
     }
@@ -741,6 +729,10 @@ class ReportApiController extends Controller
                 'lead_product_payments.payment_mode',
                 'lead_product_payments.reference_number as transaction_reference',
                 'lead_product_payments.amount as received_amount',
+                'lead_product_payments.tds_amount',
+                'lead_product_payments.tds_percentage',
+                'lead_product_payments.is_tds_deducted',
+                'lead_product_payments.payment_type',
                 'leads.id as customer_id',
                 'leads.company_name',
                 'lead_products.product_name',
@@ -751,8 +743,8 @@ class ReportApiController extends Controller
                 'lead_product_payments.attachment_path',
                 'lead_product_payments.attachment_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
-                DB::raw('CASE WHEN (' . $collectionTypeSql . ') = "balance_payment" THEN 0 ELSE (lead_product_payments.amount + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
-                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
+                DB::raw('CASE WHEN lead_product_payments.payment_type = "balance_payment" THEN 0 ELSE (COALESCE(lead_product_payments.amount, 0) + COALESCE(lead_product_payments.tds_amount, 0) + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount + COALESCE(p2.tds_amount, 0)), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),
+                DB::raw('GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount + COALESCE(p2.tds_amount, 0)), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0) as outstanding_amount'),
                 'collectors.name as received_by',
                 DB::raw('(
                     SELECT COALESCE(
@@ -805,7 +797,16 @@ class ReportApiController extends Controller
         }
 
         if ($request->filled('collection_type')) {
-            $query->whereRaw("({$collectionTypeSql}) = ?", [$request->collection_type]);
+            $cType = $request->collection_type;
+            if (in_array($cType, ['new_sales', 'new_sale'])) {
+                $query->whereIn('lead_product_payments.payment_type', ['new_sale', 'new_sales']);
+            } elseif (in_array($cType, ['balance_payment'])) {
+                $query->where('lead_product_payments.payment_type', 'balance_payment');
+            } elseif (in_array($cType, ['renewals', 'renewal'])) {
+                $query->whereIn('lead_product_payments.payment_type', ['renewals', 'renewal']);
+            } else {
+                $query->where('lead_product_payments.payment_type', $cType);
+            }
         }
 
         if ($request->filled('date_from')) {

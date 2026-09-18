@@ -358,6 +358,15 @@ class AuthController extends Controller
             // $user->hasTestingLikeRole()) — drives both the mobile menu's
             // Testing Dashboard visibility and ModuleFab's auto-routing.
             'is_testing_department' => $user->belongsToTestingDepartment() || $user->hasTestingLikeRole(),
+            'is_dm_department' => $user->belongsToDigitalMarketingDepartment(),
+            'can_view_projects_dashboard_switcher' => $user->canViewProjectsDashboardSwitcher(),
+            'projects_default_dashboard' => ($user->belongsToTestingDepartment() || $user->hasTestingLikeRole())
+                ? 'testing'
+                : ($user->belongsToDesigningDepartment()
+                    ? 'design'
+                    : ($user->belongsToDigitalMarketingDepartment()
+                        ? 'dm'
+                        : 'development')),
             'is_active'       => $user->is_active,
             // Drives the mobile app's Branch-field lockdown on Lead
             // Add/Edit/Filter (see LeadController's branch restriction):
