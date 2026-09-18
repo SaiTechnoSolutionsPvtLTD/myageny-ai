@@ -24,6 +24,17 @@ class CstAllocationApiController extends Controller
         return $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->hasAdminLikeRole();
     }
 
+    private function canAllocate(User $user): bool
+    {
+        $isAdmin = $this->isAdmin($user);
+        return $isAdmin
+            || ($user->hasCustomerSupportLikeRole() && $user->hasTlLikeRole())
+            || $user->hasTlLikeRole()
+            || $user->can('cst_allocation.create')
+            || $user->can('cst_allocation.edit')
+            || $user->can('cst_allocation.update');
+    }
+
     /**
      * GET /mobile/cst-allocation?tab=pending|completed&branch_id=&product_id=&cst_user_id=&page=
      */
@@ -105,7 +116,8 @@ class CstAllocationApiController extends Controller
                 $lead->payment_progress_pct = round($total > 0 ? ($paid / $total) * 100 : 0, 1);
             });
 
-            $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
+            $canAllocate = $this->canAllocate($currentUser);
+            $isTl = $canAllocate;
 
             // 3. Partition — identical rule to web
             if ($isTl) {
@@ -131,7 +143,8 @@ class CstAllocationApiController extends Controller
                 'data' => [
                     'tab' => $tab,
                     'is_admin' => $isAdmin,
-                    'can_allocate' => $isAdmin,
+                    'can_allocate' => $canAllocate,
+                    'is_tl' => $isTl,
                     'counts' => $counts,
                     'leads' => $slice->map(fn ($lead) => $this->formatLead($lead))->all(),
                     'pagination' => [
@@ -170,8 +183,17 @@ class CstAllocationApiController extends Controller
                         $q->where('department_id', 5);
                     });
                 });
-            $cstUsers = $this->scopeEmployeeQueryToOwnBranch($cstUsersQuery, $currentUser)
-                ->orderBy('name')->get(['id', 'name']);
+            $this->visibility->applyCompanyVisibility($cstUsersQuery, $currentUser);
+
+            if ($this->canAllocate($currentUser) || $currentUser->hasCustomerSupportLikeRole()) {
+                $cstUsers = (clone $cstUsersQuery)->orderBy('name')->get(['id', 'name']);
+            } else {
+                $cstUsers = $this->scopeEmployeeQueryToOwnBranch($cstUsersQuery, $currentUser)
+                    ->orderBy('name')->get(['id', 'name']);
+                if ($cstUsers->isEmpty()) {
+                    $cstUsers = (clone $cstUsersQuery)->orderBy('name')->get(['id', 'name']);
+                }
+            }
 
             $branches = $this->visibility->visibleBranches($currentUser);
 
@@ -311,7 +333,7 @@ class CstAllocationApiController extends Controller
         try {
             $currentUser = $request->user();
 
-            if (! $this->isAdmin($currentUser)) {
+            if (! $this->canAllocate($currentUser)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You are not authorized to allocate CST users.',

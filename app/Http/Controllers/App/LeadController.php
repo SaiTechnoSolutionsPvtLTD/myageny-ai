@@ -1523,26 +1523,48 @@ class LeadController extends Controller
         $isConvertedStatusFilter = false;
         if ($request->filled('product_status')) {
             $statusVal = $request->product_status;
+            $convertedStatusIds = LeadProduct::convertedStatusIds();
+
             if (is_numeric($statusVal)) {
                 $statusRecord = LeadStatus::find($statusVal);
-                $statusName = $statusRecord ? strtolower($statusRecord->name) : null;
-                $isConvertedStatusFilter = ($statusName === 'converted');
-                $query->where(function ($q) use ($statusVal, $statusName) {
-                    $q->where('lead_status_id', (int) $statusVal);
-                    if ($statusName) {
-                        $q->orWhere('product_status', $statusName);
-                    }
-                });
+                $statusName = $statusRecord ? strtolower(trim($statusRecord->name)) : null;
+                $isConvertedStatusFilter = in_array((int) $statusVal, $convertedStatusIds, true)
+                    || in_array($statusName, ['converted', 'won'], true)
+                    || str_contains($statusName ?? '', 'convert');
+
+                if ($isConvertedStatusFilter) {
+                    $query->where(function ($q) use ($convertedStatusIds) {
+                        $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                          ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    });
+                } else {
+                    $query->where(function ($q) use ($statusVal, $statusName) {
+                        $q->where('lead_status_id', (int) $statusVal);
+                        if ($statusName) {
+                            $q->orWhere('product_status', $statusName);
+                        }
+                    });
+                }
             } else {
-                $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
-                $statusId = $statusRecord?->id;
-                $isConvertedStatusFilter = (strtolower($statusVal) === 'converted' || strtolower($statusRecord?->name ?? '') === 'converted');
-                $query->where(function ($q) use ($statusVal, $statusId) {
-                    $q->where('product_status', $statusVal);
-                    if ($statusId) {
-                        $q->orWhere('lead_status_id', $statusId);
-                    }
-                });
+                $statusLower = strtolower(trim($statusVal));
+                $isConvertedStatusFilter = in_array($statusLower, ['converted', 'won'], true)
+                    || str_contains($statusLower, 'convert');
+
+                if ($isConvertedStatusFilter) {
+                    $query->where(function ($q) use ($convertedStatusIds) {
+                        $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                          ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    });
+                } else {
+                    $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
+                    $statusId = $statusRecord?->id;
+                    $query->where(function ($q) use ($statusVal, $statusId) {
+                        $q->where('product_status', $statusVal);
+                        if ($statusId) {
+                            $q->orWhere('lead_status_id', $statusId);
+                        }
+                    });
+                }
             }
         }
 
@@ -1614,7 +1636,7 @@ class LeadController extends Controller
 
             $productIds = $convertedRows->pluck('id');
             $paidByProduct = LeadProductPayment::whereIn('lead_product_id', $productIds)
-                ->select('lead_product_id', DB::raw('SUM(amount) as total'))
+                ->select('lead_product_id', DB::raw('SUM(amount + COALESCE(tds_amount, 0)) as total'))
                 ->groupBy('lead_product_id')
                 ->pluck('total', 'lead_product_id');
             $receivedFor = fn($lp) => (float) ($paidByProduct[$lp->id] ?? $lp->amount_paid);

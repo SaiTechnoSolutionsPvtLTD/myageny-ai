@@ -53,11 +53,20 @@ class AttendanceApiController extends Controller
         return $this->canViewAllAttendance() || $this->hasMappedTeamMembers();
     }
 
+    private function canManageAttendance(): bool
+    {
+        return $this->canViewAllAttendance() || (bool) auth()->user()?->isBranchManager();
+    }
+
     private function shouldFilterByBranch(): bool
     {
         $user = auth()->user();
         if (! $user) {
             return false;
+        }
+
+        if ($user->isBranchManager() || $user->isBranchAdmin()) {
+            return true;
         }
 
         if (! $this->canViewAllAttendance()) {
@@ -351,8 +360,8 @@ class AttendanceApiController extends Controller
                 'name'            => $e->name,
                 'photo_url'       => $e->photograph ? asset('storage/' . $e->photograph) : null,
                 'select_key'      => 'employee:' . $e->id,
-                'branch_id'       => $e->portalUser?->branch_id,
-                'branch_name'     => $e->portalUser?->branch?->name ?? '',
+                'branch_id'       => $e->branch?->id ?? $e->portalUser?->branch_id,
+                'branch_name'     => $e->branch_name !== '—' ? $e->branch_name : ($e->portalUser?->branch?->name ?? ''),
                 'department_id'   => $e->department_id,
                 'department_name' => $e->department?->name ?? '',
             ]);
@@ -367,8 +376,8 @@ class AttendanceApiController extends Controller
                 'name'            => $i->name,
                 'photo_url'       => $i->photograph ? asset('storage/' . $i->photograph) : null,
                 'select_key'      => 'intern:' . $i->id,
-                'branch_id'       => $i->portalUser?->branch_id,
-                'branch_name'     => $i->portalUser?->branch?->name ?? '',
+                'branch_id'       => $i->branch?->id ?? $i->portalUser?->branch_id,
+                'branch_name'     => $i->branch_name !== '—' ? $i->branch_name : ($i->portalUser?->branch?->name ?? ''),
                 'department_id'   => $i->department_id,
                 'department_name' => $i->department?->name ?? '',
             ]);
@@ -576,6 +585,7 @@ class AttendanceApiController extends Controller
                 'status'             => true,
                 'message'            => 'No accessible records.',
                 'can_view_all'       => $this->canViewAllAttendance(),
+                'can_manage'         => $this->canManageAttendance(),
                 'has_team_members'   => $this->hasMappedTeamMembers(),
                 'can_view_team'      => $this->canManageOrViewTeam(),
                 'is_company_admin'   => $this->isCompanyAdminUser($user),
@@ -673,12 +683,15 @@ class AttendanceApiController extends Controller
             default   => $attendanceRecords->concat($absentRecords),
         };
 
+        $requestedBranchId = $request->input('branch_id');
+
         // ── Apply remaining filters ──────────────────────────────────────────
         $records = $records->filter(function (array $rec) use (
             $employeeNameFilter,
             $employeeIdFilter,
             $departmentIdFilter,
             $actingBranchIds,
+            $requestedBranchId,
             $loginTimingFilter,
             $attendeeTypeFilter,
             $outsideOfficeFilter,
@@ -704,8 +717,14 @@ class AttendanceApiController extends Controller
                 return false;
             }
 
-            if ($actingBranchIds !== null && ! in_array((int) ($rec['branch_id'] ?? 0), $actingBranchIds, true)) {
-                return false;
+            if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
+                if ((int) ($rec['branch_id'] ?? 0) !== (int) $requestedBranchId) {
+                    return false;
+                }
+            } elseif ($actingBranchIds !== null) {
+                if (! empty($rec['branch_id']) && ! in_array((int) $rec['branch_id'], $actingBranchIds, true)) {
+                    return false;
+                }
             }
 
             if ($loginTimingFilter !== null && ($rec['login_timing'] ?? null) !== $loginTimingFilter) {
@@ -747,6 +766,7 @@ class AttendanceApiController extends Controller
             'status'             => true,
             'message'            => 'Attendance records fetched successfully.',
             'can_view_all'       => $this->canViewAllAttendance(),
+            'can_manage'         => $this->canManageAttendance(),
             'has_team_members'   => $this->hasMappedTeamMembers(),
             'can_view_team'      => $this->canManageOrViewTeam(),
             'is_company_admin'   => $this->isCompanyAdminUser($user),
@@ -803,7 +823,7 @@ class AttendanceApiController extends Controller
      */
     public function attendees(): JsonResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         return response()->json([
             'status'  => true,
@@ -818,11 +838,11 @@ class AttendanceApiController extends Controller
      * Auto-fills the existing check-in/out time for an attendee+date pair —
      * mirrors AttendanceController::lookupAttendance(), used by both the
      * Manual Check-In/Leave and Manual Checkout forms so HR never has to
-     * guess an existing login time. HR/Admin only.
+     * guess an existing login time. HR/Admin/Manager.
      */
     public function lookup(Request $request): JsonResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key'    => ['required', 'string'],
@@ -876,7 +896,7 @@ class AttendanceApiController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key'      => ['required', 'string'],
@@ -1022,7 +1042,7 @@ class AttendanceApiController extends Controller
      */
     public function storeCheckout(Request $request): JsonResponse
     {
-        abort_unless($this->canViewAllAttendance(), 403);
+        abort_unless($this->canManageAttendance(), 403);
 
         $validated = $request->validate([
             'attendee_key'    => ['required', 'string'],
@@ -1229,10 +1249,12 @@ class AttendanceApiController extends Controller
             ? ($a->intern?->name ?: ($a->employee_name ?: 'Unknown Intern'))
             : ($a->employee?->name ?: ($a->employee_name ?: 'Unknown Employee'));
         $branch = $isIntern
-            ? ($a->intern?->portalUser?->branch)
-            : ($a->employee?->portalUser?->branch);
+            ? ($a->intern?->branch ?? $a->intern?->portalUser?->branch)
+            : ($a->employee?->branch ?? $a->employee?->portalUser?->branch);
         $branchId = $branch?->id ?? ($isIntern ? $a->intern?->portalUser?->branch_id : $a->employee?->portalUser?->branch_id);
-        $branchName = $branch?->name ?? ($isIntern ? ($a->intern?->portalUser?->branch?->name ?? '') : ($a->employee?->portalUser?->branch?->name ?? ''));
+        $branchName = $branch?->name ?? ($isIntern
+            ? ($a->intern?->branch_name !== '—' ? $a->intern?->branch_name : ($a->intern?->portalUser?->branch?->name ?? ''))
+            : ($a->employee?->branch_name !== '—' ? $a->employee?->branch_name : ($a->employee?->portalUser?->branch?->name ?? '')));
         $departmentId = $isIntern
             ? $a->intern?->department_id
             : $a->employee?->department_id;

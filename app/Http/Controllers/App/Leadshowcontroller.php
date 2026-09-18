@@ -804,18 +804,11 @@ class LeadShowController extends Controller
             ], 422);
         }
 
-        $grossAmount = (float) $request->amount;
-        $balancePayment = $product->total_price - $product->amount_paid;
-        if ($balancePayment < $grossAmount) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Amount exceeds remaining balance of ₹' . number_format($balancePayment, 2),
-            ], 422);
-        }
-
-        $data = $request->validate([
+        $v = Validator::make($request->all(), [
             'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
+            'gross_amount'     => ['nullable', 'numeric', 'min:0.01'],
+            'net_amount'       => ['nullable', 'numeric', 'min:0.01'],
             'is_tds_deducted'  => ['nullable'],
             'tds_percentage'   => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'tds_amount'       => ['nullable', 'numeric', 'min:0'],
@@ -827,7 +820,15 @@ class LeadShowController extends Controller
             'attachment'       => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
         ]);
 
-        $rawType = (string) $data['payment_type'];
+        if ($v->fails()) {
+            return response()->json([
+                'status'  => false,
+                'message' => $v->errors()->first(),
+                'errors'  => $v->errors(),
+            ], 422);
+        }
+
+        $rawType = (string) $request->input('payment_type');
         $paymentType = match(strtolower(str_replace([' ', '-'], '_', $rawType))) {
             'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
             'balancepayment', 'balance_payment'             => 'balance_payment',
@@ -839,16 +840,55 @@ class LeadShowController extends Controller
         $tdsPercentage = null;
         $tdsAmount = null;
         $afterTdsAmount = null;
+        $paymentAmount = (float) $request->input('amount');
+        $settlementGross = $paymentAmount;
 
         if ($isTdsDeducted) {
             $tdsPercentage = (float) $request->input('tds_percentage', 0);
             if ($tdsPercentage > 0) {
-                $basePrice = round((float) ($product->unit_price * $product->quantity * (1 - ($product->discount_percent / 100))), 2);
-                $tdsAmount = round(($basePrice * $tdsPercentage) / 100, 2);
-                $afterTdsAmount = round(max(0, $grossAmount - $tdsAmount), 2);
+                // Calculate TDS on the product base price (excluding GST)
+                $basePrice = (float) ($product->base_price ?? round($product->unit_price * $product->quantity * (1 - (($product->discount_percent ?? 0) / 100)), 2));
+                if ($basePrice <= 0) {
+                    $basePrice = (float) $product->total_price;
+                }
+
+                if ($request->filled('tds_amount') && (float) $request->input('tds_amount') > 0) {
+                    $tdsAmount = round((float) $request->input('tds_amount'), 2);
+                } else {
+                    $tdsAmount = round(($basePrice * $tdsPercentage) / 100, 2);
+                }
+
+                if ($request->filled('gross_amount') && (float) $request->input('gross_amount') > 0) {
+                    $settlementGross = (float) $request->input('gross_amount');
+                    $netReceived = round(max(0, $settlementGross - $tdsAmount), 2);
+                } elseif ($request->filled('net_amount') && (float) $request->input('net_amount') > 0) {
+                    $netReceived = (float) $request->input('net_amount');
+                    $settlementGross = round($netReceived + $tdsAmount, 2);
+                } else {
+                    $entered = (float) $request->input('amount');
+                    $balanceDue = (float) ($product->total_price - $product->amount_paid);
+                    if (abs(($entered + $tdsAmount) - $balanceDue) < 0.05) {
+                        $netReceived = $entered;
+                        $settlementGross = round($netReceived + $tdsAmount, 2);
+                    } else {
+                        $settlementGross = $entered;
+                        $netReceived = round(max(0, $settlementGross - $tdsAmount), 2);
+                    }
+                }
+
+                $paymentAmount = $netReceived;
+                $afterTdsAmount = $netReceived;
             } else {
                 $isTdsDeducted = false;
             }
+        }
+
+        $balancePayment = (float) ($product->total_price - $product->amount_paid);
+        if ($settlementGross > ($balancePayment + 0.05)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Payment amount (₹' . number_format($settlementGross, 2) . ') exceeds remaining balance (₹' . number_format($balancePayment, 2) . ').',
+            ], 422);
         }
 
         $attachment = $request->file('attachment');
@@ -874,11 +914,11 @@ class LeadShowController extends Controller
             'tds_percentage'   => $tdsPercentage,
             'tds_amount'       => $tdsAmount,
             'after_tds_amount' => $afterTdsAmount,
-            'amount'           => $isTdsDeducted ? $afterTdsAmount : $grossAmount,
-            'payment_mode'     => $data['payment_mode'],
-            'payment_date'     => $data['payment_date'],
-            'reference_number' => $data['reference_number'] ?? null,
-            'notes'            => $data['notes'] ?? null,
+            'amount'           => $paymentAmount,
+            'payment_mode'     => $request->input('payment_mode'),
+            'payment_date'     => $request->input('payment_date'),
+            'reference_number' => $request->input('reference_number'),
+            'notes'            => $request->input('notes'),
             'attachment_path'  => $attachmentPath,
             'attachment_name'  => $attachmentName,
             'recorded_by'      => auth()->id(),
@@ -894,8 +934,9 @@ class LeadShowController extends Controller
 
         return response()->json([
             'status'  => true,
-            'message' => 'Payment of ₹' . number_format($grossAmount, 2) . ' recorded.',
+            'message' => 'Payment of ₹' . number_format($settlementGross, 2) . ' recorded.',
             'data'    => $this->formatPayment($payment),
+            'product' => $this->formatProduct($product->fresh()),
         ], 201);
     }
 

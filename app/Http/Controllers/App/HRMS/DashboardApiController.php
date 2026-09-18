@@ -40,10 +40,11 @@ class DashboardApiController extends Controller
     // ─────────────────────────────────────────────────────────────────────────
     private function organizationDashboard(Request $request): JsonResponse
     {
+        $user            = auth()->user();
         $today           = Carbon::today();
         $currentEmployee = $this->currentEmployee();
         $actingBranchId  = $this->resolveActingBranchId($request);
-        $isCompanyAdmin  = $this->isCompanyAdminUser(auth()->user());
+        $isCompanyAdmin  = $this->isCompanyAdminUser($user);
 
         $branch          = $actingBranchId ? Branch::find($actingBranchId) : null;
         $branchCode      = $branch?->code;
@@ -581,7 +582,9 @@ class DashboardApiController extends Controller
                 'can_manage_exit_requests' => false,
                 'can_manage_announcements' => false,
                 'is_company_admin'         => $isCompanyAdmin,
+                'can_filter_branch'        => false,
                 'branch_id'                => $actingBranchId,
+                'branches'                 => [],
             ],
         ]);
     }
@@ -878,33 +881,35 @@ class DashboardApiController extends Controller
         }
 
         if ($this->canFilterBranch($user)) {
+            $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
+            $myBranchIds = $user->getMyBranchIds() ?? [];
+            if (empty($myBranchIds) && $user->branch_id) {
+                $myBranchIds = [(int) $user->branch_id];
+            }
+            $defaultBranchId = $user->branch_id ? (int) $user->branch_id : (! empty($myBranchIds) ? (int) $myBranchIds[0] : null);
+
             if ($request->filled('branch_id')) {
                 $val = $request->input('branch_id');
-                $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
 
                 if ($val === 'all') {
                     if ($isBranchManagerOnly) {
-                        return $user->branch_id ? (int) $user->branch_id : null;
+                        return $defaultBranchId;
                     }
                     return null;
                 }
 
                 $reqId = (int) $val;
                 if ($isBranchManagerOnly) {
-                    $myBranchIds = $user->getMyBranchIds() ?? [];
-                    if (empty($myBranchIds) && $user->branch_id) {
-                        $myBranchIds = [(int) $user->branch_id];
-                    }
                     if (in_array($reqId, $myBranchIds, true)) {
                         return $reqId;
                     }
-                    return $user->branch_id ? (int) $user->branch_id : null;
+                    return $defaultBranchId;
                 }
 
                 return $reqId;
             }
 
-            return $user->branch_id ? (int) $user->branch_id : null;
+            return $isBranchManagerOnly ? $defaultBranchId : ($user->branch_id ? (int) $user->branch_id : null);
         }
 
         return $user->branch_id ? (int) $user->branch_id : null;
