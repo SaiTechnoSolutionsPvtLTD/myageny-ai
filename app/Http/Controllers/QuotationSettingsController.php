@@ -21,26 +21,32 @@ class QuotationSettingsController extends Controller
 
         $branchId = auth()->user()->branch_id;
 
-        $settings = QuotationSetting::where('branch_id', $branchId)->get();;
+        $settings = QuotationSetting::where('branch_id', $branchId)->get();
+        $globalSettings = QuotationSetting::whereNull('branch_id')->get();
+        $val = fn($k) => $settings->where('key', $k)->first()?->value ?? $globalSettings->where('key', $k)->first()?->value;
 
         $data = [
-            'logo' => $settings->where('key', 'logo')->first()?->value,
-            'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
-            'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
-            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
-            'prefix' => $settings->where('key', 'prefix')->first()?->value,
-            'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
-            'terms' => $settings->where('key', 'terms')->first()?->value,
-            'company_address' => $settings->where('key', 'company_address')->first()?->value,
-            'company_name' => $settings->where('key', 'company_name')->first()?->value,
-            'company_phone' => $settings->where('key', 'company_phone')->first()?->value,
-            'company_email' => $settings->where('key', 'company_email')->first()?->value,
-            'company_gstin' => $settings->where('key', 'company_gstin')->first()?->value,
-            'bank_name' => $settings->where('key', 'bank_name')->first()?->value,
-            'bank_account' => $settings->where('key', 'bank_account')->first()?->value,
-            'bank_ifsc' => $settings->where('key', 'bank_ifsc')->first()?->value,
-            'watermark_text' => $settings->where('key', 'watermark_text')->first()?->value,
-            'signature' => $settings->where('key', 'signature')->first()?->value,
+            'logo' => $val('logo'),
+            'theme_color' => $val('theme_color'),
+            'secondary_color' => $val('secondary_color'),
+            'header_text_color' => $val('header_text_color'),
+            'prefix' => $val('prefix'),
+            'number_padding' => $val('number_padding'),
+            'terms' => $val('terms'),
+            'company_address' => $val('company_address'),
+            'company_name' => $val('company_name'),
+            'company_phone' => $val('company_phone'),
+            'company_email' => $val('company_email'),
+            'company_gstin' => $val('company_gstin'),
+            'bank_name' => $val('bank_name'),
+            'account_name' => $val('account_name'),
+            'bank_account' => $val('bank_account'),
+            'bank_ifsc' => $val('bank_ifsc'),
+            'bank_branch' => $val('bank_branch'),
+            'bank_upi' => $val('bank_upi'),
+            'watermark_text' => $val('watermark_text'),
+            'show_watermark' => (bool) $val('show_watermark'),
+            'signature' => $val('signature'),
         ];
 
 
@@ -69,12 +75,12 @@ class QuotationSettingsController extends Controller
             'company_gstin'    => ['nullable', 'string', 'max:20'],
             'bank_name'        => ['nullable', 'string', 'max:100'],
             'bank_account'     => ['nullable', 'string', 'max:30'],
-            'account_name'     => ['nullable', 'string', ],
+            'account_name'     => ['nullable', 'string', 'max:150'],
             'bank_ifsc'        => ['nullable', 'string', 'max:15'],
-            'bank_branch'        => ['nullable', 'string', ],
-            'bank_upi'        => ['nullable', 'string',],
+            'bank_branch'      => ['nullable', 'string', 'max:150'],
+            'bank_upi'         => ['nullable', 'string', 'max:100'],
             'watermark_text'   => ['nullable', 'string', 'max:50'],
-            'show_watermark'   => ['nullable', 'boolean'],
+            'show_watermark'   => ['nullable'],
             'logo'             => ['nullable', 'image', 'mimes:png,jpg,jpeg,svg', 'max:2048'],
             'signature'        => ['nullable', 'image', 'mimes:png,jpg,jpeg', 'max:1024'],
         ]);
@@ -115,10 +121,10 @@ class QuotationSettingsController extends Controller
 
         // ─── Save text/color settings ─────────────────────────
         $textSettings = array_diff_key($validated, array_flip(['logo', 'signature']));
+        $textSettings['show_watermark'] = $request->boolean('show_watermark') ? '1' : '0';
+
         foreach ($textSettings as $key => $value) {
-            if ($value !== null) {
-                QuotationSetting::set($key, $value, $branchId);
-            }
+            QuotationSetting::set($key, $value ?? '', $branchId);
         }
 
         return back()->with('success', 'Quotation settings saved successfully.');

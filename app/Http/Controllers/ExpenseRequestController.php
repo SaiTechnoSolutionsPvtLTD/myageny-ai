@@ -238,6 +238,10 @@ class ExpenseRequestController extends Controller
                 ->with('error', "This expense request is already {$expenseRequest->status}.");
         }
 
+        if (! $request->filled('remarks')) {
+            $request->merge(['remarks' => 'Approved via email notification link']);
+        }
+
         return $this->approve($request, $expenseRequest);
     }
 
@@ -310,6 +314,14 @@ class ExpenseRequestController extends Controller
                 ->with('error', 'You are not authorized to approve this expense request at its current stage.');
         }
 
+        $validated = $request->validate([
+            'remarks' => 'required|string|max:1000',
+        ], [
+            'remarks.required' => 'Approval remarks are mandatory.',
+        ]);
+
+        $remarks = trim($validated['remarks']);
+
         $applicantUser = $expenseRequest->user;
         $applicantCompanyId = $applicantUser?->company_id ?: $expenseRequest->company_id;
 
@@ -339,7 +351,7 @@ class ExpenseRequestController extends Controller
             'user_id'     => $user->id,
             'user_name'   => $user->name,
             'actioned_at' => now()->toDateTimeString(),
-            'remarks'     => $request->input('remarks'),
+            'remarks'     => $remarks,
         ];
 
         $nextStepIndex = $currentStep; // 1-indexed currentStep matches next 0-indexed element in chain
@@ -370,7 +382,7 @@ class ExpenseRequestController extends Controller
             ]);
 
             // Notify applicant of final approval
-            $this->sendApplicantStatusNotification($expenseRequest, 'approved');
+            $this->sendApplicantStatusNotification($expenseRequest, 'approved', $remarks);
 
             $msg = "Expense request fully approved across all hierarchy stages!";
         }
@@ -542,7 +554,9 @@ class ExpenseRequestController extends Controller
                         : "Your expense request of ₹" . number_format($amount, 2) . " for {$categoryName} was rejected.",
                     'status'       => $status,
                     'request_type' => 'Expense Request',
-                    'detail'       => $status === 'rejected' ? "Reason: " . ($rejectionReason ?: 'No reason provided') : "Category: {$categoryName} | Amount: ₹" . number_format($amount, 2),
+                    'detail'       => $status === 'rejected'
+                        ? "Reason: " . ($rejectionReason ?: 'No reason provided')
+                        : ($rejectionReason ? "Remarks: {$rejectionReason} | " : '') . "Category: {$categoryName} | Amount: ₹" . number_format($amount, 2),
                     'action_url'   => $actionUrl,
                     'actor_name'   => $approverUser?->name ?? 'Approver',
                 ],

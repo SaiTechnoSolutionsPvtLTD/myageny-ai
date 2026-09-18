@@ -46,8 +46,11 @@ class QuotationSetting extends Model
         'company_email'     => '',
         'company_gstin'     => '',
         'bank_name'         => '',
+        'account_name'      => '',
         'bank_account'      => '',
         'bank_ifsc'         => '',
+        'bank_branch'       => '',
+        'bank_upi'          => '',
         'watermark_text'    => '',
         'show_watermark'    => false,
     ];

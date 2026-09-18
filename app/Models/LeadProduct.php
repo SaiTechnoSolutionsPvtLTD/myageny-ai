@@ -181,9 +181,15 @@ class LeadProduct extends Model
     // literal product_status string first, then falls back to the
     // product's own lead_status_id against this company's "Converted"/
     // "Won"-named LeadStatus rows.
+    protected static ?array $convertedStatusIdsCache = null;
+
     public static function convertedStatusIds(): array
     {
-        return \App\Models\LeadStatus::query()
+        if (static::$convertedStatusIdsCache !== null) {
+            return static::$convertedStatusIdsCache;
+        }
+
+        return static::$convertedStatusIdsCache = \App\Models\LeadStatus::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
                     ->orWhere('name', 'like', '%convert%');
@@ -320,6 +326,7 @@ class LeadProduct extends Model
             'status_id' => $this->lead_status_id,
             'status_value' => $this->lead_status_id ? (string) $this->lead_status_id : $this->product_status_key,
             'status_label' => $this->status_label,
+            'is_converted' => $this->isConvertedProduct(),
             'total'    => (float) $this->total_price,
             'paid'     => (float) $this->amount_paid,
             'pending'  => (float) $this->amount_pending,

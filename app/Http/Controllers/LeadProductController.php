@@ -180,13 +180,18 @@ class LeadProductController extends Controller
             ];
         })->values();
 
-        // Overall summary
+        // Overall summary (computed strictly from converted products)
+        $convertedProducts = $products->filter(fn ($p) => $p->isConvertedProduct());
+        $convertedTotal = (float) $convertedProducts->sum('total_price');
+        $convertedPaid  = (float) $convertedProducts->sum(fn($p) => $p->amount_paid);
+        $convertedPending = max(0, $convertedTotal - $convertedPaid);
+
         $summary = [
-            'total_value'   => round($products->sum('total_price'), 2),
-            'total_paid'    => round($products->sum(fn($p) => $p->amount_paid), 2),
-            'total_pending' => round($products->sum(fn($p) => $p->amount_pending), 2),
+            'total_value'   => round($convertedTotal, 2),
+            'total_paid'    => round($convertedPaid, 2),
+            'total_pending' => round($convertedPending, 2),
             'product_count' => $products->count(),
-            'converted'     => $products->filter(fn ($p) => $this->productStatusKey($p) === 'converted')->count(),
+            'converted'     => $convertedProducts->count(),
         ];
 
         return response()->json([

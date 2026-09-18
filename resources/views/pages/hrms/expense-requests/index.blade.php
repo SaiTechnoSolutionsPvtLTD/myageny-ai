@@ -633,6 +633,16 @@ select.exp-filter-input {
         {{ session('error') }}
     </div>
     @endif
+    @if(isset($errors) && $errors->any())
+    <div style="margin-bottom:20px; padding:14px 18px; border-radius:12px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-weight:700; font-size:14px; display:flex; align-items:flex-start; gap:10px;">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="margin-top:2px; flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+            @foreach($errors->all() as $errorMsg)
+                <div>{{ $errorMsg }}</div>
+            @endforeach
+        </div>
+    </div>
+    @endif
 
     {{-- Stats Cards --}}
     @php
@@ -787,6 +797,7 @@ select.exp-filter-input {
                                     'amount' => number_format($req->amount, 2),
                                     'description' => $req->description,
                                     'status' => $req->status,
+                                    'history' => $req->stage_history ?? [],
                                     'attachments' => $req->attachment_urls,
                                     'created_at' => $req->created_at ? $req->created_at->format('d M Y, h:i A') : '-'
                                 ]) }}"
@@ -810,6 +821,9 @@ select.exp-filter-input {
                                                 @if($stg['actioned_by'])
                                                     <span style="color:#64748b; font-size:10px; display:block;">By {{ $stg['actioned_by'] }}</span>
                                                 @endif
+                                                @if(!empty($stg['remarks']))
+                                                    <span style="color:#166534; font-size:10px; display:block; margin-top:2px;">💬 <em>{{ $stg['remarks'] }}</em></span>
+                                                @endif
                                             </div>
                                         @elseif($stg['status'] === 'current')
                                             <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#fef3c7; color:#b45309; font-weight:800; font-size:10px; flex-shrink:0;">⏳</span>
@@ -824,6 +838,9 @@ select.exp-filter-input {
                                                 <span style="color:#b91c1c; font-weight:700;">Stage {{ $stg['step'] }}: {{ $stg['role_name'] }}</span>
                                                 @if($stg['actioned_by'])
                                                     <span style="color:#b91c1c; font-size:10px; display:block;">Rejected by {{ $stg['actioned_by'] }}</span>
+                                                @endif
+                                                @if(!empty($stg['remarks']))
+                                                    <span style="color:#991b1b; font-size:10px; display:block; margin-top:2px;">💬 <em>{{ $stg['remarks'] }}</em></span>
                                                 @endif
                                             </div>
                                         @else
@@ -849,7 +866,14 @@ select.exp-filter-input {
                             @endif
                         @endif
 
-                        @if($req->status === 'rejected' && $req->rejection_reason)
+                        @php
+                            $lastApproval = collect($req->stage_history ?? [])->where('action', 'approved')->last();
+                        @endphp
+                        @if($req->status === 'approved' && $lastApproval && !empty($lastApproval['remarks']))
+                            <div style="margin-top:6px; padding:6px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; color:#166534; font-size:11px; font-weight:600; line-height:1.4; max-width:220px;">
+                                💬 <strong>Remarks:</strong> {{ $lastApproval['remarks'] }}
+                            </div>
+                        @elseif($req->status === 'rejected' && $req->rejection_reason)
                             <div style="margin-top:6px; padding:6px 10px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#991b1b; font-size:11px; font-weight:600; line-height:1.4; max-width:220px;">
                                 💬 <strong>Remarks:</strong> {{ $req->rejection_reason }}
                             </div>
@@ -1033,6 +1057,14 @@ select.exp-filter-input {
                 </div>
             </div>
 
+            {{-- Approval History / Remarks --}}
+            <div id="detailHistorySection" style="display: none; flex-direction: column; gap: 6px;">
+                <label class="exp-form-label" style="color: #374151; margin-bottom: 0;">Approval & Stage History</label>
+                <div id="detailHistoryContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                    {{-- Dynamically populated via JS --}}
+                </div>
+            </div>
+
         </div>
 
         <div class="exp-modal-foot">
@@ -1064,7 +1096,7 @@ select.exp-filter-input {
 
 {{-- Confirm Approve Modal --}}
 <div id="confirmApproveModal" class="exp-confirm-modal">
-    <div class="exp-confirm-card">
+    <div class="exp-confirm-card" style="max-width: 480px; width: 100%;">
         <div class="exp-confirm-head" style="background:#f0fdf4; border-bottom-color:#bbf7d0;">
             <div class="exp-confirm-title" style="color:#15803d;">
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1072,9 +1104,20 @@ select.exp-filter-input {
             </div>
             <button class="exp-modal-close" onclick="closeConfirmApproveModal()">✕</button>
         </div>
-        <div class="exp-confirm-body">
-            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:8px;">Are you sure you want to approve this expense request?</p>
-            <p style="font-size:13px; color:#6b7280; line-height:1.5;">An email notification will be sent to the next stage approver (or applicant if final stage).</p>
+        <div class="exp-confirm-body" style="padding: 20px 24px; text-align: left;">
+            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:6px;">Are you sure you want to approve this expense request?</p>
+            <p style="font-size:13px; color:#6b7280; line-height:1.5; margin-bottom:14px;">An email notification will be sent to the next stage approver (or applicant if final stage).</p>
+
+            <div class="exp-form-group" style="display:flex; flex-direction:column; gap:6px;">
+                <label class="exp-form-label" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0;">
+                    <span style="font-weight:700; color:#374151;">Approval Remarks <span style="color:#dc2626;">*</span></span>
+                    <span style="font-size:11px; font-weight:700; color:#dc2626; text-transform:none;">Mandatory</span>
+                </label>
+                <textarea id="approveRemarksInput" rows="3" class="exp-textarea" style="width:100%; box-sizing:border-box;" placeholder="Enter your approval remarks or comments (mandatory)..." required></textarea>
+                <div id="approveRemarksError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-top:2px;">
+                    ⚠️ Approval remarks are mandatory. Please enter remarks before approving.
+                </div>
+            </div>
         </div>
         <div class="exp-confirm-foot">
             <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmApproveModal()">Cancel</button>
@@ -1227,6 +1270,44 @@ function openExpenseDetailModal(btn) {
             container.innerHTML = html;
         }
 
+        // Approval History
+        const history = data.history || [];
+        const historySection = document.getElementById('detailHistorySection');
+        const historyContainer = document.getElementById('detailHistoryContainer');
+        if (historySection && historyContainer) {
+            if (history.length > 0) {
+                let hHtml = '';
+                history.forEach(h => {
+                    const isApprove = h.action === 'approved';
+                    const badgeBg = isApprove ? '#dcfce7' : '#fee2e2';
+                    const badgeColor = isApprove ? '#15803d' : '#b91c1c';
+                    const icon = isApprove ? '✓' : '✕';
+                    hHtml += `
+                        <div style="padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:12px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <span style="font-weight:700; color:#1e293b;">Stage ${h.step}: ${h.role_name || 'Approver'}</span>
+                                <span style="background:${badgeBg}; color:${badgeColor}; font-weight:700; padding:2px 8px; border-radius:6px; font-size:11px;">
+                                    ${icon} ${isApprove ? 'Approved' : 'Rejected'}
+                                </span>
+                            </div>
+                            <div style="color:#64748b; font-size:11px; margin-bottom:4px;">
+                                By <strong>${h.user_name || 'User'}</strong> on ${h.actioned_at || '-'}
+                            </div>
+                            ${h.remarks ? `
+                                <div style="margin-top:4px; padding:6px 10px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; color:#334155;">
+                                    💬 <strong>Remarks:</strong> ${h.remarks}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                historyContainer.innerHTML = hHtml;
+                historySection.style.display = 'flex';
+            } else {
+                historySection.style.display = 'none';
+            }
+        }
+
         document.getElementById('expenseDetailModal').style.display = 'flex';
     } catch (e) {
         console.error('Error opening expense details modal:', e);
@@ -1252,10 +1333,29 @@ function closeConfirmSendModal() {
 
 function showConfirmApproveModal(formId) {
     pendingApproveFormId = formId;
+    const rInput = document.getElementById('approveRemarksInput');
+    const rError = document.getElementById('approveRemarksError');
+    if (rInput) {
+        rInput.value = '';
+        rInput.style.borderColor = '';
+        rInput.style.boxShadow = '';
+    }
+    if (rError) rError.style.display = 'none';
     document.getElementById('confirmApproveModal').classList.add('show');
+    if (rInput) {
+        setTimeout(() => rInput.focus(), 150);
+    }
 }
 function closeConfirmApproveModal() {
     pendingApproveFormId = null;
+    const rInput = document.getElementById('approveRemarksInput');
+    const rError = document.getElementById('approveRemarksError');
+    if (rInput) {
+        rInput.value = '';
+        rInput.style.borderColor = '';
+        rInput.style.boxShadow = '';
+    }
+    if (rError) rError.style.display = 'none';
     document.getElementById('confirmApproveModal').classList.remove('show');
 }
 
@@ -1329,18 +1429,56 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Dynamic remarks input listener to clear error
+    const rInput = document.getElementById('approveRemarksInput');
+    if (rInput) {
+        rInput.addEventListener('input', function() {
+            const rError = document.getElementById('approveRemarksError');
+            if (this.value.trim().length > 0) {
+                if (rError) rError.style.display = 'none';
+                this.style.borderColor = '';
+                this.style.boxShadow = '';
+            }
+        });
+    }
+
     // Confirm Approve Submit Listener
     const btnApprove = document.getElementById('btnConfirmApproveSubmit');
     if (btnApprove) {
         btnApprove.addEventListener('click', function() {
+            const input = document.getElementById('approveRemarksInput');
+            const error = document.getElementById('approveRemarksError');
+            const remarks = input ? input.value.trim() : '';
+
+            if (!remarks) {
+                if (error) error.style.display = 'block';
+                if (input) {
+                    input.style.borderColor = '#dc2626';
+                    input.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
+                    input.focus();
+                }
+                return;
+            }
+
             if (pendingApproveFormId) {
                 const form = document.getElementById(pendingApproveFormId);
-                closeConfirmApproveModal();
-                showProcessOverlay(
-                    "Sending Email & Processing Approval...",
-                    "Please wait while the expense request is approved and email notification is sent..."
-                );
-                form.submit();
+                if (form) {
+                    let hidden = form.querySelector('input[name="remarks"]');
+                    if (!hidden) {
+                        hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'remarks';
+                        form.appendChild(hidden);
+                    }
+                    hidden.value = remarks;
+
+                    closeConfirmApproveModal();
+                    showProcessOverlay(
+                        "Sending Email & Processing Approval...",
+                        "Please wait while the expense request is approved and email notification is sent..."
+                    );
+                    form.submit();
+                }
             }
         });
     }
@@ -1366,6 +1504,9 @@ document.getElementById('sendModal').addEventListener('click', function(e) {
 });
 document.getElementById('rejectModal').addEventListener('click', function(e) {
     if (e.target === this) closeRejectModal();
+});
+document.getElementById('confirmApproveModal').addEventListener('click', function(e) {
+    if (e.target === this) closeConfirmApproveModal();
 });
 </script>
 @endpush

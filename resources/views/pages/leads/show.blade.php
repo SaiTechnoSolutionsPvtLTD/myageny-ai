@@ -243,9 +243,10 @@ tbody tr:last-child td { border-bottom: none; }
         ->values();
     $approvalHistoryCount = $approvalHistoryProducts->count();
 
-    $totalValue    = $lead->products->sum('total_price');
-    $totalPaid     = $lead->products->sum('amount_paid');
-    $totalPending  = $totalValue - $totalPaid;
+    $convProds     = $convertedProducts ?? $lead->products->filter(fn ($p) => $p->isConvertedProduct());
+    $totalValue    = (float) $convProds->sum('total_price');
+    $totalPaid     = (float) $convProds->sum('amount_paid');
+    $totalPending  = max(0, $totalValue - $totalPaid);
 @endphp
 
 <div class="lsp">
