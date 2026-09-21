@@ -235,12 +235,17 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
         // OD (On Duty) Requests — static routes BEFORE wildcard
         Route::get('od-requests/meta',               [OdRequestApiController::class, 'meta'])->name('od-requests.meta');
+        Route::get('od-requests/active',             [OdRequestApiController::class, 'active'])->name('od-requests.active');
         Route::get('od-requests/pending-approvals',  [OdRequestApiController::class, 'pendingApprovals'])->name('od-requests.pending-approvals');
         Route::get('od-requests/handled-approvals',  [OdRequestApiController::class, 'handledApprovals'])->name('od-requests.handled-approvals');
 
         Route::get('od-requests',                    [OdRequestApiController::class, 'index'])->name('od-requests.index');
         Route::post('od-requests',                   [OdRequestApiController::class, 'store'])->name('od-requests.store');
         Route::get('od-requests/{odRequest}',         [OdRequestApiController::class, 'show'])->name('od-requests.show');
+
+        // Gate Out / Gate In (End OD)
+        Route::post('od-requests/{odRequest}/gate-out', [OdRequestApiController::class, 'recordGateOut'])->name('od-requests.gate-out');
+        Route::post('od-requests/{odRequest}/gate-in',  [OdRequestApiController::class, 'recordGateIn'])->name('od-requests.gate-in');
 
         // Approve / Reject
         Route::post('od-requests/{odRequest}/approvals/{approval}/approve', [OdRequestApiController::class, 'approve'])->name('od-requests.approve');

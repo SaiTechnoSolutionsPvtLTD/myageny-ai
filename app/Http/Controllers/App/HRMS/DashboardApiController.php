@@ -12,11 +12,13 @@ use App\Models\HolidayCalendar;
 use App\Models\HrmsAnnouncement;
 use App\Models\InternJoiningForm;
 use App\Models\LeaveRequest;
+use App\Models\OdRequest;
 use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
 use App\Models\RecruitmentInterview;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -342,6 +344,9 @@ class DashboardApiController extends Controller
                 'exit_approval_queue'        => $exit_approval_queue,
                 'announcements'              => $announcements,
 
+                // Active OD for current user if applicable
+                'active_od'                  => $this->activeOdForUser($user),
+
                 // Own exit request & raise flag (mirrors web org dashboard)
                 'exit_request' => $exitRequest ? [
                     'id'            => $exitRequest->id,
@@ -550,6 +555,9 @@ class DashboardApiController extends Controller
 
                 'department_stats'    => [],
                 'exit_approval_queue' => [],
+
+                // Active OD for current user if applicable
+                'active_od'           => $this->activeOdForUser(auth()->user()),
 
                 'exit_request' => $exitRequest ? [
                     'id'            => $exitRequest->id,
@@ -1277,5 +1285,60 @@ class DashboardApiController extends Controller
         $name = $employee?->name ?: auth()->user()?->name ?: 'You';
 
         return "Happy Work Anniversary, {$name}! Thank you for your dedication, contribution, and the positive energy you bring every day.";
+    }
+
+    private function activeOdForUser(?User $user): ?array
+    {
+        if (! $user) {
+            return null;
+        }
+
+        $today = Carbon::today()->format('Y-m-d');
+
+        $od = OdRequest::with(['user.roles', 'employee', 'approvals.approver', 'approvals.actionedBy'])
+            ->where('user_id', $user->id)
+            ->whereIn('status', [OdRequest::STATUS_PENDING, OdRequest::STATUS_APPROVED])
+            ->whereDate('from_date', '<=', $today)
+            ->whereDate('to_date', '>=', $today)
+            ->latest('id')
+            ->first();
+
+        if (! $od) {
+            return null;
+        }
+
+        $employee = $od->employee ?: $od->user?->employee;
+        $userName = $od->user?->name ?? $employee?->name ?? 'Unknown';
+        $userRole = $od->user?->roles?->first()?->display_name
+            ?: ($od->user?->roles?->first()?->name
+            ?: ($employee?->role?->name ?? 'Employee'));
+
+        return [
+            'id'                 => $od->id,
+            'user_id'            => $od->user_id,
+            'user_name'          => $userName,
+            'employee_name'      => $employee?->name ?? $userName,
+            'employee_code'      => $employee?->employee_id ?? '',
+            'user_role'          => $userRole,
+            'user_avatar'        => $od->user?->profile_photo_path ?? null,
+            'is_owner'           => true,
+            'from_date'          => $od->from_date instanceof Carbon ? $od->from_date->format('Y-m-d') : $od->from_date,
+            'to_date'            => $od->to_date instanceof Carbon ? $od->to_date->format('Y-m-d') : $od->to_date,
+            'gate_out_time'      => $od->gate_out_time ? substr((string) $od->gate_out_time, 0, 5) : null,
+            'gate_in_time'       => $od->gate_in_time ? substr((string) $od->gate_in_time, 0, 5) : null,
+            'has_gate_out'       => !empty($od->gate_out_time),
+            'has_gate_in'        => !empty($od->gate_in_time),
+            'is_completed'       => !empty($od->gate_in_time),
+            'formatted_gate_out' => $od->gate_out_time ? Carbon::parse($od->gate_out_time)->format('h:i A') : null,
+            'formatted_gate_in'  => $od->gate_in_time ? Carbon::parse($od->gate_in_time)->format('h:i A') : null,
+            'total_days'         => $od->total_days,
+            'reason'             => $od->reason ?? '',
+            'status'             => $od->status,
+            'current_step'       => $od->current_step,
+            'branch_id'          => $od->branch_id,
+            'submitted_at'       => $od->submitted_at?->format('Y-m-d H:i:s'),
+            'approved_at'        => $od->approved_at?->format('Y-m-d H:i:s'),
+            'rejected_at'        => $od->rejected_at?->format('Y-m-d H:i:s'),
+        ];
     }
 }

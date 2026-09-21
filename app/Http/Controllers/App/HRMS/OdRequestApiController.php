@@ -242,6 +242,28 @@ class OdRequestApiController extends Controller
         ]);
     }
 
+    // ── GET /api/mobile/hrms/od-requests/active ──────────────────────────────
+    public function active(Request $request): JsonResponse
+    {
+        $user  = $request->user();
+        $today = Carbon::today()->format('Y-m-d');
+
+        $od = OdRequest::with(['user.roles', 'employee', 'approvals.approver', 'approvals.actionedBy'])
+            ->where('user_id', $user->id)
+            ->whereIn('status', [OdRequest::STATUS_PENDING, OdRequest::STATUS_APPROVED])
+            ->whereDate('from_date', '<=', $today)
+            ->whereDate('to_date', '>=', $today)
+            ->latest('id')
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'active_od' => $od ? $this->mapOdRequest($od, true, $user) : null,
+            ],
+        ]);
+    }
+
     // ── GET /api/mobile/hrms/od-requests/{odRequest} ──────────────────────────
     public function show(Request $request, OdRequest $odRequest): JsonResponse
     {
@@ -285,6 +307,18 @@ class OdRequestApiController extends Controller
             'from_date.after_or_equal' => 'Past dates cannot be selected for OD requests.',
             'to_date.after_or_equal'   => 'To Date must be equal to or after From Date.',
         ]);
+
+        // Validation: If both gate times provided on the same day, Gate Out must be before Gate In.
+        if (!empty($validated['gate_out_time']) && !empty($validated['gate_in_time'])) {
+            if ($validated['from_date'] === $validated['to_date']) {
+                if ($validated['gate_out_time'] >= $validated['gate_in_time']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Gate Out Time cannot be after Gate In Time.',
+                    ], 422);
+                }
+            }
+        }
 
         $user         = $request->user();
         $approvalRows = $this->approvalRowsFor($user);
@@ -335,6 +369,107 @@ class OdRequestApiController extends Controller
             'message' => 'OD request submitted successfully. Approval started with your hierarchy.',
             'data'    => $this->mapOdRequest($odRequest, true, $user),
         ], 201);
+    }
+
+    // ── POST /api/mobile/hrms/od-requests/{odRequest}/gate-out ─────────────────
+    public function recordGateOut(Request $request, OdRequest $odRequest): JsonResponse
+    {
+        $user = $request->user();
+        if ((int) $odRequest->user_id !== (int) $user->id && ! $user->isSystemAdmin()) {
+            return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
+        }
+
+        if ($odRequest->status === OdRequest::STATUS_REJECTED) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot record gate out for a rejected OD request.',
+            ], 422);
+        }
+
+        $request->validate([
+            'gate_out_time' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $gateOut = $request->input('gate_out_time') ?: now()->format('H:i');
+
+        if ($odRequest->gate_in_time && $odRequest->from_date === $odRequest->to_date) {
+            $existingGateIn = substr((string) $odRequest->gate_in_time, 0, 5);
+            if ($gateOut >= $existingGateIn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gate Out time cannot be after Gate In time (' . $existingGateIn . ').',
+                ], 422);
+            }
+        }
+
+        $odRequest->update(['gate_out_time' => $gateOut]);
+
+        // If already approved, update daily attendance records with the new gate out time
+        if ($odRequest->status === OdRequest::STATUS_APPROVED) {
+            $this->markAttendanceRecords($odRequest);
+        }
+
+        $odRequest->refresh()->load(['user.roles', 'employee', 'approvals.approver', 'approvals.actionedBy']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Gate Out time recorded successfully.',
+            'data'    => $this->mapOdRequest($odRequest, true, $user),
+        ]);
+    }
+
+    // ── POST /api/mobile/hrms/od-requests/{odRequest}/gate-in ──────────────────
+    public function recordGateIn(Request $request, OdRequest $odRequest): JsonResponse
+    {
+        $user = $request->user();
+        if ((int) $odRequest->user_id !== (int) $user->id && ! $user->isSystemAdmin()) {
+            return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
+        }
+
+        if ($odRequest->status === OdRequest::STATUS_REJECTED) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot record gate in for a rejected OD request.',
+            ], 422);
+        }
+
+        if (!empty($odRequest->gate_in_time)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gate In time has already been recorded for this OD request.',
+            ], 422);
+        }
+
+        $request->validate([
+            'gate_in_time' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $gateIn = $request->input('gate_in_time') ?: now()->format('H:i');
+
+        if ($odRequest->gate_out_time && $odRequest->from_date === $odRequest->to_date) {
+            $existingGateOut = substr((string) $odRequest->gate_out_time, 0, 5);
+            if ($existingGateOut >= $gateIn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gate In time must be after Gate Out time (' . $existingGateOut . ').',
+                ], 422);
+            }
+        }
+
+        $odRequest->update(['gate_in_time' => $gateIn]);
+
+        // If already approved, update daily attendance records with the new gate in time and working hours
+        if ($odRequest->status === OdRequest::STATUS_APPROVED) {
+            $this->markAttendanceRecords($odRequest);
+        }
+
+        $odRequest->refresh()->load(['user.roles', 'employee', 'approvals.approver', 'approvals.actionedBy']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'On Duty ended successfully. Gate In time recorded.',
+            'data'    => $this->mapOdRequest($odRequest, true, $user),
+        ]);
     }
 
     // ── POST /api/mobile/hrms/od-requests/{odRequest}/approvals/{approval}/approve
@@ -699,18 +834,23 @@ class OdRequestApiController extends Controller
             'user_role'     => $userRole,
             'user_avatar'   => $r->user?->profile_photo_path ?? null,
             'is_owner'      => $currentUser ? (int) $r->user_id === (int) $currentUser->id : false,
-            'from_date'     => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
-            'to_date'       => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
-            'gate_out_time' => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,
-            'gate_in_time'  => $r->gate_in_time ? substr((string) $r->gate_in_time, 0, 5) : null,
-            'total_days'    => $r->total_days,
-            'reason'        => $r->reason ?? '',
-            'status'        => $r->status,
-            'current_step'  => $r->current_step,
-            'branch_id'     => $r->branch_id,
-            'submitted_at'  => $r->submitted_at?->format('Y-m-d H:i:s'),
-            'approved_at'   => $r->approved_at?->format('Y-m-d H:i:s'),
-            'rejected_at'   => $r->rejected_at?->format('Y-m-d H:i:s'),
+            'from_date'          => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
+            'to_date'            => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
+            'gate_out_time'      => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,
+            'gate_in_time'       => $r->gate_in_time ? substr((string) $r->gate_in_time, 0, 5) : null,
+            'has_gate_out'       => !empty($r->gate_out_time),
+            'has_gate_in'        => !empty($r->gate_in_time),
+            'is_completed'       => !empty($r->gate_in_time),
+            'formatted_gate_out' => $r->gate_out_time ? Carbon::parse($r->gate_out_time)->format('h:i A') : null,
+            'formatted_gate_in'  => $r->gate_in_time ? Carbon::parse($r->gate_in_time)->format('h:i A') : null,
+            'total_days'         => $r->total_days,
+            'reason'             => $r->reason ?? '',
+            'status'             => $r->status,
+            'current_step'       => $r->current_step,
+            'branch_id'          => $r->branch_id,
+            'submitted_at'       => $r->submitted_at?->format('Y-m-d H:i:s'),
+            'approved_at'        => $r->approved_at?->format('Y-m-d H:i:s'),
+            'rejected_at'        => $r->rejected_at?->format('Y-m-d H:i:s'),
         ];
 
         if ($withApprovals && $r->relationLoaded('approvals')) {
