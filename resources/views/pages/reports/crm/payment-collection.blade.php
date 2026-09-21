@@ -298,11 +298,180 @@
     border-color: #0f172a;
     box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
 }
+.crm-pay-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.crm-pay-edit-btn:hover {
+    background: #f0fdf4;
+    border-color: #22c55e;
+    color: #16a34a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.12);
+}
+.crm-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    animation: crmFadeIn 0.18s ease-out;
+}
+.crm-modal-card {
+    background: #ffffff;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    animation: crmZoomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.crm-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.crm-modal-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.crm-modal-title {
+    margin: 8px 0 2px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+}
+.crm-modal-sub {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+.crm-modal-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+.crm-modal-close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+.crm-modal-body {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.crm-modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.crm-modal-label {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: #475569;
+}
+.crm-modal-input, .crm-modal-select {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1.5px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    outline: none;
+    transition: all 0.15s;
+}
+.crm-modal-input:focus, .crm-modal-select:focus {
+    border-color: #16a34a;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+.crm-modal-footer {
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.crm-modal-btn {
+    padding: 10px 18px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+.crm-modal-btn-cancel {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #475569;
+}
+.crm-modal-btn-cancel:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+.crm-modal-btn-save {
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(22, 163, 74, 0.25);
+}
+.crm-modal-btn-save:hover {
+    box-shadow: 0 6px 20px rgba(22, 163, 74, 0.35);
+    transform: translateY(-1px);
+}
+.crm-modal-btn-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+@keyframes crmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes crmZoomIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
 </style>
 @endpush
 
 @section('content')
 @php
+    $isSuperAdmin = auth()->user() && (auth()->user()->isSuperAdmin() || auth()->user()->hasRole('super_admin'));
     $hasCustomFilters =
         request()->filled('customer_id')
         || request()->filled('company_name')
@@ -697,6 +866,9 @@
                                     <th>Payment Mode</th>
                                     <th>Transaction Reference</th>
                                     <th>Received By</th>
+                                    @if($isSuperAdmin)
+                                        <th style="text-align:center; width:90px;">Action</th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody>
@@ -722,7 +894,7 @@
                                         </td>
                                         <td>
                                             <a href="{{ route('leads.show', $row->customer_id) }}" class="crm-pay-name" style="color:#0f172a; font-weight:800; text-decoration:none;">
-                                                {{ $row->company_name ?: '-' }}
+                                                 {{ $row->company_name ?: '-' }}
                                             </a>
                                         </td>
                                         <td>
@@ -784,6 +956,27 @@
                                                 @endif
                                             </div>
                                         </td>
+                                        @if($isSuperAdmin)
+                                            <td onclick="event.stopPropagation();" style="text-align:center; white-space:nowrap;">
+                                                <button type="button"
+                                                        class="crm-pay-edit-btn"
+                                                        title="Edit Payment"
+                                                        onclick="event.stopPropagation(); openEditPaymentModal({
+                                                            id: {{ $row->payment_id }},
+                                                            code: 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}',
+                                                            customer: '{{ addslashes($row->company_name ?: $row->customer_name) }}',
+                                                            payment_type: '{{ $row->payment_type ?: $row->collection_type }}',
+                                                            payment_date: '{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('Y-m-d') : '' }}',
+                                                            amount: '{{ (float) ($row->received_amount ?? 0) }}'
+                                                        })">
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                    <span>Edit</span>
+                                                </button>
+                                            </td>
+                                        @endif
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -808,7 +1001,7 @@
                                     <td class="crm-pay-money" style="padding:14px; font-size:13px; color:#dc2626;">
                                         Rs {{ number_format($reportRows->sum('outstanding_amount'), 2) }}
                                     </td>
-                                    <td colspan="3"></td>
+                                    <td colspan="{{ $isSuperAdmin ? 4 : 3 }}"></td>
                                 </tr>
                                 @if($reportRows->hasPages())
                                     <tr style="background:#f1f5f9; font-weight:900; border-top:1px solid #cbd5e1;">
@@ -827,7 +1020,7 @@
                                         <td class="crm-pay-money" style="padding:14px; font-size:14px; color:#dc2626;">
                                             Rs {{ number_format($summary['outstanding_amount'], 2) }}
                                         </td>
-                                        <td colspan="3"></td>
+                                        <td colspan="{{ $isSuperAdmin ? 4 : 3 }}"></td>
                                     </tr>
                                 @endif
                             </tfoot>
@@ -895,6 +1088,63 @@
         </div>
     </div>
 </div>
+
+@if($isSuperAdmin)
+<div id="crmEditPaymentModal" class="crm-modal-overlay" style="display:none;" onclick="if(event.target === this) closeEditPaymentModal()">
+    <div class="crm-modal-card" role="dialog" aria-modal="true" aria-labelledby="crmEditPaymentTitle">
+        <div class="crm-modal-header">
+            <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="crmEditModalCode" class="crm-pay-code" style="font-size:13px; font-weight:800; background:#f1f5f9; padding:3px 8px; border-radius:6px; color:#0f172a;"></span>
+                    <span class="crm-modal-badge">Super Admin Only</span>
+                </div>
+                <h3 id="crmEditPaymentTitle" class="crm-modal-title">Edit Payment Details</h3>
+                <p id="crmEditModalCustomer" class="crm-modal-sub"></p>
+            </div>
+            <button type="button" class="crm-modal-close" onclick="closeEditPaymentModal()" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <form id="crmEditPaymentForm" onsubmit="handleEditPaymentSubmit(event)">
+            <input type="hidden" id="edit_payment_id" name="payment_id">
+
+            <div id="crmEditModalAlert" style="display:none; margin: 0 24px 16px 24px; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; line-height: 1.4;"></div>
+
+            <div class="crm-modal-body">
+                <div class="crm-modal-field">
+                    <label class="crm-modal-label" for="edit_payment_type">Payment Type <span style="color:#ef4444;">*</span></label>
+                    <select id="edit_payment_type" name="payment_type" class="crm-modal-select" required>
+                        <option value="new_sale">New Sales</option>
+                        <option value="balance_payment">Balance Payment</option>
+                        <option value="renewals">Renewals</option>
+                    </select>
+                </div>
+
+                <div class="crm-modal-field">
+                    <label class="crm-modal-label" for="edit_payment_date">Date Received <span style="color:#ef4444;">*</span></label>
+                    <input type="date" id="edit_payment_date" name="payment_date" class="crm-modal-input" required>
+                </div>
+
+                <div class="crm-modal-field">
+                    <label class="crm-modal-label" for="edit_amount">Received Amount (₹) <span style="color:#ef4444;">*</span></label>
+                    <input type="number" step="0.01" min="0.01" id="edit_amount" name="amount" class="crm-modal-input" placeholder="0.00" required>
+                </div>
+            </div>
+
+            <div class="crm-modal-footer">
+                <button type="button" class="crm-modal-btn crm-modal-btn-cancel" onclick="closeEditPaymentModal()">Cancel</button>
+                <button type="submit" id="crmEditModalSubmitBtn" class="crm-modal-btn crm-modal-btn-save">
+                    <span id="crmEditModalSubmitText">Save Changes</span>
+                    <span id="crmEditModalSpinner" style="display:none;">Saving...</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+
+<div id="crm-toast-wrap" style="position:fixed; bottom:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
 @endsection
 
 @push('scripts')
@@ -1180,5 +1430,144 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     updateCrmQuickDateRangeSpan(q?.value || 'month');
 });
+
+@if($isSuperAdmin)
+const CRM_UPDATE_URL_TEMPLATE = "{{ route('reports.crm.payment-collection.update', ':id') }}";
+
+function openEditPaymentModal(data) {
+    document.getElementById('edit_payment_id').value = data.id;
+    document.getElementById('crmEditModalCode').textContent = data.code;
+    document.getElementById('crmEditModalCustomer').textContent = data.customer ? `Customer: ${data.customer}` : '';
+    
+    let pType = (data.payment_type || '').toLowerCase().replace(/[\s-]/g, '_');
+    if (pType === 'new_sales') pType = 'new_sale';
+    if (pType === 'renewal') pType = 'renewals';
+    
+    const typeSelect = document.getElementById('edit_payment_type');
+    if (typeSelect) {
+        typeSelect.value = pType || 'new_sale';
+    }
+
+    document.getElementById('edit_payment_date').value = data.payment_date || '';
+    document.getElementById('edit_amount').value = data.amount || '';
+
+    const alertBox = document.getElementById('crmEditModalAlert');
+    if (alertBox) {
+        alertBox.style.display = 'none';
+        alertBox.textContent = '';
+    }
+
+    document.getElementById('crmEditPaymentModal').style.display = 'flex';
+}
+
+function closeEditPaymentModal() {
+    const modal = document.getElementById('crmEditPaymentModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function handleEditPaymentSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit_payment_id').value;
+    const paymentType = document.getElementById('edit_payment_type').value;
+    const paymentDate = document.getElementById('edit_payment_date').value;
+    const amount = document.getElementById('edit_amount').value;
+
+    const alertBox = document.getElementById('crmEditModalAlert');
+    const submitBtn = document.getElementById('crmEditModalSubmitBtn');
+    const submitText = document.getElementById('crmEditModalSubmitText');
+    const spinner = document.getElementById('crmEditModalSpinner');
+
+    if (alertBox) alertBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitText.style.display = 'none';
+    spinner.style.display = 'inline';
+
+    const url = CRM_UPDATE_URL_TEMPLATE.replace(':id', id);
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                payment_type: paymentType,
+                payment_date: paymentDate,
+                amount: amount
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showCrmToast(result.message || 'Payment updated successfully!', 'success');
+            closeEditPaymentModal();
+            setTimeout(() => {
+                window.location.reload();
+            }, 700);
+        } else {
+            let errorMsg = result.message || 'Failed to update payment.';
+            if (result.errors) {
+                errorMsg = Object.values(result.errors).flat().join('<br>');
+            }
+            if (alertBox) {
+                alertBox.style.display = 'block';
+                alertBox.style.background = '#fef2f2';
+                alertBox.style.color = '#b91c1c';
+                alertBox.style.border = '1px solid #fecaca';
+                alertBox.innerHTML = errorMsg;
+            } else {
+                showCrmToast(errorMsg, 'error');
+            }
+        }
+    } catch (err) {
+        if (alertBox) {
+            alertBox.style.display = 'block';
+            alertBox.style.background = '#fef2f2';
+            alertBox.style.color = '#b91c1c';
+            alertBox.style.border = '1px solid #fecaca';
+            alertBox.textContent = 'A network error occurred. Please try again.';
+        } else {
+            showCrmToast('A network error occurred. Please try again.', 'error');
+        }
+    } finally {
+        submitBtn.disabled = false;
+        submitText.style.display = 'inline';
+        spinner.style.display = 'none';
+    }
+}
+
+function showCrmToast(message, type = 'success') {
+    const wrap = document.getElementById('crm-toast-wrap');
+    if (!wrap) return;
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        padding: 12px 18px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        background: ${type === 'success' ? '#16a34a' : '#dc2626'};
+        box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+        animation: crmFadeIn 0.2s ease;
+        max-width: 360px;
+    `;
+    toast.innerHTML = message;
+    wrap.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeEditPaymentModal();
+    }
+});
+@endif
 </script>
 @endpush
