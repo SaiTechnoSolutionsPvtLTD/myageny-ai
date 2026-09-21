@@ -13,8 +13,10 @@ use App\Models\Product;
 use App\Models\ProductionCountReport;
 use App\Models\ProductionInitiation;
 use App\Models\User;
+use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -460,6 +462,76 @@ class CrmReportController extends Controller
             'defaultFromDate',
             'defaultToDate'
         ));
+    }
+
+    public function updatePaymentCollection(Request $request, $payment): JsonResponse
+    {
+        $user = auth()->user();
+        $isSuperAdmin = $user && ($user->isSuperAdmin() || $user->hasRole('super_admin'));
+        if (! $isSuperAdmin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only Super Admin can edit payment details.',
+            ], 403);
+        }
+
+        if (! ($payment instanceof LeadProductPayment)) {
+            $payment = LeadProductPayment::findOrFail($payment);
+        }
+
+        $validated = $request->validate([
+            'payment_type' => ['required', 'string', 'in:new_sale,balance_payment,renewals'],
+            'payment_date' => ['required', 'date'],
+            'amount'       => ['required', 'numeric', 'min:0.01'],
+        ]);
+
+        $oldValues = [
+            'payment_type' => $payment->payment_type,
+            'payment_date' => $payment->payment_date?->format('Y-m-d'),
+            'amount'       => (float) $payment->amount,
+        ];
+
+        DB::transaction(function () use ($payment, $validated, $user, $oldValues) {
+            $newAmount = (float) $validated['amount'];
+
+            $payment->payment_type = $validated['payment_type'];
+            $payment->payment_date = $validated['payment_date'];
+            $payment->amount       = $newAmount;
+
+            if ($payment->is_tds_deducted) {
+                $payment->after_tds_amount = $newAmount;
+            }
+
+            $payment->save();
+
+            // Keep parent lead product amount_paid and payment_status in sync
+            if ($payment->lead_product_id) {
+                $leadProduct = $payment->leadProduct()->first();
+                $leadProduct?->syncPaymentStatus();
+            }
+
+            $payment->load('leadProduct');
+            ActivityLogger::logPayment('update', $payment, $payment->lead_id, $user, [
+                'product_name' => $payment->leadProduct?->product_name,
+                'old_values'   => $oldValues,
+                'new_values'   => [
+                    'payment_type' => $payment->payment_type,
+                    'payment_date' => $validated['payment_date'],
+                    'amount'       => $newAmount,
+                ],
+            ]);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment details updated successfully.',
+            'payment' => [
+                'id'           => $payment->id,
+                'payment_type' => $payment->payment_type,
+                'payment_date' => $payment->payment_date?->format('Y-m-d'),
+                'amount'       => (float) $payment->amount,
+            ],
+        ]);
     }
 
     public function exportPaymentCollection(Request $request): Response

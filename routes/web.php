@@ -225,6 +225,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('reports.crm.revenue-comparison.export');
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
         ->name('reports.crm.payment-collection');
+    Route::post('/reports/crm/payment-collection/{payment}/update', [CrmReportController::class, 'updatePaymentCollection'])
+        ->name('reports.crm.payment-collection.update');
     Route::get('/reports/crm/payment-collection/export', [CrmReportController::class, 'exportPaymentCollection'])
         ->name('reports.crm.payment-collection.export');
     Route::get('/reports/crm/branch-comparison', [CrmReportController::class, 'branchComparison'])
