@@ -13,7 +13,9 @@ use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
+use App\Models\LeadSource;
 use App\Models\LeadStatus;
+
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -90,7 +92,7 @@ class SuperAdminDashboardController extends ApiController
                 || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
         };
 
-        // Query converted products in the selected date range using converted_at
+        // Query converted products in the selected date range using converted_at (converted date)
         $convertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
@@ -105,31 +107,10 @@ class SuperAdminDashboardController extends ApiController
             });
 
         if ($dateFrom) {
-            $convertedProductsQuery->where(function ($q) use ($dateFrom) {
-                $q->whereDate('converted_at', '>=', $dateFrom)
-                  ->orWhere(function ($sub) use ($dateFrom) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($dateFrom) {
-                              $sub2->whereDate('created_at', '>=', $dateFrom)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                          });
-                  });
-            });
+            $convertedProductsQuery->whereDate('converted_at', '>=', $dateFrom);
         }
-
         if ($dateTo) {
-            $convertedProductsQuery->where(function ($q) use ($dateTo) {
-                $q->whereDate('converted_at', '<=', $dateTo)
-                  ->orWhere(function ($sub) use ($dateTo) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($dateTo) {
-                              $sub2->whereDate('created_at', '<=', $dateTo)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                          });
-                  });
-            });
+            $convertedProductsQuery->whereDate('converted_at', '<=', $dateTo);
         }
 
         $convertedProducts = $convertedProductsQuery->with('payments')->get();
@@ -137,15 +118,20 @@ class SuperAdminDashboardController extends ApiController
         $convertedValue = (float) $convertedProducts->sum('total_price');
 
         $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
+        // won_leads = unique leads whose products converted in the selected period or marked won in period
         $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
         $wonLeads      = $wonLeadIds->count();
         $wonValue      = $convertedValue > 0 ? $convertedValue : (float) (clone $wonQuery)->sum('deal_value');
         $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
 
+
+
+
         $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
         $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
+
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
@@ -167,25 +153,33 @@ class SuperAdminDashboardController extends ApiController
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
 
-        // ── 3. Source counts (from enum) ───────────────────────────
+        // ── 3. Source counts (grouped by distinct source name) ──────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        foreach (Lead::sourceOptions() as $key => $label) {
+        $uniqueSources = LeadSource::query()
+            ->orderBy('id')
+            ->get(['id', 'name'])
+            ->unique(fn($s) => strtolower(trim($s->name)))
+            ->values();
+
+        foreach ($uniqueSources as $src) {
+            $sName = strtolower(trim($src->name));
+            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+
             $count = (clone $base())
-                ->where(function ($q) use ($key, $label) {
-                    $q->where('lead_source_id', $key)
-                        ->orWhere(function ($q2) use ($label) {
-                            $q2->whereNull('lead_source_id')->where('lead_source', $label);
-                        });
+                ->where(function ($q) use ($sameNameIds, $src) {
+                    $q->whereIn('lead_source_id', $sameNameIds)
+                      ->orWhere('lead_source', $src->name);
                 })
                 ->count();
             $sourceTotal += $count;
-            $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
+            $sourceCounts[] = ['key' => (string) $src->id, 'label' => $src->name, 'count' => $count];
         }
         foreach ($sourceCounts as &$src) {
             $src['percent'] = $sourceTotal > 0 ? round($src['count'] / $sourceTotal * 100, 1) : 0;
         }
         unset($src);
+
 
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
@@ -394,11 +388,8 @@ class SuperAdminDashboardController extends ApiController
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
             ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
-            ->map(function ($branch) use ($request, $dateFrom, $dateTo, $convertedStatusIds) {
-                $q = Lead::where('branch_id', $branch->id)
-                    ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
-                    ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
-                $this->visibility->applyLeadVisibility($q, $request->user());
+            ->map(function ($branch) use ($base, $request, $dateFrom, $dateTo, $userId, $stage, $source, $convertedStatusIds) {
+                $q = (clone $base())->where('branch_id', $branch->id);
 
                 $total          = (clone $q)->count();
 
@@ -407,37 +398,20 @@ class SuperAdminDashboardController extends ApiController
                         $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                             ->orWhereIn('lead_status_id', $convertedStatusIds);
                     })
-                    ->whereHas('lead', function ($lq) use ($branch, $request) {
+                    ->whereHas('lead', function ($lq) use ($branch, $request, $userId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('branch_id', $branch->id);
+                        if ($userId) $lq->where('assigned_to', $userId);
+                        if ($stage)  $lq->where('lead_status', $stage);
+                        if ($source) $lq->where('lead_source_id', $source);
                     });
 
                 if ($dateFrom) {
-                    $branchConvProductQuery->where(function ($sq) use ($dateFrom) {
-                        $sq->whereDate('converted_at', '>=', $dateFrom)
-                           ->orWhere(function ($sub) use ($dateFrom) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateFrom) {
-                                       $sub2->whereDate('created_at', '>=', $dateFrom)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                                   });
-                           });
-                    });
+                    $branchConvProductQuery->whereDate('converted_at', '>=', $dateFrom);
                 }
 
                 if ($dateTo) {
-                    $branchConvProductQuery->where(function ($sq) use ($dateTo) {
-                        $sq->whereDate('converted_at', '<=', $dateTo)
-                           ->orWhere(function ($sub) use ($dateTo) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateTo) {
-                                       $sub2->whereDate('created_at', '<=', $dateTo)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                                   });
-                           });
-                    });
+                    $branchConvProductQuery->whereDate('converted_at', '<=', $dateTo);
                 }
 
                 $branchConvProducts = $branchConvProductQuery->get();
@@ -472,20 +446,43 @@ class SuperAdminDashboardController extends ApiController
                     'pipeline_value'       => $pipeline,
                     'conversion_rate'      => $convRate,
                 ];
-            })
+            });
+
+        $unassignedBranchLeads = (clone $base())->whereNull('branch_id')->count();
+        if ($unassignedBranchLeads > 0) {
+            $branchPerformance->push([
+                'branch_id'            => null,
+                'branch_name'          => 'No Branch',
+                'branch_code'          => 'N/A',
+                'total_leads'          => $unassignedBranchLeads,
+                'converted_count'      => 0,
+                'converted_value'      => 0,
+                'converted_percentage' => 0,
+                'won_leads'            => 0,
+                'won_value'            => 0,
+                'lost_leads'           => (clone $base())->whereNull('branch_id')->where('lead_status', 'lost')->count(),
+                'pipeline_value'       => (float)(clone $base())->whereNull('branch_id')->sum('deal_value'),
+                'conversion_rate'      => 0,
+            ]);
+        }
+
+        $branchPerformance = $branchPerformance
+            ->filter(fn($b) => $b['total_leads'] > 0 || $b['converted_count'] > 0)
             ->sortByDesc('converted_value')
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────
-        $teamPerformance = $this->visibility->visibleAssignableUsers($request->user())
+        $assignedUserIds = (clone $base())->whereNotNull('assigned_to')->pluck('assigned_to')->unique();
+        $assignableUserIds = $this->visibility->visibleAssignableUsers($request->user())
             ->when($branchId, fn($users) => $users->where('branch_id', $branchId))
-            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId, $convertedStatusIds) {
-                $q = Lead::where('assigned_to', $user->id)
-                    ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
-                    ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
-                $this->visibility->applyLeadVisibility($q, $request->user());
+            ->pluck('id');
+        $allTeamUserIds = $assignedUserIds->merge($assignableUserIds)->unique()->filter();
 
+        $teamPerformance = User::whereIn('id', $allTeamUserIds)
+            ->with('roles')
+            ->get()
+            ->map(function ($user) use ($base, $request, $dateFrom, $dateTo, $branchId, $stage, $source, $convertedStatusIds) {
+                $q = (clone $base())->where('assigned_to', $user->id);
                 $total  = (clone $q)->count();
 
                 // Converted products for this user within converted date range
@@ -493,38 +490,20 @@ class SuperAdminDashboardController extends ApiController
                         $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                             ->orWhereIn('lead_status_id', $convertedStatusIds);
                     })
-                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId) {
+                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('assigned_to', $user->id);
                         if ($branchId) $lq->where('branch_id', $branchId);
+                        if ($stage)    $lq->where('lead_status', $stage);
+                        if ($source)   $lq->where('lead_source_id', $source);
                     });
 
                 if ($dateFrom) {
-                    $userConvProductQuery->where(function ($sq) use ($dateFrom) {
-                        $sq->whereDate('converted_at', '>=', $dateFrom)
-                           ->orWhere(function ($sub) use ($dateFrom) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateFrom) {
-                                       $sub2->whereDate('created_at', '>=', $dateFrom)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                                   });
-                           });
-                    });
+                    $userConvProductQuery->whereDate('converted_at', '>=', $dateFrom);
                 }
 
                 if ($dateTo) {
-                    $userConvProductQuery->where(function ($sq) use ($dateTo) {
-                        $sq->whereDate('converted_at', '<=', $dateTo)
-                           ->orWhere(function ($sub) use ($dateTo) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateTo) {
-                                       $sub2->whereDate('created_at', '<=', $dateTo)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                                   });
-                           });
-                    });
+                    $userConvProductQuery->whereDate('converted_at', '<=', $dateTo);
                 }
 
                 $userConvProducts = $userConvProductQuery->get();
@@ -536,7 +515,7 @@ class SuperAdminDashboardController extends ApiController
                     'user_id'         => $user->id,
                     'user_name'       => $user->name,
                     'user_email'      => $user->email,
-                    'role'            => $user->roles->first()?->display_name,
+                    'role'            => $user->roles->first()?->display_name ?? 'Staff',
                     'role_name'       => $user->roles->first()?->name,
                     'total_leads'     => $total,
                     'convert_leads'   => $convertCount,
@@ -545,11 +524,29 @@ class SuperAdminDashboardController extends ApiController
                     'convert_value'   => $convertVal,
                     'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
-            })
+            });
+
+        $unassignedUserLeads = (clone $base())->whereNull('assigned_to')->count();
+        if ($unassignedUserLeads > 0) {
+            $teamPerformance->push([
+                'user_id'         => null,
+                'user_name'       => 'Unassigned',
+                'user_email'      => null,
+                'role'            => 'Unassigned',
+                'role_name'       => 'unassigned',
+                'total_leads'     => $unassignedUserLeads,
+                'convert_leads'   => 0,
+                'lost_leads'      => (clone $base())->whereNull('assigned_to')->where('lead_status', 'lost')->count(),
+                'active_leads'    => $unassignedUserLeads,
+                'convert_value'   => 0,
+                'conversion_rate' => 0,
+            ]);
+        }
+
+        $teamPerformance = $teamPerformance
             ->filter(fn($u) => $u['total_leads'] > 0 || $u['convert_leads'] > 0)
             ->sortByDesc('convert_value')
-            ->values()
-            ->take(10);
+            ->values();
 
         // ── 10. 6-month trend ────────────────────────────────────
         $monthTrend = [];
@@ -1052,7 +1049,7 @@ class SuperAdminDashboardController extends ApiController
                 || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
         };
 
-        // Query converted products in the selected date range using converted_at
+        // Query converted products in the selected date range using converted_at (converted date)
         $convertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
@@ -1067,49 +1064,30 @@ class SuperAdminDashboardController extends ApiController
             });
 
         if ($dateFrom) {
-            $convertedProductsQuery->where(function ($q) use ($dateFrom) {
-                $q->whereDate('converted_at', '>=', $dateFrom)
-                  ->orWhere(function ($sub) use ($dateFrom) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($dateFrom) {
-                              $sub2->whereDate('created_at', '>=', $dateFrom)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                          });
-                  });
-            });
+            $convertedProductsQuery->whereDate('converted_at', '>=', $dateFrom);
         }
-
         if ($dateTo) {
-            $convertedProductsQuery->where(function ($q) use ($dateTo) {
-                $q->whereDate('converted_at', '<=', $dateTo)
-                  ->orWhere(function ($sub) use ($dateTo) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($dateTo) {
-                              $sub2->whereDate('created_at', '<=', $dateTo)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                          });
-                  });
-            });
+            $convertedProductsQuery->whereDate('converted_at', '<=', $dateTo);
         }
 
         $convertedProducts = $convertedProductsQuery->with('payments')->get();
         $convertedProductsCount = $convertedProducts->count();
         $convertedValue = (float) $convertedProducts->sum('total_price');
 
+        // won_leads = unique leads whose products were converted in the selected date range or marked won in period
         $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
         $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
         $wonLeads      = $wonLeadIds->count();
         $wonValue      = $convertedValue > 0 ? $convertedValue : (float) (clone $wonQuery)->sum('deal_value');
         $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
 
+
         $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
         $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
-        // Previous period converted products
+        // Previous period converted products using converted_at
         $prevConvertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
@@ -1124,31 +1102,10 @@ class SuperAdminDashboardController extends ApiController
             });
 
         if ($prevFrom) {
-            $prevConvertedProductsQuery->where(function ($q) use ($prevFrom) {
-                $q->whereDate('converted_at', '>=', $prevFrom)
-                  ->orWhere(function ($sub) use ($prevFrom) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($prevFrom) {
-                              $sub2->whereDate('created_at', '>=', $prevFrom)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $prevFrom))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $prevFrom)->orWhereDate('created_at', '>=', $prevFrom));
-                          });
-                  });
-            });
+            $prevConvertedProductsQuery->whereDate('converted_at', '>=', $prevFrom);
         }
-
         if ($prevTo) {
-            $prevConvertedProductsQuery->where(function ($q) use ($prevTo) {
-                $q->whereDate('converted_at', '<=', $prevTo)
-                  ->orWhere(function ($sub) use ($prevTo) {
-                      $sub->whereNull('converted_at')
-                          ->where(function ($sub2) use ($prevTo) {
-                              $sub2->whereDate('created_at', '<=', $prevTo)
-                                   ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $prevTo))
-                                   ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $prevTo)->orWhereDate('created_at', '<=', $prevTo));
-                          });
-                  });
-            });
+            $prevConvertedProductsQuery->whereDate('converted_at', '<=', $prevTo);
         }
 
         $prevConvertedProducts = $prevConvertedProductsQuery->get();
@@ -1159,9 +1116,11 @@ class SuperAdminDashboardController extends ApiController
         $prevLostQuery     = (clone $prevBase())->lost();
         $prevLostLeads     = (clone $prevLostQuery)->count();
 
-        $prevWonLeadIds    = (clone $prevWonQuery)->pluck('id')->merge($prevConvertedLeadIdsInPeriod)->unique();
+        $prevWonLeadIds    = $prevConvertedLeadIdsInPeriod;
         $prevWonLeads      = $prevWonLeadIds->count();
         $prevActiveLeads   = max(0, $prevTotalLeads - $prevWonLeads - $prevLostLeads);
+
+
 
         $prevConvertedValue = (float) $prevConvertedProducts->sum('total_price');
         $prevDealWonVal    = (float) (clone $prevWonQuery)->sum('deal_value');
@@ -1200,25 +1159,33 @@ class SuperAdminDashboardController extends ApiController
         $stageTotal = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
 
-        // ── 3. Source counts (from enum) ───────────────────────────
+        // ── 3. Source counts (grouped by distinct source name) ──────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        foreach (Lead::sourceOptions() as $key => $label) {
+        $uniqueSources = LeadSource::query()
+            ->orderBy('id')
+            ->get(['id', 'name'])
+            ->unique(fn($s) => strtolower(trim($s->name)))
+            ->values();
+
+        foreach ($uniqueSources as $src) {
+            $sName = strtolower(trim($src->name));
+            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+
             $count = (clone $base())
-                ->where(function ($q) use ($key, $label) {
-                    $q->where('lead_source_id', $key)
-                        ->orWhere(function ($q2) use ($label) {
-                            $q2->whereNull('lead_source_id')->where('lead_source', $label);
-                        });
+                ->where(function ($q) use ($sameNameIds, $src) {
+                    $q->whereIn('lead_source_id', $sameNameIds)
+                      ->orWhere('lead_source', $src->name);
                 })
                 ->count();
             $sourceTotal += $count;
-            $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
+            $sourceCounts[] = ['key' => (string) $src->id, 'label' => $src->name, 'count' => $count];
         }
         foreach ($sourceCounts as &$src) {
             $src['percent'] = $sourceTotal > 0 ? round($src['count'] / $sourceTotal * 100, 1) : 0;
         }
         unset($src);
+
 
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
@@ -1442,11 +1409,8 @@ class SuperAdminDashboardController extends ApiController
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
             ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->get()
-            ->map(function ($branch) use ($request, $dateFrom, $dateTo, $convertedStatusIds) {
-                $q = Lead::where('branch_id', $branch->id)
-                    ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
-                    ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
-                $this->visibility->applyLeadVisibility($q, $request->user());
+            ->map(function ($branch) use ($base, $request, $dateFrom, $dateTo, $userId, $stage, $source, $convertedStatusIds) {
+                $q = (clone $base())->where('branch_id', $branch->id);
 
                 $total          = (clone $q)->count();
 
@@ -1455,37 +1419,20 @@ class SuperAdminDashboardController extends ApiController
                         $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                             ->orWhereIn('lead_status_id', $convertedStatusIds);
                     })
-                    ->whereHas('lead', function ($lq) use ($branch, $request) {
+                    ->whereHas('lead', function ($lq) use ($branch, $request, $userId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('branch_id', $branch->id);
+                        if ($userId) $lq->where('assigned_to', $userId);
+                        if ($stage)  $lq->where('lead_status', $stage);
+                        if ($source) $lq->where('lead_source_id', $source);
                     });
 
                 if ($dateFrom) {
-                    $branchConvProductQuery->where(function ($sq) use ($dateFrom) {
-                        $sq->whereDate('converted_at', '>=', $dateFrom)
-                           ->orWhere(function ($sub) use ($dateFrom) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateFrom) {
-                                       $sub2->whereDate('created_at', '>=', $dateFrom)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                                   });
-                           });
-                    });
+                    $branchConvProductQuery->whereDate('converted_at', '>=', $dateFrom);
                 }
 
                 if ($dateTo) {
-                    $branchConvProductQuery->where(function ($sq) use ($dateTo) {
-                        $sq->whereDate('converted_at', '<=', $dateTo)
-                           ->orWhere(function ($sub) use ($dateTo) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateTo) {
-                                       $sub2->whereDate('created_at', '<=', $dateTo)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                                   });
-                           });
-                    });
+                    $branchConvProductQuery->whereDate('converted_at', '<=', $dateTo);
                 }
 
                 $branchConvProducts = $branchConvProductQuery->get();
@@ -1520,20 +1467,43 @@ class SuperAdminDashboardController extends ApiController
                     'pipeline_value'       => $pipeline,
                     'conversion_rate'      => $convRate,
                 ];
-            })
+            });
+
+        $unassignedBranchLeads = (clone $base())->whereNull('branch_id')->count();
+        if ($unassignedBranchLeads > 0) {
+            $branchPerformance->push([
+                'branch_id'            => null,
+                'branch_name'          => 'No Branch',
+                'branch_code'          => 'N/A',
+                'total_leads'          => $unassignedBranchLeads,
+                'converted_count'      => 0,
+                'converted_value'      => 0,
+                'converted_percentage' => 0,
+                'won_leads'            => 0,
+                'won_value'            => 0,
+                'lost_leads'           => (clone $base())->whereNull('branch_id')->where('lead_status', 'lost')->count(),
+                'pipeline_value'       => (float)(clone $base())->whereNull('branch_id')->sum('deal_value'),
+                'conversion_rate'      => 0,
+            ]);
+        }
+
+        $branchPerformance = $branchPerformance
+            ->filter(fn($b) => $b['total_leads'] > 0 || $b['converted_count'] > 0)
             ->sortByDesc('converted_value')
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────
-        $teamPerformance = $this->visibility->visibleAssignableUsers($request->user())
+        $assignedUserIds = (clone $base())->whereNotNull('assigned_to')->pluck('assigned_to')->unique();
+        $assignableUserIds = $this->visibility->visibleAssignableUsers($request->user())
             ->when($branchId, fn($users) => $users->where('branch_id', $branchId))
-            ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId, $convertedStatusIds) {
-                $q = Lead::where('assigned_to', $user->id)
-                    ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                    ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
-                    ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
-                $this->visibility->applyLeadVisibility($q, $request->user());
+            ->pluck('id');
+        $allTeamUserIds = $assignedUserIds->merge($assignableUserIds)->unique()->filter();
 
+        $teamPerformance = User::whereIn('id', $allTeamUserIds)
+            ->with('roles')
+            ->get()
+            ->map(function ($user) use ($base, $request, $dateFrom, $dateTo, $branchId, $stage, $source, $convertedStatusIds) {
+                $q = (clone $base())->where('assigned_to', $user->id);
                 $total  = (clone $q)->count();
 
                 // Converted products for this user within converted date range
@@ -1541,38 +1511,20 @@ class SuperAdminDashboardController extends ApiController
                         $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                             ->orWhereIn('lead_status_id', $convertedStatusIds);
                     })
-                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId) {
+                    ->whereHas('lead', function ($lq) use ($user, $request, $branchId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('assigned_to', $user->id);
                         if ($branchId) $lq->where('branch_id', $branchId);
+                        if ($stage)    $lq->where('lead_status', $stage);
+                        if ($source)   $lq->where('lead_source_id', $source);
                     });
 
                 if ($dateFrom) {
-                    $userConvProductQuery->where(function ($sq) use ($dateFrom) {
-                        $sq->whereDate('converted_at', '>=', $dateFrom)
-                           ->orWhere(function ($sub) use ($dateFrom) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateFrom) {
-                                       $sub2->whereDate('created_at', '>=', $dateFrom)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                                   });
-                           });
-                    });
+                    $userConvProductQuery->whereDate('converted_at', '>=', $dateFrom);
                 }
 
                 if ($dateTo) {
-                    $userConvProductQuery->where(function ($sq) use ($dateTo) {
-                        $sq->whereDate('converted_at', '<=', $dateTo)
-                           ->orWhere(function ($sub) use ($dateTo) {
-                               $sub->whereNull('converted_at')
-                                   ->where(function ($sub2) use ($dateTo) {
-                                       $sub2->whereDate('created_at', '<=', $dateTo)
-                                            ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                            ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                                   });
-                           });
-                    });
+                    $userConvProductQuery->whereDate('converted_at', '<=', $dateTo);
                 }
 
                 $userConvProducts = $userConvProductQuery->get();
@@ -1584,7 +1536,7 @@ class SuperAdminDashboardController extends ApiController
                     'user_id'         => $user->id,
                     'user_name'       => $user->name,
                     'user_email'      => $user->email,
-                    'role'            => $user->roles->first()?->display_name,
+                    'role'            => $user->roles->first()?->display_name ?? 'Staff',
                     'role_name'       => $user->roles->first()?->name,
                     'total_leads'     => $total,
                     'convert_leads'   => $convertCount,
@@ -1593,11 +1545,29 @@ class SuperAdminDashboardController extends ApiController
                     'convert_value'   => $convertVal,
                     'conversion_rate' => $total > 0 ? round($convertCount / $total * 100, 1) : 0,
                 ];
-            })
+            });
+
+        $unassignedUserLeads = (clone $base())->whereNull('assigned_to')->count();
+        if ($unassignedUserLeads > 0) {
+            $teamPerformance->push([
+                'user_id'         => null,
+                'user_name'       => 'Unassigned',
+                'user_email'      => null,
+                'role'            => 'Unassigned',
+                'role_name'       => 'unassigned',
+                'total_leads'     => $unassignedUserLeads,
+                'convert_leads'   => 0,
+                'lost_leads'      => (clone $base())->whereNull('assigned_to')->where('lead_status', 'lost')->count(),
+                'active_leads'    => $unassignedUserLeads,
+                'convert_value'   => 0,
+                'conversion_rate' => 0,
+            ]);
+        }
+
+        $teamPerformance = $teamPerformance
             ->filter(fn($u) => $u['total_leads'] > 0 || $u['convert_leads'] > 0)
             ->sortByDesc('convert_value')
-            ->values()
-            ->take(10);
+            ->values();
 
         // ── 10. 6-month trend ────────────────────────────────────
         $monthTrend = [];

@@ -52,6 +52,12 @@ class CrmTaskController extends Controller
             });
         }
 
+        if ($request->filled('company_id')) {
+            $baseQuery->whereHas('lead', function ($lq) use ($request) {
+                $lq->where('company_id', $request->company_id);
+            });
+        }
+
         // Tab Counts
         $todayCount = (clone $baseQuery)->where('is_completed', false)->whereDate('remind_at', today())->count();
         $overdueCount = (clone $baseQuery)->where('is_completed', false)->whereDate('remind_at', '<', today())->count();
