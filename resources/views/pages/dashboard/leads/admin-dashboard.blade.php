@@ -164,8 +164,10 @@
 
 /* ─── Performance tables ─── */
 .da-perf-tbl { width:100%; border-collapse:collapse; }
-.da-perf-tbl th { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--da-muted); padding:9px 14px; text-align:left; background:#fafafa; white-space:nowrap; }
+.da-perf-tbl th { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--da-muted); padding:9px 14px; text-align:left; background:#fafafa; white-space:nowrap; position:sticky; top:0; z-index:2; }
 .da-perf-tbl td { padding:11px 14px; font-size:13px; border-top:1px solid #f7f6f9; vertical-align:middle; }
+.da-perf-tbl tbody tr { transition:background .12s; }
+.da-perf-tbl tbody tr:hover td { background:#fdf9f6; }
 .da-rank { width:22px; height:22px; border-radius:7px; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; }
 .da-member-av { width:28px; height:28px; border-radius:8px; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; }
 
@@ -708,16 +710,16 @@
                     <div class="da-card-title">🏢 Branch-wise Performance</div>
                     <span class="da-badge">Highest → Lowest</span>
                 </div>
-                <div id="daBranchBody" style="overflow-x:auto">
+                <div id="daBranchBody" style="overflow-x:auto;max-height:480px;overflow-y:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:200px"></div></div>
                 </div>
             </div>
             <div class="da-card">
                 <div class="da-card-head">
                     <div class="da-card-title">👥 Team Performance</div>
-                    <span class="da-badge">Top performers</span>
+                    <span class="da-badge">All members</span>
                 </div>
-                <div id="daTeamBody">
+                <div id="daTeamBody" style="overflow-x:auto;max-height:480px;overflow-y:auto">
                     <div style="padding:16px"><div class="da-skel" style="height:200px"></div></div>
                 </div>
             </div>
@@ -778,6 +780,7 @@ var API_URL   = '{{ $apiBase ?? url("/api") }}/dashboard-data';
 var API_TOKEN = '{{ $apiToken ?? "" }}';   // Server-issued Sanctum token (2h expiry)
 var LEAD_BASE = '{{ $leadBase ?? url("/leads") }}';
 var LEAD_PRODUCTS_BASE = '{{ route("leads.products.index") }}';
+var COMPANY_ID = '{{ $companyId ?? "" }}';  // Company isolation — ensures navigation pages only show this company's data
 // Avatar colors
 var AV_COLORS = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b45309','#0f766e'];
 var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
@@ -1314,6 +1317,9 @@ function getFilterDates() {
 window.viewAllLeads = function() {
     var dates = getFilterDates();
     var params = new URLSearchParams();
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.quick) {
         params.set('quick_date', state.quick);
     }
@@ -1343,6 +1349,9 @@ window.viewConvertedLeads = function() {
     var dates = getFilterDates();
     var params = new URLSearchParams();
     params.set('lead_status', 'converted');
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.quick) {
         params.set('quick_date', state.quick);
     }
@@ -1366,6 +1375,9 @@ window.viewConvertedProducts = function() {
     var dates = getFilterDates();
     var params = new URLSearchParams();
     params.set('product_status', 'converted');
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.quick) {
         params.set('quick_date', state.quick);
     }
@@ -1388,6 +1400,9 @@ window.viewConvertedProducts = function() {
 window.viewPaymentCollection = function() {
     var dates = getFilterDates();
     var params = new URLSearchParams();
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.quick) {
         params.set('quick_date', state.quick);
     }
@@ -1411,6 +1426,9 @@ window.viewPaymentCollection = function() {
 window.navigateToTasks = function(tab) {
     var params = new URLSearchParams();
     params.set('tab', tab || 'today');
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.branch) {
         params.set('branch_id', state.branch);
     }
@@ -1427,6 +1445,9 @@ window.navigateToTodayCalls = function() {
     var params = new URLSearchParams();
     params.set('date_from', todayStr);
     params.set('date_to', todayStr);
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
     if (state.branch) {
         params.set('branch_id', state.branch);
     }
@@ -1442,6 +1463,9 @@ window.navigateToFunnelStage = function(stageVal) {
 
     if (stageVal) {
         params.set('product_status', stageVal);
+    }
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
     }
     if (state.quick) {
         params.set('quick_date', state.quick);
@@ -1461,6 +1485,7 @@ window.navigateToFunnelStage = function(stageVal) {
 
     window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
 };
+
 
 /* ── Pipeline Funnel ── */
 function renderFunnel(f) {
@@ -1552,6 +1577,38 @@ window.navigateToSource = function(sourceVal) {
     window.location.href = LEAD_BASE + '?' + params.toString();
 };
 
+window.navigateToBranch = function(branchId, statusVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    if (branchId) params.set('branch_id', branchId);
+    if (statusVal) params.set('lead_status', statusVal);
+    if (COMPANY_ID) params.set('company_id', COMPANY_ID);
+    if (state.quick) params.set('quick_date', state.quick);
+    if (dates.from) params.set('date_from', dates.from);
+    if (dates.to) params.set('date_to', dates.to);
+    if (state.user) params.set('assigned_to', state.user);
+    if (state.source) params.set('lead_source', state.source);
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
+
+window.navigateToUser = function(userId, statusVal) {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    if (userId === 'unassigned') {
+        params.set('assigned_to', 'unassigned');
+    } else if (userId) {
+        params.set('assigned_to', userId);
+    }
+    if (statusVal) params.set('lead_status', statusVal);
+    if (COMPANY_ID) params.set('company_id', COMPANY_ID);
+    if (state.quick) params.set('quick_date', state.quick);
+    if (dates.from) params.set('date_from', dates.from);
+    if (dates.to) params.set('date_to', dates.to);
+    if (state.branch) params.set('branch_id', state.branch);
+    if (state.source) params.set('lead_source', state.source);
+    window.location.href = LEAD_BASE + '?' + params.toString();
+};
+
 /* ── Source Distribution ── */
 function renderSources(sd, payModes) {
     document.getElementById('daSourceTotal').textContent = sd.total + ' leads';
@@ -1635,13 +1692,14 @@ function renderBranchPerf(branches) {
         var convCnt   = b.converted_count !== undefined ? b.converted_count : (b.converted_leads !== undefined ? b.converted_leads : (b.won_leads || 0));
         var convPct   = b.converted_percentage !== undefined ? b.converted_percentage : (b.conversion_rate || 0);
         var bpct      = Math.round(convVal / maxVal * 100);
+        var branchArg = b.branch_id ? b.branch_id : "''";
 
-        return '<tr>' +
+        return '<tr onclick="navigateToBranch(' + branchArg + ')" style="cursor:pointer;" title="Click to view leads for ' + (b.branch_name || 'Branch') + '">' +
             '<td><div class="da-rank" style="background:' + rc + '20;color:' + rc + '">' + (i+1) + '</div></td>' +
             '<td><div style="font-size:13px;font-weight:700;color:var(--da-text)">' + b.branch_name + '</div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:5px;width:100%"><div style="height:100%;width:' + bpct + '%;background:' + rc + ';border-radius:2px"></div></div></td>' +
             '<td style="text-align:right;font-weight:700;color:#374151">' + b.total_leads + '</td>' +
-            '<td style="text-align:right;font-weight:700;color:var(--da-green)">' + convCnt + '</td>' +
+            '<td style="text-align:right;font-weight:700;color:var(--da-green);cursor:pointer;" onclick="event.stopPropagation();navigateToBranch(' + branchArg + ',\'converted\')" title="Click to view converted leads for ' + (b.branch_name || 'Branch') + '">' + convCnt + '</td>' +
             '<td style="text-align:right;font-weight:800;color:' + rc + '">' + fmtL(convVal) + '</td>' +
             '<td style="text-align:right">' +
             '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + (convPct>=50?'#f0fdf4':'#fffbeb') + ';color:' + (convPct>=50?'#16a34a':'#b45309') + '">' + convPct + '%</span>' +
@@ -1660,9 +1718,11 @@ function renderTeamPerf(team) {
     var maxVal = team.reduce(function(m, u) { return Math.max(m, u.convert_value); }, 1);
 
     var rows = team.map(function(u, i) {
-        var mc   = avColor(u.user_id);
-        var tpct = Math.round(u.convert_value / maxVal * 100);
-        return '<tr>' +
+        var mc      = avColor(u.user_id);
+        var tpct    = Math.round(u.convert_value / maxVal * 100);
+        var userArg = u.user_id ? u.user_id : "'unassigned'";
+
+        return '<tr onclick="navigateToUser(' + userArg + ')" style="cursor:pointer;" title="Click to view leads for ' + (u.user_name || 'Member') + '">' +
             '<td><div class="da-rank" style="background:' + mc + '20;color:' + mc + '">' + (i+1) + '</div></td>' +
             '<td><div style="display:flex;align-items:center;gap:8px">' +
             '<div class="da-member-av" style="background:' + mc + '">' + (u.user_name ? u.user_name.charAt(0).toUpperCase() : '?') + '</div>' +
@@ -1670,7 +1730,7 @@ function renderTeamPerf(team) {
             '<div style="font-size:10px;color:var(--da-muted)">' + (u.role || 'Staff') + '</div></div></div>' +
             '<div style="height:3px;background:#f0eef2;border-radius:2px;margin-top:6px"><div style="height:100%;width:' + tpct + '%;background:' + mc + ';border-radius:2px"></div></div></td>' +
             '<td style="text-align:right;font-weight:700;color:#374151">' + u.total_leads + '</td>' +
-            '<td style="text-align:right"><span style="color:var(--da-green);font-weight:700">' + u.convert_leads + ' C</span> <span style="color:var(--da-red);font-weight:700">' + u.lost_leads + 'L</span></td>' +
+            '<td style="text-align:right"><span style="color:var(--da-green);font-weight:700;cursor:pointer;" onclick="event.stopPropagation();navigateToUser(' + userArg + ',\'converted\')" title="Click to view converted leads">' + u.convert_leads + ' C</span> <span style="color:var(--da-red);font-weight:700">' + u.lost_leads + 'L</span></td>' +
             '<td style="text-align:right;font-weight:800;color:' + mc + '">' + fmtL(u.convert_value) + '</td></tr>';
     }).join('');
 

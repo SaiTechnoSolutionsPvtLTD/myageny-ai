@@ -60,6 +60,10 @@ class LeadController extends Controller
             $query->where('branch_id', $request->branch_id);
         }
 
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
+        }
+
         if ($request->filled('mobile_number')) {
             $query->where('mobile_number', 'like', '%' . $request->mobile_number . '%');
         }
@@ -67,27 +71,27 @@ class LeadController extends Controller
         if ($request->filled('lead_source')) {
             $sourceInput = $request->lead_source;
 
-            $sourceObj = null;
-            if (is_numeric($sourceInput)) {
-                $sourceObj = LeadSource::find($sourceInput);
-            } else {
-                $sourceObj = LeadSource::where('name', $sourceInput)
-                    ->orWhere('id', $sourceInput)
-                    ->first();
+            $sourceObj = is_numeric($sourceInput)
+                ? LeadSource::find($sourceInput)
+                : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
+
+            $sourceName = $sourceObj ? $sourceObj->name : $sourceInput;
+            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
+            if (empty($sameNameIds) && is_numeric($sourceInput)) {
+                $sameNameIds = [(int) $sourceInput];
             }
 
-            if ($sourceObj) {
-                $query->where('lead_source_id', $sourceObj->id);
-            } else {
-                $query->where(function ($q) use ($sourceInput) {
-                    $q->whereHas('leadSource', function ($lsq) use ($sourceInput) {
-                        $lsq->where('name', 'like', "%{$sourceInput}%");
-                    })
-                    ->orWhere('lead_source', 'like', "%{$sourceInput}%");
-                });
-            }
+            $query->where(function ($q) use ($sameNameIds, $sourceName, $sourceInput) {
+                if (!empty($sameNameIds)) {
+                    $q->whereIn('lead_source_id', $sameNameIds);
+                }
+                $q->orWhere('lead_source', 'like', "%{$sourceName}%")
+                  ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+            });
         }
 
+
+        $isConvertedLeadFilter = false;
         if ($request->filled('lead_status')) {
             $statusInput = $request->lead_status;
 
@@ -100,7 +104,22 @@ class LeadController extends Controller
                     ->first();
             }
 
-            if ($statusObj) {
+            $statusName = $statusObj ? strtolower(trim($statusObj->name)) : strtolower(trim((string) $statusInput));
+            $isConvertedLeadFilter = in_array($statusName, ['converted', 'won']) || str_contains($statusName, 'convert');
+
+            if ($isConvertedLeadFilter) {
+                $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%')
+                    ->pluck('id')->toArray();
+                $query->where(function ($q) use ($convertedStatusIds) {
+                    $q->whereIn('lead_status_id', $convertedStatusIds)
+                      ->orWhereIn('lead_status', ['won', 'converted'])
+                      ->orWhereHas('products', function ($pq) use ($convertedStatusIds) {
+                          $pq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                             ->orWhereIn('lead_status_id', $convertedStatusIds);
+                      });
+                });
+            } elseif ($statusObj) {
                 $statusId = $statusObj->id;
                 $query->where(function ($q) use ($statusId) {
                     $q->where('lead_status_id', $statusId)
@@ -125,7 +144,11 @@ class LeadController extends Controller
         }
 
         if ($request->filled('assigned_to')) {
-            $query->where('assigned_to', $request->assigned_to);
+            if ($request->assigned_to === 'unassigned') {
+                $query->whereNull('assigned_to');
+            } else {
+                $query->where('assigned_to', $request->assigned_to);
+            }
         }
 
         if ($request->filled('pre_sale_executive_id')) {
@@ -142,19 +165,36 @@ class LeadController extends Controller
 
         if ($request->filled('date_from')) {
             $dateFrom = $request->date_from;
-            $query->where(function ($dq) use ($dateFrom) {
-                $dq->whereDate('lead_date', '>=', $dateFrom)
-                   ->orWhereDate('created_at', '>=', $dateFrom);
-            });
+            if ($isConvertedLeadFilter) {
+                $query->where(function ($dq) use ($dateFrom) {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom)
+                       ->orWhereHas('products', fn($pq) => $pq->whereDate('converted_at', '>=', $dateFrom));
+                });
+            } else {
+                $query->where(function ($dq) use ($dateFrom) {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom);
+                });
+            }
         }
 
         if ($request->filled('date_to')) {
             $dateTo = $request->date_to;
-            $query->where(function ($dq) use ($dateTo) {
-                $dq->whereDate('lead_date', '<=', $dateTo)
-                   ->orWhereDate('created_at', '<=', $dateTo);
-            });
+            if ($isConvertedLeadFilter) {
+                $query->where(function ($dq) use ($dateTo) {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo)
+                       ->orWhereHas('products', fn($pq) => $pq->whereDate('converted_at', '<=', $dateTo));
+                });
+            } else {
+                $query->where(function ($dq) use ($dateTo) {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo);
+                });
+            }
         }
+
 
         $activeLeadIds = (clone $query)->pluck('leads.id');
         $lpProducts    = LeadProduct::whereIn('lead_id', $activeLeadIds)->get();
@@ -193,15 +233,20 @@ class LeadController extends Controller
                 $sourceObj = is_numeric($sourceInput)
                     ? LeadSource::find($sourceInput)
                     : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
-                if ($sourceObj) {
-                    $q->where('lead_source_id', $sourceObj->id);
-                } else {
-                    $q->where(function ($sq) use ($sourceInput) {
-                        $sq->whereHas('leadSource', fn ($lsq) => $lsq->where('name', 'like', "%{$sourceInput}%"))
-                           ->orWhere('lead_source', 'like', "%{$sourceInput}%");
-                    });
+                $sourceName = $sourceObj ? $sourceObj->name : $sourceInput;
+                $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
+                if (empty($sameNameIds) && is_numeric($sourceInput)) {
+                    $sameNameIds = [(int) $sourceInput];
                 }
+                $q->where(function ($sq) use ($sameNameIds, $sourceName, $sourceInput) {
+                    if (!empty($sameNameIds)) {
+                        $sq->whereIn('lead_source_id', $sameNameIds);
+                    }
+                    $sq->orWhere('lead_source', 'like', "%{$sourceName}%")
+                       ->orWhere('lead_source', 'like', "%{$sourceInput}%");
+                });
             })
+
             ->when($request->filled('search'), function ($q) use ($request) {
                 $s = $request->search;
                 $q->where(function ($sq) use ($s) {
@@ -481,28 +526,34 @@ class LeadController extends Controller
             $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('assigned_to', $assignedTo));
         }
 
+        if ($request->filled('company_id')) {
+            $companyIdFilter = $request->company_id;
+            $query->whereHas('lead', fn ($leadQuery) => $leadQuery->where('company_id', $companyIdFilter));
+        }
+
         $isConvertedStatusFilter = false;
         if ($request->filled('product_status')) {
             $statusVal = $request->product_status;
             if (is_numeric($statusVal)) {
                 $statusRecord = LeadStatus::find($statusVal);
-                $statusName = $statusRecord ? strtolower($statusRecord->name) : null;
-                $isConvertedStatusFilter = ($statusName === 'converted');
-                $query->where(function ($q) use ($statusVal, $statusName) {
-                    $q->where('lead_status_id', (int) $statusVal);
+                $statusName = $statusRecord ? strtolower(trim($statusRecord->name)) : null;
+                $isConvertedStatusFilter = in_array($statusName, ['converted', 'won']) || str_contains($statusName ?? '', 'convert');
+                $sameNameIds = $statusName ? LeadStatus::whereRaw('LOWER(name) = ?', [$statusName])->pluck('id')->toArray() : [(int) $statusVal];
+                $query->where(function ($q) use ($sameNameIds, $statusName) {
+                    $q->whereIn('lead_status_id', $sameNameIds);
                     if ($statusName) {
                         $q->orWhere('product_status', $statusName);
                     }
                 });
             } else {
-                $statusRecord = LeadStatus::where('name', 'like', $statusVal)->first();
-                $statusId = $statusRecord?->id;
-                $isConvertedStatusFilter = (strtolower($statusVal) === 'converted' || strtolower($statusRecord?->name ?? '') === 'converted');
-                $query->where(function ($q) use ($statusVal, $statusId) {
-                    $q->where('product_status', $statusVal);
-                    if ($statusId) {
-                        $q->orWhere('lead_status_id', $statusId);
+                $statusValLower = strtolower(trim((string) $statusVal));
+                $isConvertedStatusFilter = in_array($statusValLower, ['converted', 'won']) || str_contains($statusValLower, 'convert');
+                $sameNameIds = LeadStatus::whereRaw('LOWER(name) = ?', [$statusValLower])->pluck('id')->toArray();
+                $query->where(function ($q) use ($sameNameIds, $statusValLower) {
+                    if (!empty($sameNameIds)) {
+                        $q->whereIn('lead_status_id', $sameNameIds);
                     }
+                    $q->orWhere('product_status', $statusValLower);
                 });
             }
         }
@@ -552,23 +603,35 @@ class LeadController extends Controller
         if ($request->filled('date_from')) {
             $dateFrom = $request->date_from;
             if ($isConvertedStatusFilter) {
-                $query->where(function ($q) use ($dateFrom) {
-                    $q->whereDate('converted_at', '>=', $dateFrom)
-                      ->orWhere(function ($sub) use ($dateFrom) {
-                          $sub->whereNull('converted_at')
-                              ->where(function ($sub2) use ($dateFrom) {
-                                  $sub2->whereDate('created_at', '>=', $dateFrom)
-                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                              });
-                      });
+                // Converted status: filter by converted_at (converted date)
+                $query->whereDate('converted_at', '>=', $dateFrom);
+            } elseif ($request->filled('product_status')) {
+                // Specific non-converted status: filter by lead_date
+                $query->whereHas('lead', function ($lq) use ($dateFrom) {
+                    $lq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom);
                 });
             } else {
-                $query->where(function ($q) use ($dateFrom) {
-                    $q->whereDate('created_at', '>=', $dateFrom)
-                      ->orWhereDate('converted_at', '>=', $dateFrom)
-                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                // All products (matching pipeline funnel definition: converted in period OR lead in period)
+                $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%')
+                    ->pluck('id')->toArray();
+                $query->where(function ($q) use ($dateFrom, $convertedStatusIds) {
+                    $q->where(function ($cq) use ($dateFrom, $convertedStatusIds) {
+                        $cq->where(function ($cs) use ($convertedStatusIds) {
+                            $cs->whereIn('lead_status_id', $convertedStatusIds)
+                               ->orWhereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won']);
+                        })->whereDate('converted_at', '>=', $dateFrom);
+                    })->orWhere(function ($ncq) use ($dateFrom, $convertedStatusIds) {
+                        $ncq->where(function ($ncs) use ($convertedStatusIds) {
+                            $ncs->where(function ($wNull) use ($convertedStatusIds) {
+                                $wNull->whereNull('lead_status_id')->orWhereNotIn('lead_status_id', $convertedStatusIds);
+                            })->where(function ($sub) {
+                                $sub->whereNull('product_status')
+                                    ->orWhereRaw('LOWER(product_status) not in (?, ?)', ['converted', 'won']);
+                            });
+                        })->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                    });
                 });
             }
         }
@@ -576,26 +639,40 @@ class LeadController extends Controller
         if ($request->filled('date_to')) {
             $dateTo = $request->date_to;
             if ($isConvertedStatusFilter) {
-                $query->where(function ($q) use ($dateTo) {
-                    $q->whereDate('converted_at', '<=', $dateTo)
-                      ->orWhere(function ($sub) use ($dateTo) {
-                          $sub->whereNull('converted_at')
-                              ->where(function ($sub2) use ($dateTo) {
-                                  $sub2->whereDate('created_at', '<=', $dateTo)
-                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                              });
-                      });
+                // Converted status: filter by converted_at (converted date)
+                $query->whereDate('converted_at', '<=', $dateTo);
+            } elseif ($request->filled('product_status')) {
+                // Specific non-converted status: filter by lead_date
+                $query->whereHas('lead', function ($lq) use ($dateTo) {
+                    $lq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo);
                 });
             } else {
-                $query->where(function ($q) use ($dateTo) {
-                    $q->whereDate('created_at', '<=', $dateTo)
-                      ->orWhereDate('converted_at', '<=', $dateTo)
-                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                // All products (matching pipeline funnel definition: converted in period OR lead in period)
+                $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%')
+                    ->pluck('id')->toArray();
+                $query->where(function ($q) use ($dateTo, $convertedStatusIds) {
+                    $q->where(function ($cq) use ($dateTo, $convertedStatusIds) {
+                        $cq->where(function ($cs) use ($convertedStatusIds) {
+                            $cs->whereIn('lead_status_id', $convertedStatusIds)
+                               ->orWhereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won']);
+                        })->whereDate('converted_at', '<=', $dateTo);
+                    })->orWhere(function ($ncq) use ($dateTo, $convertedStatusIds) {
+                        $ncq->where(function ($ncs) use ($convertedStatusIds) {
+                            $ncs->where(function ($wNull) use ($convertedStatusIds) {
+                                $wNull->whereNull('lead_status_id')->orWhereNotIn('lead_status_id', $convertedStatusIds);
+                            })->where(function ($sub) {
+                                $sub->whereNull('product_status')
+                                    ->orWhereRaw('LOWER(product_status) not in (?, ?)', ['converted', 'won']);
+                            });
+                        })->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                    });
                 });
             }
         }
+
+
 
         $statsBase = (clone $query)->with('payments');
         $leadProducts = $query->paginate(15)->withQueryString();

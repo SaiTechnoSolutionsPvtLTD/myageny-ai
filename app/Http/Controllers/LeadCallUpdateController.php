@@ -60,6 +60,12 @@ class LeadCallUpdateController extends Controller
             });
         }
 
+        if ($request->filled('company_id')) {
+            $query->whereHas('lead', function ($leadQuery) use ($request) {
+                $leadQuery->where('company_id', $request->company_id);
+            });
+        }
+
         if ($dateFrom) {
             $query->whereDate('called_at', '>=', $dateFrom);
         }

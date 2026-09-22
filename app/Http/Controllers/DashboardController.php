@@ -83,7 +83,9 @@ class DashboardController extends Controller
             'users'     => $users,
             'sources'   => $sources,
             'statuses'  => $statuses,
+            'companyId' => $user->company_id,
         ]);
+
     }
 
     /**
