@@ -61,8 +61,7 @@ class ReportApiController extends Controller
                 DB::raw('COUNT(*) as total_rows'),
                 DB::raw('COUNT(DISTINCT leads.id) as total_leads'),
                 DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as total_cost'),
-                DB::raw('SUM(COALESCE(lead_products.amount_paid, 0)) as total_paid'),
-                // DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
+                DB::raw('SUM(COALESCE(payment_totals.total_received, lead_products.amount_paid, 0)) as total_paid'),
             ]);
 
             $totalCost = (float) ($summaryStats->total_cost ?? 0);
@@ -213,23 +212,11 @@ class ReportApiController extends Controller
 
     private function buildLeadsSummaryAnalytics($rows): array
     {
-        // Get all payments for these products
-        $productIds = collect($rows)->pluck('lead_product_id')->filter()->unique()->toArray();
-        $paymentsMap = [];
-        if (!empty($productIds)) {
-            $paymentsMap = DB::table('lead_product_payments')
-                ->whereIn('lead_product_id', $productIds)
-                ->groupBy('lead_product_id')
-                ->selectRaw('lead_product_id, SUM(amount) as total_paid')
-                ->pluck('total_paid', 'lead_product_id')
-                ->toArray();
-        }
-
-        $normalizedRows = collect($rows)->map(function ($row) use ($paymentsMap) {
+        $normalizedRows = collect($rows)->map(function ($row) {
             $entryDate = $row->lead_date ?? optional($row->lead_created_at)?->toDateString();
             $leadStatus = $row->product_lead_status ?: $row->base_lead_status;
             $totalCost = (float) ($row->total_price ?? 0);
-            $receivedCost = (float) ($paymentsMap[$row->lead_product_id] ?? 0);
+            $receivedCost = (float) ($row->amount_paid ?? 0);
 
             return [
                 'source' => $row->lead_source ?: 'Unknown',
@@ -298,29 +285,37 @@ class ReportApiController extends Controller
             ->selectRaw('lead_product_id, MIN(created_at) as converted_at')
             ->groupBy('lead_product_id');
 
+        $paymentsSubquery = DB::table('lead_product_payments')
+            ->selectRaw('lead_product_id, SUM(amount) as total_received')
+            ->groupBy('lead_product_id');
+
         $query = Lead::query()
             ->leftJoin('lead_products', 'lead_products.lead_id', '=', 'leads.id')
-            ->leftJoin('lead_sources', 'lead_sources.id', '=', 'leads.lead_source')
-            ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+            ->leftJoin('lead_sources as lead_source_table', 'lead_source_table.id', '=', 'leads.lead_source_id')
+            ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
             ->leftJoin('lead_statuses as product_lead_statuses', 'product_lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
             ->leftJoinSub($convertedSubquery, 'converted_products', function ($join) {
                 $join->on('converted_products.lead_product_id', '=', 'lead_products.id');
+            })
+            ->leftJoinSub($paymentsSubquery, 'payment_totals', function ($join) {
+                $join->on('payment_totals.lead_product_id', '=', 'lead_products.id');
             })
             ->select([
                 'leads.id as lead_id',
                 'leads.contact_name',
                 'leads.email',
                 'leads.mobile_number',
-                'lead_sources.name as lead_source',
-                'leads.lead_status as base_lead_status',
+                // Prefer FK-resolved name, fall back to legacy string column
+                DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
+                DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
                 'leads.lead_date',
                 'leads.created_at as lead_created_at',
                 'lead_products.id as lead_product_id',
                 'lead_products.product_id',
-                'products.package_name as product_name',
+                'lead_products.product_name',
                 'lead_products.total_price',
-                'lead_products.amount_paid',
+                DB::raw('COALESCE(payment_totals.total_received, lead_products.amount_paid, 0) as amount_paid'),
                 'lead_products.created_at as lead_product_created_at',
                 'product_lead_statuses.name as product_lead_status',
                 'assigned_users.name as allocated_to_name',
@@ -342,15 +337,30 @@ class ReportApiController extends Controller
         }
 
         if ($request->filled('lead_source')) {
-            $query->where('leads.lead_source', $request->lead_source);
+            // Filter accepts either an ID (new) or a name string (legacy)
+            $val = $request->lead_source;
+            if (is_numeric($val)) {
+                $query->where('leads.lead_source_id', (int) $val);
+            } else {
+                $query->where('lead_source_table.name', $val);
+            }
         }
 
         if ($request->filled('lead_status')) {
-            $query->where(function ($statusQuery) use ($request) {
-                $statusQuery
-                    ->where('leads.lead_status', $request->lead_status)
-                    ->orWhere('product_lead_statuses.name', $request->lead_status);
-            });
+            $val = $request->lead_status;
+            if (is_numeric($val)) {
+                $query->where(function ($statusQuery) use ($val) {
+                    $statusQuery
+                        ->where('leads.lead_status_id', (int) $val)
+                        ->orWhere('lead_products.lead_status_id', (int) $val);
+                });
+            } else {
+                $query->where(function ($statusQuery) use ($val) {
+                    $statusQuery
+                        ->where('lead_status_table.name', $val)
+                        ->orWhere('product_lead_statuses.name', $val);
+                });
+            }
         }
 
         if ($request->filled('assigned_to')) {
