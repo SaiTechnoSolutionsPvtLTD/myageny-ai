@@ -100,25 +100,44 @@ class DashboardController extends Controller
 
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
-        // "Active Customers" (won_leads) — was `where('lead_status','won')`
-        // against the legacy plain-string column, which only matched leads
-        // whose old string literally said 'won'. This company's actual
-        // lead_statuses master table has no "Won" row, only "Converted",
-        // so any lead that was only ever marked converted via the newer
-        // lead_status_id FK (not the legacy string) was silently excluded
-        // from this count — and the mobile Lead List's own lead_status
-        // filter (App\LeadController::index()) has no way to match the
-        // legacy string at all, so tapping this card returned zero leads
-        // even though this KPI showed a non-zero count. Lead::scopeConverted()
-        // is the single already-correct "is this a converted/active
-        // customer lead" definition (same one web's own dashboard uses),
-        // so using it here keeps this count and the Lead List filter it
-        // navigates to (which also calls scopeConverted() for the 'won'/
-        // 'converted' keyword) permanently in sync instead of two
-        // independently-maintained conditions that can drift apart.
-        $wonLeads      = (clone $base())->converted()->count();
+        $wonQuery      = (clone $base())->converted();
         $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
-        $activeLeads   = $totalLeads - $wonLeads - $lostLeads;
+
+        // Query converted products in the selected date range using converted_at (converted date)
+        // matching SuperAdminDashboardController so won_leads (Active Customers) counts
+        // unique leads whose products converted in the period or marked won in period
+        $convertedStatusIds = LeadStatus::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('name', 'like', '%convert%');
+            })
+            ->pluck('id')
+            ->toArray();
+
+        $convertedProductsQuery = LeadProduct::query()
+            ->where(function ($q) use ($convertedStatusIds) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+                if ($stage)    $lq->where('lead_status', $stage);
+                if ($source)   $lq->where('lead_source_id', $source);
+            });
+
+        if ($dateFrom) {
+            $convertedProductsQuery->whereDate('converted_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $convertedProductsQuery->whereDate('converted_at', '<=', $dateTo);
+        }
+
+        $convertedLeadIdsInPeriod = $convertedProductsQuery->pluck('lead_id')->unique();
+        $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
+        $wonLeads      = $wonLeadIds->count();
+        $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
         $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
         $wonValue      = (float)(clone $base())->converted()->sum('deal_value');
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();

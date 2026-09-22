@@ -173,7 +173,12 @@ class LeadController extends Controller
         // reuse it here to guarantee the Lead List always shows exactly
         // the leads the dashboard counted — instead of two independent
         // status checks that could silently drift apart.
-        if ($request->filled('lead_status')) {
+        $isActiveCustomersFilter = $request->boolean('active_customers') || $request->input('is_active_customer') === '1';
+        $isConvertedFilter = $isActiveCustomersFilter;
+
+        if ($isActiveCustomersFilter) {
+            $query->converted();
+        } elseif ($request->filled('lead_status')) {
             $statusVal = $request->lead_status;
             if (is_numeric($statusVal)) {
                 $statusId = (int) $statusVal;
@@ -183,6 +188,7 @@ class LeadController extends Controller
                 });
             } elseif (in_array(strtolower($statusVal), ['won', 'converted'], true)) {
                 $query->converted();
+                $isConvertedFilter = true;
             } else {
                 // Any other non-numeric value — a raw status name sent
                 // instead of its id. Mirrors the product_status handling
@@ -209,16 +215,30 @@ class LeadController extends Controller
         // Date filters check lead_date OR created_at — mirrors web LeadController@index
         // and SuperAdminDashboardController@dashboardData so the lead list and dashboard
         // counts stay strictly identical (leads with null lead_date are not dropped).
+        // For converted / active-customer leads, also checks products.converted_at in range
+        // matching web LeadController@index.
         if (!empty($dateFrom)) {
-            $query->where(function ($dq) use ($dateFrom) {
-                $dq->whereDate('lead_date', '>=', $dateFrom)
-                   ->orWhereDate('created_at', '>=', $dateFrom);
+            $query->where(function ($dq) use ($dateFrom, $isConvertedFilter) {
+                if ($isConvertedFilter) {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom)
+                       ->orWhereHas('products', fn($pq) => $pq->whereDate('converted_at', '>=', $dateFrom));
+                } else {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom);
+                }
             });
         }
         if (!empty($dateTo)) {
-            $query->where(function ($dq) use ($dateTo) {
-                $dq->whereDate('lead_date', '<=', $dateTo)
-                   ->orWhereDate('created_at', '<=', $dateTo);
+            $query->where(function ($dq) use ($dateTo, $isConvertedFilter) {
+                if ($isConvertedFilter) {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo)
+                       ->orWhereHas('products', fn($pq) => $pq->whereDate('converted_at', '<=', $dateTo));
+                } else {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo);
+                }
             });
         }
 
