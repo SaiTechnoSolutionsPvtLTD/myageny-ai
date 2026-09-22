@@ -156,7 +156,7 @@ class AuthController extends Controller
 
         $this->ensureIsNotRateLimited($request);
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::withoutGlobalScopes()->where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             RateLimiter::hit($this->throttleKey($request));
@@ -177,6 +177,17 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->company_id && $user->company) {
+            $user->company->syncExpiryState();
+            $user->company->refresh();
+            if ($user->company->company_status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Your company account is inactive. Please contact the main administrator.',
+                ], 403);
+            }
+        }
+
         $user->update([
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),
@@ -191,6 +202,7 @@ class AuthController extends Controller
             'token'      => $token,
             'token_type' => 'Bearer',
             'user' => $this->formatUser($user->load(
+                'company',
                 'employeeOnboarding.department',
                 'employeeOnboarding.role',
                 'roles.department',
@@ -264,7 +276,7 @@ class AuthController extends Controller
     )]
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load('branch', 'roles.department', 'employeeOnboarding.department', 'employeeOnboarding.role');
+        $user = $request->user()->load('branch', 'company', 'roles.department', 'employeeOnboarding.department', 'employeeOnboarding.role');
 
         return response()->json([
             'status' => true,
@@ -356,6 +368,14 @@ class AuthController extends Controller
 
         return [
             'id'              => $user->id,
+            'company_id'      => $user->company_id ? (int) $user->company_id : null,
+            'company'         => $user->company ? [
+                'id'           => $user->company->id,
+                'company_name' => $user->company->company_name,
+                'email'        => $user->company->email,
+                'status'       => $user->company->company_status,
+                'expiry_date'  => $user->company->expiry_date?->toDateString(),
+            ] : null,
             'name'            => $user->name,
             'email'           => $user->email,
             'role'            => $user->roles->first()?->name ?? null,
