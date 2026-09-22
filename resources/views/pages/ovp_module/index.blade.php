@@ -359,7 +359,6 @@
                                 request()->filled('product_id') ||
                                 request()->filled('status') ||
                                 request()->filled('user_id') ||
-                                request()->filled('company_id') ||
                                 request()->filled('department_id');
         @endphp
 
@@ -430,18 +429,6 @@
                         </div>
 
                         <div style="display:flex; flex-direction:column; gap:6px;">
-                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Company</label>
-                            <div class="ovp-select-wrap">
-                                <select name="company_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
-                                    <option value="">All Companies</option>
-                                    @foreach($companies as $c)
-                                        <option value="{{ $c->id }}" {{ request('company_id') == $c->id ? 'selected' : '' }}>{{ $c->company_name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style="display:flex; flex-direction:column; gap:6px;">
                             <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Department</label>
                             <div class="ovp-select-wrap">
                                 <select name="department_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
@@ -503,7 +490,6 @@
                             <tr>
                                 <th>Product</th>
                                 <th>Department</th>
-                                <th>Lead / Company</th>
                                 <th>Status</th>
                                 <th>Assigned Executive</th>
                                 <th>Allocation</th>
@@ -573,9 +559,8 @@
                                      <td>
                                          <div class="ovp-product">{{ $item->product_name }}</div>
                                      </td>
-                                    <td>{{ $item->department?->name ?: 'No department' }}</td>
-                                    <td>{{ $item->lead?->company_name ?: ($item->lead?->contact_name ?: 'No lead') }}</td>
-                                    <td><span class="ovp-status-pill {{ $statusBucket }}">{{ ucfirst(str_replace('_', ' ', $statusBucket)) }}</span></td>
+                                     <td>{{ $item->department?->name ?: 'No department' }}</td>
+                                     <td><span class="ovp-status-pill {{ $statusBucket }}">{{ ucfirst(str_replace('_', ' ', $statusBucket)) }}</span></td>
                                     @php
                                         $assignedExecName = $item->ovpAllocatedTo?->name
                                             ?: ($item->ovp_allocated_to ? (\App\Models\User::withTrashed()->find($item->ovp_allocated_to)?->name ?: 'Not allocated') : 'Not allocated');

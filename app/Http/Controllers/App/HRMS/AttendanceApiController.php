@@ -306,7 +306,7 @@ class AttendanceApiController extends Controller
                     $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $targetBranchIds)->pluck('code')->filter()->all();
                     $employeeQuery->where(function (Builder $q) use ($targetBranchIds, $branchCodes) {
                         $q->whereHas('portalUser', function ($puQ) use ($targetBranchIds) {
-                            $puQ->whereIn('branch_id', $targetBranchIds);
+                            $puQ->inBranches($targetBranchIds);
                         });
                         foreach ($branchCodes as $code) {
                             $q->orWhere('employee_id', 'like', $code . '%');
@@ -314,7 +314,7 @@ class AttendanceApiController extends Controller
                     });
                     $internQuery->where(function (Builder $q) use ($targetBranchIds, $branchCodes) {
                         $q->whereHas('portalUser', function ($puQ) use ($targetBranchIds) {
-                            $puQ->whereIn('branch_id', $targetBranchIds);
+                            $puQ->inBranches($targetBranchIds);
                         });
                         foreach ($branchCodes as $code) {
                             $q->orWhere('intern_id', 'like', $code . '%');
@@ -326,7 +326,7 @@ class AttendanceApiController extends Controller
                 if (!empty($branchIds)) {
                     $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
                     $employeeQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
-                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->whereIn('branch_id', $branchIds));
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($branchIds));
                         foreach ($branchCodes as $code) {
                             $sub->orWhere(function (Builder $q2) use ($code) {
                                 $q2->whereNull('portal_user_id')->where('employee_id', 'like', $code . '%');
@@ -334,7 +334,7 @@ class AttendanceApiController extends Controller
                         }
                     });
                     $internQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
-                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->whereIn('branch_id', $branchIds));
+                        $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($branchIds));
                         foreach ($branchCodes as $code) {
                             $sub->orWhere(function (Builder $q2) use ($code) {
                                 $q2->whereNull('portal_user_id')->where('intern_id', 'like', $code . '%');

@@ -173,15 +173,25 @@
                             @php
                                 $currentUser = auth()->user();
                                 $isSuperOrCompanyAdmin = $currentUser && ($currentUser->isSystemAdmin() || $currentUser->isCompanyAdmin());
+                                $isBranchManagerOrAdmin = $currentUser && ($currentUser->isBranchManager() || $currentUser->isBranchAdmin() || app(\App\Services\DataVisibilityService::class)->hasBranchManagerRole($currentUser) || app(\App\Services\DataVisibilityService::class)->hasBranchAdminRole($currentUser));
 
                                 $activeAssignedUserId = old('assigned_to', $isEdit ? $lead?->assigned_to : ($currentUser && $users->contains('id', $currentUser->id) ? $currentUser->id : null));
                                 $activeUser = $activeAssignedUserId ? $users->firstWhere('id', $activeAssignedUserId) : $currentUser;
 
-                                $accessibleBranchIds = null;
-                                if ($activeUser && !($activeUser->isSystemAdmin() || $activeUser->isCompanyAdmin())) {
-                                    $accessibleBranchIds = $activeUser->getMyBranchIds();
-                                } elseif (!$isSuperOrCompanyAdmin && $currentUser) {
+                                if ($isSuperOrCompanyAdmin) {
+                                    $accessibleBranchIds = null;
+                                    $isBranchLocked = false;
+                                } elseif ($isBranchManagerOrAdmin) {
                                     $accessibleBranchIds = $currentUser->getMyBranchIds();
+                                    $isBranchLocked = count($accessibleBranchIds) === 1;
+                                } else {
+                                    $accessibleBranchIds = null;
+                                    if ($activeUser && !($activeUser->isSystemAdmin() || $activeUser->isCompanyAdmin())) {
+                                        $accessibleBranchIds = $activeUser->getMyBranchIds();
+                                    } elseif ($currentUser) {
+                                        $accessibleBranchIds = $currentUser->getMyBranchIds();
+                                    }
+                                    $isBranchLocked = ($accessibleBranchIds !== null && count($accessibleBranchIds) === 1);
                                 }
 
                                 $selectedBranchId = old('branch_id');
@@ -192,8 +202,6 @@
                                         $selectedBranchId = $accessibleBranchIds[0];
                                     }
                                 }
-
-                                $isBranchLocked = ($accessibleBranchIds !== null && count($accessibleBranchIds) === 1 && !$isSuperOrCompanyAdmin);
                             @endphp
                             <select name="branch_id" 
                                     id="leadBranchSelect"
@@ -486,6 +494,8 @@ $(document).ready(function() {
         'company_id' => $b->company_id,
     ])->values()) !!};
     const isCurrentSuperOrCompanyAdmin = {{ $isSuperOrCompanyAdmin ? 'true' : 'false' }};
+    const isBranchManagerOrAdmin = {{ $isBranchManagerOrAdmin ? 'true' : 'false' }};
+    const managerBranchIds = {!! json_encode($isBranchManagerOrAdmin && $currentUser ? array_map('intval', $currentUser->getMyBranchIds()) : []) !!};
 
     function lockBranchSelect($el) {
         $el.css({
@@ -533,7 +543,7 @@ $(document).ready(function() {
 
         if (availableCount === 1) {
             $branchSelect.val(lastAllowedId);
-            if (!isCurrentSuperOrCompanyAdmin) {
+            if (!isCurrentSuperOrCompanyAdmin && !isBranchManagerOrAdmin) {
                 lockBranchSelect($branchSelect);
             } else {
                 unlockBranchSelect($branchSelect);
@@ -568,6 +578,13 @@ $(document).ready(function() {
         const selectedUserId = $(this).val();
         const $branchSelect = $('#leadBranchSelect');
         if (!$branchSelect.length) return;
+
+        // If the logged-in user is a Branch Manager or Branch Admin:
+        // Always maintain all mapped branches for them
+        if (isBranchManagerOrAdmin) {
+            renderBranchOptions(managerBranchIds, $branchSelect.val());
+            return;
+        }
 
         if (!selectedUserId) {
             if (isCurrentSuperOrCompanyAdmin) {

@@ -190,9 +190,9 @@ class SuperAdminDashboardController extends ApiController
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
         $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
-        $totalPending      = max(0, $totalProductValue - $totalPaid);
+        $totalPending      = max(0, $convertedValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
-        $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
+        $payPct            = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
 
         $paymentsQuery = LeadProductPayment::query()
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
@@ -1178,7 +1178,7 @@ class SuperAdminDashboardController extends ApiController
         $prevAllLpProducts = $prevNonConverted->merge($prevConvertedProducts)->unique('id');
         $prevTotalProductValue = (float) $prevAllLpProducts->sum('total_price');
         $prevTotalPaid         = (float) $prevAllLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
-        $prevTotalPending      = max(0, $prevTotalProductValue - $prevTotalPaid);
+        $prevTotalPending      = max(0, $prevConvertedValue - $prevTotalPaid);
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
@@ -1223,9 +1223,9 @@ class SuperAdminDashboardController extends ApiController
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
         $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
-        $totalPending      = max(0, $totalProductValue - $totalPaid);
+        $totalPending      = max(0, $convertedValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
-        $payPct            = $totalProductValue > 0 ? round($totalPaid / $totalProductValue * 100, 1) : 0;
+        $payPct            = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
 
         $paymentsQuery = LeadProductPayment::query()
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {

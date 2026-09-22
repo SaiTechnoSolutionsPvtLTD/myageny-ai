@@ -29,7 +29,7 @@ class InternJoiningForm extends Model
 
                     $builder->where(function ($q) use ($branchIds, $branchCodes) {
                         $q->whereHas('portalUser', function ($query) use ($branchIds) {
-                            $query->whereIn('branch_id', $branchIds);
+                            $query->inBranches($branchIds);
                         });
 
                         foreach ($branchCodes as $code) {

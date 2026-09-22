@@ -36,9 +36,9 @@ class OutsideOfficeAttendanceRequest extends Model
                 if (!empty($branchIds)) {
                     $builder->where(function ($query) use ($branchIds) {
                         $query->whereHas('employee.portalUser', function ($q) use ($branchIds) {
-                            $q->whereIn('branch_id', $branchIds);
+                            $q->inBranches($branchIds);
                         })->orWhereHas('intern.portalUser', function ($q) use ($branchIds) {
-                            $q->whereIn('branch_id', $branchIds);
+                            $q->inBranches($branchIds);
                         });
                     });
                 }

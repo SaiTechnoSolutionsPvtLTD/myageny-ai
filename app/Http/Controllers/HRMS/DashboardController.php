@@ -465,7 +465,7 @@ class DashboardController extends Controller
         $branchIds = $this->restrictedBranchIdsForUser($user);
         if (!empty($branchIds)) {
             $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
-                $portalUserQuery->whereIn('branch_id', $branchIds);
+                $portalUserQuery->inBranches($branchIds);
             });
         }
 
@@ -493,7 +493,7 @@ class DashboardController extends Controller
         $branchIds = $this->restrictedBranchIdsForUser($user);
         if (!empty($branchIds)) {
             $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
-                $portalUserQuery->whereIn('branch_id', $branchIds);
+                $portalUserQuery->inBranches($branchIds);
             });
         }
 
@@ -516,7 +516,7 @@ class DashboardController extends Controller
         $branchIds = $this->restrictedBranchIdsForUser($user);
         if (!empty($branchIds)) {
             $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
-                $portalUserQuery->whereIn('branch_id', $branchIds);
+                $portalUserQuery->inBranches($branchIds);
             });
         }
 
@@ -544,7 +544,7 @@ class DashboardController extends Controller
         $branchIds = $this->restrictedBranchIdsForUser($user);
         if (!empty($branchIds)) {
             $query->whereHas('portalUser', function (Builder $portalUserQuery) use ($branchIds) {
-                $portalUserQuery->whereIn('branch_id', $branchIds);
+                $portalUserQuery->inBranches($branchIds);
             });
         }
 
