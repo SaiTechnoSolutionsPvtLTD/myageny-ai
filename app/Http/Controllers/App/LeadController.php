@@ -709,9 +709,28 @@ class LeadController extends Controller
                 'reminder_types' => LeadReminder::TYPES,
                 'branches'       => $branchesQuery->orderBy('name')->get(['id', 'name']),
                 'users'          => $this->restrictUserCollectionToOwnBranch(
-                        $this->visibility->visibleAssignableUsers(request()->user())
+                        tap($this->visibility->visibleAssignableUsers(request()->user())
                             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
-                            ->values(),
+                            ->values(), function ($collection) use ($user) {
+                                if ($user && ($user->isBranchAdmin() || $user->isBranchManager())) {
+                                    $userBranchIds = $user->getMyBranchIds();
+                                    $branchManagers = User::query()
+                                        ->where('is_active', true)
+                                        ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                                        ->when(!empty($userBranchIds), fn ($q) => $q->inBranches($userBranchIds))
+                                        ->whereHas('roles', function ($q) {
+                                            $q->where('name', 'like', '%branch_manager%')
+                                              ->orWhere('name', 'like', '%bm%')
+                                              ->orWhere('display_name', 'like', '%branch%manager%');
+                                        })
+                                        ->get();
+                                    foreach ($branchManagers as $bm) {
+                                        if (! $collection->contains('id', $bm->id)) {
+                                            $collection->push($bm);
+                                        }
+                                    }
+                                }
+                            }),
                         request()->user()
                     )->map(fn($user) => [
                         'id' => $user->id,
@@ -815,7 +834,7 @@ class LeadController extends Controller
                             ->orWhere('name', 'like', '%telecaller%');
                         });
 
-                        if ($isCompanyAdmin) {
+                        if ($isCompanyAdmin || ($user && ($user->isBranchAdmin() || $user->isBranchManager()))) {
                             $q->orWhere('name', 'like', '%branch_admin%')
                               ->orWhere('name', 'like', '%branch_manager%')
                               ->orWhere('name', 'like', '%bm%')

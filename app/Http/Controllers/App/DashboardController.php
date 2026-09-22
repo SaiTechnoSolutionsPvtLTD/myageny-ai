@@ -403,8 +403,14 @@ class DashboardController extends Controller
             ]);
 
         // ── 8. Branch-wise performance ────────────────────────────
-        $branchPerformance = Branch::where('is_active', true)
-            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+        $branchPerformanceQuery = Branch::where('is_active', true)
+            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId));
+
+        if (! $this->visibility->isCompanyWideUser($request->user())) {
+            $branchPerformanceQuery->whereIn('id', $request->user()?->getMyBranchIds() ?? []);
+        }
+
+        $branchPerformance = $branchPerformanceQuery
             ->get()
             ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
                 $q = Lead::where('branch_id', $branch->id)
@@ -449,8 +455,24 @@ class DashboardController extends Controller
             ->values();
 
         // ── 9. Team performance ───────────────────────────────────
-        $teamPerformance = $this->visibility->visibleAssignableUsers($request->user())
-            ->when($branchId, fn($users) => $users->where('branch_id', $branchId))
+        $teamUsers = $this->visibility->visibleAssignableUsers($request->user());
+        if ($request->user() && ($request->user()->isBranchAdmin() || $request->user()->isBranchManager())) {
+            $userBranchIds = $request->user()->getMyBranchIds();
+            $bmUsers = User::query()
+                ->where('is_active', true)
+                ->when($request->user()->company_id, fn ($q) => $q->where('company_id', $request->user()->company_id))
+                ->when(!empty($userBranchIds), fn ($q) => $q->inBranches($userBranchIds))
+                ->whereHas('roles', function ($q) {
+                    $q->where('name', 'like', '%branch_manager%')
+                      ->orWhere('name', 'like', '%bm%')
+                      ->orWhere('display_name', 'like', '%branch%manager%');
+                })
+                ->get();
+            $teamUsers = $teamUsers->concat($bmUsers)->unique('id');
+        }
+
+        $teamPerformance = $teamUsers
+            ->when($branchId, fn($users) => $users->filter(fn($u) => (int)$u->branch_id === (int)$branchId || (method_exists($u, 'belongsToBranch') && $u->belongsToBranch($branchId)) || in_array((int)$branchId, $u->getMyBranchIds() ?? [], true)))
             ->map(function ($user) use ($request, $dateFrom, $dateTo, $branchId) {
                 $q = Lead::where('assigned_to', $user->id)
                     ->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))

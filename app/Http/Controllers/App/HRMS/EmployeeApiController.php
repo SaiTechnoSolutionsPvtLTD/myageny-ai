@@ -52,16 +52,32 @@ class EmployeeApiController extends Controller
         $user = auth()->user();
         $isCompanyAdmin = $this->isCompanyAdmin($user);
 
-        $actingBranchId = null;
+        $userBranchIds = $user?->getMyBranchIds() ?? [];
+        if (empty($userBranchIds) && $user?->branch_id) {
+            $userBranchIds = [(int) $user->branch_id];
+        }
+
+        $actingBranchIds = [];
         if ($isCompanyAdmin) {
             if ($request->filled('branch_id')) {
-                $actingBranchId = ($request->branch_id === 'all') ? null : (int) $request->branch_id;
-            } else {
-                $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
+                if ($request->branch_id !== 'all') {
+                    $actingBranchIds = [(int) $request->branch_id];
+                }
+            } elseif ($user?->branch_id) {
+                $actingBranchIds = [(int) $user->branch_id];
             }
         } else {
-            // Non-Company Admin is strictly scoped to their own branch_id
-            $actingBranchId = $user?->branch_id ? (int) $user->branch_id : null;
+            // Non-Company Admin is scoped to their own assigned branches (supports Branch Admin / Manager)
+            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
+                $reqBranchId = (int) $request->branch_id;
+                if (in_array($reqBranchId, $userBranchIds, true)) {
+                    $actingBranchIds = [$reqBranchId];
+                } else {
+                    $actingBranchIds = $userBranchIds;
+                }
+            } else {
+                $actingBranchIds = $userBranchIds;
+            }
         }
 
         $query = EmployeeOnboarding::query()
@@ -79,14 +95,18 @@ class EmployeeApiController extends Controller
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->department_id, fn ($q) => $q->where('department_id', $request->department_id))
             ->when($request->role_id, fn ($q) => $q->where('role_id', $request->role_id))
-            ->when($actingBranchId, function ($q, $branchId) {
-                $branch = Branch::withoutGlobalScopes()->find($branchId);
-                $branchCode = $branch?->code;
-                $q->where(function (Builder $sub) use ($branchId, $branchCode) {
-                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches([$branchId]));
-                    if ($branchCode) {
-                        $sub->orWhere(function (Builder $q2) use ($branchCode) {
-                            $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+            ->when(!empty($actingBranchIds), function ($q) use ($actingBranchIds) {
+                $branches = Branch::withoutGlobalScopes()->whereIn('id', $actingBranchIds)->get();
+                $branchCodes = $branches->pluck('code')->filter()->values()->all();
+                $q->where(function (Builder $sub) use ($actingBranchIds, $branchCodes) {
+                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($actingBranchIds));
+                    if (!empty($branchCodes)) {
+                        $sub->orWhere(function (Builder $q2) use ($branchCodes) {
+                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
+                                foreach ($branchCodes as $code) {
+                                    $codeQ->orWhere('employee_id', 'like', $code . '%');
+                                }
+                            });
                         });
                     }
                 });
@@ -229,8 +249,13 @@ class EmployeeApiController extends Controller
         $user = auth()->user() ?? request()->user();
         $isCompanyAdmin = $this->isCompanyAdmin($user);
 
-        // Branch options — only Company Admin can view and select other branches.
-        // For non-Company Admin, branches is empty and UI hides the branch filter.
+        $userBranchIds = $user?->getMyBranchIds() ?? [];
+        if (empty($userBranchIds) && $user?->branch_id) {
+            $userBranchIds = [(int) $user->branch_id];
+        }
+
+        // Branch options — Company Admin can view and select all company branches.
+        // Branch Admin / Manager can select among their assigned branches.
         $branches = [];
         if ($isCompanyAdmin) {
             $branchesQuery = Branch::where('is_active', true);
@@ -238,6 +263,11 @@ class EmployeeApiController extends Controller
                 $branchesQuery->where('company_id', $user->company_id);
             }
             $branches = $branchesQuery->orderBy('name')->get(['id', 'name']);
+        } elseif (! empty($userBranchIds)) {
+            $branches = Branch::where('is_active', true)
+                ->whereIn('id', $userBranchIds)
+                ->orderBy('name')
+                ->get(['id', 'name']);
         }
 
         // Role options — company-scoped (Role carries BelongsToCompany).
@@ -257,7 +287,7 @@ class EmployeeApiController extends Controller
                 'branches'         => $branches,
                 'roles'            => $roles,
                 'is_company_admin' => $isCompanyAdmin,
-                'user_branch_id'   => $user?->branch_id ? (int) $user->branch_id : null,
+                'user_branch_id'   => $user?->branch_id ? (int) $user->branch_id : ($userBranchIds[0] ?? null),
             ],
         ]);
     }

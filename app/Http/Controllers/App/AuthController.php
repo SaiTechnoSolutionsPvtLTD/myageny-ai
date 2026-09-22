@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -345,6 +346,14 @@ class AuthController extends Controller
             $permissions[] = 'customer-success-dashboard.view';
         }
 
+        $userBranch = $user->branch;
+        if (! $userBranch) {
+            $userBranchIds = $user->getMyBranchIds();
+            if (! empty($userBranchIds)) {
+                $userBranch = Branch::withoutGlobalScopes()->find($userBranchIds[0]);
+            }
+        }
+
         return [
             'id'              => $user->id,
             'name'            => $user->name,
@@ -379,15 +388,15 @@ class AuthController extends Controller
             // modify DataVisibilityService itself (web depends on it too).
             'can_select_any_branch' => app(DataVisibilityService::class)->isCompanyWideUser($user),
             'is_company_admin' => (bool) ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->hasRole('company_admin')),
-            'branch_id'       => $activeBranchId ?? $user->branch_id,
-            'branch' => $user->branch ? [
-                'id'                       => $user->branch->id,
-                'name'                     => $user->branch->name,
-                'latitude'                 => $user->branch->latitude,
-                'longitude'                => $user->branch->longitude,
-                'latitude_2'               => $user->branch->latitude,
-                'longitude_2'              => $user->branch->longitude,
-                'attendance_radius_meters' => (float) ($user->branch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50)),
+            'branch_id'       => ($userBranch ? $userBranch->id : ($user->branch_id ? (int) $user->branch_id : null)),
+            'branch' => $userBranch ? [
+                'id'                       => $userBranch->id,
+                'name'                     => $userBranch->name,
+                'latitude'                 => $userBranch->latitude,
+                'longitude'                => $userBranch->longitude,
+                'latitude_2'               => $userBranch->latitude,
+                'longitude_2'              => $userBranch->longitude,
+                'attendance_radius_meters' => (float) ($userBranch->attendance_radius_meters ?? config('hrms.attendance_radius_meters', 50)),
             ] : null,
             'last_login_at'   => $user->last_login_at?->toIso8601String(),
             'profile_photo'   => $user->photo ?? null,

@@ -881,6 +881,10 @@ class DailyAttendanceController extends Controller
         if ($user?->branch_id) {
             return Branch::find($user->branch_id);
         }
+        $userBranchIds = $user?->getMyBranchIds();
+        if (! empty($userBranchIds)) {
+            return Branch::withoutGlobalScopes()->find($userBranchIds[0]);
+        }
         if ($request->filled('employee_id')) {
             $emp = \App\Models\EmployeeOnboarding::find($request->employee_id);
             if ($emp?->portalUser?->branch) {
@@ -888,6 +892,10 @@ class DailyAttendanceController extends Controller
             }
             if ($emp?->portalUser?->branch_id) {
                 return Branch::find($emp->portalUser->branch_id);
+            }
+            $empBranchIds = $emp?->portalUser?->getMyBranchIds();
+            if (! empty($empBranchIds)) {
+                return Branch::withoutGlobalScopes()->find($empBranchIds[0]);
             }
         }
         if ($request->filled('intern_id')) {
@@ -897,6 +905,10 @@ class DailyAttendanceController extends Controller
             }
             if ($intern?->portalUser?->branch_id) {
                 return Branch::find($intern->portalUser->branch_id);
+            }
+            $internBranchIds = $intern?->portalUser?->getMyBranchIds();
+            if (! empty($internBranchIds)) {
+                return Branch::withoutGlobalScopes()->find($internBranchIds[0]);
             }
         }
 

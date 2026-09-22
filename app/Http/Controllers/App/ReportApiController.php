@@ -111,10 +111,7 @@ class ReportApiController extends Controller
             // mobile controllers) that global scope isn't relied on here —
             // explicit filter so this report's branch filter list can't
             // include another company's branches.
-            $branches = Branch::query()
-                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
-                ->orderBy('name')
-                ->get(['id', 'name']);
+            $branches = $this->getVisibleBranchesForUser($request->user());
 
             $rowsData = $reportRows->getCollection()->map(function ($row) {
                 $entryDate = !empty($row->lead_date) ? $row->lead_date : optional($row->lead_created_at)?->toDateString();
@@ -137,6 +134,7 @@ class ReportApiController extends Controller
                 return [
                     'lead_id'        => $row->lead_id,
                     'lead_code'      => 'LD-' . str_pad((string) $row->lead_id, 4, '0', STR_PAD_LEFT),
+                    'branch_name'    => $row->branch_name ?: null,
                     'name'           => $row->contact_name ?: null,
                     'email'          => $row->email ?: null,
                     'mobile_number'  => $row->mobile_number ?: null,
@@ -279,6 +277,25 @@ class ReportApiController extends Controller
             ->all();
     }
 
+    /**
+     * Resolve branches visible to the user.
+     * Company-wide users see all branches in their company.
+     * Branch admins / managers see only their assigned branches.
+     */
+    private function getVisibleBranchesForUser(?User $user): \Illuminate\Support\Collection
+    {
+        $branchesQuery = Branch::query()
+            ->when($user?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
+            ->orderBy('name');
+
+        if ($user && ! $this->visibility->isCompanyWideUser($user)) {
+            $myBranchIds = $user->getMyBranchIds();
+            $branchesQuery->whereIn('id', !empty($myBranchIds) ? $myBranchIds : [-1]);
+        }
+
+        return $branchesQuery->get(['id', 'name']);
+    }
+
     private function buildLeadsSummaryQuery(Request $request)
     {
         $convertedSubquery = ProductionInitiation::query()
@@ -295,6 +312,7 @@ class ReportApiController extends Controller
             ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
             ->leftJoin('lead_statuses as product_lead_statuses', 'product_lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->leftJoin('users as assigned_users', 'assigned_users.id', '=', 'leads.assigned_to')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->leftJoinSub($convertedSubquery, 'converted_products', function ($join) {
                 $join->on('converted_products.lead_product_id', '=', 'lead_products.id');
             })
@@ -309,6 +327,7 @@ class ReportApiController extends Controller
                 // Prefer FK-resolved name, fall back to legacy string column
                 DB::raw('COALESCE(lead_source_table.name, leads.lead_source) as lead_source'),
                 DB::raw('COALESCE(lead_status_table.name, leads.lead_status) as base_lead_status'),
+                'branches.name as branch_name',
                 'leads.lead_date',
                 'leads.created_at as lead_created_at',
                 'lead_products.id as lead_product_id',
@@ -948,10 +967,7 @@ class ReportApiController extends Controller
                     'name' => trim(($p->package_name ?: $p->product_name) . ($p->sku ? " - {$p->sku}" : '')),
                 ]);
 
-            $branches = Branch::query()
-                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId))
-                ->orderBy('name')
-                ->get(['id', 'name'])
+            $branches = $this->getVisibleBranchesForUser($request->user())
                 ->map(fn($b) => ['id' => $b->id, 'name' => $b->name]);
 
             $data = $reportRows->getCollection()->map(fn($row) => [
@@ -1300,7 +1316,7 @@ class ReportApiController extends Controller
 
             // Already shaped as rows / all_sources / all_statuses — matches the
             // mobile app's model 1:1, no reshaping needed.
-            $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo);
+            $comparisonData = $this->buildBranchComparisonData($dateFrom, $dateTo, $request->user());
 
             return response()->json([
                 'status'         => true,
@@ -1324,30 +1340,45 @@ class ReportApiController extends Controller
         }
     }
 
-    private function buildBranchComparisonData(string $dateFrom, string $dateTo): array
+    private function buildBranchComparisonData(string $dateFrom, string $dateTo, ?User $user = null): array
     {
         $companyId = $this->visibility->companyIdFor();
-        $branchesQuery = \App\Models\Branch::query()->orderBy('name');
-        if ($companyId) {
-            $branchesQuery->where('company_id', $companyId);
-        }
-        $branches = $branchesQuery->get(['id', 'name']);
+        $branches = $this->getVisibleBranchesForUser($user);
+
+        $startDateTime = $dateFrom . ' 00:00:00';
+        $endDateTime = $dateTo . ' 23:59:59';
 
         // 1. Total Leads count per branch
         $leadCounts = DB::table('leads')
-            ->select('branch_id', DB::raw('COUNT(*) as total_leads'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id')
+            ->select('leads.branch_id', DB::raw('COUNT(*) as total_leads'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id')
             ->pluck('total_leads', 'branch_id')
             ->toArray();
 
         // 2. Converted Leads count per branch
         $convertedCounts = DB::table('lead_products')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->leftJoin('lead_statuses', 'lead_statuses.id', '=', 'lead_products.lead_status_id')
             ->select('leads.branch_id', DB::raw('COUNT(DISTINCT leads.id) as converted_leads'))
-            ->where('lead_products.product_status', 'converted')
-            ->whereBetween('lead_products.updated_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->where(function ($q) {
+                $q->where('lead_products.product_status', 'converted')
+                  ->orWhere(DB::raw('LOWER(lead_statuses.name)'), '=', 'converted');
+            })
+            ->where(function ($q) use ($startDateTime, $endDateTime) {
+                $q->whereBetween('lead_products.converted_at', [$startDateTime, $endDateTime])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('lead_products.converted_at')
+                         ->whereBetween('lead_products.updated_at', [$startDateTime, $endDateTime]);
+                  });
+            })
             ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
             ->groupBy('leads.branch_id')
             ->pluck('converted_leads', 'branch_id')
@@ -1357,7 +1388,7 @@ class ReportApiController extends Controller
         $revenueAmounts = DB::table('lead_products')
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->select('leads.branch_id', DB::raw('SUM(COALESCE(lead_products.total_price, 0)) as revenue'))
-            ->whereBetween('lead_products.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->whereBetween('lead_products.created_at', [$startDateTime, $endDateTime])
             ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
             ->groupBy('leads.branch_id')
             ->pluck('revenue', 'branch_id')
@@ -1375,18 +1406,32 @@ class ReportApiController extends Controller
 
         // 5. Lead Source distribution per branch
         $sourceStats = DB::table('leads')
-            ->select('branch_id', 'lead_source', DB::raw('COUNT(*) as count'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id', 'lead_source')
+            ->leftJoin('lead_sources as lead_source_table', 'lead_source_table.id', '=', 'leads.lead_source_id')
+            ->select('leads.branch_id', DB::raw('COALESCE(lead_source_table.name, NULLIF(leads.lead_source, ""), "Unknown") as source_name'), DB::raw('COUNT(*) as count'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id', DB::raw('COALESCE(lead_source_table.name, NULLIF(leads.lead_source, ""), "Unknown")'))
             ->get();
 
         // 6. Lead Status distribution per branch
         $statusStats = DB::table('leads')
-            ->select('branch_id', 'lead_status', DB::raw('COUNT(*) as count'))
-            ->whereBetween('lead_date', [$dateFrom, $dateTo])
-            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
-            ->groupBy('branch_id', 'lead_status')
+            ->leftJoin('lead_statuses as lead_status_table', 'lead_status_table.id', '=', 'leads.lead_status_id')
+            ->select('leads.branch_id', DB::raw('COALESCE(lead_status_table.name, NULLIF(leads.lead_status, ""), "Unknown") as status_name'), DB::raw('COUNT(*) as count'))
+            ->where(function ($q) use ($dateFrom, $dateTo, $startDateTime, $endDateTime) {
+                $q->whereBetween('leads.lead_date', [$dateFrom, $dateTo])
+                  ->orWhere(function ($sq) use ($startDateTime, $endDateTime) {
+                      $sq->whereNull('leads.lead_date')
+                         ->whereBetween('leads.created_at', [$startDateTime, $endDateTime]);
+                  });
+            })
+            ->when($companyId, fn($q) => $q->where('leads.company_id', $companyId))
+            ->groupBy('leads.branch_id', DB::raw('COALESCE(lead_status_table.name, NULLIF(leads.lead_status, ""), "Unknown")'))
             ->get();
 
         $rows = [];
@@ -1410,7 +1455,7 @@ class ReportApiController extends Controller
         foreach ($sourceStats as $stat) {
             $branchId = $stat->branch_id;
             if (isset($rows[$branchId])) {
-                $sourceName = $stat->lead_source ?: 'Unknown';
+                $sourceName = $stat->source_name ?: 'Unknown';
                 $rows[$branchId]['sources'][$sourceName] = (int) $stat->count;
                 $allSources[$sourceName] = true;
             }
@@ -1419,7 +1464,7 @@ class ReportApiController extends Controller
         foreach ($statusStats as $stat) {
             $branchId = $stat->branch_id;
             if (isset($rows[$branchId])) {
-                $statusName = $stat->lead_status ?: 'Unknown';
+                $statusName = $stat->status_name ?: 'Unknown';
                 $rows[$branchId]['statuses'][$statusName] = (int) $stat->count;
                 $allStatuses[$statusName] = true;
             }
@@ -1548,7 +1593,7 @@ class ReportApiController extends Controller
             $periodType = $request->input('period_type', 'month');
             $scope = $request->input('scope', 'all_branches');
 
-            $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+            $branches = $this->getVisibleBranchesForUser($request->user());
 
             $selectedBranchId = $request->input('branch_id');
             if (!$selectedBranchId) {
@@ -1572,7 +1617,7 @@ class ReportApiController extends Controller
             $end = $periodDetails['end'];
             $targetMonths = $periodDetails['months'];
 
-            $comparisonData = $this->buildSalesComparisonData($companyId, $scope, $selectedBranchId, $start, $end, $targetMonths);
+            $comparisonData = $this->buildSalesComparisonData($companyId, $scope, $selectedBranchId, $start, $end, $targetMonths, $request->user());
 
             return response()->json([
                 'status' => true,
@@ -1609,7 +1654,7 @@ class ReportApiController extends Controller
      * Reused by salesComparisonApi — identical target-vs-actual calculation
      * CrmReportController::salesComparison() uses for all three scopes.
      */
-    private function buildSalesComparisonData(int $companyId, string $scope, $selectedBranchId, $start, $end, array $targetMonths): array
+    private function buildSalesComparisonData(int $companyId, string $scope, $selectedBranchId, $start, $end, array $targetMonths, ?User $currentUser = null): array
     {
         $comparisonData = [];
 
@@ -1625,7 +1670,7 @@ class ReportApiController extends Controller
         ];
 
         if ($scope === 'all_branches') {
-            $branches = Branch::where('company_id', $companyId)->orderBy('name')->get();
+            $branches = $this->getVisibleBranchesForUser($currentUser);
 
             foreach ($branches as $branch) {
                 $target = (float) SalesTarget::where('branch_id', $branch->id)
@@ -1680,8 +1725,18 @@ class ReportApiController extends Controller
                 ];
             }
         } else {
-            $users = User::where('company_id', $companyId)
-                ->where('is_active', true)
+            $usersQuery = User::where('company_id', $companyId)
+                ->where('is_active', true);
+
+            if ($currentUser && ! $this->visibility->isCompanyWideUser($currentUser)) {
+                $myBranchIds = $currentUser->getMyBranchIds();
+                $usersQuery->where(function ($q) use ($myBranchIds) {
+                    $q->whereIn('branch_id', !empty($myBranchIds) ? $myBranchIds : [-1])
+                      ->orWhereHas('branches', fn($bq) => $bq->whereIn('branches.id', !empty($myBranchIds) ? $myBranchIds : [-1]));
+                });
+            }
+
+            $users = $usersQuery
                 ->where(function ($query) use ($salesDeptIds, $companyId, $targetRoleBaseNames) {
                     $query->whereHas('roles', fn($q) => $q->whereIn('department_id', $salesDeptIds));
                     foreach ($targetRoleBaseNames as $baseRole) {
@@ -2303,11 +2358,7 @@ class ReportApiController extends Controller
         $currentYear = now()->year;
         $productOptions = Product::query()->orderBy('package_name');
         $this->visibility->applyProductVisibility($productOptions);
-        $branchesQuery = \App\Models\Branch::query()->orderBy('name');
-        if ($companyId = $this->visibility->companyIdFor()) {
-            $branchesQuery->where('company_id', $companyId);
-        }
-        $branches = $branchesQuery->get(['id', 'name']);
+        $branches = $this->getVisibleBranchesForUser(auth()->user());
 
         return [
             'period_types' => [
@@ -2544,11 +2595,7 @@ class ReportApiController extends Controller
             $reportRows = (clone $query)->paginate($perPage)->withQueryString();
 
             $companyId = $this->visibility->companyIdFor();
-            $branchesQuery = Branch::query()->orderBy('name');
-            if ($companyId) {
-                $branchesQuery->where('company_id', $companyId);
-            }
-            $branches = $branchesQuery->get(['id', 'name']);
+            $branches = $this->getVisibleBranchesForUser($request->user());
 
             $users = $this->visibility->visibleAssignableUsers();
 

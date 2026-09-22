@@ -12,14 +12,20 @@ class AttendanceLocationApiController extends Controller
     {
         $user = $request->user()->fresh(['branch']);
 
-        if (! $user->branch_id || ! $user->branch) {
+        $branch = $user->branch;
+        if (! $branch) {
+            $branchIds = $user->getMyBranchIds();
+            if (! empty($branchIds)) {
+                $branch = \App\Models\Branch::withoutGlobalScopes()->find($branchIds[0]);
+            }
+        }
+
+        if (! $branch) {
             return response()->json([
                 'status'  => false,
                 'message' => 'No branch is assigned to your account yet. Please contact your administrator.',
             ], 422);
         }
-
-        $branch = $user->branch;
 
         return response()->json([
             'status' => true,
