@@ -1241,10 +1241,19 @@ function renderKpis(k, filters) {
 
 /* ── Financials ── */
 function renderFinancials(f) {
+    var convertedVal = parseFloat(f.converted_value) || 0;
+    var paidVal      = parseFloat(f.amount_paid) || 0;
+    var pendingVal   = (f.amount_pending !== undefined && f.amount_pending !== null)
+        ? parseFloat(f.amount_pending)
+        : Math.max(0, convertedVal - paidVal);
+    var payPct       = convertedVal > 0
+        ? Math.min(100, Math.round((paidVal / convertedVal) * 100))
+        : (parseFloat(f.payment_percent) || 0);
+
     var cards = [
-        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:f.converted_value,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(f.converted_value/f.total_product_value*100) : (f.converted_count > 0 ? 100 : 0), clickAction: "viewConvertedProducts()" },
-        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:f.amount_paid,          sub:f.payment_percent + '% Collected',  bar:f.payment_percent },
-        { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:f.amount_pending,       sub:'Outstanding balance',              bar:Math.max(0,100-f.payment_percent) },
+        { cls:'fc-conv',    bc:'#7c3aed', label:'Converted Products',    val:convertedVal,      sub:f.converted_count + ' Product(s)',  bar: f.total_product_value > 0 ? Math.round(convertedVal/f.total_product_value*100) : (f.converted_count > 0 ? 100 : 0), clickAction: "viewConvertedProducts()" },
+        { cls:'fc-paid',    bc:'#16a34a', label:'Amount Received',       val:paidVal,          sub:payPct + '% Collected',             bar:payPct },
+        { cls:'fc-pending', bc:'#dc2626', label:'Amount Pending',        val:pendingVal,       sub:'Outstanding balance',              bar:Math.max(0, 100 - payPct) },
     ];
     var html = cards.map(function(c) {
         var clickAttr = c.clickAction ? ' onclick="' + c.clickAction + '" style="border-left-color:' + c.bc + ';cursor:pointer;" title="Click to view Converted Products"' : ' style="border-left-color:' + c.bc + '"';

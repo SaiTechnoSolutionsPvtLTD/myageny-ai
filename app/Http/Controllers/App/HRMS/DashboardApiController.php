@@ -88,8 +88,8 @@ class DashboardApiController extends Controller
             ->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING)
             ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
                 $q->where(function ($sub) use ($actingBranchId, $branchCode) {
-                    $sub->whereHas('employee.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId))
-                        ->orWhereHas('intern.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                    $sub->whereHas('employee.portalUser', fn ($pu) => $pu->inBranches([$actingBranchId]))
+                        ->orWhereHas('intern.portalUser', fn ($pu) => $pu->inBranches([$actingBranchId]));
                     if ($branchCode && $branchCode !== 'STS') {
                         $sub->orWhereHas('employee', fn ($eq) => $eq->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%'))
                             ->orWhereHas('intern', fn ($iq) => $iq->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%'));
@@ -702,7 +702,7 @@ class DashboardApiController extends Controller
             ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
                 $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
                     $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn ($uq) => $uq->where('branch_id', $actingBranchId));
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches([$actingBranchId]));
                         if ($branchCode && $branchCode !== 'STS') {
                             $sub->orWhere(function ($q2) use ($branchCode) {
                                 $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
@@ -738,7 +738,7 @@ class DashboardApiController extends Controller
             ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
                 $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
                     $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn ($uq) => $uq->where('branch_id', $actingBranchId));
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches([$actingBranchId]));
                         if ($branchCode && $branchCode !== 'STS') {
                             $sub->orWhere(function ($q2) use ($branchCode) {
                                 $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
@@ -955,7 +955,7 @@ class DashboardApiController extends Controller
             $branchCode = $branch?->code;
 
             $query->where(function (Builder $q) use ($branchId, $branchCode) {
-                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches([$branchId]));
                 if ($branchCode && $branchCode !== 'STS') {
                     $q->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
@@ -984,7 +984,7 @@ class DashboardApiController extends Controller
             $branchCode = $branch?->code;
 
             $query->where(function (Builder $q) use ($branchId, $branchCode) {
-                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches([$branchId]));
                 if ($branchCode && $branchCode !== 'STS') {
                     $q->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
@@ -1018,7 +1018,7 @@ class DashboardApiController extends Controller
             $branchCode = $branch?->code;
 
             $query->where(function (Builder $q) use ($branchId, $branchCode) {
-                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches([$branchId]));
                 if ($branchCode && $branchCode !== 'STS') {
                     $q->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
@@ -1047,7 +1047,7 @@ class DashboardApiController extends Controller
             $branchCode = $branch?->code;
 
             $query->where(function (Builder $q) use ($branchId, $branchCode) {
-                $q->whereHas('portalUser', fn (Builder $sub) => $sub->where('branch_id', $branchId));
+                $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches([$branchId]));
                 if ($branchCode && $branchCode !== 'STS') {
                     $q->orWhere(function (Builder $q2) use ($branchCode) {
                         $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');

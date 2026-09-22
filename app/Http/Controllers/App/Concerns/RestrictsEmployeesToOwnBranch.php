@@ -62,7 +62,13 @@ trait RestrictsEmployeesToOwnBranch
 
         return $query->where(function (Builder $q) use ($branchIds, $branchColumn, $actingUser) {
             $q->whereIn($branchColumn, $branchIds)
-              ->orWhere('id', $actingUser->id);
+              ->orWhere('id', $actingUser->id)
+              ->orWhereExists(function ($sub) use ($branchIds) {
+                  $sub->select(\DB::raw(1))
+                      ->from('branch_user')
+                      ->whereColumn('branch_user.user_id', 'users.id')
+                      ->whereIn('branch_user.branch_id', $branchIds);
+              });
         });
     }
 
@@ -88,7 +94,8 @@ trait RestrictsEmployeesToOwnBranch
 
         return $users->filter(function ($u) use ($branchIds, $branchAttr, $actingUser) {
             return (int) $u->id === (int) $actingUser->id
-                || in_array((int) $u->{$branchAttr}, $branchIds, true);
+                || in_array((int) $u->{$branchAttr}, $branchIds, true)
+                || (method_exists($u, 'getMyBranchIds') && !empty(array_intersect($u->getMyBranchIds(), $branchIds)));
         })->values();
     }
 

@@ -67,7 +67,7 @@ class InternJoiningFormController extends Controller
                 $branchId = $request->integer('branch_id');
                 $branch = Branch::withoutGlobalScopes()->find($branchId);
                 $query->where(function ($sub) use ($branchId, $branch) {
-                    $sub->whereHas('portalUser', fn ($q) => $q->where('branch_id', $branchId));
+                    $sub->whereHas('portalUser', fn ($q) => $q->inBranches([$branchId]));
                     if ($branch && $branch->code) {
                         $sub->orWhere(function ($q2) use ($branch) {
                             $q2->whereNull('portal_user_id')

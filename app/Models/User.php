@@ -75,7 +75,17 @@ class User extends Authenticatable
             if ($user && $user->isBranchAdmin()) {
                 $branchIds = $user->getMyBranchIds();
                 if (!empty($branchIds)) {
-                    $builder->whereIn($builder->getModel()->getTable() . '.branch_id', $branchIds);
+                    $table = $builder->getModel()->getTable();
+                    $builder->where(function ($q) use ($branchIds, $user, $table) {
+                        $q->whereIn($table . '.branch_id', $branchIds)
+                          ->orWhere($table . '.id', $user->id)
+                          ->orWhereExists(function ($sub) use ($branchIds, $table) {
+                              $sub->select(\DB::raw(1))
+                                  ->from('branch_user')
+                                  ->whereColumn('branch_user.user_id', $table . '.id')
+                                  ->whereIn('branch_user.branch_id', $branchIds);
+                          });
+                    });
                 }
             }
         });
@@ -164,6 +174,40 @@ class User extends Authenticatable
             $this->memoizedBranchIds = array_values(array_unique($ids));
         }
         return $this->memoizedBranchIds;
+    }
+
+    public function scopeInBranches(\Illuminate\Database\Eloquent\Builder $query, array $branchIds): \Illuminate\Database\Eloquent\Builder
+    {
+        $branchIds = array_values(array_unique(array_filter(array_map('intval', $branchIds))));
+        if (empty($branchIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $table = $query->getModel()->getTable();
+
+        return $query->where(function ($q) use ($branchIds, $table) {
+            $q->whereIn($table . '.branch_id', $branchIds)
+              ->orWhereExists(function ($sub) use ($branchIds, $table) {
+                  $sub->select(\DB::raw(1))
+                      ->from('branch_user')
+                      ->whereColumn('branch_user.user_id', $table . '.id')
+                      ->whereIn('branch_user.branch_id', $branchIds);
+              });
+        });
+    }
+
+    public function belongsToBranch(int|string|null $branchId): bool
+    {
+        if (! $branchId) {
+            return false;
+        }
+
+        return in_array((int) $branchId, $this->getMyBranchIds(), true);
+    }
+
+    public function sharesBranchWith(User $otherUser): bool
+    {
+        return !empty(array_intersect($this->getMyBranchIds(), $otherUser->getMyBranchIds()));
     }
 
     public function company()

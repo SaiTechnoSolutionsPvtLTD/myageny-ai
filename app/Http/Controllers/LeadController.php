@@ -645,8 +645,22 @@ class LeadController extends Controller
      */
     public function create()
     {
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
-        $users    = $this->visibility->visibleAssignableUsers();
+        $user = auth()->user();
+        $isBranchManagerOrAdmin = $user && ($user->isBranchManager() || $user->isBranchAdmin() || $this->visibility->hasBranchManagerRole($user) || $this->visibility->hasBranchAdminRole($user));
+
+        if ($isBranchManagerOrAdmin) {
+            $branchIds = $user->getMyBranchIds();
+            $branches = Branch::withoutGlobalScope('branch')
+                ->where('is_active', true)
+                ->when(!empty($branchIds), fn ($q) => $q->whereIn('id', $branchIds))
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->orderBy('name')
+                ->get();
+        } else {
+            $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        }
+
+        $users        = $this->visibility->visibleAssignableUsers();
         $customFields = $this->customFieldsForForm();
 
         return view('pages.leads.create', compact('branches', 'users', 'customFields'));
@@ -807,8 +821,30 @@ class LeadController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get();
-        $users    = $this->visibility->visibleAssignableUsers();
+        $user = auth()->user();
+        $isBranchManagerOrAdmin = $user && ($user->isBranchManager() || $user->isBranchAdmin() || $this->visibility->hasBranchManagerRole($user) || $this->visibility->hasBranchAdminRole($user));
+
+        if ($isBranchManagerOrAdmin) {
+            $branchIds = $user->getMyBranchIds();
+            $branches = Branch::withoutGlobalScope('branch')
+                ->where('is_active', true)
+                ->when(!empty($branchIds), fn ($q) => $q->whereIn('id', $branchIds))
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->orderBy('name')
+                ->get();
+        } else {
+            $branches = Branch::where('is_active', true)->orderBy('name')->get();
+        }
+
+        if ($lead->branch_id && ! $branches->contains('id', $lead->branch_id)) {
+            $leadBranch = Branch::withoutGlobalScopes()->find($lead->branch_id);
+            if ($leadBranch) {
+                $branches->push($leadBranch);
+                $branches = $branches->sortBy('name')->values();
+            }
+        }
+
+        $users        = $this->visibility->visibleAssignableUsers();
         $customFields = $this->customFieldsForForm();
         $lead->load('customFieldValues');
 

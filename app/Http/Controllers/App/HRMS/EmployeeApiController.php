@@ -83,7 +83,7 @@ class EmployeeApiController extends Controller
                 $branch = Branch::withoutGlobalScopes()->find($branchId);
                 $branchCode = $branch?->code;
                 $q->where(function (Builder $sub) use ($branchId, $branchCode) {
-                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->where('branch_id', $branchId));
+                    $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches([$branchId]));
                     if ($branchCode) {
                         $sub->orWhere(function (Builder $q2) use ($branchCode) {
                             $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
@@ -132,13 +132,25 @@ class EmployeeApiController extends Controller
         $isCompanyAdmin = $this->isCompanyAdmin($user);
 
         if (! $isCompanyAdmin) {
-            $userBranchId = $user?->branch_id;
-            $empBranchId  = $employee->portalUser?->branch_id;
-            $branch       = $userBranchId ? Branch::find($userBranchId) : null;
-            $branchCode   = $branch?->code;
+            $userBranchIds = $user?->getMyBranchIds() ?? [];
+            if (empty($userBranchIds) && $user?->branch_id) {
+                $userBranchIds = [(int) $user->branch_id];
+            }
+            $empBranchIds = $employee->portalUser ? $employee->portalUser->getMyBranchIds() : [];
+            if (empty($empBranchIds) && $employee->portalUser?->branch_id) {
+                $empBranchIds = [(int) $employee->portalUser->branch_id];
+            }
+            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $userBranchIds)->pluck('code')->filter()->all();
 
-            $matchesBranch = ($userBranchId && $empBranchId === $userBranchId)
-                || ($branchCode && is_null($employee->portal_user_id) && str_starts_with($employee->employee_id ?? '', $branchCode));
+            $matchesBranch = !empty(array_intersect($userBranchIds, $empBranchIds));
+            if (! $matchesBranch && is_null($employee->portal_user_id)) {
+                foreach ($branchCodes as $code) {
+                    if (str_starts_with($employee->employee_id ?? '', $code)) {
+                        $matchesBranch = true;
+                        break;
+                    }
+                }
+            }
 
             if (! $matchesBranch && $user?->id !== $employee->portal_user_id) {
                 return response()->json([
@@ -169,9 +181,15 @@ class EmployeeApiController extends Controller
         $employee = EmployeeOnboarding::with('portalUser')->findOrFail($id);
 
         if (! $this->isCompanyAdmin($user)) {
-            $userBranchId = $user?->branch_id;
-            $empBranchId  = $employee->portalUser?->branch_id;
-            if ($userBranchId && $empBranchId && $empBranchId !== $userBranchId) {
+            $userBranchIds = $user?->getMyBranchIds() ?? [];
+            if (empty($userBranchIds) && $user?->branch_id) {
+                $userBranchIds = [(int) $user->branch_id];
+            }
+            $empBranchIds = $employee->portalUser ? $employee->portalUser->getMyBranchIds() : [];
+            if (empty($empBranchIds) && $employee->portalUser?->branch_id) {
+                $empBranchIds = [(int) $employee->portalUser->branch_id];
+            }
+            if (!empty($userBranchIds) && !empty($empBranchIds) && empty(array_intersect($userBranchIds, $empBranchIds))) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized for this branch.'], 403);
             }
         }

@@ -141,16 +141,27 @@ class DataVisibilityService
 
         if ($this->hasBranchManagerRole($user)) {
             $branchIds = $user->getMyBranchIds();
-            $teamIds = $this->descendantUserIds($user)->push($user->id)->unique()->values();
+            $descendants = $this->descendantUserIds($user);
 
             try {
-                return User::query()
+                return User::withoutGlobalScope('branch')
                     ->where('is_active', true)
-                    ->whereIn('id', $teamIds)
-                    ->when(!empty($branchIds), fn ($query) => $query->where(function ($q) use ($branchIds, $user) {
-                        $q->whereIn('branch_id', $branchIds)
-                          ->orWhere('id', $user->id);
-                    }))
+                    ->where(function ($query) use ($branchIds, $descendants, $user) {
+                        if ($descendants->isNotEmpty()) {
+                            $query->whereIn('id', $descendants->push($user->id)->unique());
+                        } elseif (!empty($branchIds)) {
+                            $query->whereIn('branch_id', $branchIds)
+                                  ->orWhere('id', $user->id)
+                                  ->orWhereExists(function ($sub) use ($branchIds) {
+                                      $sub->select(\DB::raw(1))
+                                          ->from('branch_user')
+                                          ->whereColumn('branch_user.user_id', 'users.id')
+                                          ->whereIn('branch_user.branch_id', $branchIds);
+                                  });
+                        } else {
+                            $query->where('id', $user->id);
+                        }
+                    })
                     ->pluck('id')
                     ->all();
             } catch (\Throwable $e) {
@@ -165,8 +176,8 @@ class DataVisibilityService
             try {
                 return User::query()
                     ->where('is_active', true)
-                    ->when(!empty($branchIds), fn ($query) => $query->whereIn('branch_id', $branchIds))
-                    ->when(empty($branchIds) && $user->branch_id, fn ($query) => $query->where('branch_id', $user->branch_id))
+                    ->when(!empty($branchIds), fn ($query) => $query->inBranches($branchIds))
+                    ->when(empty($branchIds) && $user->branch_id, fn ($query) => $query->inBranches([(int) $user->branch_id]))
                     ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
                     ->pluck('id')
                     ->all();
@@ -458,6 +469,13 @@ class DataVisibilityService
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             return (int) $lead->customer_support_tl_id === $user->id
                 || (int) $lead->customer_support_executive_id === $user->id;
+        }
+
+        if ($user && ($user->isBranchManager() || $user->isBranchAdmin() || $this->hasBranchAdminRole($user) || $this->hasBranchManagerRole($user))) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                return in_array((int) $lead->branch_id, array_map('intval', $branchIds), true);
+            }
         }
 
         $visibleIds = $this->visibleUserIds($user);

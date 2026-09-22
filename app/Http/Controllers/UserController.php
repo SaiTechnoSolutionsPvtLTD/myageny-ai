@@ -35,7 +35,7 @@ class UserController extends Controller
                 )
             )
             ->when($request->branch_id, fn($q) =>
-                $q->where('branch_id', $request->branch_id)
+                $q->inBranches([(int) $request->branch_id])
             )
             ->when($request->role, fn($q) =>
                 $q->whereHas('roles', fn($q2) =>

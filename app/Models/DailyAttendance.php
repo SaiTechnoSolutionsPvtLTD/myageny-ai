@@ -30,7 +30,7 @@ class DailyAttendance extends Model
                                 ->whereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
                                     $eq->where(function ($q) use ($branchIds, $branchCodes) {
                                         $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                                            $puQ->whereIn('branch_id', $branchIds);
+                                            $puQ->inBranches($branchIds);
                                         });
                                         foreach ($branchCodes as $code) {
                                             $q->orWhere('employee_id', 'like', $code . '%');
@@ -42,7 +42,7 @@ class DailyAttendance extends Model
                                 ->whereHas('intern', function ($iq) use ($branchIds, $branchCodes) {
                                     $iq->where(function ($q) use ($branchIds, $branchCodes) {
                                         $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                                            $puQ->whereIn('branch_id', $branchIds);
+                                            $puQ->inBranches($branchIds);
                                         });
                                         foreach ($branchCodes as $code) {
                                             $q->orWhere('intern_id', 'like', $code . '%');
@@ -52,7 +52,7 @@ class DailyAttendance extends Model
                         })->orWhere(function ($uqQuery) use ($branchIds) {
                             $uqQuery->where('attendee_type', 'user')
                                 ->whereHas('user', function ($uq) use ($branchIds) {
-                                    $uq->whereIn('branch_id', $branchIds);
+                                    $uq->inBranches($branchIds);
                                 });
                         });
                     });

@@ -897,7 +897,7 @@ class AttendanceController extends Controller
                 $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
                 $query->where(function (Builder $q) use ($branchIds, $branchCodes) {
                     $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                        $puQ->whereIn('branch_id', $branchIds);
+                        $puQ->inBranches($branchIds);
                     });
                     foreach ($branchCodes as $code) {
                         $q->orWhere('employee_id', 'like', $code . '%');
@@ -924,7 +924,7 @@ class AttendanceController extends Controller
                 $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
                 $query->where(function (Builder $q) use ($branchIds, $branchCodes) {
                     $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
-                        $puQ->whereIn('branch_id', $branchIds);
+                        $puQ->inBranches($branchIds);
                     });
                     foreach ($branchCodes as $code) {
                         $q->orWhere('intern_id', 'like', $code . '%');
