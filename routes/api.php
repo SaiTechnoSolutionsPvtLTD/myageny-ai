@@ -619,6 +619,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     // leads-search endpoint's shape (id/name, 20/page, meta.has_more).
     // Mobile-only; not used by web.
     Route::get('employees-search', [MobileLeadController::class, 'employeesSearch'])->name('employees-search');
+    Route::get('search',           [MobileLeadController::class, 'leadsSearch'])->name('search');
 
     Route::get('/lead-products', [MobileLeadController::class, 'leadProductFunction']);
     Route::get('/call-updates',  [MobileLeadController::class, 'callUpdateFunction']);

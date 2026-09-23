@@ -93,9 +93,15 @@ class DashboardController extends Controller
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
-                ->when($source, fn($q) => $q->where('lead_source', $source))
-                ->when($dateFrom, fn($q) => $q->whereDate('lead_date', '>=', $dateFrom))
-                ->when($dateTo, fn($q) => $q->whereDate('lead_date', '<=', $dateTo));
+                ->when($source, fn($q) => $q->where('lead_source_id', $source))
+                ->when($dateFrom, fn($q) => $q->where(function($dq) use ($dateFrom) {
+                    $dq->whereDate('lead_date', '>=', $dateFrom)
+                      ->orWhereDate('created_at', '>=', $dateFrom);
+                }))
+                ->when($dateTo, fn($q) => $q->where(function($dq) use ($dateTo) {
+                    $dq->whereDate('lead_date', '<=', $dateTo)
+                      ->orWhereDate('created_at', '<=', $dateTo);
+                }));
         };
 
         // ── 1. KPIs ───────────────────────────────────────────────
@@ -113,6 +119,12 @@ class DashboardController extends Controller
             })
             ->pluck('id')
             ->toArray();
+
+        $isConvertedProduct = function (LeadProduct $lp) use ($convertedStatusIds) {
+            $status = strtolower(trim((string) $lp->product_status));
+            return in_array($status, ['converted', 'won'])
+                || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+        };
 
         $convertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
@@ -134,7 +146,11 @@ class DashboardController extends Controller
             $convertedProductsQuery->whereDate('converted_at', '<=', $dateTo);
         }
 
-        $convertedLeadIdsInPeriod = $convertedProductsQuery->pluck('lead_id')->unique();
+        $convertedProducts = $convertedProductsQuery->with('payments')->get();
+        $convertedProductsCount = $convertedProducts->count();
+        $convertedValue = (float) $convertedProducts->sum('total_price');
+
+        $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
         $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
         $wonLeads      = $wonLeadIds->count();
         $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
@@ -143,37 +159,56 @@ class DashboardController extends Controller
         $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
-        // ── 2. Pipeline funnel ──────────────────────────────────────
-        // Web's Pipeline Funnel counts lead PRODUCTS grouped by each
-        // product's own pipeline stage (lead_products.lead_status_id against
-        // the company's LeadStatus master rows) — not leads grouped by
-        // Lead::lead_status like this used to. The two totals differ
-        // whenever a lead has zero or multiple products, which is why web's
-        // funnel total and its "Overall Leads Count" KPI aren't the same
-        // number. See buildProductStatusFunnel() below (ported from
-        // SuperAdminDashboardControlle
+        // ── 2. Pipeline funnel from lead_products.lead_status_id ───
         $leadIds = (clone $base())->pluck('id');
-        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request);
+        $lpProducts = LeadProduct::whereIn('lead_id', $leadIds)->with('payments')->get();
+
+        $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
+
+        $allLpProducts = $nonConvertedProducts->merge($convertedProducts)->unique('id');
+
+        $productStatusFunnel = $this->buildProductStatusFunnel($leadIds, $request, $allLpProducts, $convertedProductsCount, $convertedStatusIds);
         $stageTotal  = $productStatusFunnel['total'];
         $stageFunnel = $productStatusFunnel['stages'];
 
         // ── 3. Source distribution ─────────────────────────────────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        foreach (Lead::sourceOptions() as $key => $label) {
+        $uniqueSources = LeadSource::query()
+            ->orderBy('id')
+            ->get(['id', 'name'])
+            ->unique(fn($s) => strtolower(trim($s->name)))
+            ->values();
+
+        foreach ($uniqueSources as $src) {
+            $sName = strtolower(trim($src->name));
+            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+
             $count = (clone $base())
-                ->where(function ($q) use ($key, $label) {
-                    $q->where('lead_source_id', $key)
-                        ->orWhere(function ($q2) use ($label) {
-                            $q2->whereNull('lead_source_id')->where('lead_source', $label);
-                        });
+                ->where(function ($q) use ($sameNameIds, $src) {
+                    $q->whereIn('lead_source_id', $sameNameIds)
+                      ->orWhere('lead_source', $src->name);
                 })
                 ->count();
             $sourceTotal += $count;
-            $sourceCounts[] = ['key' => $key, 'label' => $label, 'count' => $count];
+            $sourceCounts[] = ['key' => (string) $src->id, 'label' => $src->name, 'count' => $count];
         }
+
+        // Account for leads with unassigned/null sources so donut chart matches overall lead count
+        $unassignedCount = max(0, $totalLeads - $sourceTotal);
+        if ($unassignedCount > 0) {
+            $sourceCounts[] = [
+                'key'   => 'unassigned',
+                'label' => 'Unassigned',
+                'count' => $unassignedCount,
+            ];
+            $donutTotal = $totalLeads;
+        } else {
+            $donutTotal = $sourceTotal;
+        }
+
         foreach ($sourceCounts as &$src) {
-            $src['percent'] = $sourceTotal > 0 ? round($src['count'] / $sourceTotal * 100, 1) : 0;
+            $src['percent'] = $donutTotal > 0 ? round($src['count'] / $donutTotal * 100, 1) : 0;
         }
         unset($src);
 
@@ -653,7 +688,7 @@ class DashboardController extends Controller
                 ],
 
                 'source_distribution' => [
-                    'total'   => $sourceTotal,
+                    'total'   => $donutTotal,
                     'sources' => $sourceCounts,
                 ],
 
@@ -770,7 +805,7 @@ class DashboardController extends Controller
     // the old lead-status-based grouping. $leadIds is accepted to match the
     // original signature but, same as web's version, isn't actually used
     // inside — every count here comes from $this->getLeadProductBaseQuery().
-    private function buildProductStatusFunnel($leadIds, Request $request): array
+    private function buildProductStatusFunnel($leadIds, Request $request, $allLpProducts = null, $convertedCount = 0, $convertedStatusIds = []): array
     {
         $companyId = $request->user()?->company_id;
 
@@ -783,9 +818,11 @@ class DashboardController extends Controller
                     ->orWhereNull('company_id'))
             )
             ->orderBy('id')
-            ->get(['id', 'name']);
+            ->get(['id', 'name'])
+            ->unique(fn($s) => strtolower(trim($s->name)))
+            ->values();
 
-        $leadProducts = $this->getLeadProductBaseQuery($request)->get(['id', 'lead_status_id', 'product_status']);
+        $leadProducts = $allLpProducts ?? LeadProduct::whereIn('lead_id', $leadIds)->get(['id', 'lead_status_id', 'product_status']);
 
         if ($statuses->isNotEmpty() && $leadProducts->isNotEmpty()) {
             $statusByName = [];
@@ -793,14 +830,40 @@ class DashboardController extends Controller
                 $statusByName[strtolower(trim($s->name))] = $s->id;
             }
 
+            $allStatusNames = LeadStatus::pluck('name', 'id')->toArray();
+
             $counts = [];
             foreach ($statuses as $s) {
                 $counts[$s->id] = 0;
             }
 
             foreach ($leadProducts as $lp) {
+                $pStatus = strtolower(trim((string)$lp->product_status));
+                $isConv = in_array($pStatus, ['converted', 'won'])
+                    || ($lp->lead_status_id && in_array($lp->lead_status_id, $convertedStatusIds));
+
+                if ($isConv) {
+                    $convStatusId = null;
+                    foreach ($statuses as $s) {
+                        $sLower = strtolower(trim($s->name));
+                        if (in_array($sLower, ['converted', 'won']) || str_contains($sLower, 'convert')) {
+                            $convStatusId = $s->id;
+                            break;
+                        }
+                    }
+                    if ($convStatusId && isset($counts[$convStatusId])) {
+                        $counts[$convStatusId]++;
+                        continue;
+                    }
+                }
+
                 if (!empty($lp->lead_status_id) && isset($counts[$lp->lead_status_id])) {
                     $counts[$lp->lead_status_id]++;
+                } elseif (!empty($lp->lead_status_id) && isset($allStatusNames[$lp->lead_status_id])) {
+                    $sName = strtolower(trim($allStatusNames[$lp->lead_status_id]));
+                    if (isset($statusByName[$sName])) {
+                        $counts[$statusByName[$sName]]++;
+                    }
                 } elseif (!empty($lp->product_status)) {
                     $pStatusKey = strtolower(trim($lp->product_status));
                     if (isset($statusByName[$pStatusKey])) {

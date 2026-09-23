@@ -106,8 +106,11 @@ class LeadController extends Controller
         $this->visibility->applyLeadVisibility($query, $request->user());
 
         if ($request->filled('search')) {
-            $s = $request->search;
+            $s = trim((string) $request->search);
             $query->where(function ($q) use ($s) {
+                if (is_numeric($s)) {
+                    $q->orWhere('id', (int) $s);
+                }
                 $q->where('company_name',   'like', "%{$s}%")
                     ->orWhere('contact_name', 'like', "%{$s}%")
                     ->orWhere('mobile_number', 'like', "%{$s}%")
@@ -141,7 +144,13 @@ class LeadController extends Controller
         // Also supports string names/keys passed from the dashboard.
         if ($request->filled('lead_source')) {
             $sourceInput = $request->lead_source;
-            if (is_numeric($sourceInput)) {
+            if ($sourceInput === 'unassigned') {
+                $query->where(function ($q) {
+                    $q->whereNull('lead_source_id')->orWhere('lead_source_id', 0);
+                })->where(function ($q) {
+                    $q->whereNull('lead_source')->orWhere('lead_source', '');
+                });
+            } elseif (is_numeric($sourceInput)) {
                 $query->where('lead_source_id', (int) $sourceInput);
             } else {
                 $sourceObj = LeadSource::where('name', $sourceInput)
@@ -696,23 +705,17 @@ class LeadController extends Controller
     public function meta(): JsonResponse
     {
         $user = request()->user();
-        // Branch Add/Edit/Filter restriction: company-wide/admin users still
-        // see every branch; everyone else only sees their own (usually a
-        // single branch, but getMyBranchIds() covers the branch_user pivot
-        // for a user linked to more than one). See canAssignBranch() for
-        // the matching write-side enforcement.
-        $branchesQuery = Branch::where('is_active', true);
-        // Branch also carries BelongsToCompany, but (like LeadStatus/
-        // LeadSource) that global scope isn't something this file leans
-        // on anywhere else — explicit here too, so a company-wide/admin
-        // user's meta() never lists another company's branches alongside
-        // their own.
-        if ($user?->company_id) {
-            $branchesQuery->where('company_id', $user->company_id);
-        }
-        if (! $this->visibility->isCompanyWideUser($user)) {
-            $branchesQuery->whereIn('id', $user->getMyBranchIds());
-        }
+        // Branch Add/Edit/Filter restriction: mirrors web LeadController::index()
+        // and DataVisibilityService::visibleBranches() exactly — company-wide /
+        // admin / CBO users see all company branches; branch managers / branch admins
+        // see only their assigned branch(es) (getMyBranchIds()).
+        $branches = $this->visibility->visibleBranches($user)
+            ->unique('id')
+            ->values()
+            ->map(fn ($b) => [
+                'id'   => (int) $b->id,
+                'name' => (string) $b->name,
+            ]);
 
         return response()->json([
             'status' => true,
@@ -727,7 +730,7 @@ class LeadController extends Controller
                 'statuses'       => $this->companyScopedLeadStatusOptions($user),
                 'priorities'     => Lead::PRIORITIES,
                 'reminder_types' => LeadReminder::TYPES,
-                'branches'       => $branchesQuery->orderBy('name')->get(['id', 'name']),
+                'branches'       => $branches,
                 'users'          => $this->restrictUserCollectionToOwnBranch(
                         tap($this->visibility->visibleAssignableUsers(request()->user())
                             ->reject(fn ($u) => $u->hasPreSalesLikeRole())
@@ -897,6 +900,87 @@ class LeadController extends Controller
                 'current_page' => $employees->currentPage(),
                 'last_page'    => $employees->lastPage(),
                 'has_more'     => $employees->currentPage() < $employees->lastPage(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /mobile/leads/search?q=&page= — paginated, searchable Lead lookup
+     * for search-as-you-type pickers (e.g. Quotation Create "Select Lead",
+     * etc.). Searches across Lead ID (when numeric), contact name, company name,
+     * mobile number, and email. Observes applyLeadVisibility() role and branch
+     * isolation, returning lightweight {id, name, subtitle, extra} objects.
+     */
+    public function leadsSearch(Request $request): JsonResponse
+    {
+        $request->validate([
+            'q'    => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $q = trim((string) $request->input('q', ''));
+
+        $query = Lead::with('branch:id,name,state');
+
+        $this->visibility->applyLeadVisibility($query, $request->user());
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                if (is_numeric($q)) {
+                    $sub->orWhere('id', (int) $q);
+                }
+                $sub->orWhere('company_name', 'like', "%{$q}%")
+                    ->orWhere('contact_name', 'like', "%{$q}%")
+                    ->orWhere('mobile_number', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%");
+            });
+        }
+
+        $leads = $query->orderByDesc('id')->paginate(20);
+
+        $data = collect($leads->items())->map(function (Lead $lead) {
+            $contact = trim((string) $lead->contact_name);
+            $company = trim((string) $lead->company_name);
+            $name = $contact !== ''
+                ? ($company !== '' ? "{$contact} ({$company})" : $contact)
+                : ($company !== '' ? $company : "Lead #{$lead->id}");
+
+            $subtitleParts = ["Lead #{$lead->id}"];
+            if (!empty($lead->mobile_number)) {
+                $subtitleParts[] = $lead->mobile_number;
+            }
+            if ($lead->branch?->name) {
+                $subtitleParts[] = $lead->branch->name;
+            }
+
+            return [
+                'id'       => $lead->id,
+                'name'     => $name,
+                'subtitle' => implode(' • ', $subtitleParts),
+                'extra'    => [
+                    'contact_name' => $contact,
+                    'company_name' => $company,
+                    'mobile_number'=> $lead->mobile_number,
+                    'email'        => $lead->email,
+                    'branch_id'    => $lead->branch_id,
+                    'branch_name'  => $lead->branch?->name,
+                    'branch_state' => $lead->branch?->state,
+                    'gstin'        => $lead->gstin ?? '',
+                    'state'        => $lead->state ?? ($lead->branch?->state ?? ''),
+                    'address'      => $lead->address ?? '',
+                ],
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $data,
+            'meta'   => [
+                'current_page' => $leads->currentPage(),
+                'last_page'    => $leads->lastPage(),
+                'per_page'     => $leads->perPage(),
+                'total'        => $leads->total(),
+                'has_more'     => $leads->currentPage() < $leads->lastPage(),
             ],
         ]);
     }
@@ -1649,46 +1733,67 @@ class LeadController extends Controller
         // ── Date Filtering (strictly mirrors web productsIndex()) ──
         if (!$allDates && $dateFrom) {
             if ($isConvertedStatusFilter) {
-                $query->where(function ($q) use ($dateFrom) {
-                    $q->whereDate('converted_at', '>=', $dateFrom)
-                      ->orWhere(function ($sub) use ($dateFrom) {
-                          $sub->whereNull('converted_at')
-                              ->where(function ($sub2) use ($dateFrom) {
-                                  $sub2->whereDate('created_at', '>=', $dateFrom)
-                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
-                              });
-                      });
+                // Converted status: filter by converted_at (converted date)
+                $query->whereDate('converted_at', '>=', $dateFrom);
+            } elseif ($request->filled('product_status')) {
+                // Specific non-converted status: filter by lead_date / created_at (mirrors web lines 608-613)
+                $query->whereHas('lead', function ($lq) use ($dateFrom) {
+                    $lq->whereDate('lead_date', '>=', $dateFrom)
+                       ->orWhereDate('created_at', '>=', $dateFrom);
                 });
             } else {
-                $query->where(function ($q) use ($dateFrom) {
-                    $q->whereDate('created_at', '>=', $dateFrom)
-                      ->orWhereDate('converted_at', '>=', $dateFrom)
-                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '>=', $dateFrom))
-                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                // All products (matching pipeline funnel definition: converted in period OR lead in period)
+                $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%')
+                    ->pluck('id')->toArray();
+                $query->where(function ($q) use ($dateFrom, $convertedStatusIds) {
+                    $q->where(function ($cq) use ($dateFrom, $convertedStatusIds) {
+                        $cq->where(function ($cs) use ($convertedStatusIds) {
+                            $cs->whereIn('lead_status_id', $convertedStatusIds)
+                               ->orWhereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won']);
+                        })->whereDate('converted_at', '>=', $dateFrom);
+                    })->orWhere(function ($ncq) use ($dateFrom, $convertedStatusIds) {
+                        $ncq->where(function ($ncs) use ($convertedStatusIds) {
+                            $ncs->where(function ($wNull) use ($convertedStatusIds) {
+                                $wNull->whereNull('lead_status_id')->orWhereNotIn('lead_status_id', $convertedStatusIds);
+                            })->where(function ($sub) {
+                                $sub->whereNull('product_status')
+                                    ->orWhereRaw('LOWER(product_status) not in (?, ?)', ['converted', 'won']);
+                            });
+                        })->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                    });
                 });
             }
         }
 
         if (!$allDates && $dateTo) {
             if ($isConvertedStatusFilter) {
-                $query->where(function ($q) use ($dateTo) {
-                    $q->whereDate('converted_at', '<=', $dateTo)
-                      ->orWhere(function ($sub) use ($dateTo) {
-                          $sub->whereNull('converted_at')
-                              ->where(function ($sub2) use ($dateTo) {
-                                  $sub2->whereDate('created_at', '<=', $dateTo)
-                                       ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                                       ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
-                              });
-                      });
+                $query->whereDate('converted_at', '<=', $dateTo);
+            } elseif ($request->filled('product_status')) {
+                $query->whereHas('lead', function ($lq) use ($dateTo) {
+                    $lq->whereDate('lead_date', '<=', $dateTo)
+                       ->orWhereDate('created_at', '<=', $dateTo);
                 });
             } else {
-                $query->where(function ($q) use ($dateTo) {
-                    $q->whereDate('created_at', '<=', $dateTo)
-                      ->orWhereDate('converted_at', '<=', $dateTo)
-                      ->orWhereHas('payments', fn ($pq) => $pq->whereDate('payment_date', '<=', $dateTo))
-                      ->orWhereHas('lead', fn ($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
+                    ->orWhere('name', 'like', '%convert%')
+                    ->pluck('id')->toArray();
+                $query->where(function ($q) use ($dateTo, $convertedStatusIds) {
+                    $q->where(function ($cq) use ($dateTo, $convertedStatusIds) {
+                        $cq->where(function ($cs) use ($convertedStatusIds) {
+                            $cs->whereIn('lead_status_id', $convertedStatusIds)
+                               ->orWhereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won']);
+                        })->whereDate('converted_at', '<=', $dateTo);
+                    })->orWhere(function ($ncq) use ($dateTo, $convertedStatusIds) {
+                        $ncq->where(function ($ncs) use ($convertedStatusIds) {
+                            $ncs->where(function ($wNull) use ($convertedStatusIds) {
+                                $wNull->whereNull('lead_status_id')->orWhereNotIn('lead_status_id', $convertedStatusIds);
+                            })->where(function ($sub) {
+                                $sub->whereNull('product_status')
+                                    ->orWhereRaw('LOWER(product_status) not in (?, ?)', ['converted', 'won']);
+                            });
+                        })->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                    });
                 });
             }
         }

@@ -52,7 +52,7 @@ trait ScopesLeadStatusAndSourceToCompany
     {
         $rows = $this->companyScopedLeadLookupQuery(LeadSource::query(), $user)
             ->orderByRaw('company_id IS NULL ASC')
-            ->orderBy('id ASC')
+            ->orderBy('id', 'asc')
             ->get(['id', 'name', 'company_id']);
 
         $unique = [];

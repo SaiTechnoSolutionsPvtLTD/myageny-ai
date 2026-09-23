@@ -379,6 +379,7 @@ class AuthController extends Controller
             'name'            => $user->name,
             'email'           => $user->email,
             'role'            => $user->roles->first()?->name ?? null,
+            'roles'           => $user->roles->pluck('name')->values()->toArray(),
             'role_display'    => $user->role_display_name,
             'dashboard_route' => $mobileRoute,
             'is_designing_department' => $user->belongsToDesigningDepartment(),
