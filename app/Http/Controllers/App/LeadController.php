@@ -1847,11 +1847,13 @@ class LeadController extends Controller
             // ── Stats (matches web productsIndex() exactly) ──────────────
             $statsBase = (clone $query)->with('payments');
             $statsRows = $statsBase->get();
+            $totalValue = (float) $statsRows->sum('total_price');
+            $received    = (float) $statsRows->sum(fn($lp) => $lp->amount_paid);
             $stats = [
                 'total_products' => $statsRows->count(),
-                'total_value'    => (float) $statsRows->sum('total_price'),
-                'received'       => (float) $statsRows->sum(fn($lp) => $lp->amount_paid),
-                'pending'        => (float) $statsRows->sum(fn($lp) => $lp->amount_pending),
+                'total_value'    => $totalValue,
+                'received'       => $received,
+                'pending'        => max(0, $totalValue - $received),
             ];
 
             // ── Paginate ─────────────────────────────────────────────

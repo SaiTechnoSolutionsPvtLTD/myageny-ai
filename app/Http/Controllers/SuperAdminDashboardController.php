@@ -595,6 +595,19 @@ class SuperAdminDashboardController extends ApiController
                     ->when($source,   fn($q2) => $q2->where('lead_source_id', $source));
             })->count();
 
+        // ── Forecasting / Total Prospects (Current Month Hot Products) ──
+        $currentMonthHotProductsQuery = LeadProduct::query()
+            ->whereRaw('LOWER(product_status) = ?', ['hot'])
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId)        $lq->where('branch_id', $branchId);
+                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
+            });
+        $currentMonthHotProductsCount = (clone $currentMonthHotProductsQuery)->count();
+        $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
@@ -619,6 +632,16 @@ class SuperAdminDashboardController extends ApiController
                 'today_reminders_count'      => $todayRemindersCount,
                 'overdue_reminders_count'    => $overdueCount,
                 'today_completed_calls_count' => $todayCompletedCallsCount,
+                'current_month_hot_products_count' => $currentMonthHotProductsCount,
+                'total_prospects'            => $currentMonthHotProductsCount,
+                'current_month_hot_products_value' => $currentMonthHotProductsValue,
+            ],
+
+            'forecasting' => [
+                'total_prospects'        => $currentMonthHotProductsCount,
+                'hot_products_count'     => $currentMonthHotProductsCount,
+                'hot_products_value'     => $currentMonthHotProductsValue,
+                'month_name'             => now()->format('F Y'),
             ],
 
             'financials' => [
@@ -1630,6 +1653,19 @@ class SuperAdminDashboardController extends ApiController
                     ->when($userId,   fn($q2) => $q2->where('assigned_to', $userId));
             })->count();
 
+        // ── Forecasting / Total Prospects (Current Month Hot Products) ──
+        $currentMonthHotProductsQuery = LeadProduct::query()
+            ->whereRaw('LOWER(product_status) = ?', ['hot'])
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+            });
+        $currentMonthHotProductsCount = (clone $currentMonthHotProductsQuery)->count();
+        $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
@@ -1653,6 +1689,16 @@ class SuperAdminDashboardController extends ApiController
                 'today_reminders_count'      => $todayRemindersCount,
                 'overdue_reminders_count'    => $overdueCount,
                 'today_completed_calls_count' => $todayCompletedCallsCount,
+                'current_month_hot_products_count' => $currentMonthHotProductsCount,
+                'total_prospects'            => $currentMonthHotProductsCount,
+                'current_month_hot_products_value' => $currentMonthHotProductsValue,
+            ],
+
+            'forecasting' => [
+                'total_prospects'        => $currentMonthHotProductsCount,
+                'hot_products_count'     => $currentMonthHotProductsCount,
+                'hot_products_value'     => $currentMonthHotProductsValue,
+                'month_name'             => now()->format('F Y'),
             ],
 
             'trends' => [
