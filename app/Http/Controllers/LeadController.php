@@ -493,7 +493,7 @@ class LeadController extends Controller
         $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
 
         $query = LeadProduct::query()
-            ->with(['lead.branch', 'lead.assignedTo', 'product', 'leadStatus'])
+            ->with(['lead.branch', 'lead.assignedTo', 'product', 'leadStatus', 'payments'])
             ->whereHas('lead')
             ->latest('created_at');
 
@@ -679,11 +679,14 @@ class LeadController extends Controller
 
         $statsRows = $statsBase->get();
 
+        $totalValue = (float) $statsRows->sum('total_price');
+        $received = (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_paid);
+
         $stats = [
             'total_products' => $statsRows->count(),
-            'total_value' => (float) $statsRows->sum('total_price'),
-            'received' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_paid),
-            'pending' => (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_pending),
+            'total_value' => $totalValue,
+            'received' => $received,
+            'pending' => max(0, $totalValue - $received),
         ];
 
         $branches = $this->visibility->visibleBranches($request->user());

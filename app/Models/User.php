@@ -165,13 +165,22 @@ class User extends Authenticatable
                 // Fail-safe if table doesn't exist
             }
 
-            // If additional branches are explicitly assigned, use ONLY those branches.
-            // If no additional branches are assigned, fall back to the primary main branch.
-            if (empty($ids) && $this->branch_id) {
+            if ($this->branch_id) {
                 $ids[] = (int) $this->branch_id;
             }
 
-            $this->memoizedBranchIds = array_values(array_unique($ids));
+            try {
+                $managedBranchIds = \DB::table('branches')
+                    ->where('manager_id', $this->id)
+                    ->pluck('id')
+                    ->map(fn($id) => (int) $id)
+                    ->all();
+                $ids = array_merge($ids, $managedBranchIds);
+            } catch (\Throwable $e) {
+                // Fail-safe if column doesn't exist
+            }
+
+            $this->memoizedBranchIds = array_values(array_unique(array_filter($ids)));
         }
         return $this->memoizedBranchIds;
     }

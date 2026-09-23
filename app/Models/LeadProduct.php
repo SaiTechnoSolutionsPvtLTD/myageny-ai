@@ -55,6 +55,7 @@ class LeadProduct extends Model
         'remarks', 'product_status', 'lead_status_id', 'lead_source_id',
         'amount_paid', 'created_by', 'company_id',
         'payment_status', 'converted_at',
+        'closure_date', 'expected_value',
     ];
 
     protected $casts = [
@@ -67,6 +68,8 @@ class LeadProduct extends Model
         'lead_status_id'   => 'integer',
         'lead_source_id'   => 'integer',
         'converted_at'     => 'datetime',
+        'closure_date'     => 'date',
+        'expected_value'   => 'float',
     ];
 
      // ── Product Status Constants ───────────────────────────────────
@@ -330,6 +333,8 @@ class LeadProduct extends Model
             'total'    => (float) $this->total_price,
             'paid'     => (float) $this->amount_paid,
             'pending'  => (float) $this->amount_pending,
+            'expected_value' => (float) ($this->expected_value ?? 0),
+            'closure_date'   => $this->closure_date ? $this->closure_date->format('Y-m-d') : null,
             'progress' => $this->payment_progress,
             'payUrl'   => route('leads.products.payments.store', [$this->lead_id, $this->id]),
             'departments' => $product?->departments

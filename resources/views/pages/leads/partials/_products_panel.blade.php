@@ -787,6 +787,30 @@
             </div>
             <p class="pp-confirm-text">This product status will be updated for the selected lead product.</p>
             <div class="pp-confirm-status" id="pp-status-confirm-label"></div>
+
+            {{-- Hot Status Mandatory Fields --}}
+            <div id="pp-status-confirm-hot-fields" style="display:none; margin-top:16px;">
+                <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:12px; color:#c2410c; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:16px;">🔥</span>
+                    <span><strong>Hot Status Requirement:</strong> Expected Value and Closure Date are mandatory.</span>
+                </div>
+                <div class="ppf-r2">
+                    <div class="ppf-grp" style="margin-bottom:0;">
+                        <label class="ppf-lbl">Expected Value (₹) <span class="ppf-req">*</span></label>
+                        <div class="ppf-rel">
+                            <input type="number" step="0.01" min="0" class="ppf-inp ni" id="pp-status-expected-value" placeholder="e.g. 50000" />
+                        </div>
+                        <span class="ppf-err" id="pp-err-status-expected-value">Expected value is required.</span>
+                    </div>
+                    <div class="ppf-grp" style="margin-bottom:0;">
+                        <label class="ppf-lbl">Closure Date <span class="ppf-req">*</span></label>
+                        <div class="ppf-rel">
+                            <input type="date" class="ppf-inp ni" id="pp-status-closure-date" min="{{ date('Y-m-d') }}" />
+                        </div>
+                        <span class="ppf-err" id="pp-err-status-closure-date">Closure date is required.</span>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="pp-mfoot">
             <div class="pp-confirm-actions">

@@ -66,6 +66,18 @@
 .da-reset-btn { display:flex; align-items:center; gap:4px; padding:6px 12px; border-radius:8px; border:1px solid var(--da-border); font-size:12px; font-weight:600; color:var(--da-muted); cursor:pointer; font-family:inherit; text-decoration:none; transition:all .15s; background:var(--da-white); }
 .da-reset-btn:hover { border-color:var(--da-red); color:var(--da-red); }
 
+/* ─── Forecasting Button & Grid ─── */
+.da-forecast-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:8px; background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%); color:#ffffff; border:1px solid rgba(147, 51, 234, 0.4); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; transition:all .2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow:0 3px 12px rgba(124, 58, 237, 0.3); letter-spacing:.02em; }
+.da-forecast-btn:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(124, 58, 237, 0.45); filter:brightness(1.08); }
+.da-forecast-btn.active { background:linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); box-shadow:0 0 0 2px #fff, 0 0 0 4px #7c3aed, 0 4px 12px rgba(124, 58, 237, 0.35); }
+.da-forecast-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; }
+@media (max-width: 1024px) and (min-width: 641px) {
+    .da-forecast-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+    .da-forecast-grid { grid-template-columns:1fr; }
+}
+
 /* Active chips */
 .da-chips { display:none; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 24px 8px; }
 .da-chips.show { display:flex; }
@@ -100,7 +112,37 @@
 .da-card-body { padding:16px 18px; }
 
 /* ─── KPI grid ─── */
-.da-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; }
+.da-kpi-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; }
+.da-kpi-grid > .da-kpi:nth-child(5),
+.da-kpi-grid > .da-skel-card:nth-child(5) {
+    grid-column: 2 / span 1;
+}
+.da-kpi-grid > .da-kpi:nth-child(6),
+.da-kpi-grid > .da-skel-card:nth-child(6) {
+    grid-column: 3 / span 1;
+}
+@media (max-width: 1024px) and (min-width: 641px) {
+    .da-kpi-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .da-kpi-grid > .da-kpi:nth-child(5),
+    .da-kpi-grid > .da-skel-card:nth-child(5) {
+        grid-column: auto;
+    }
+    .da-kpi-grid > .da-kpi:nth-child(6),
+    .da-kpi-grid > .da-skel-card:nth-child(6) {
+        grid-column: auto;
+    }
+}
+@media (max-width: 640px) {
+    .da-kpi-grid { grid-template-columns:1fr; }
+    .da-kpi-grid > .da-kpi:nth-child(5),
+    .da-kpi-grid > .da-skel-card:nth-child(5) {
+        grid-column: auto;
+    }
+    .da-kpi-grid > .da-kpi:nth-child(6),
+    .da-kpi-grid > .da-skel-card:nth-child(6) {
+        grid-column: auto;
+    }
+}
 .da-kpi { position:relative; overflow:hidden; border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(15,23,42,.05), 0 8px 10px -6px rgba(15,23,42,.03); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
 .da-kpi:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.15),0 10px 10px -5px rgba(15,23,42,.08); }
 .da-kpi-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,0.2); color:#fff; font-size:16px; backdrop-filter:blur(4px); margin-bottom:12px; }
@@ -115,6 +157,15 @@
 }
 @media (max-width: 640px) {
     .da-fin-grid { grid-template-columns:1fr; }
+}
+
+/* ─── Activities grid ─── */
+.da-activities-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+@media (max-width: 991px) {
+    .da-activities-grid { grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+}
+@media (max-width: 640px) {
+    .da-activities-grid { grid-template-columns:1fr; }
 }
 .da-fin { background:var(--da-white); border:1px solid var(--da-border); border-radius:16px; padding:20px; border-left:4px solid transparent; box-shadow:0 10px 25px -5px rgba(15,23,42,.03); transition:all 0.3s cubic-bezier(0.4,0,0.2,1); }
 .da-fin:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.1),0 10px 10px -5px rgba(15,23,42,.05); }
@@ -520,6 +571,11 @@
                 <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.36"/></svg>
                 Reset
             </button>
+
+            <button type="button" class="da-forecast-btn" id="daForecastBtn" onclick="toggleForecasting()" title="View Forecasting & Current Month Hot Prospects">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.3"/></svg>
+                <span id="daForecastBtnText">Forecasting</span>
+            </button>
         </div>
 
         {{-- Active chips --}}
@@ -537,7 +593,7 @@
         </div>
 
         {{-- ── KPIs ── --}}
-        <div>
+        <div id="daKpiSection">
             <div class="da-section-head">
                 <div class="da-section-title">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -546,7 +602,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 9; $i++)
+                @for($i = 0; $i < 6; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -554,6 +610,30 @@
                     <div class="da-skel" style="height:12px;width:40%"></div>
                 </div>
                 @endfor
+            </div>
+        </div>
+
+        {{-- ── Forecasting Section ── --}}
+        <div id="daForecastSection" style="display:none;">
+            <div class="da-section-head">
+                <div class="da-section-title">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.3"/></svg>
+                    Forecasting
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="da-badge" style="background:#fee2e2; color:#b91c1c; border-color:#fecaca; font-weight:700;">Current Month Hot Prospects</span>
+                    <button type="button" onclick="toggleForecasting(false)" class="da-qb" style="padding:3px 10px; font-size:11px; cursor:pointer;" title="Switch back to Key Metrics">
+                        ← Back to Key Metrics
+                    </button>
+                </div>
+            </div>
+            <div class="da-forecast-grid" id="daForecastGrid">
+                <div class="da-skel-card">
+                    <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
+                    <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:70%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:40%"></div>
+                </div>
             </div>
         </div>
 
@@ -675,6 +755,27 @@
                     <div class="da-skel" style="height:24px;width:70%;margin-top:8px;"></div>
                     <div class="da-skel" style="height:12px;width:40%;margin-top:8px;"></div>
                     <div class="da-skel" style="height:6px;width:100%;margin-top:12px;border-radius:3px;"></div>
+                </div>
+                @endfor
+            </div>
+        </div>
+
+        {{-- ── Total Activities ── --}}
+        <div>
+            <div class="da-section-head">
+                <div class="da-section-title">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Total Activities
+                </div>
+                <span class="da-badge">Reminders & Calls</span>
+            </div>
+            <div class="da-activities-grid" id="daActivitiesGrid">
+                @for($i = 0; $i < 3; $i++)
+                <div class="da-skel-card">
+                    <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
+                    <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:70%;margin-bottom:8px"></div>
+                    <div class="da-skel" style="height:12px;width:40%"></div>
                 </div>
                 @endfor
             </div>
@@ -879,9 +980,9 @@ window.resetFilters = function() {
     var bSel = document.getElementById('fBranch');
     var defaultBranch = (bSel && bSel.options.length === 1) ? bSel.value : '';
     state = { quick:'month', branch: defaultBranch, user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
-    ['fBranch','fUser','fStage','fSource'].forEach(function(id) { 
+    ['fBranch','fUser','fStage','fSource'].forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.value = (id === 'fBranch' ? defaultBranch : ''); 
+        if (el) el.value = (id === 'fBranch' ? defaultBranch : '');
     });
     var qSel = document.getElementById('fQuickDate');
     if (qSel) qSel.value = 'month';
@@ -1085,9 +1186,12 @@ function hideError() {
    RENDER ALL SECTIONS
 ═══════════════════════════════════════════════════════ */
 function renderAll(d) {
+    window.lastDashboardData = d;
     renderKpis(d.kpis, d.filters_applied);
+    renderForecasting(d);
     renderTargetStats(d.sales_target_stats);
     renderFinancials(d.financials);
+    renderTotalActivities(d.kpis);
     renderFunnel(d.pipeline_funnel);
     renderSources(d.source_distribution, d.financials.payment_by_mode);
     renderTrend(d.month_trend);
@@ -1096,6 +1200,13 @@ function renderAll(d) {
     renderFollowups(d.today_followups);
     renderReminders(d.reminders);
     renderRecentLeads(d.recent_leads);
+
+    if (window.isForecastingActive) {
+        var kpiSec = document.getElementById('daKpiSection');
+        var forecastSec = document.getElementById('daForecastSection');
+        if (kpiSec) kpiSec.style.display = 'none';
+        if (forecastSec) forecastSec.style.display = 'block';
+    }
 }
 
 /* ── Sales Target Stats ── */
@@ -1207,26 +1318,20 @@ function renderKpis(k, filters) {
         { accent:'orange', val:k.total_leads,    label:'Overall Leads Count', sub:'All in scope',
           clickAction: "viewAllLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
-        { accent:'blue',   val:k.won_leads,      label:'Active Customers', sub:'Converted leads count',
+        { accent:'blue',   val:k.won_leads,      label:'Converted customers', sub:'Converted leads count',
           clickAction: "viewConvertedLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' },
         { accent:'green',  val:k.converted_products_count, label:'Converted Products', sub:'Total Converted Products',
           clickAction: "viewConvertedProducts()",
           svg:'<polyline points="20 6 9 17 4 12"/>' },
-        { accent:'teal',   val:fmtL(k.converted_value), label:'Converted Value',  sub:'Total products value',
+        { accent:'teal',   val:fmtL(k.converted_value), label:'Total Deal Values',  sub:'Total Converted Deal value',
           clickAction: "viewConvertedProducts()",
           svg:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>' },
-        { accent:'purple', val:fmtL(k.total_received_amount !== undefined ? k.total_received_amount : (k.amount_paid || 0)), label:'Total Received Amount', sub:'Total collected payments',
-          clickAction: "viewPaymentCollection()",
-          svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
         { accent:'amber',  val:k.converted_percentage + '%', label:'Converted Percentage', sub:'Converted ÷ Total Products',
           svg:'<path d="M3 16l4-4 4 4 4-6 4 4"/>' },
-        { accent:'orange', val:(k.today_reminders_count !== undefined ? k.today_reminders_count : (k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0)), label:'Today Remainders', sub:'Reminders set for today',
-          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', clickAction: "navigateToTasks('today')" },
-        { accent:'rose',   val:(k.overdue_reminders_count !== undefined ? k.overdue_reminders_count : 0), label:'Overdue Reminders', sub:'Pending reminders past due',
-          svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', clickAction: "navigateToTasks('overdue')" },
-        { accent:'teal',   val:(k.today_completed_calls_count !== undefined ? k.today_completed_calls_count : 0), label:'Today Completed Calls', sub:'Call updates logged today',
-          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>', clickAction: "navigateToTodayCalls()" },
+        { accent:'purple', val:fmtL(k.total_received_amount !== undefined ? k.total_received_amount : (k.amount_paid || 0)), label:'Collection Amount', sub:'Total collected payments',
+          clickAction: "viewPaymentCollection()",
+          svg:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' }
     ];
 
     var html = kpis.map(function(kpi) {
@@ -1241,6 +1346,104 @@ function renderKpis(k, filters) {
     }).join('');
     document.getElementById('daKpiGrid').innerHTML = html;
 }
+
+/* ── Total Activities ── */
+function renderTotalActivities(k) {
+    var gridEl = document.getElementById('daActivitiesGrid');
+    if (!gridEl || !k) return;
+
+    var gradients = {
+        orange: 'linear-gradient(135deg, #fe5f04 0%, #ff8c42 100%)',
+        teal:   'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)',
+        rose:   'linear-gradient(135deg, #be123c 0%, #f43f5e 100%)'
+    };
+
+    var activities = [
+        { accent:'orange', val:(k.today_reminders_count !== undefined ? k.today_reminders_count : (k.scheduled_followups_count !== undefined ? k.scheduled_followups_count : 0)), label:'Today Remainders', sub:'Remainders set for today',
+          svg:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', clickAction: "navigateToTasks('today')" },
+        { accent:'rose',   val:(k.overdue_reminders_count !== undefined ? k.overdue_reminders_count : 0), label:'Overdue Reminders', sub:'Pending reminders past due',
+          svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', clickAction: "navigateToTasks('overdue')" },
+        { accent:'teal',   val:(k.today_completed_calls_count !== undefined ? k.today_completed_calls_count : 0), label:'Today Completed Calls', sub:'Call updates logged today',
+          svg:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>', clickAction: "navigateToTodayCalls()" }
+    ];
+
+    var html = activities.map(function(act) {
+        var grad = gradients[act.accent] || gradients.orange;
+        var clickAttr = act.clickAction ? ' onclick="' + act.clickAction + '" style="background:' + grad + ';cursor:pointer;" title="Click to view details"' : ' style="background:' + grad + ';"';
+        return '<div class="da-kpi"' + clickAttr + '>' +
+            '<div class="da-kpi-icon">' +
+            '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' + act.svg + '</svg></div>' +
+            '<div class="da-kpi-val">' + act.val + '</div>' +
+            '<div class="da-kpi-lbl">' + act.label + '</div>' +
+            '<div class="da-kpi-sub">' + act.sub + '</div></div>';
+    }).join('');
+    gridEl.innerHTML = html;
+}
+
+/* ── Forecasting Section ── */
+function renderForecasting(d) {
+    var gridEl = document.getElementById('daForecastGrid');
+    if (!gridEl) return;
+
+    var k = (d && d.kpis) || {};
+    var fc = (d && d.forecasting) || {};
+
+    var hotCount = fc.total_prospects !== undefined
+        ? fc.total_prospects
+        : (k.current_month_hot_products_count !== undefined
+            ? k.current_month_hot_products_count
+            : (k.total_prospects !== undefined ? k.total_prospects : 0));
+
+    var hotValue = fc.hot_products_value !== undefined
+        ? fc.hot_products_value
+        : (k.current_month_hot_products_value || 0);
+
+    var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • Hot products') : 'Current month Hot products';
+
+    var cardHtml = '<div class="da-kpi" onclick="viewHotProducts()" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%);cursor:pointer;" title="Click to view Hot Products">' +
+        '<div class="da-kpi-icon">' +
+        '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
+        '<path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>' +
+        '</svg></div>' +
+        '<div class="da-kpi-val">' + hotCount + '</div>' +
+        '<div class="da-kpi-lbl">Total Prospects</div>' +
+        '<div class="da-kpi-sub">' + subText + '</div></div>';
+
+    gridEl.innerHTML = cardHtml;
+}
+
+window.viewHotProducts = function() {
+    window.location.href = LEAD_BASE + '/products?product_status=hot';
+};
+
+window.isForecastingActive = false;
+window.toggleForecasting = function(forcedState) {
+    var kpiSec = document.getElementById('daKpiSection');
+    var forecastSec = document.getElementById('daForecastSection');
+    var btn = document.getElementById('daForecastBtn');
+    var btnText = document.getElementById('daForecastBtnText');
+
+    if (typeof forcedState === 'boolean') {
+        window.isForecastingActive = forcedState;
+    } else {
+        window.isForecastingActive = !window.isForecastingActive;
+    }
+
+    if (window.isForecastingActive) {
+        if (kpiSec) kpiSec.style.display = 'none';
+        if (forecastSec) forecastSec.style.display = 'block';
+        if (btn) btn.classList.add('active');
+        if (btnText) btnText.textContent = 'Forecasting Active';
+        if (window.lastDashboardData) {
+            renderForecasting(window.lastDashboardData);
+        }
+    } else {
+        if (kpiSec) kpiSec.style.display = 'block';
+        if (forecastSec) forecastSec.style.display = 'none';
+        if (btn) btn.classList.remove('active');
+        if (btnText) btnText.textContent = 'Forecasting';
+    }
+};
 
 /* ── Financials ── */
 function renderFinancials(f) {

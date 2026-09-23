@@ -38,6 +38,8 @@
         statusConfirm: {
             resolve: null,
         },
+        isConvertingPayment: false,
+        convertingStatusId: null,
     };
 
     /* ─────────────────────────────────────────────────────────────
@@ -137,21 +139,139 @@
         }
     };
 
-    function showStatusConfirm(label) {
+    function showStatusConfirm(label, isHot, product) {
         var labelEl = el('pp-status-confirm-label');
         if (labelEl) {
             labelEl.textContent = 'Change status to ' + label;
         }
 
+        var hotFields = el('pp-status-confirm-hot-fields');
+        var expValInput = el('pp-status-expected-value');
+        var clsDateInput = el('pp-status-closure-date');
+        var errExpVal = el('pp-err-status-expected-value');
+        var errClsDate = el('pp-err-status-closure-date');
+
+        if (errExpVal) errExpVal.style.display = 'none';
+        if (errClsDate) errClsDate.style.display = 'none';
+
+        if (hotFields) {
+            hotFields.style.display = isHot ? 'block' : 'none';
+        }
+
+        if (isHot) {
+            if (expValInput) {
+                var prefillExp = (product && product.expected_value > 0)
+                    ? product.expected_value
+                    : (product && product.total ? product.total : (product && product.base_price ? product.base_price : ''));
+                expValInput.value = prefillExp || '';
+                if (!expValInput.dataset.hasListener) {
+                    expValInput.dataset.hasListener = '1';
+                    expValInput.addEventListener('input', function () {
+                        if (errExpVal) errExpVal.style.display = 'none';
+                    });
+                }
+            }
+            if (clsDateInput) {
+                var today = new Date();
+                var yyyy = today.getFullYear();
+                var mm = String(today.getMonth() + 1).padStart(2, '0');
+                var dd = String(today.getDate()).padStart(2, '0');
+                var todayStr = yyyy + '-' + mm + '-' + dd;
+
+                clsDateInput.min = todayStr;
+                clsDateInput.value = (product && product.closure_date) ? product.closure_date : '';
+                if (!clsDateInput.dataset.hasListener) {
+                    clsDateInput.dataset.hasListener = '1';
+                    clsDateInput.addEventListener('input', function () {
+                        if (errClsDate) errClsDate.style.display = 'none';
+                    });
+                }
+            }
+        }
+
         return new Promise(function (resolve) {
-            ppState.statusConfirm.resolve = resolve;
+            ppState.statusConfirm = {
+                resolve: resolve,
+                isHot: !!isHot,
+                product: product || null,
+            };
             ppShow('pp-modal-status-confirm');
         });
     }
 
     function resolveStatusConfirm(confirmed) {
-        var resolver = ppState.statusConfirm.resolve;
-        ppState.statusConfirm.resolve = null;
+        if (confirmed && ppState.statusConfirm && ppState.statusConfirm.isHot) {
+            var expValInput = el('pp-status-expected-value');
+            var clsDateInput = el('pp-status-closure-date');
+            var errExpVal = el('pp-err-status-expected-value');
+            var errClsDate = el('pp-err-status-closure-date');
+
+            var valStr = expValInput ? expValInput.value.trim() : '';
+            var dateStr = clsDateInput ? clsDateInput.value.trim() : '';
+            var valNum = parseFloat(valStr);
+
+            var today = new Date();
+            var yyyy = today.getFullYear();
+            var mm = String(today.getMonth() + 1).padStart(2, '0');
+            var dd = String(today.getDate()).padStart(2, '0');
+            var todayStr = yyyy + '-' + mm + '-' + dd;
+
+            var hasError = false;
+
+            if (!valStr || isNaN(valNum) || valNum <= 0) {
+                if (errExpVal) {
+                    errExpVal.textContent = 'Expected value is required and must be greater than 0.';
+                    errExpVal.style.display = 'block';
+                }
+                if (expValInput) expValInput.focus();
+                hasError = true;
+            } else if (errExpVal) {
+                errExpVal.style.display = 'none';
+            }
+
+            if (!dateStr) {
+                if (errClsDate) {
+                    errClsDate.textContent = 'Closure date is required.';
+                    errClsDate.style.display = 'block';
+                }
+                if (!hasError && clsDateInput) clsDateInput.focus();
+                hasError = true;
+            } else if (dateStr < todayStr) {
+                if (errClsDate) {
+                    errClsDate.textContent = 'Closure date cannot be in the past.';
+                    errClsDate.style.display = 'block';
+                }
+                if (!hasError && clsDateInput) clsDateInput.focus();
+                hasError = true;
+            } else if (errClsDate) {
+                errClsDate.style.display = 'none';
+            }
+
+            if (hasError) {
+                return; // Prevent closing the modal
+            }
+
+            var resolver = ppState.statusConfirm ? ppState.statusConfirm.resolve : null;
+            ppState.statusConfirm = { resolve: null, isHot: false, product: null };
+
+            var modal = el('pp-modal-status-confirm');
+            if (modal) {
+                modal.classList.remove('pp-show');
+                document.body.style.overflow = '';
+            }
+
+            if (resolver) {
+                resolver({
+                    confirmed: true,
+                    expected_value: valNum,
+                    closure_date: dateStr,
+                });
+            }
+            return;
+        }
+
+        var resolver = ppState.statusConfirm ? ppState.statusConfirm.resolve : null;
+        ppState.statusConfirm = { resolve: null, isHot: false, product: null };
 
         var modal = el('pp-modal-status-confirm');
         if (modal) {
@@ -160,7 +280,7 @@
         }
 
         if (resolver) {
-            resolver(!!confirmed);
+            resolver(confirmed ? { confirmed: true } : false);
         }
     }
 
@@ -867,6 +987,14 @@
             }
         }
 
+        var hotMeta = '';
+        if (currentStatusKey === 'hot' && (p.expected_value > 0 || p.closure_date)) {
+            hotMeta = '<div style="display:flex;gap:12px;margin:0 0 10px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:11px;color:#c2410c;">' +
+                (p.expected_value > 0 ? '<div><strong>Exp. Value:</strong> ' + fmt(p.expected_value) + '</div>' : '') +
+                (p.closure_date ? '<div><strong>Closure Date:</strong> ' + escHtml(p.closure_date) + '</div>' : '') +
+            '</div>';
+        }
+
         return '<div class="pp-prod-card pp-prod-card--sub" id="pp-prod-' + p.id + '">' +
             '<div class="pp-prod-inner">' +
                 '<div class="pp-prod-name-row">' +
@@ -890,6 +1018,7 @@
                         '<svg class="pp-status-caret" style="color:' + statusCfg.text + '" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
                     '</div>' +
                 '</div>' +
+                hotMeta +
                 '<div class="pp-amounts-row">' +
                     '<div class="pp-amt-item"><div class="pp-amt-label">Total</div>' +
                         '<div class="pp-amt-value">' + fmt(p.total) + '</div></div>' +
@@ -1003,8 +1132,18 @@
             return;
         }
 
-        showStatusConfirm(label).then(function (confirmed) {
-            if (!confirmed) {
+        var targetKey = statusKey(option ? option.name : statusId);
+        var isTargetHot = (targetKey === 'hot');
+        var isTargetConverted = (targetKey === 'converted');
+
+        if (isTargetConverted) {
+            sel.value = previousValue;
+            PP.ppShowPayment(productId, true, statusId);
+            return;
+        }
+
+        showStatusConfirm(label, isTargetHot, product).then(function (result) {
+            if (!result || !result.confirmed) {
                 sel.value = previousValue;
                 return;
             }
@@ -1026,11 +1165,17 @@
                 payload.product_status = statusId;
             }
 
+            if (isTargetHot && result.expected_value !== undefined) {
+                payload.expected_value = result.expected_value;
+                payload.closure_date = result.closure_date;
+            }
+
             submitProductStatusChange(payload, label)
             .then(function () { loadDeals(); })
-            .catch(function () {
+            .catch(function (err) {
                 sel.value = previousValue;
-                toast('Failed to update status', 'error');
+                var errMsg = (err && err.message) ? err.message : 'Failed to update status';
+                toast(errMsg, 'error');
                 loadDeals();
             });
         });
@@ -1093,29 +1238,31 @@
         return '';
     }
 
-    function canOpenPaymentModal(product) {
-        return isConvertedProduct(product);
+    function canOpenPaymentModal(product, isConverting) {
+        return Boolean(isConverting) || isConvertedProduct(product);
     }
 
     function canMoveToProduction(product) {
         return isConvertedProduct(product) && (product.payments || []).length >= 1;
     }
 
-    PP.ppShowPayment = function (prodId) {
+    PP.ppShowPayment = function (prodId, isConverting, targetStatusId) {
         var p = findProduct(prodId);
         if (!p) { toast('Product not found. Try refreshing.', 'error'); return; }
-        if (!canOpenPaymentModal(p)) {
+        if (!canOpenPaymentModal(p, isConverting)) {
             toast(paymentLockedMessage(), 'error');
             return;
         }
 
         ppState.activePayProdId = prodId;
+        ppState.isConvertingPayment = !!isConverting;
+        ppState.convertingStatusId = targetStatusId || null;
 
         var basePrice = p.base_price != null ? p.base_price : (p.unit_price * p.quantity * (1 - (p.discount_percent || 0) / 100));
         var gstPct = p.gst_percent != null ? p.gst_percent : 0;
         var gstAmount = p.gst_amount != null ? p.gst_amount : Math.round(basePrice * (gstPct / 100) * 100) / 100;
 
-        setInner('pp-pay-name',        p.name);
+        setInner('pp-pay-name',        p.name + (isConverting ? ' (Convert Status)' : ''));
         setInner('pp-pay-base-price',  fmt(basePrice));
         setInner('pp-pay-gst-pct',     gstPct);
         setInner('pp-pay-gst-amount',  fmt(gstAmount));
@@ -1123,9 +1270,21 @@
         setInner('pp-pay-paid',        fmt(p.paid));
         setInner('pp-pay-balance',     fmt(p.total - p.paid));
 
+        var btnEl = el('pp-submit-pay-btn');
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+                '<polyline points="20 6 9 17 4 12"/>' +
+                '</svg> ' + (isConverting ? 'Save Payment & Convert' : 'Save Payment');
+        }
+
         var amtInp = el('pp-pay-amount');
-        if (amtInp) amtInp.value = (p.total - p.paid) > 0
-            ? (p.total - p.paid).toFixed(2) : '';
+        if (amtInp) {
+            amtInp.min = '1.00';
+            amtInp.placeholder = 'Min 1.00';
+            var remaining = (p.total - p.paid) > 0 ? (p.total - p.paid) : 0;
+            amtInp.value = remaining > 0 ? remaining.toFixed(2) : (isConverting ? '1.00' : '');
+        }
 
         // Reset mode to UPI
         qsa('.ppf-mode-tile').forEach(function (t) { t.classList.remove('pp-sel'); });
@@ -1145,7 +1304,7 @@
         if (notesInp) notesInp.value = '';
 
         var typeInp = el('pp-pay-type');
-        if (typeInp) typeInp.value = '';
+        if (typeInp) typeInp.value = isConverting ? 'new_sale' : '';
 
         var tdsChk = el('pp-pay-deduct-tds');
         if (tdsChk) tdsChk.checked = false;
@@ -1231,7 +1390,11 @@
 
         if (!pid)          { toast('No product selected.', 'error'); return; }
         if (!paymentType)  { toast('Please select Payment Type.', 'error'); if (el('pp-pay-type')) el('pp-pay-type').focus(); return; }
-        if (amount <= 0)   { toast('Enter a valid amount.', 'error'); return; }
+        if (isNaN(amount) || amount < 1) {
+            toast('Minimum payment amount is ₹1.00.', 'error');
+            if (el('pp-pay-amount')) el('pp-pay-amount').focus();
+            return;
+        }
 
         if (isTds) {
             if (isNaN(tdsPercent) || tdsPercent <= 0 || tdsPercent > 100) {
@@ -1245,6 +1408,7 @@
             netReceivedAmount = Math.round(Math.max(0, amount - tdsAmount) * 100) / 100;
         }
 
+        var wasConverting = !!ppState.isConvertingPayment;
         var btnEl = el('pp-submit-pay-btn');
         if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="width: 12px; height: 12px; border-width: 2px; display: inline-block;"></span> Saving…'; }
 
@@ -1260,6 +1424,9 @@
             formData.append('tds_amount', tdsAmount);
             formData.append('after_tds_amount', netReceivedAmount);
         }
+        if (wasConverting && ppState.convertingStatusId) {
+            formData.append('lead_status_id', ppState.convertingStatusId);
+        }
         formData.append('payment_mode', mode);
         formData.append('payment_date', date);
         formData.append('reference_number', ref);
@@ -1274,7 +1441,9 @@
         })
         .then(function () {
             PP.ppHideModal('pp-modal-payment');
-            toast('Payment of ' + fmt(amount) + ' recorded!');
+            toast(wasConverting ? 'Payment recorded and product status converted successfully!' : ('Payment of ' + fmt(amount) + ' recorded!'));
+            ppState.isConvertingPayment = false;
+            ppState.convertingStatusId = null;
             ppProductCache = {};   // clear cache
             loadDeals();
         })
@@ -1283,7 +1452,11 @@
             toast(msg, 'error');
         })
         .finally(function () {
-            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Save Payment'; }
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> ' +
+                    (wasConverting ? 'Save Payment & Convert' : 'Save Payment');
+            }
         });
     };
 
@@ -1726,7 +1899,13 @@
     };
 
     function handlePaymentModalClosed() {
+        var wasConverting = ppState.isConvertingPayment;
         ppState.activePayProdId = null;
+        ppState.isConvertingPayment = false;
+        ppState.convertingStatusId = null;
+        if (wasConverting) {
+            loadDeals();
+        }
     }
 
     function renderProductionBody() {

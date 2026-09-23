@@ -296,6 +296,8 @@ class LeadProductController extends Controller
             'product_id'      => ['nullable', 'integer', 'exists:lead_products,id'],
             'lead_status_id'  => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'product_status'  => ['nullable', 'string'],
+            'expected_value'  => ['nullable', 'numeric', 'min:0'],
+            'closure_date'    => ['nullable', 'date'],
         ]);
 
         if ($v->fails()) {
@@ -318,10 +320,61 @@ class LeadProductController extends Controller
             ], 422);
         }
 
+        $targetStatusKey = LeadProduct::statusKey($status->name);
+
+        if ($targetStatusKey === 'hot') {
+            $hotValidator = Validator::make($request->all(), [
+                'expected_value' => ['required', 'numeric', 'min:0'],
+                'closure_date'   => ['required', 'date', 'after_or_equal:today'],
+            ], [
+                'expected_value.required'      => 'Expected Value is mandatory when changing status to Hot.',
+                'expected_value.numeric'       => 'Expected Value must be a valid number.',
+                'expected_value.min'           => 'Expected Value cannot be negative.',
+                'closure_date.required'        => 'Closure Date is mandatory when changing status to Hot.',
+                'closure_date.date'            => 'Closure Date must be a valid date.',
+                'closure_date.after_or_equal' => 'Closure Date cannot be a past date.',
+            ]);
+
+            if ($hotValidator->fails()) {
+                return response()->json(['errors' => $hotValidator->errors()], 422);
+            }
+        }
+
+        if ($targetStatusKey === 'converted') {
+            if ($request->filled('product_id')) {
+                $checkProduct = LeadProduct::where('lead_id', $request->lead_id)
+                    ->whereKey((int) $request->product_id)
+                    ->firstOrFail();
+
+                if ((float) $checkProduct->amount_paid < 1) {
+                    return response()->json([
+                        'errors' => ['product_status' => ['Minimum payment of ₹1 is required to change status to Converted. Please record a payment.']],
+                    ], 422);
+                }
+            } elseif ($request->filled('deal_name')) {
+                $checkProducts = LeadProduct::where('lead_id', $request->lead_id)
+                    ->where('deal_name', $request->deal_name)
+                    ->get();
+
+                if ($checkProducts->contains(fn (LeadProduct $p) => (float) $p->amount_paid < 1)) {
+                    return response()->json([
+                        'errors' => ['product_status' => ['All products in the deal must have a minimum payment of ₹1 to change status to Converted. Please record a payment.']],
+                    ], 422);
+                }
+            }
+        }
+
         $updatePayload = [
             'lead_status_id' => $status->id,
-            'product_status' => LeadProduct::statusKey($status->name),
+            'product_status' => $targetStatusKey,
         ];
+
+        if ($targetStatusKey === 'hot' || $request->filled('expected_value')) {
+            $updatePayload['expected_value'] = $request->expected_value;
+        }
+        if ($targetStatusKey === 'hot' || $request->filled('closure_date')) {
+            $updatePayload['closure_date'] = $request->closure_date;
+        }
 
         if ($request->filled('product_id')) {
             $product = LeadProduct::where('lead_id', $request->lead_id)
@@ -903,16 +956,22 @@ class LeadProductController extends Controller
         $lp = LeadProduct::with('lead')->findOrFail($request->lead_product_id);
         // abort_unless($lp->lead && $this->visibility->canAccessLead($lp->lead), 403);
 
-        if ($lp->product_status_key !== 'converted') {
-            return response()->json([
-                'errors' => ['product_status' => ['Payments can be added only after the product status is Converted.']],
-            ], 422);
+        $isConverting = ($lp->product_status_key !== 'converted');
+
+        if ($isConverting) {
+            $rawAmount = (float) $request->amount;
+            if ($rawAmount < 1) {
+                return response()->json([
+                    'errors' => ['amount' => ['Minimum payment of ₹1 is required to convert product status.']],
+                ], 422);
+            }
         }
 
         $v = Validator::make($request->all(), [
             'lead_product_id' => ['required', 'exists:lead_products,id'],
+            'lead_status_id'  => ['nullable', 'integer'],
             'payment_type'    => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
-            'amount'          => ['required', 'numeric', 'min:0.01'],
+            'amount'          => ['required', 'numeric', 'min:1'],
             'gross_amount'    => ['nullable', 'numeric', 'min:0.01'],
             'net_amount'      => ['nullable', 'numeric', 'min:0.01'],
             'is_tds_deducted' => ['nullable'],
@@ -924,6 +983,8 @@ class LeadProductController extends Controller
             'reference_number'=> ['nullable', 'string', 'max:100'],
             'notes'           => ['nullable', 'string', 'max:500'],
             'attachment'      => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
+        ], [
+            'amount.min'      => 'Minimum payment amount is ₹1.00.',
         ]);
 
         if ($v->fails()) {
@@ -1030,6 +1091,20 @@ class LeadProductController extends Controller
             return $p;
         });
 
+        if ($isConverting) {
+            $convertedStatus = $this->statusOptionsForLead($lp->lead)
+                ->first(fn ($s) => LeadProduct::statusKey($s->name) === 'converted');
+
+            $targetLeadStatusId = $request->filled('lead_status_id')
+                ? (int) $request->lead_status_id
+                : ($convertedStatus?->id ?? $lp->lead_status_id);
+
+            $lp->update([
+                'product_status' => 'converted',
+                'lead_status_id' => $targetLeadStatusId,
+            ]);
+        }
+
         $lp->syncPaymentStatus();
 
         $payment->load(['recordedBy', 'leadProduct']);
@@ -1039,7 +1114,7 @@ class LeadProductController extends Controller
         ]);
 
         return response()->json([
-            'message'  => 'Payment recorded.',
+            'message'  => $isConverting ? 'Payment recorded and product status converted successfully.' : 'Payment recorded.',
             'payment'  => $payment->toJsPayload(),
             'product'  => $lp->fresh()->toJsPayload(),
         ], 201);

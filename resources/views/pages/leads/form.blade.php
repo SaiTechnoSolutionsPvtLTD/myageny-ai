@@ -183,7 +183,7 @@
                                     $isBranchLocked = false;
                                 } elseif ($isBranchManagerOrAdmin) {
                                     $accessibleBranchIds = $currentUser->getMyBranchIds();
-                                    $isBranchLocked = count($accessibleBranchIds) === 1;
+                                    $isBranchLocked = !$isEdit && count($accessibleBranchIds) === 1;
                                 } else {
                                     $accessibleBranchIds = null;
                                     if ($activeUser && !($activeUser->isSystemAdmin() || $activeUser->isCompanyAdmin())) {
@@ -495,7 +495,10 @@ $(document).ready(function() {
     ])->values()) !!};
     const isCurrentSuperOrCompanyAdmin = {{ $isSuperOrCompanyAdmin ? 'true' : 'false' }};
     const isBranchManagerOrAdmin = {{ $isBranchManagerOrAdmin ? 'true' : 'false' }};
-    const managerBranchIds = {!! json_encode($isBranchManagerOrAdmin && $currentUser ? array_map('intval', $currentUser->getMyBranchIds()) : []) !!};
+    const managerBranchIds = {!! json_encode(array_values(array_unique(array_filter(array_merge(
+        $isBranchManagerOrAdmin && $currentUser ? array_map('intval', $currentUser->getMyBranchIds()) : [],
+        ($isEdit && $lead?->branch_id) ? [(int) $lead->branch_id] : []
+    ))))) !!};
 
     function lockBranchSelect($el) {
         $el.css({
