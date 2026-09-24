@@ -47,6 +47,14 @@
                         <input type="text" name="code" class="crm-input" value="{{ old('code', $branch->code) }}">
                     </div>
                     <div>
+                        <label class="crm-label">Branch Type</label>
+                        <select name="branch_type" class="crm-input">
+                            <option value="">Select Branch Type</option>
+                            <option value="COCO" @selected(old('branch_type', $branch->branch_type) === 'COCO')>COCO</option>
+                            <option value="NON COCO" @selected(old('branch_type', $branch->branch_type) === 'NON COCO')>NON COCO</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="crm-label">City</label>
                         <input type="text" name="city" class="crm-input" value="{{ old('city', $branch->city) }}">
                     </div>

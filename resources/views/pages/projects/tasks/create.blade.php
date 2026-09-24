@@ -63,6 +63,44 @@
 .task-remove-btn:hover:not(:disabled) { background:#ef4444; color:#fff; }
 .task-remove-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
+.task-file-dropzone {
+    background: #ffffff;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.task-file-dropzone:hover {
+    border-color: #ea580c !important;
+    background: #fffaf5 !important;
+}
+.task-file-dropzone.dragover {
+    border-color: #ea580c !important;
+    background: #fff7ed !important;
+    box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.12) !important;
+}
+.task-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: #1e293b;
+    transition: all 0.15s ease;
+}
+.task-file-item:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
 /* Select2 Custom Styles with Search */
 .pts-page .select2-container { width: 100% !important; }
 .pts-page .select2-container--default .select2-selection--single {
@@ -219,7 +257,7 @@
             @endif
         </div>
 
-        <form method="POST" action="{{ route('projects.tasks.store') }}" id="taskCreationForm">
+        <form method="POST" action="{{ route('projects.tasks.store') }}" id="taskCreationForm" enctype="multipart/form-data">
             @csrf
 
             <!-- Assignment Info Section -->
@@ -273,7 +311,7 @@
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                             Task Details (Products &amp; Descriptions)
                         </div>
-                        <div class="pts-card-sub">Select Lead &amp; Product mapped to the selected team member, write task description, and use the plus (+) button to add more.</div>
+                        <div class="pts-card-sub">Select Lead &amp; Product mapped to the selected team member, write task description, upload any file attachments, and use the plus (+) button to add more.</div>
                     </div>
                     <button type="button" class="pts-btn pts-btn-primary" id="addRowBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -334,6 +372,40 @@
                                         @error("tasks.{$index}.task_description")
                                             <div class="pts-error">{{ $message }}</div>
                                         @enderror
+                                    </div>
+
+                                    <!-- File Attachments (Multiple Allowed) -->
+                                    <div class="pts-grid-col-12" style="margin-top: 4px;">
+                                        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px;">
+                                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+                                                <label class="pts-label" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px; cursor:default;">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                                    <span>Task Attachments / Reference Files</span>
+                                                    <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Optional, Multiple files allowed)</span>
+                                                </label>
+                                                <span style="font-size:11px; color:#64748b; font-weight:600;">Images, PDFs, Docs, Sheets, Zips (Max 25MB each)</span>
+                                            </div>
+                                            <div class="task-file-dropzone" style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; transition:all 0.2s;">
+                                                <div style="display:flex; align-items:center; gap:10px;">
+                                                    <div style="width:34px; height:34px; border-radius:8px; background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                                    </div>
+                                                    <div>
+                                                        <div style="font-size:12.5px; font-weight:700; color:#1e293b;">Click to browse files or drag &amp; drop here</div>
+                                                        <div style="font-size:11px; color:#64748b;">Select one or multiple files to attach to this task</div>
+                                                    </div>
+                                                </div>
+                                                <button type="button" class="pts-btn" style="padding:6px 12px; font-size:11.5px; pointer-events:none; background:#ffffff; flex-shrink:0;">Browse Files</button>
+                                                <input type="file" name="tasks[{{ $index }}][attachments][]" class="task-attachments-input" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.txt" style="display:none;">
+                                            </div>
+                                            <div class="task-files-preview-list" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;"></div>
+                                            @error("tasks.{$index}.attachments")
+                                                <div class="pts-error">{{ $message }}</div>
+                                            @enderror
+                                            @error("tasks.{$index}.attachments.*")
+                                                <div class="pts-error">{{ $message }}</div>
+                                            @enderror
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -590,6 +662,94 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setupCharCounter(row);
 
+        // Attachment file handlers
+        const dropzone = row.querySelector('.task-file-dropzone');
+        const fileInput = row.querySelector('.task-attachments-input');
+        const previewList = row.querySelector('.task-files-preview-list');
+
+        function updateFilePreview() {
+            if (!previewList) return;
+            previewList.innerHTML = '';
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+            const files = Array.from(fileInput.files);
+            files.forEach((file) => {
+                const sizeKb = (file.size / 1024).toFixed(1);
+                const sizeMb = (file.size / 1048576).toFixed(2);
+                const displaySize = file.size >= 1048576 ? `${sizeMb} MB` : `${sizeKb} KB`;
+
+                const isImg = file.type && file.type.startsWith('image/');
+                const icon = isImg ? '🖼️' : '📄';
+
+                const item = document.createElement('div');
+                item.className = 'task-file-item';
+                item.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <span style="font-size:16px;">${icon}</span>
+                        <div style="min-width:0;">
+                            <div style="font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px;" title="${escapeHtml(file.name)}">
+                                ${escapeHtml(file.name)}
+                            </div>
+                            <div style="font-size:11px; color:#64748b;">${displaySize}</div>
+                        </div>
+                    </div>
+                    <span style="font-size:11px; font-weight:800; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:2px 8px; border-radius:999px;">
+                        Ready to upload
+                    </span>
+                `;
+                previewList.appendChild(item);
+            });
+
+            if (files.length > 0) {
+                const clearRow = document.createElement('div');
+                clearRow.style.cssText = 'display:flex; justify-content:flex-end; margin-top:2px;';
+                clearRow.innerHTML = `
+                    <button type="button" class="pts-btn" style="padding:3px 10px; font-size:11px; color:#ef4444; border-color:#fecaca; background:#fff;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <span>Clear Selected Files</span>
+                    </button>
+                `;
+                clearRow.querySelector('button').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    fileInput.value = '';
+                    previewList.innerHTML = '';
+                });
+                previewList.appendChild(clearRow);
+            }
+        }
+
+        if (dropzone && fileInput) {
+            dropzone.addEventListener('click', function (e) {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', function () {
+                updateFilePreview();
+            });
+
+            dropzone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.add('dragover');
+            });
+
+            dropzone.addEventListener('dragleave', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('dragover');
+            });
+
+            dropzone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('dragover');
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    updateFilePreview();
+                }
+            });
+        }
+
         if (removeBtn) {
             removeBtn.addEventListener('click', function () {
                 const totalRows = container.querySelectorAll('.task-item-row').length;
@@ -606,6 +766,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     function setupCharCounter(row) {
@@ -640,11 +810,13 @@ document.addEventListener('DOMContentLoaded', function () {
             const leadSelect = row.querySelector('.task-lead-select');
             const projectSelect = row.querySelector('.task-project-select');
             const textarea = row.querySelector('.pts-textarea');
+            const fileInput = row.querySelector('.task-attachments-input');
             const removeBtn = row.querySelector('.task-remove-btn');
 
             if (leadSelect) leadSelect.name = `tasks[${idx}][lead_id]`;
             if (projectSelect) projectSelect.name = `tasks[${idx}][production_initiation_id]`;
             if (textarea) textarea.name = `tasks[${idx}][task_description]`;
+            if (fileInput) fileInput.name = `tasks[${idx}][attachments][]`;
 
             if (removeBtn) {
                 removeBtn.disabled = (rows.length === 1);
@@ -686,6 +858,33 @@ document.addEventListener('DOMContentLoaded', function () {
                         <div class="pts-help task-desc-counter" style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
                             <span class="counter-text" style="font-weight:700; font-size:11px; color:#ea580c;">0 / 30 min characters</span>
                             <span style="font-size:11px; color:#64748b;">Must be at least 30 characters</span>
+                        </div>
+                    </div>
+                    <!-- File Attachments (Multiple Allowed) -->
+                    <div class="pts-grid-col-12" style="margin-top: 4px;">
+                        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+                                <label class="pts-label" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px; cursor:default;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                    <span>Task Attachments / Reference Files</span>
+                                    <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Optional, Multiple files allowed)</span>
+                                </label>
+                                <span style="font-size:11px; color:#64748b; font-weight:600;">Images, PDFs, Docs, Sheets, Zips (Max 25MB each)</span>
+                            </div>
+                            <div class="task-file-dropzone" style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; transition:all 0.2s;">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <div style="width:34px; height:34px; border-radius:8px; background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:12.5px; font-weight:700; color:#1e293b;">Click to browse files or drag &amp; drop here</div>
+                                        <div style="font-size:11px; color:#64748b;">Select one or multiple files to attach to this task</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="pts-btn" style="padding:6px 12px; font-size:11.5px; pointer-events:none; background:#ffffff; flex-shrink:0;">Browse Files</button>
+                                <input type="file" name="tasks[${newIndex}][attachments][]" class="task-attachments-input" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.txt" style="display:none;">
+                            </div>
+                            <div class="task-files-preview-list" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;"></div>
                         </div>
                     </div>
                 </div>

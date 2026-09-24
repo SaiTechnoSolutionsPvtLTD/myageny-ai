@@ -28,10 +28,19 @@ class Branch extends Model
         });
     }
 
+    public const TYPE_COCO = 'COCO';
+    public const TYPE_NON_COCO = 'NON COCO';
+
+    public const BRANCH_TYPES = [
+        self::TYPE_COCO => 'COCO',
+        self::TYPE_NON_COCO => 'NON COCO',
+    ];
+
     protected $fillable = [
         'company_id',
         'name',
         'code',
+        'branch_type',
         'address',
         'city',
         'state',

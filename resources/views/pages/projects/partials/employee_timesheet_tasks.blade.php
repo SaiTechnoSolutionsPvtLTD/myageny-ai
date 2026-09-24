@@ -827,10 +827,19 @@ function openPjdEmpDetailsModal(emp) {
             const badgeColor = isDone ? '#15803d' : (t.status === 'in_progress' ? '#1d4ed8' : '#b45309');
             const badgeBorder = isDone ? '#a7f3d0' : (t.status === 'in_progress' ? '#bfdbfe' : '#fed7aa');
 
+            let attHtml = '';
+            if (t.attachments && t.attachments.length > 0) {
+                attHtml = '<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">';
+                t.attachments.forEach(att => {
+                    attHtml += '<a href="' + (att.url || '#') + '" target="_blank" download="' + (att.name || 'file') + '" style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; font-size:11px; font-weight:700; color:#ea580c; text-decoration:none;" title="Download ' + (att.name || '') + '">📎 ' + (att.name || 'Attachment') + '</a>';
+                });
+                attHtml += '</div>';
+            }
+
             tasksHtml += '<tr style="border-bottom:1px solid #f1f5f9; background:#fff;">';
             tasksHtml += '<td style="padding:10px 14px; color:#64748b; font-weight:600; white-space:nowrap; border-bottom:1px solid #f1f5f9;">' + (t.task_date || '—') + '</td>';
             tasksHtml += '<td style="padding:10px 14px; border-bottom:1px solid #f1f5f9;"><div style="font-weight:700; color:#0f172a;">' + (t.project_name || 'General') + '</div><div style="font-size:11px; color:#64748b;">' + (t.company_name || '') + '</div></td>';
-            tasksHtml += '<td style="padding:10px 14px; color:#334155; line-height:1.5; border-bottom:1px solid #f1f5f9;">' + (t.task_description || '—') + '</td>';
+            tasksHtml += '<td style="padding:10px 14px; color:#334155; line-height:1.5; border-bottom:1px solid #f1f5f9;"><div>' + (t.task_description || '—') + '</div>' + attHtml + '</td>';
             tasksHtml += '<td style="padding:10px 14px; text-align:center; border-bottom:1px solid #f1f5f9;"><span style="display:inline-block; padding:3px 9px; border-radius:999px; font-size:10.5px; font-weight:800; text-transform:capitalize; background:' + badgeBg + '; color:' + badgeColor + '; border:1px solid ' + badgeBorder + ';">' + (t.status || 'pending') + '</span></td>';
             tasksHtml += '</tr>';
         });

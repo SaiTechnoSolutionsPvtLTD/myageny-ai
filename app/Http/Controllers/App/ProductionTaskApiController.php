@@ -16,6 +16,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Mobile mirror of the web's NEW Production Tasks flow
@@ -330,6 +331,8 @@ class ProductionTaskApiController extends Controller
             'tasks.*.lead_id' => ['required', 'integer', 'exists:leads,id'],
             'tasks.*.production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
             'tasks.*.task_description' => ['required', 'string', 'min:30'],
+            'tasks.*.attachments' => ['nullable', 'array'],
+            'tasks.*.attachments.*' => ['nullable', 'file', 'max:25600'],
         ], [
             'task_date.required' => 'The date field is mandatory.',
             'assigned_to_user_id.required' => 'Selecting a team member is mandatory.',
@@ -338,6 +341,7 @@ class ProductionTaskApiController extends Controller
             'tasks.*.production_initiation_id.required' => 'Product / Project is mandatory for all task rows.',
             'tasks.*.task_description.required' => 'Task description is mandatory for all task rows.',
             'tasks.*.task_description.min' => 'Task Description must be at least 30 characters for all task rows.',
+            'tasks.*.attachments.*.max' => 'Each attached file must not exceed 25MB.',
         ]);
 
         $taskDate = Carbon::parse($validated['task_date'])->toDateString();
@@ -347,13 +351,43 @@ class ProductionTaskApiController extends Controller
 
         $createdIds = [];
 
-        DB::transaction(function () use ($validated, $user, $taskDate, $assignedUserId, $projects, &$createdIds) {
-            foreach ($validated['tasks'] as $taskRow) {
+        DB::transaction(function () use ($validated, $user, $taskDate, $assignedUserId, $projects, &$createdIds, $request) {
+            foreach ($validated['tasks'] as $index => $taskRow) {
                 $projectId = (int) $taskRow['production_initiation_id'];
                 $leadId = (int) $taskRow['lead_id'];
                 $project = $projects->get($projectId);
                 $productName = $project?->product_name ?? 'Project Task';
                 $taskDesc = trim((string) $taskRow['task_description']);
+
+                $storedAttachments = [];
+                $files = $request->file("tasks.{$index}.attachments");
+                if ($files) {
+                    if (! is_array($files)) {
+                        $files = [$files];
+                    }
+                    $targetDir = public_path('uploads/tasks');
+                    if (! file_exists($targetDir)) {
+                        mkdir($targetDir, 0755, true);
+                    }
+                    foreach ($files as $file) {
+                        if ($file && $file->isValid()) {
+                            $origName = $file->getClientOriginalName();
+                            $fileSize = $file->getSize();
+                            $mimeType = $file->getClientMimeType();
+                            $ext = $file->getClientOriginalExtension() ?: pathinfo($origName, PATHINFO_EXTENSION);
+                            $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . strtolower($ext) : '');
+                            $file->move($targetDir, $fileName);
+                            $relPath = 'uploads/tasks/' . $fileName;
+
+                            $storedAttachments[] = [
+                                'path' => $relPath,
+                                'name' => $origName,
+                                'size' => $fileSize ?: (file_exists($targetDir . '/' . $fileName) ? filesize($targetDir . '/' . $fileName) : 0),
+                                'mime_type' => $mimeType,
+                            ];
+                        }
+                    }
+                }
 
                 $task = ProductionTask::create([
                     'company_id' => $user->company_id,
@@ -364,6 +398,7 @@ class ProductionTaskApiController extends Controller
                     'production_initiation_id' => $projectId,
                     'product_name' => $productName,
                     'task_description' => $taskDesc,
+                    'attachments' => ! empty($storedAttachments) ? $storedAttachments : null,
                     'status' => 'pending',
                 ]);
                 $createdIds[] = $task->id;
@@ -490,6 +525,7 @@ class ProductionTaskApiController extends Controller
                     'lead_company' => $t->lead?->company_name ?: ($t->project?->company_name ?: 'No Company'),
                     'product_name' => $t->product_name ?: ($t->project?->product_name ?: 'General Task'),
                     'task_description' => $t->task_description,
+                    'attachments' => $t->attachment_list,
                     'status' => $t->status,
                     'can_update_status' => $viewer->hasAdminLikeRole() || $t->assigned_to === $viewer->id || $t->created_by === $viewer->id,
                     'can_delete' => $viewer->hasAdminLikeRole() || $t->created_by === $viewer->id,

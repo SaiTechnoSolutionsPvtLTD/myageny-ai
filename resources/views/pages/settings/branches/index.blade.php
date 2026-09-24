@@ -38,6 +38,7 @@
                         <th>#</th>
                         <th>Branch Name</th>
                         <th>Code</th>
+                        <th>Type</th>
                         <th>Location</th>
                         <th>Status</th>
                         <th>Default</th>
@@ -50,6 +51,13 @@
                         <td>{{ ($branches->firstItem() ?? 1) + $loop->index }}</td>
                         <td><strong>{{ $branch->name }}</strong></td>
                         <td>{{ $branch->code ?: '—' }}</td>
+                        <td>
+                            @if($branch->branch_type)
+                                <span class="crm-badge {{ $branch->branch_type === 'COCO' ? 'crm-badge-purple' : 'crm-badge-blue' }}">{{ $branch->branch_type }}</span>
+                            @else
+                                —
+                            @endif
+                        </td>
                         <td>{{ collect([$branch->city, $branch->state])->filter()->implode(', ') ?: '—' }}</td>
                         <td>{{ $branch->is_active ? 'Active' : 'Inactive' }}</td>
                         <td>{{ $branch->is_default ? 'Yes' : 'No' }}</td>
@@ -74,7 +82,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="crm-empty">No branches found.</td></tr>
+                    <tr><td colspan="8" class="crm-empty">No branches found.</td></tr>
                 @endforelse
                 </tbody>
             </table>

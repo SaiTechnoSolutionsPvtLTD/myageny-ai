@@ -175,6 +175,33 @@
 @media (max-width: 900px) {
     .pts-dept-grid { grid-template-columns:1fr; }
 }
+
+/* File dropzone & file preview items */
+.task-file-dropzone:hover {
+    border-color: #ea580c !important;
+    background: #fffaf5 !important;
+}
+.task-file-dropzone.dragover {
+    border-color: #ea580c !important;
+    background: #fff7ed !important;
+    box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.12) !important;
+}
+.task-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: #1e293b;
+    transition: all 0.15s ease;
+}
+.task-file-item:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
 </style>
 @endpush
 
@@ -482,6 +509,7 @@
                                                 'waiting_posters' => (int) $t->waiting_posters,
                                                 'waiting_videos' => (int) $t->waiting_videos,
                                                 'update_status_url' => route('projects.timesheets.update-status', $t->id),
+                                                'attachments' => $t->attachment_list,
                                             ];
                                         })->values();
 
@@ -536,7 +564,7 @@
                                                     class="pts-btn pts-btn-outline open-timesheets-modal-btn"
                                                     data-user-name="{{ $timesheetUser?->name ?: 'My Timesheets' }}"
                                                     data-timesheet-date="{{ optional($groupDate)->format('d M Y') }}"
-                                                    data-timesheets='@json($groupTimesheetsData)'>
+                                                    data-timesheets="{{ json_encode($groupTimesheetsData) }}">
                                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                                                 <span>View Timesheets</span>
                                                 <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalEntries }}</span>
@@ -648,6 +676,44 @@
                     <label class="pts-label">Day Closing Update Details <span style="color:#ef4444;">*</span></label>
                     <textarea id="entryClosingTextarea" class="pts-textarea" rows="6" required style="min-height:140px;" placeholder="Write your completed tasks and day closing details here..."></textarea>
                 </div>
+
+                <!-- Multiple File Attachments -->
+                <div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                        <label class="pts-label" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            <span>File Attachments (Screenshots, Reports, Deliverables)</span>
+                            <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Optional, Multiple files)</span>
+                        </label>
+                        <span style="font-size:11px; color:#64748b; font-weight:600;">Max 25MB each</span>
+                    </div>
+
+                    <!-- Existing Attachments List -->
+                    <div id="entryExistingAttachmentsContainer" style="display:none; margin-bottom:10px;">
+                        <div style="font-size:11.5px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            <span>Current Attachments</span>
+                        </div>
+                        <div id="entryExistingAttachmentsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+                    </div>
+
+                    <!-- File Dropzone -->
+                    <div id="entryFileDropzone" class="task-file-dropzone" style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; transition:all 0.2s;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:34px; height:34px; border-radius:8px; background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            </div>
+                            <div>
+                                <div style="font-size:12.5px; font-weight:700; color:#1e293b;">Click to upload or drag &amp; drop files here</div>
+                                <div style="font-size:11px; color:#64748b;">Images, PDFs, Docs, Sheets, Zips (Multiple files allowed)</div>
+                            </div>
+                        </div>
+                        <button type="button" class="pts-btn" style="padding:6px 12px; font-size:11.5px; pointer-events:none; background:#ffffff; flex-shrink:0;">Browse Files</button>
+                        <input type="file" id="entryClosingAttachments" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.txt" style="display:none;">
+                    </div>
+                    <!-- Selected Files Preview -->
+                    <div id="entrySelectedFilesList" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;"></div>
+                </div>
             </div>
             <div class="pts-actions" style="margin-top:20px; justify-content:flex-end;">
                 <button type="button" class="pts-btn" data-close-entry-closing-modal>Cancel</button>
@@ -680,6 +746,14 @@
     <div class="pts-modal-body">
         <div id="viewClosingModalContent" style="white-space:pre-wrap; line-height:1.65; color:#1e293b; font-size:13.5px; background:#f8fafc; padding:18px; border-radius:10px; border:1px solid #e2e8f0; max-height:350px; overflow-y:auto;">
         </div>
+        <!-- View Attachments Container -->
+        <div id="viewClosingModalAttachmentsContainer" style="margin-top:14px; display:none;">
+            <div style="font-size:12px; font-weight:800; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                <span>Attached Files (<span id="viewClosingModalAttachmentsCount">0</span>)</span>
+            </div>
+            <div id="viewClosingModalAttachmentsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
         <div class="pts-actions" style="margin-top:18px; justify-content:flex-end; gap:8px;">
             <button type="button" class="pts-btn" data-close-view-closing-modal>Close</button>
             <button type="button" id="viewClosingEditShortcutBtn" class="pts-btn pts-btn-primary">
@@ -703,7 +777,7 @@
         </button>
     </div>
     <div class="pts-modal-body">
-        <form method="POST" action="{{ route('projects.timesheets.store') }}">
+        <form method="POST" action="{{ route('projects.timesheets.store') }}" enctype="multipart/form-data">
             @csrf
             <div class="pts-form-grid">
                 <!-- Lead Dropdown -->
@@ -834,6 +908,48 @@
                         <div class="pts-error">{{ $message }}</div>
                     @enderror
                 </div>
+
+                <!-- File Attachments (Multiple Allowed) -->
+                <div class="pts-grid-col-12" id="timesheetAttachmentsContainer">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                        <label class="pts-label" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            <span>File Attachments (Screenshots, Reports, Deliverables)</span>
+                            <span style="font-weight:600; text-transform:none; color:#64748b; font-size:11px;">(Optional, Multiple files)</span>
+                        </label>
+                        <span style="font-size:11px; color:#64748b; font-weight:600;">Images, PDFs, Docs, Sheets, Zips (Max 25MB each)</span>
+                    </div>
+
+                    <!-- Existing Attachments List in Add/Edit Timesheet modal -->
+                    <div id="timesheetExistingAttachmentsContainer" style="display:none; margin-bottom:10px;">
+                        <div style="font-size:11.5px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            <span>Current Attachments</span>
+                        </div>
+                        <div id="timesheetExistingAttachmentsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+                    </div>
+
+                    <div id="timesheetFileDropzone" class="task-file-dropzone" style="background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; transition:all 0.2s;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:34px; height:34px; border-radius:8px; background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            </div>
+                            <div>
+                                <div style="font-size:12.5px; font-weight:700; color:#1e293b;">Click to upload or drag &amp; drop files here</div>
+                                <div style="font-size:11px; color:#64748b;">Images, PDFs, Docs, Sheets, Zips (Multiple files allowed)</div>
+                            </div>
+                        </div>
+                        <button type="button" class="pts-btn" style="padding:6px 12px; font-size:11.5px; pointer-events:none; background:#ffffff; flex-shrink:0;">Browse Files</button>
+                        <input type="file" name="attachments[]" id="timesheetAttachmentsInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.txt" style="display:none;">
+                    </div>
+                    <div id="timesheetSelectedFilesList" style="margin-top:8px; display:flex; flex-direction:column; gap:6px;"></div>
+                    @error('attachments')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                    @error('attachments.*')
+                        <div class="pts-error">{{ $message }}</div>
+                    @enderror
+                </div>
             </div>
 
             <div class="pts-actions" style="margin-top:18px; justify-content:flex-end;">
@@ -953,6 +1069,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     const waitingVideosInput = document.querySelector('input[name="waiting_videos"]');
                     const dayClosingTextarea = document.getElementById('dayClosingUpdateTextarea');
 
+                    const timesheetExistingContainer = document.getElementById('timesheetExistingAttachmentsContainer');
+                    const timesheetExistingList = document.getElementById('timesheetExistingAttachmentsList');
+                    const timesheetForm = document.querySelector('[data-timesheet-modal] form');
+
+                    if (timesheetForm) {
+                        timesheetForm.querySelectorAll('input[name="removed_attachments[]"]').forEach(inp => inp.remove());
+                    }
+
                     if (res.exists && res.data) {
                         const d = res.data;
                         if (statusSelect) statusSelect.value = d.status || 'pending';
@@ -964,6 +1088,54 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (waitingPostersInput) waitingPostersInput.value = d.waiting_posters;
                         if (waitingVideosInput) waitingVideosInput.value = d.waiting_videos;
                         if (dayClosingTextarea) dayClosingTextarea.value = d.day_closing_update;
+
+                        if (timesheetExistingContainer && timesheetExistingList) {
+                            timesheetExistingList.innerHTML = '';
+                            const atts = Array.isArray(d.attachments) ? d.attachments : [];
+                            if (atts.length > 0) {
+                                timesheetExistingContainer.style.display = 'block';
+                                atts.forEach(att => {
+                                    const item = document.createElement('div');
+                                    item.className = 'task-file-item';
+                                    item.innerHTML = `
+                                        <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                                            <span style="font-size:16px;">${getFileIcon(att.name, att.mime_type)}</span>
+                                            <div style="min-width:0;">
+                                                <a href="${escapeHtml(att.url)}" target="_blank" style="font-weight:700; color:#0f172a; text-decoration:none; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;" title="${escapeHtml(att.name)}">
+                                                    ${escapeHtml(att.name)}
+                                                </a>
+                                                <div style="font-size:11px; color:#64748b;">${escapeHtml(att.formatted_size || formatBytes(att.size))}</div>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <a href="${escapeHtml(att.url)}" target="_blank" download class="pts-btn" style="padding:3px 8px; font-size:11px; background:#f8fafc; border-color:#cbd5e1; text-decoration:none;" title="Download file">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                            </a>
+                                            <button type="button" class="pts-btn remove-timesheet-att-btn" style="padding:3px 8px; font-size:11px; color:#ef4444; border-color:#fecaca; background:#fff;" title="Remove this attachment">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                            </button>
+                                        </div>
+                                    `;
+                                    item.querySelector('.remove-timesheet-att-btn').addEventListener('click', function(ev) {
+                                        ev.preventDefault();
+                                        if (timesheetForm && att.path) {
+                                            const hiddenInput = document.createElement('input');
+                                            hiddenInput.type = 'hidden';
+                                            hiddenInput.name = 'removed_attachments[]';
+                                            hiddenInput.value = att.path;
+                                            timesheetForm.appendChild(hiddenInput);
+                                        }
+                                        item.remove();
+                                        if (timesheetExistingList.children.length === 0) {
+                                            timesheetExistingContainer.style.display = 'none';
+                                        }
+                                    });
+                                    timesheetExistingList.appendChild(item);
+                                });
+                            } else {
+                                timesheetExistingContainer.style.display = 'none';
+                            }
+                        }
                     } else {
                         if (statusSelect) statusSelect.value = 'pending';
                         if (typeSelect) typeSelect.value = 'recurring';
@@ -974,6 +1146,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (waitingPostersInput) waitingPostersInput.value = 0;
                         if (waitingVideosInput) waitingVideosInput.value = 0;
                         if (dayClosingTextarea) dayClosingTextarea.value = '';
+                        if (timesheetExistingContainer && timesheetExistingList) {
+                            timesheetExistingList.innerHTML = '';
+                            timesheetExistingContainer.style.display = 'none';
+                        }
                     }
                     toggleDesignDmInputs();
                 }
@@ -988,6 +1164,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Clear previous options
         projectSelect.innerHTML = '<option value="">Select project</option>';
+
+        const existingContainer = document.getElementById('timesheetExistingAttachmentsContainer');
+        const existingList = document.getElementById('timesheetExistingAttachmentsList');
+        if (existingContainer && existingList) {
+            existingList.innerHTML = '';
+            existingContainer.style.display = 'none';
+        }
 
         if (!leadId) {
             projectSelect.disabled = true;
@@ -1027,6 +1210,10 @@ document.addEventListener('DOMContentLoaded', function () {
     openButtons.forEach(function (button) {
         button.addEventListener('click', function () {
             setModalState(true);
+            const tsFileInput = document.getElementById('timesheetAttachmentsInput');
+            const tsPreviewList = document.getElementById('timesheetSelectedFilesList');
+            if (tsFileInput) tsFileInput.value = '';
+            if (tsPreviewList) tsPreviewList.innerHTML = '';
             window.setTimeout(syncDeliveryDate, 0);
         });
     });
@@ -1181,9 +1368,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function escapeHtml(str) {
         if (!str) return '';
-        const p = document.createElement('p');
-        p.textContent = str;
-        return p.innerHTML;
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     let currentGroupBtn = null;
@@ -1220,6 +1410,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         let closingActionHtml = '';
                         const hasClosingUpdate = (ts.day_closing_update && ts.day_closing_update.trim() !== '');
+                        const attsJson = escapeHtml(JSON.stringify(ts.attachments || []));
+                        const hasAttachments = (ts.attachments && ts.attachments.length > 0);
+                        const attBadgeHtml = hasAttachments ? `
+                            <span class="pts-badge count" style="padding:2px 7px; font-size:11px; display:inline-flex; align-items:center; gap:4px; background:#fff7ed; color:#ea580c; border:1px solid #fed7aa;" title="${ts.attachments.length} file attachment(s)">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                <span>${ts.attachments.length}</span>
+                            </span>
+                        ` : '';
+
                         if (hasClosingUpdate) {
                             closingActionHtml = `
                                 <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -1228,6 +1427,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
                                             data-closing-text="${escapeHtml(ts.day_closing_update)}"
+                                            data-attachments="${attsJson}"
                                             data-timesheet-id="${ts.id}"
                                             data-update-url="${ts.update_status_url}"
                                             style="padding:5px 10px; font-size:12px; gap:5px;" title="View closing update details">
@@ -1239,22 +1439,25 @@ document.addEventListener('DOMContentLoaded', function () {
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
                                             data-closing-text="${escapeHtml(ts.day_closing_update)}"
+                                            data-attachments="${attsJson}"
                                             data-timesheet-id="${ts.id}"
                                             data-update-url="${ts.update_status_url}"
                                             style="padding:5px 9px; font-size:12px; gap:5px; background:#f8fafc; border-color:#cbd5e1;" title="Edit closing update">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                         <span>Edit</span>
                                     </button>
+                                    ${attBadgeHtml}
                                 </div>
                             `;
                         } else {
                             closingActionHtml = `
-                                <div class="closing-btn-group">
+                                <div class="closing-btn-group" style="display:flex; align-items:center; gap:6px;">
                                     <button type="button" class="pts-btn pts-btn-primary open-entry-closing-btn"
                                             data-project-name="${escapeHtml(ts.product_name)}"
                                             data-lead-name="${escapeHtml(ts.lead_company)}"
                                             data-delivery-date="${escapeHtml(ts.delivery_date)}"
                                             data-closing-text=""
+                                            data-attachments="${attsJson}"
                                             data-timesheet-id="${ts.id}"
                                             data-update-url="${ts.update_status_url}"
                                             style="padding:6px 12px; font-size:12px; gap:6px;">
@@ -1424,6 +1627,29 @@ document.addEventListener('DOMContentLoaded', function () {
         viewClosingOverlay.classList.toggle('is-open', isOpen);
     }
 
+    function formatBytes(bytes) {
+        bytes = Number(bytes) || 0;
+        if (bytes >= 1048576) {
+            return (bytes / 1048576).toFixed(2) + ' MB';
+        } else if (bytes >= 1024) {
+            return (bytes / 1024).toFixed(1) + ' KB';
+        }
+        return bytes + ' B';
+    }
+
+    function getFileIcon(name, mime) {
+        name = (name || '').toLowerCase();
+        mime = (mime || '').toLowerCase();
+        if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(name)) return '🖼️';
+        if (mime.includes('pdf') || /\.pdf$/i.test(name)) return '📕';
+        if (mime.includes('sheet') || mime.includes('excel') || mime.includes('csv') || /\.(xls|xlsx|csv)$/i.test(name)) return '📊';
+        if (mime.includes('word') || /\.(doc|docx)$/i.test(name)) return '📝';
+        if (mime.includes('zip') || mime.includes('tar') || mime.includes('compressed') || /\.(zip|rar|7z|gz)$/i.test(name)) return '🗜️';
+        return '📄';
+    }
+
+    let removedAttachmentsList = [];
+
     // Delegate click for open-entry-closing-btn
     document.addEventListener('click', function(e) {
         const entryBtn = e.target.closest('.open-entry-closing-btn');
@@ -1435,12 +1661,80 @@ document.addEventListener('DOMContentLoaded', function () {
             const timesheetId = entryBtn.getAttribute('data-timesheet-id') || '';
 
             currentActiveRow = entryBtn.closest('tr');
+            removedAttachmentsList = [];
 
             if (entryClosingTitle) entryClosingTitle.textContent = closingText ? 'Edit Day Closing Update' : 'Add Day Closing Update';
             if (entryClosingSubTitle) entryClosingSubTitle.textContent = projectName + (leadName ? ' | ' + leadName : '');
             if (entryClosingTextarea) entryClosingTextarea.value = closingText;
             if (entryClosingTimesheetId) entryClosingTimesheetId.value = timesheetId;
             if (entryClosingUpdateUrl) entryClosingUpdateUrl.value = updateUrl;
+
+            // Reset new files input & preview
+            const entryFileInput = document.getElementById('entryClosingAttachments');
+            const entryPreviewList = document.getElementById('entrySelectedFilesList');
+            if (entryFileInput) entryFileInput.value = '';
+            if (entryPreviewList) entryPreviewList.innerHTML = '';
+
+            // Render existing attachments if any
+            let attachments = [];
+            if (currentGroupTimesheets && timesheetId) {
+                const tsItem = currentGroupTimesheets.find(t => String(t.id) === String(timesheetId));
+                if (tsItem && Array.isArray(tsItem.attachments)) {
+                    attachments = tsItem.attachments;
+                }
+            }
+            if (!attachments || attachments.length === 0) {
+                try {
+                    attachments = JSON.parse(entryBtn.getAttribute('data-attachments') || '[]');
+                } catch(err) {
+                    attachments = [];
+                }
+            }
+
+            const existingContainer = document.getElementById('entryExistingAttachmentsContainer');
+            const existingList = document.getElementById('entryExistingAttachmentsList');
+            if (existingContainer && existingList) {
+                existingList.innerHTML = '';
+                if (attachments && attachments.length > 0) {
+                    existingContainer.style.display = 'block';
+                    attachments.forEach(att => {
+                        const item = document.createElement('div');
+                        item.className = 'task-file-item';
+                        item.innerHTML = `
+                            <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                                <span style="font-size:16px;">${getFileIcon(att.name, att.mime_type)}</span>
+                                <div style="min-width:0;">
+                                    <a href="${escapeHtml(att.url)}" target="_blank" style="font-weight:700; color:#0f172a; text-decoration:none; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;" title="${escapeHtml(att.name)}">
+                                        ${escapeHtml(att.name)}
+                                    </a>
+                                    <div style="font-size:11px; color:#64748b;">${escapeHtml(att.formatted_size || formatBytes(att.size))}</div>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <a href="${escapeHtml(att.url)}" target="_blank" download class="pts-btn" style="padding:3px 8px; font-size:11px; background:#f8fafc; border-color:#cbd5e1; text-decoration:none;" title="Download file">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                </a>
+                                <button type="button" class="pts-btn remove-existing-att-btn" style="padding:3px 8px; font-size:11px; color:#ef4444; border-color:#fecaca; background:#fff;" title="Remove this attachment">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
+                        `;
+                        item.querySelector('.remove-existing-att-btn').addEventListener('click', function(ev) {
+                            ev.preventDefault();
+                            if (att.path) {
+                                removedAttachmentsList.push(att.path);
+                            }
+                            item.remove();
+                            if (existingList.children.length === 0) {
+                                existingContainer.style.display = 'none';
+                            }
+                        });
+                        existingList.appendChild(item);
+                    });
+                } else {
+                    existingContainer.style.display = 'none';
+                }
+            }
 
             setEntryClosingModalState(true);
             setTimeout(() => { if (entryClosingTextarea) entryClosingTextarea.focus(); }, 100);
@@ -1452,10 +1746,67 @@ document.addEventListener('DOMContentLoaded', function () {
             const projectName = viewBtn.getAttribute('data-project-name') || 'Project';
             const leadName = viewBtn.getAttribute('data-lead-name') || '';
             const closingText = viewBtn.getAttribute('data-closing-text') || 'No closing update recorded.';
+            const timesheetId = viewBtn.getAttribute('data-timesheet-id') || '';
 
             if (viewClosingTitle) viewClosingTitle.textContent = 'Day Closing Update Details';
             if (viewClosingSubTitle) viewClosingSubTitle.textContent = projectName + (leadName ? ' | ' + leadName : '');
             if (viewClosingContent) viewClosingContent.textContent = closingText;
+
+            // Render view modal attachments
+            let attachments = [];
+            if (currentGroupTimesheets && timesheetId) {
+                const tsItem = currentGroupTimesheets.find(t => String(t.id) === String(timesheetId));
+                if (tsItem && Array.isArray(tsItem.attachments)) {
+                    attachments = tsItem.attachments;
+                }
+            }
+            if (!attachments || attachments.length === 0) {
+                try {
+                    attachments = JSON.parse(viewBtn.getAttribute('data-attachments') || '[]');
+                } catch(err) {
+                    attachments = [];
+                }
+            }
+
+            const viewAttsContainer = document.getElementById('viewClosingModalAttachmentsContainer');
+            const viewAttsList = document.getElementById('viewClosingModalAttachmentsList');
+            const viewAttsCount = document.getElementById('viewClosingModalAttachmentsCount');
+
+            if (viewAttsContainer && viewAttsList) {
+                viewAttsList.innerHTML = '';
+                if (attachments && attachments.length > 0) {
+                    if (viewAttsCount) viewAttsCount.textContent = attachments.length;
+                    attachments.forEach(att => {
+                        const item = document.createElement('div');
+                        item.className = 'task-file-item';
+                        item.innerHTML = `
+                            <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                                <span style="font-size:16px;">${getFileIcon(att.name, att.mime_type)}</span>
+                                <div style="min-width:0;">
+                                    <div style="font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px;" title="${escapeHtml(att.name)}">
+                                        ${escapeHtml(att.name)}
+                                    </div>
+                                    <div style="font-size:11px; color:#64748b;">${escapeHtml(att.formatted_size || formatBytes(att.size))}</div>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <a href="${escapeHtml(att.url)}" target="_blank" class="pts-btn pts-btn-primary" style="padding:4px 10px; font-size:11px; gap:4px; text-decoration:none;" title="View file">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <span>View</span>
+                                </a>
+                                <a href="${escapeHtml(att.url)}" download="${escapeHtml(att.name)}" class="pts-btn pts-btn-outline" style="padding:4px 10px; font-size:11px; gap:4px; text-decoration:none;" title="Download file">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    <span>Download</span>
+                                </a>
+                            </div>
+                        `;
+                        viewAttsList.appendChild(item);
+                    });
+                    viewAttsContainer.style.display = 'block';
+                } else {
+                    viewAttsContainer.style.display = 'none';
+                }
+            }
 
             // Store attributes on shortcut edit button
             if (viewClosingEditShortcutBtn) {
@@ -1505,16 +1856,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 entryClosingSubmitBtn.innerHTML = '<span>Saving...</span>';
             }
 
+            const formData = new FormData();
+            formData.append('_method', 'PATCH');
+            formData.append('day_closing_update', newText);
+
+            const entryFileInput = document.getElementById('entryClosingAttachments');
+            if (entryFileInput && entryFileInput.files) {
+                for (let i = 0; i < entryFileInput.files.length; i++) {
+                    formData.append('attachments[]', entryFileInput.files[i]);
+                }
+            }
+            removedAttachmentsList.forEach(path => {
+                formData.append('removed_attachments[]', path);
+            });
+
             fetch(updateUrl, {
-                method: 'PATCH',
+                method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrfToken
                 },
-                body: JSON.stringify({
-                    day_closing_update: newText
-                })
+                body: formData
             })
             .then(res => res.json())
             .then(data => {
@@ -1527,10 +1889,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     setEntryClosingModalState(false);
 
                     const timesheetId = entryClosingTimesheetId ? entryClosingTimesheetId.value : '';
+                    const updatedAttachments = data.attachments || [];
+
                     if (currentGroupTimesheets && timesheetId) {
                         const tsItem = currentGroupTimesheets.find(t => String(t.id) === String(timesheetId));
                         if (tsItem) {
                             tsItem.day_closing_update = newText;
+                            tsItem.attachments = updatedAttachments;
                         }
                         if (currentGroupBtn) {
                             currentGroupBtn.setAttribute('data-timesheets', JSON.stringify(currentGroupTimesheets));
@@ -1542,6 +1907,14 @@ document.addEventListener('DOMContentLoaded', function () {
                         const cell = currentActiveRow.querySelector('td:nth-child(5)');
                         const projectName = currentActiveRow.querySelector('.pts-project')?.textContent || '';
                         const leadName = currentActiveRow.querySelector('td:nth-child(2) > div:first-child')?.textContent || '';
+                        const attsJson = escapeHtml(JSON.stringify(updatedAttachments));
+                        const hasAtts = updatedAttachments.length > 0;
+                        const attBadge = hasAtts ? `
+                            <span class="pts-badge count" style="padding:2px 7px; font-size:11px; display:inline-flex; align-items:center; gap:4px; background:#fff7ed; color:#ea580c; border:1px solid #fed7aa;" title="${updatedAttachments.length} file attachment(s)">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                <span>${updatedAttachments.length}</span>
+                            </span>
+                        ` : '';
 
                         if (cell) {
                             cell.innerHTML = `
@@ -1550,6 +1923,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                             data-project-name="${escapeHtml(projectName)}"
                                             data-lead-name="${escapeHtml(leadName)}"
                                             data-closing-text="${escapeHtml(newText)}"
+                                            data-attachments="${attsJson}"
                                             data-timesheet-id="${timesheetId}"
                                             data-update-url="${updateUrl}"
                                             style="padding:5px 10px; font-size:12px; gap:5px;" title="View closing update details">
@@ -1560,12 +1934,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                             data-project-name="${escapeHtml(projectName)}"
                                             data-lead-name="${escapeHtml(leadName)}"
                                             data-closing-text="${escapeHtml(newText)}"
+                                            data-attachments="${attsJson}"
                                             data-timesheet-id="${timesheetId}"
                                             data-update-url="${updateUrl}"
                                             style="padding:5px 9px; font-size:12px; gap:5px; background:#f8fafc; border-color:#cbd5e1;" title="Edit closing update">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                         <span>Edit</span>
                                     </button>
+                                    ${attBadge}
                                 </div>
                             `;
                         }
@@ -1596,6 +1972,87 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     }
+
+    // Initialize Dropzones
+    function initFileDropzone(dropzoneEl, inputEl, previewListEl) {
+        if (!dropzoneEl || !inputEl || !previewListEl) return;
+
+        function updatePreview() {
+            previewListEl.innerHTML = '';
+            const files = Array.from(inputEl.files || []);
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'task-file-item';
+                item.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <span style="font-size:16px;">${getFileIcon(file.name, file.type)}</span>
+                        <div style="min-width:0;">
+                            <div style="font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;" title="${escapeHtml(file.name)}">
+                                ${escapeHtml(file.name)}
+                            </div>
+                            <div style="font-size:11px; color:#64748b;">${formatBytes(file.size)}</div>
+                        </div>
+                    </div>
+                    <span style="font-size:11px; font-weight:800; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:2px 8px; border-radius:999px;">
+                        Ready to upload
+                    </span>
+                `;
+                previewListEl.appendChild(item);
+            });
+
+            if (files.length > 0) {
+                const clearRow = document.createElement('div');
+                clearRow.style.cssText = 'display:flex; justify-content:flex-end; margin-top:2px;';
+                clearRow.innerHTML = `
+                    <button type="button" class="pts-btn" style="padding:3px 10px; font-size:11px; color:#ef4444; border-color:#fecaca; background:#fff;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <span>Clear Selected Files</span>
+                    </button>
+                `;
+                clearRow.querySelector('button').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    inputEl.value = '';
+                    previewListEl.innerHTML = '';
+                });
+                previewListEl.appendChild(clearRow);
+            }
+        }
+
+        dropzoneEl.addEventListener('click', () => inputEl.click());
+        inputEl.addEventListener('change', updatePreview);
+
+        dropzoneEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzoneEl.classList.add('dragover');
+        });
+        dropzoneEl.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzoneEl.classList.remove('dragover');
+        });
+        dropzoneEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzoneEl.classList.remove('dragover');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                inputEl.files = e.dataTransfer.files;
+                updatePreview();
+            }
+        });
+    }
+
+    initFileDropzone(
+        document.getElementById('entryFileDropzone'),
+        document.getElementById('entryClosingAttachments'),
+        document.getElementById('entrySelectedFilesList')
+    );
+
+    initFileDropzone(
+        document.getElementById('timesheetFileDropzone'),
+        document.getElementById('timesheetAttachmentsInput'),
+        document.getElementById('timesheetSelectedFilesList')
+    );
 
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {

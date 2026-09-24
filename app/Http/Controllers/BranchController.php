@@ -22,6 +22,7 @@ class BranchController extends Controller
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('name', 'like', '%' . $search . '%')
                         ->orWhere('code', 'like', '%' . $search . '%')
+                        ->orWhere('branch_type', 'like', '%' . $search . '%')
                         ->orWhere('city', 'like', '%' . $search . '%')
                         ->orWhere('state', 'like', '%' . $search . '%');
                 });
