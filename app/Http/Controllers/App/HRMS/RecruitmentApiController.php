@@ -443,6 +443,114 @@ class RecruitmentApiController extends Controller
         ]);
     }
 
+    // ── POST /api/mobile/hrms/recruitment ────────────────────────────────────
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:150'],
+            'mobile_number' => ['required', 'string', 'max:30'],
+            'email' => ['nullable', 'email', 'max:150'],
+            'location' => ['nullable', 'string', 'max:150'],
+            'job_title' => ['required', 'string', 'max:150'],
+            'candidate_type' => ['required', 'string', Rule::in(['fresher', 'experienced', 'intern'])],
+            'institute_name' => ['nullable', 'string', 'max:255'],
+            'course_name' => ['nullable', 'string', 'max:255'],
+            'internship_months' => ['nullable', 'string', 'max:50'],
+            'has_stipend' => ['nullable', 'string', Rule::in(['yes', 'no'])],
+            'stipend_amount' => ['nullable', 'numeric', 'min:0'],
+            'source' => ['nullable', 'string', 'max:100'],
+            'source_details' => ['nullable', 'string', 'max:255'],
+            'current_ctc' => ['nullable', 'numeric', 'min:0'],
+            'expected_ctc' => ['nullable', 'numeric', 'min:0'],
+            'notice_period' => ['nullable', 'string', 'max:100'],
+            'experience_years' => ['nullable', 'integer', 'min:0', 'max:60'],
+            'previous_company' => ['nullable', 'string', 'max:150'],
+            'previous_hr_name' => ['nullable', 'string', 'max:150'],
+            'previous_hr_contact' => ['nullable', 'string', 'max:50'],
+            'relieving_reason' => ['nullable', 'string', 'max:255'],
+            'has_laptop' => ['nullable', 'string', Rule::in(['yes', 'no'])],
+            'education_details' => ['nullable'],
+            'remarks' => ['nullable', 'string', 'max:3000'],
+            'resume' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:5120'],
+        ]);
+
+        if (isset($validated['education_details']) && is_string($validated['education_details'])) {
+            $decoded = json_decode($validated['education_details'], true);
+            if (is_array($decoded)) {
+                $validated['education_details'] = $decoded;
+            }
+        }
+
+        if (! empty($validated['education_details']) && is_array($validated['education_details'])) {
+            $validated['education_details'] = array_values(array_filter($validated['education_details'], function ($item) {
+                if (! is_array($item)) return false;
+                return ! empty($item['degree']) || ! empty($item['institution']) || ! empty($item['specialization']);
+            }));
+        } else {
+            $validated['education_details'] = [];
+        }
+
+        if (($validated['source'] ?? '') !== 'Others') {
+            $validated['source_details'] = null;
+        }
+
+        if (($validated['candidate_type'] ?? '') === 'fresher') {
+            $validated['experience_years'] = null;
+            $validated['previous_company'] = null;
+            $validated['previous_hr_name'] = null;
+            $validated['previous_hr_contact'] = null;
+            $validated['relieving_reason'] = null;
+            $validated['has_laptop'] = null;
+            $validated['notice_period'] = null;
+            $validated['current_ctc'] = null;
+            $validated['institute_name'] = null;
+            $validated['course_name'] = null;
+            $validated['internship_months'] = null;
+            $validated['has_stipend'] = null;
+            $validated['stipend_amount'] = null;
+        } elseif (($validated['candidate_type'] ?? '') === 'experienced') {
+            $validated['institute_name'] = null;
+            $validated['course_name'] = null;
+            $validated['internship_months'] = null;
+            $validated['has_stipend'] = null;
+            $validated['stipend_amount'] = null;
+        } elseif (($validated['candidate_type'] ?? '') === 'intern') {
+            $validated['experience_years'] = null;
+            $validated['previous_company'] = null;
+            $validated['previous_hr_name'] = null;
+            $validated['previous_hr_contact'] = null;
+            $validated['relieving_reason'] = null;
+            $validated['has_laptop'] = null;
+            $validated['notice_period'] = null;
+            $validated['current_ctc'] = null;
+
+            if (($validated['has_stipend'] ?? '') !== 'yes') {
+                $validated['stipend_amount'] = null;
+            }
+        }
+
+        if ($request->hasFile('resume')) {
+            $validated['resume_path'] = $request->file('resume')->store('recruitment/resumes', self::RESUME_DISK);
+        }
+
+        unset($validated['resume']);
+
+        $candidate = RecruitmentCandidate::create(array_merge($validated, [
+            'company_id'        => $request->user()?->company_id,
+            'candidate_no'      => RecruitmentCandidate::generateCandidateNo(),
+            'status'            => RecruitmentCandidate::STATUS_SHORTLIST,
+            'created_by'        => $request->user()?->id,
+            'updated_by'        => $request->user()?->id,
+            'status_updated_at' => now(),
+        ]));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Candidate added successfully.',
+            'data'    => $this->formatDetail($candidate->fresh()),
+        ], 201);
+    }
+
     // ── GET /api/mobile/hrms/recruitment ─────────────────────────────────────
     // Lightweight, paginated list — only the fields the list card needs.
     // Mirrors RecruitmentController::index()'s search/status/bucket/assigned

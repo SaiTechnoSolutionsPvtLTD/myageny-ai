@@ -11,6 +11,8 @@ use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
 use App\Models\LeadStatus;
+use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\SalesTarget;
 use App\Models\User;
 use App\Services\DataVisibilityService;
@@ -642,6 +644,21 @@ class DashboardController extends Controller
             ? $periodRemindersQuery->count()
             : (clone $reminderQuery())->whereDate('remind_at', today())->count();
 
+        // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $currentMonthHotProductsQuery = LeadProduct::query()
+            ->whereRaw('LOWER(product_status) = ?', ['hot'])
+            ->whereMonth('closure_date', now()->month)
+            ->whereYear('closure_date', now()->year)
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId)        $lq->where('branch_id', $branchId);
+                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
+            });
+        $currentMonthHotProductsCount = (clone $currentMonthHotProductsQuery)->count();
+        $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
+        $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
+        $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
+
         // ── Build response ────────────────────────────────────────
         return response()->json([
             'success' => true,
@@ -669,6 +686,32 @@ class DashboardController extends Controller
                     'completed_calls_count'      => $completedCallsCount,
                     'today_completed_calls_count'=> $completedCallsCount,
                     'overdue_reminders_count'    => $overdueCount,
+                    'current_month_hot_products_count' => $currentMonthHotProductsCount,
+                    'total_prospects'            => $currentMonthHotProductsCount,
+                    'current_month_hot_products_value' => $currentMonthHotProductsValue,
+                    'current_month_expected_collection' => $currentMonthExpectedCollection,
+                    'nst_ho_prospects_count'     => $cpMetrics['nst_ho']['count'],
+                    'nst_ho_deal_value'          => $cpMetrics['nst_ho']['deal_value'],
+                    'nst_ho_expected_value'      => $cpMetrics['nst_ho']['expected_value'],
+                    'non_coco_prospects_count'   => $cpMetrics['non_coco']['count'],
+                    'non_coco_deal_value'        => $cpMetrics['non_coco']['deal_value'],
+                    'non_coco_expected_value'    => $cpMetrics['non_coco']['expected_value'],
+                    'coco_prospects_count'       => $cpMetrics['coco']['count'],
+                    'coco_deal_value'            => $cpMetrics['coco']['deal_value'],
+                    'coco_expected_value'        => $cpMetrics['coco']['expected_value'],
+                ],
+
+                'forecasting' => [
+                    'total_prospects'           => $currentMonthHotProductsCount,
+                    'hot_products_count'        => $currentMonthHotProductsCount,
+                    'hot_products_value'        => $currentMonthHotProductsValue,
+                    'deal_value'                => $currentMonthHotProductsValue,
+                    'expected_collection_value' => $currentMonthExpectedCollection,
+                    'month_name'                => now()->format('F Y'),
+                    'nst_ho'                    => $cpMetrics['nst_ho'],
+                    'non_coco'                  => $cpMetrics['non_coco'],
+                    'coco'                      => $cpMetrics['coco'],
+                    'active_branches'           => $this->buildActiveBranchesHotMetrics($request),
                 ],
 
                 'financials' => [
@@ -976,5 +1019,426 @@ class DashboardController extends Controller
         }
 
         return [$request->date_from ?: null, $request->date_to ?: null];
+    }
+
+    /**
+     * Build separate metrics for Channel Partner category products (NON COCO and COCO)
+     * based on current month Hot lead products.
+     */
+    private function buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, ?Request $request = null): array
+    {
+        $channelPartnerCat = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+        $catId = $channelPartnerCat?->id;
+
+        $cocoProduct = Product::where(function ($q) use ($catId) {
+            if ($catId) {
+                $q->where('product_category_id', $catId);
+            }
+            $q->where(function ($sq) {
+                $sq->where('product_name', 'like', '%COCO%')
+                   ->orWhere('package_name', 'like', '%COCO%');
+            });
+        })->where(function ($q) {
+            $q->where('product_name', 'not like', '%NON%')
+              ->where('package_name', 'not like', '%NON%');
+        })->first();
+
+        $nonCocoProduct = Product::where(function ($q) use ($catId) {
+            if ($catId) {
+                $q->where('product_category_id', $catId);
+            }
+            $q->where(function ($sq) {
+                $sq->where('product_name', 'like', '%NON%COCO%')
+                   ->orWhere('package_name', 'like', '%NON%COCO%');
+            });
+        })->first();
+
+        // NON COCO Hot query
+        $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct) {
+            if ($nonCocoProduct) {
+                $q->where('product_id', $nonCocoProduct->id)
+                  ->orWhere('product_name', 'like', '%NON%COCO%');
+            } else {
+                $q->where('product_name', 'like', '%NON%COCO%');
+            }
+        });
+        $nonCocoHotCount = (clone $nonCocoHotQuery)->count();
+        $nonCocoDealValue = (float) (clone $nonCocoHotQuery)->sum('total_price');
+        $nonCocoExpectedValue = (float) (clone $nonCocoHotQuery)->sum('expected_value');
+
+        // COCO Hot query
+        $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct) {
+            if ($cocoProduct) {
+                $q->where(function ($sq) use ($cocoProduct) {
+                    $sq->where('product_id', $cocoProduct->id)
+                       ->orWhere(function ($ssq) {
+                           $ssq->where('product_name', 'like', '%COCO%')
+                               ->where('product_name', 'not like', '%NON%');
+                       });
+                });
+            } else {
+                $q->where('product_name', 'like', '%COCO%')
+                  ->where('product_name', 'not like', '%NON%');
+            }
+        });
+        $cocoHotCount = (clone $cocoHotQuery)->count();
+        $cocoDealValue = (float) (clone $cocoHotQuery)->sum('total_price');
+        $cocoExpectedValue = (float) (clone $cocoHotQuery)->sum('expected_value');
+
+        // Channel Partner product IDs to exclude from NST - HO
+        $cpProductIds = [];
+        if ($catId) {
+            $cpProductIds = Product::where('product_category_id', $catId)->pluck('id')->toArray();
+        }
+        if ($nonCocoProduct && !in_array($nonCocoProduct->id, $cpProductIds)) {
+            $cpProductIds[] = $nonCocoProduct->id;
+        }
+        if ($cocoProduct && !in_array($cocoProduct->id, $cpProductIds)) {
+            $cpProductIds[] = $cocoProduct->id;
+        }
+
+        // Company's default branch filter for NST - HO
+        $user = $request?->user();
+        $companyId = $user ? ($this->visibility->companyIdFor($user) ?? $user->company_id) : null;
+        $defaultBranchQuery = Branch::where('is_default', true);
+        if ($companyId) {
+            $defaultBranchQuery->where('company_id', $companyId);
+        } else {
+            $defaultBranchQuery->where('company_id', 1);
+        }
+        $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+        if (empty($defaultBranchIds)) {
+            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+        }
+
+        // NST - HO Hot query: EXCLUDE Channel Partner products AND ONLY include company default branch
+        $nstHoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cpProductIds) {
+            if (!empty($cpProductIds)) {
+                $q->whereNotIn('product_id', $cpProductIds);
+            }
+            $q->where('product_name', 'not like', '%COCO%')
+              ->where('product_name', 'not like', '%Channel Partner%');
+        });
+        if (!empty($defaultBranchIds)) {
+            $nstHoHotQuery->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                $lq->whereIn('branch_id', $defaultBranchIds);
+            });
+        }
+        $nstHoHotCount = (clone $nstHoHotQuery)->count();
+        $nstHoDealValue = (float) (clone $nstHoHotQuery)->sum('total_price');
+        $nstHoExpectedValue = (float) (clone $nstHoHotQuery)->sum('expected_value');
+
+        return [
+            'nst_ho' => [
+                'count'          => $nstHoHotCount,
+                'deal_value'     => $nstHoDealValue,
+                'expected_value' => $nstHoExpectedValue,
+                'heading'        => 'NST - HO',
+            ],
+            'non_coco' => [
+                'count'          => $nonCocoHotCount,
+                'deal_value'     => $nonCocoDealValue,
+                'expected_value' => $nonCocoExpectedValue,
+                'product_id'     => $nonCocoProduct?->id,
+                'product_name'   => $nonCocoProduct?->product_name ?? 'Channel Partner NON COCO Model',
+            ],
+            'coco' => [
+                'count'          => $cocoHotCount,
+                'deal_value'     => $cocoDealValue,
+                'expected_value' => $cocoExpectedValue,
+                'product_id'     => $cocoProduct?->id,
+                'product_name'   => $cocoProduct?->product_name ?? 'Channel Partner COCO Model',
+            ],
+        ];
+    }
+
+    /**
+     * Build active branches current month hot prospect metrics for the Total Prospects modal.
+     */
+    private function buildActiveBranchesHotMetrics(Request $request): array
+    {
+        $user = $request->user();
+        $visibleBranchIds = $user ? $this->visibility->visibleBranchIds($user) : collect();
+        $companyId = $user ? $this->visibility->companyIdFor($user) : null;
+
+        $branches = Branch::where('is_active', true)
+            ->where(function ($query) {
+                $query->where('is_default', false)
+                    ->orWhereNull('is_default');
+            })
+            ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+            ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+            ->when($request->filled('branch_id'), fn($query) => $query->where('id', $request->branch_id))
+            ->orderBy('name')
+            ->get();
+
+        $branchIds = $branches->pluck('id')->toArray();
+        if (empty($branchIds)) {
+            return [];
+        }
+
+        $hotProductsGrouped = LeadProduct::query()
+            ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
+            ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
+            ->whereMonth('lead_products.closure_date', now()->month)
+            ->whereYear('lead_products.closure_date', now()->year)
+            ->whereIn('leads.branch_id', $branchIds)
+            ->when($request->filled('user_id'), fn($q) => $q->where('leads.assigned_to', $request->user_id))
+            ->select(
+                'leads.branch_id',
+                DB::raw('COUNT(lead_products.id) as prospect_count'),
+                DB::raw('COALESCE(SUM(lead_products.total_price), 0) as deal_value'),
+                DB::raw('COALESCE(SUM(lead_products.expected_value), 0) as expected_value')
+            )
+            ->groupBy('leads.branch_id')
+            ->get()
+            ->keyBy('branch_id');
+
+        return $branches->map(function ($branch) use ($hotProductsGrouped) {
+            $stats = $hotProductsGrouped->get($branch->id);
+
+            return [
+                'id'             => $branch->id,
+                'name'           => $branch->name,
+                'code'           => $branch->code,
+                'is_default'     => (bool) $branch->is_default,
+                'branch_type'    => $branch->branch_type,
+                'prospect_count' => $stats ? (int) $stats->prospect_count : 0,
+                'deal_value'     => $stats ? (float) $stats->deal_value : 0.0,
+                'expected_value' => $stats ? (float) $stats->expected_value : 0.0,
+            ];
+        })->values()->toArray();
+    }
+
+    /**
+     * Get hot leads for a specific branch or card category in the current month by closure_date for mobile app.
+     */
+    public function branchHotLeads(Request $request): JsonResponse
+    {
+        $currentUser = $request->user();
+        if (!$currentUser) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $type = $request->input('type');
+        $branchId = (int) $request->input('branch_id');
+
+        if (!$type && !$branchId) {
+            return response()->json(['success' => false, 'message' => 'Type or Branch ID is required.'], 422);
+        }
+
+        $branch = null;
+        $title = 'Hot Prospects';
+        $subtitle = 'Current month closure hot leads';
+        $branchType = null;
+
+        $query = LeadProduct::query()
+            ->with([
+                'lead' => function ($lq) {
+                    $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                },
+                'product:id,product_name',
+                'leadStatus:id,name'
+            ])
+            ->whereRaw('LOWER(product_status) = ?', ['hot'])
+            ->whereMonth('closure_date', now()->month)
+            ->whereYear('closure_date', now()->year);
+
+        // Apply Lead Visibility
+        $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
+            $this->visibility->applyLeadVisibility($lq, $currentUser);
+            if ($request->filled('user_id')) {
+                $lq->where('assigned_to', $request->user_id);
+            }
+        });
+
+        if ($type === 'nst_ho') {
+            $title = 'NST - HO';
+            $subtitle = 'Default Branch (HO) • Excl. Channel Partner';
+
+            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            $catId = $channelPartnerCategory?->id;
+
+            $cocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%COCO%')
+                       ->orWhere('package_name', 'like', '%COCO%');
+                });
+            })->where(function ($q) {
+                $q->where('product_name', 'not like', '%NON%')
+                  ->where('package_name', 'not like', '%NON%');
+            })->first();
+
+            $nonCocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%NON%COCO%')
+                       ->orWhere('package_name', 'like', '%NON%COCO%');
+                });
+            })->first();
+
+            $cpProductIds = [];
+            if ($catId) {
+                $cpProductIds = Product::where('product_category_id', $catId)->pluck('id')->toArray();
+            }
+            if ($nonCocoProduct && !in_array($nonCocoProduct->id, $cpProductIds)) {
+                $cpProductIds[] = $nonCocoProduct->id;
+            }
+            if ($cocoProduct && !in_array($cocoProduct->id, $cpProductIds)) {
+                $cpProductIds[] = $cocoProduct->id;
+            }
+
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            } else {
+                $defaultBranchQuery->where('company_id', 1);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            $query->where(function ($q) use ($cpProductIds) {
+                if (!empty($cpProductIds)) {
+                    $q->whereNotIn('product_id', $cpProductIds);
+                }
+                $q->where('product_name', 'not like', '%COCO%')
+                  ->where('product_name', 'not like', '%Channel Partner%');
+            });
+
+            if (!empty($defaultBranchIds)) {
+                $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                });
+            }
+
+        } elseif ($type === 'non_coco') {
+            $title = 'Channel Partner - NON COCO Model';
+            $subtitle = 'NON COCO Hot Products';
+            $branchType = 'NON COCO';
+
+            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            $catId = $channelPartnerCategory?->id;
+
+            $nonCocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%NON%COCO%')
+                       ->orWhere('package_name', 'like', '%NON%COCO%');
+                });
+            })->first();
+
+            $query->where(function ($q) use ($nonCocoProduct) {
+                if ($nonCocoProduct) {
+                    $q->where('product_id', $nonCocoProduct->id)
+                      ->orWhere('product_name', 'like', '%NON%COCO%');
+                } else {
+                    $q->where('product_name', 'like', '%NON%COCO%');
+                }
+            });
+
+        } elseif ($type === 'coco') {
+            $title = 'Channel Partner - COCO Model';
+            $subtitle = 'COCO Hot Products';
+            $branchType = 'COCO';
+
+            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            $catId = $channelPartnerCategory?->id;
+
+            $cocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%COCO%')
+                       ->orWhere('package_name', 'like', '%COCO%');
+                });
+            })->where(function ($q) {
+                $q->where('product_name', 'not like', '%NON%')
+                  ->where('package_name', 'not like', '%NON%');
+            })->first();
+
+            $query->where(function ($q) use ($cocoProduct) {
+                if ($cocoProduct) {
+                    $q->where(function ($sq) use ($cocoProduct) {
+                        $sq->where('product_id', $cocoProduct->id)
+                           ->orWhere(function ($ssq) {
+                               $ssq->where('product_name', 'like', '%COCO%')
+                                   ->where('product_name', 'not like', '%NON%');
+                           });
+                    });
+                } else {
+                    $q->where('product_name', 'like', '%COCO%')
+                      ->where('product_name', 'not like', '%NON%');
+                }
+            });
+
+        } else {
+            // By Branch ID
+            $branch = Branch::find($branchId);
+            if (!$branch) {
+                return response()->json(['success' => false, 'message' => 'Branch not found.'], 404);
+            }
+
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+            if ($visibleBranchIds->isNotEmpty() && !$visibleBranchIds->contains($branchId)) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized branch access.'], 403);
+            }
+
+            $title = $branch->name;
+            $subtitle = 'Hot prospects for current month closure';
+            $branchType = $branch->branch_type;
+
+            $query->whereHas('lead', function ($lq) use ($branchId) {
+                $lq->where('branch_id', $branchId);
+            });
+        }
+
+        $hotProducts = $query->orderByDesc('closure_date')->get();
+
+        $rows = $hotProducts->map(function ($item, $idx) {
+            $lead = $item->lead;
+            return [
+                'index'          => $idx + 1,
+                'lead_id'        => $lead?->id,
+                'company_name'   => $lead?->company_name ?: ($lead?->business_name ?: '-'),
+                'customer_name'  => $lead?->contact_name ?: '-',
+                'product_name'   => $item->product_name ?: ($item->product?->product_name ?: '-'),
+                'status'         => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
+                'deal_value'     => (float) $item->total_price,
+                'expected_value' => (float) ($item->expected_value ?? 0),
+                'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
+                'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
+                'executive_name' => $lead?->assignedTo?->name ?: '-',
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Branch hot leads fetched.',
+            'data'    => [
+                'branch' => [
+                    'id'          => $branch?->id,
+                    'name'        => $title,
+                    'code'        => $branch?->code,
+                    'branch_type' => $branchType,
+                    'subtitle'    => $subtitle,
+                ],
+                'period'         => now()->format('F Y'),
+                'total_count'    => $rows->count(),
+                'total_deal'     => (float) $rows->sum('deal_value'),
+                'total_expected' => (float) $rows->sum('expected_value'),
+                'leads'          => $rows,
+            ],
+        ]);
     }
 }

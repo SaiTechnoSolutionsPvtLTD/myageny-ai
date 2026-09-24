@@ -164,6 +164,7 @@ Route::middleware('auth:sanctum')->group(function () {
 */
 Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(function () {
     Route::get('dashboard', [MobileDashboardController::class, 'index'])->name('dashboard');
+    Route::get('dashboard/branch-hot-leads', [MobileDashboardController::class, 'branchHotLeads'])->name('dashboard.branch-hot-leads');
     Route::get('menu', [AppMenuController::class, 'index'])->name('menu');
     Route::get('modules', [AppMenuController::class, 'modules'])->name('modules');
     Route::prefix('hrms')->name('hrms.')->group(function () {
@@ -261,6 +262,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         Route::delete('recruitment/reminders/{reminder}', [RecruitmentApiController::class, 'destroyReminder'])->name('recruitment.reminders.destroy');
 
         Route::get('recruitment',              [RecruitmentApiController::class, 'index'])->name('recruitment.index');
+        Route::post('recruitment',             [RecruitmentApiController::class, 'store'])->name('recruitment.store');
         Route::get('recruitment/{recruitment}', [RecruitmentApiController::class, 'show'])->name('recruitment.show');
 
         Route::post('recruitment/{recruitment}/call-updates', [RecruitmentApiController::class, 'storeCallUpdate'])
