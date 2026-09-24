@@ -610,6 +610,17 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('/crm/tasks/{reminder}/complete', [\App\Http\Controllers\CrmTaskController::class, 'complete'])->middleware('can:leads.edit')->name('tasks.complete');
     Route::patch('/crm/tasks/{reminder}/incomplete', [\App\Http\Controllers\CrmTaskController::class, 'incomplete'])->middleware('can:leads.edit')->name('tasks.incomplete');
 
+    // ── Sales Department Day Closing ─────────────────────────
+    Route::prefix('crm/day-closing')->name('crm.day-closing.')->middleware('can:leads.view')->group(function () {
+        Route::get('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'index'])->name('index');
+        Route::get('/stats', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallStats'])->name('stats');
+        Route::get('/call-details', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallDetails'])->name('call-details');
+        Route::post('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'store'])->name('store');
+        Route::patch('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'update'])->name('update');
+        Route::patch('/{closing}/status', [\App\Http\Controllers\SalesDailyClosingController::class, 'updateStatus'])->name('update-status');
+        Route::delete('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'destroy'])->name('destroy');
+    });
+
     // ── Pre Sales Management ─────────────────────────────────────
     Route::get('/pre-sales', [\App\Http\Controllers\PreSalesController::class, 'index'])->name('pre-sales.index');
     Route::post('/pre-sales/allocate', [\App\Http\Controllers\PreSalesController::class, 'allocate'])->name('pre-sales.allocate');
