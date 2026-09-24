@@ -53,6 +53,7 @@ class BranchRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:150'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'branch_type' => ['nullable', 'string', 'in:COCO,NON COCO'],
             'is_active' => ['nullable', 'boolean'],
             'is_default' => ['nullable', 'boolean'],
         ];

@@ -64,6 +64,7 @@ Route::post('/ai/summarize', [AiController::class, 'summarize'])->name('ai.summa
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard-data', [SuperAdminDashboardController::class, 'dashboardData']);
+    Route::get('/dashboard/branch-hot-leads', [SuperAdminDashboardController::class, 'branchHotLeads']);
     Route::get('/product-dashboard-data', [AdminDashboardProductController::class, 'index']);
     Route::get('/product-dashboard-data/filters', [AdminDashboardProductController::class, 'filterOptions']);
 });

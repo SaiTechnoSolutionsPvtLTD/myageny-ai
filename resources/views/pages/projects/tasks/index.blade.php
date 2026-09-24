@@ -100,7 +100,7 @@
 
 .pts-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.48); z-index:1200; display:none; }
 .pts-modal-overlay.is-open { display:block; }
-.pts-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(900px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 24px 60px rgba(15,23,42,.25); z-index:1210; display:none; }
+.pts-modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:min(1040px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 24px 60px rgba(15,23,42,.25); z-index:1210; display:none; }
 .pts-modal.is-open { display:block; }
 .pts-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
 .pts-modal-close { width:38px; height:38px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-size:16px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
@@ -520,6 +520,7 @@
                                                 'lead_company' => $t->lead?->company_name ?: ($t->project?->company_name ?: 'No Company'),
                                                 'product_name' => $t->product_name ?: ($t->project?->product_name ?: 'General Task'),
                                                 'task_description' => $t->task_description,
+                                                'attachments' => $t->attachment_list,
                                                 'status' => $t->status,
                                                 'can_delete' => auth()->user()?->hasAdminLikeRole() || auth()->user()?->can('tasks.delete') || $t->created_by === auth()->id(),
                                                 'delete_url' => route('projects.tasks.destroy', $t->id),
@@ -529,6 +530,10 @@
                                         $uniqueCompanies = $group->map(function ($task) {
                                             return $task->lead?->company_name ?: ($task->project?->company_name ?: 'No Company');
                                         })->unique()->values();
+
+                                        $groupAttachmentCount = $group->sum(function ($task) {
+                                            return is_array($task->attachments) ? count($task->attachments) : 0;
+                                        });
                                     @endphp
                                     <tr data-group-row>
                                         <!-- Date -->
@@ -571,15 +576,22 @@
 
                                         <!-- Task Description with View Tasks Button -->
                                         <td>
-                                            <button type="button" 
-                                                    class="pts-btn pts-btn-outline open-tasks-modal-btn" 
-                                                    data-user-name="{{ $assignedUser?->name ?: 'Team Member' }}"
-                                                    data-task-date="{{ optional($taskDate)->format('d M Y') }}"
-                                                    data-tasks='@json($tasksData)'>
-                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                                <span>View Tasks</span>
-                                                <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalTasks }}</span>
-                                            </button>
+                                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                                <button type="button" 
+                                                        class="pts-btn pts-btn-outline open-tasks-modal-btn" 
+                                                        data-user-name="{{ $assignedUser?->name ?: 'Team Member' }}"
+                                                        data-task-date="{{ optional($taskDate)->format('d M Y') }}"
+                                                        data-tasks='@json($tasksData)'>
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                    <span>View Tasks</span>
+                                                    <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalTasks }}</span>
+                                                </button>
+                                                @if($groupAttachmentCount > 0)
+                                                    <span class="pts-badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:10.5px; padding:3px 8px;" title="{{ $groupAttachmentCount }} file attachment(s) available">
+                                                        📎 {{ $groupAttachmentCount }}
+                                                    </span>
+                                                @endif
+                                            </div>
                                         </td>
 
                                         <!-- Assigned By -->
@@ -661,10 +673,11 @@
             <table class="modal-task-table">
                 <thead>
                     <tr>
-                        <th class="th-center" style="width:50px;">#</th>
-                        <th style="width:220px;">Lead (Client)</th>
-                        <th style="width:200px;">Product / Project</th>
+                        <th class="th-center" style="width:45px;">#</th>
+                        <th style="width:190px;">Lead (Client)</th>
+                        <th style="width:170px;">Product / Project</th>
                         <th>Task Description</th>
+                        <th style="width:230px;">Attachments</th>
                     </tr>
                 </thead>
                 <tbody id="modalTasksTableBody">
@@ -870,11 +883,42 @@ document.addEventListener('DOMContentLoaded', function () {
 
         tableBody.innerHTML = '';
         if (!tasks || tasks.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px; color:#64748b;">No tasks found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#64748b;">No tasks found.</td></tr>';
             return;
         }
 
         tasks.forEach((task, idx) => {
+            let attachmentsHtml = '';
+            if (task.attachments && task.attachments.length > 0) {
+                attachmentsHtml = '<div style="display:flex; flex-direction:column; gap:6px;">';
+                task.attachments.forEach(att => {
+                    const isImg = (att.mime_type && att.mime_type.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(att.name || '');
+                    const isPdf = (att.mime_type === 'application/pdf') || /\.pdf$/i.test(att.name || '');
+                    const iconSvg = isImg 
+                        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>'
+                        : (isPdf 
+                            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>'
+                            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>');
+
+                    attachmentsHtml += `
+                        <a href="${escapeHtml(att.url)}" target="_blank" download="${escapeHtml(att.name)}" 
+                           style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:12px; font-weight:700; color:#0f172a; text-decoration:none; transition:all 0.15s ease;"
+                           onmouseover="this.style.background='#fff7ed'; this.style.borderColor='#fed7aa';"
+                           onmouseout="this.style.background='#f8fafc'; this.style.borderColor='#e2e8f0';"
+                           title="Click to view or download: ${escapeHtml(att.name)}">
+                            <span style="display:flex; align-items:center; gap:6px; min-width:0;">
+                                ${iconSvg}
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;">${escapeHtml(att.name)}</span>
+                            </span>
+                            <span style="font-size:10px; color:#64748b; font-weight:600; flex-shrink:0;">${escapeHtml(att.formatted_size || '')}</span>
+                        </a>
+                    `;
+                });
+                attachmentsHtml += '</div>';
+            } else {
+                attachmentsHtml = '<span style="color:#94a3b8; font-size:12px; font-style:italic;">No attachments</span>';
+            }
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="td-center">
@@ -889,6 +933,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 </td>
                 <td>
                     <div style="white-space:pre-wrap; line-height:1.55; color:#334155; font-size:13px;">${escapeHtml(task.task_description)}</div>
+                </td>
+                <td>
+                    ${attachmentsHtml}
                 </td>
             `;
             tableBody.appendChild(tr);

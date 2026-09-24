@@ -78,6 +78,390 @@
     .da-forecast-grid { grid-template-columns:1fr; }
 }
 
+/* ─── Total Prospects Key Metrics Full Page Modal ─── */
+.da-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+}
+.da-modal-overlay.open {
+    display: flex;
+}
+.da-modal-container {
+    background: #f8fafc;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: daModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes daModalPop {
+    from { opacity: 0; transform: scale(0.99); }
+    to { opacity: 1; transform: scale(1); }
+}
+.da-modal-head {
+    padding: 0 32px;
+    height: 60px;
+    border-bottom: 1px solid var(--da-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--da-white);
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.da-modal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.da-modal-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--da-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.da-modal-close {
+    padding: 8px 16px;
+    border-radius: 9px;
+    border: 1px solid var(--da-border);
+    background: var(--da-white);
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    transition: all 0.15s ease;
+}
+.da-modal-close:hover {
+    color: var(--da-red);
+    border-color: var(--da-red);
+    background: #fef2f2;
+}
+.da-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
+}
+.da-modal-split-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: stretch;
+}
+@media (max-width: 1100px) {
+    .da-modal-split-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.da-modal-col-left {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.da-modal-col-right {
+    display: flex;
+    flex-direction: column;
+}
+.da-modal-section-card {
+    background: var(--da-white);
+    border: 1px solid var(--da-border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    flex-shrink: 0;
+}
+.da-modal-section-head {
+    padding: 12px 18px;
+    background: linear-gradient(to right, #ffffff, #f8fafc);
+    border-bottom: 1px solid var(--da-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.da-modal-section-heading {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.01em;
+}
+.da-modal-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 18px;
+}
+@media (max-width: 700px) {
+    .da-modal-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.da-modal-metric-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    color: #fff;
+    min-height: 74px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.da-modal-metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+.da-modal-metric-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    backdrop-filter: blur(4px);
+}
+.da-modal-metric-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+}
+.da-modal-metric-val {
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.da-modal-metric-lbl {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+}
+.da-modal-metric-sub {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Active Branches Table inside Modal */
+.da-modal-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(100vh - 150px);
+}
+.da-modal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+.da-modal-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    border-bottom: 1.5px solid var(--da-border);
+    white-space: nowrap;
+}
+.da-modal-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    vertical-align: middle;
+}
+.da-modal-table tbody tr:hover {
+    background: #fdfaf6;
+}
+.da-modal-table tfoot th,
+.da-modal-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: #f8fafc;
+    padding: 11px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    border-top: 2px solid var(--da-border);
+    border-bottom: none;
+}
+@media (max-width: 900px) {
+    .da-modal-head {
+        padding: 0 16px;
+    }
+    .da-modal-body {
+        padding: 16px 14px 32px;
+    }
+}
+
+/* ─── Stacked Branch Hot Leads Detail Modal ─── */
+.da-submodal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100010; /* Stacked higher than da-modal-overlay (99999) */
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.da-submodal-overlay.open {
+    display: flex;
+}
+.da-submodal-container {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+    width: 95vw;
+    max-width: 1400px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: daSubModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid #e2e8f0;
+}
+@keyframes daSubModalPop {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+}
+.da-submodal-head {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--da-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #ffffff;
+    flex-shrink: 0;
+}
+.da-submodal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.da-submodal-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(254, 95, 4, 0.1);
+    color: var(--da-orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.da-submodal-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--da-text);
+}
+.da-submodal-sub {
+    font-size: 12px;
+    color: var(--da-muted);
+    margin-top: 2px;
+}
+.da-submodal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    background: #f8fafc;
+}
+.da-submodal-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+.da-submodal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+    background: #ffffff;
+}
+.da-submodal-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f1f5f9;
+    padding: 11px 14px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    border-bottom: 1px solid var(--da-border);
+    white-space: nowrap;
+}
+.da-submodal-table tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    vertical-align: middle;
+}
+.da-submodal-table tbody tr:hover {
+    background: #fdfaf6;
+}
+.da-submodal-table tfoot th,
+.da-submodal-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: #f8fafc;
+    padding: 12px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    border-top: 2px solid var(--da-border);
+    border-bottom: none;
+}
+
 /* Active chips */
 .da-chips { display:none; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 24px 8px; }
 .da-chips.show { display:flex; }
@@ -866,6 +1250,299 @@
 
     </div>{{-- /da-body --}}
 </div>{{-- /da-page --}}
+
+{{-- ── Total Prospects Key Metrics Modal ── --}}
+<div class="da-modal-overlay" id="daTotalProspectsModal" onclick="if(event.target === this) closeTotalProspectsModal()">
+    <div class="da-modal-container" role="dialog" aria-modal="true" aria-labelledby="daModalMainTitle">
+        <div class="da-modal-head">
+            <div class="da-modal-title-wrap">
+                <div class="da-modal-title" id="daModalMainTitle">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="var(--da-orange)" stroke-width="2.2">
+                        <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    <span>Key Metrics</span>
+                </div>
+                <span class="da-badge" id="daModalPeriodBadge" style="background:#fee2e2; color:#b91c1c; border-color:#fecaca; font-weight:700;">Current Month</span>
+            </div>
+            <button type="button" class="da-modal-close" onclick="closeTotalProspectsModal()" title="Close (Esc)">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>Close</span>
+            </button>
+        </div>
+
+        <div class="da-modal-body">
+            <div class="da-modal-split-grid">
+                {{-- ── Left 6 Columns: Key Metrics Cards ── --}}
+                <div class="da-modal-col-left">
+                    {{-- Section Card 1: NST - HO --}}
+                    <div class="da-modal-section-card">
+                        <div class="da-modal-section-head">
+                            <div class="da-modal-section-heading">
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#4f46e5" stroke-width="2.2">
+                                    <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                </svg>
+                                <span>NST - HO</span>
+                            </div>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(79,70,229,0.08); color:#4f46e5; border-color:rgba(79,70,229,0.2);">Default Branch (HO) • Excl. Channel Partner</span>
+                        </div>
+
+                        <div class="da-modal-kpi-grid">
+                            {{-- Card 1: Total Prospect count --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('nst_ho', 'NST - HO')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view NST - HO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalProspectCount">0</div>
+                                    <div class="da-modal-metric-lbl">Total Prospect count</div>
+                                    <div class="da-modal-metric-sub" id="daModalProspectSub">Default Branch (HO) • Excl. CP</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 2: Deal Value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('nst_ho', 'NST - HO')" style="background:linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%); cursor:pointer;" title="Click to view NST - HO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalDealValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Deal Value</div>
+                                    <div class="da-modal-metric-sub">Total Deal value of Hot products</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 3: Expected Collection value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('nst_ho', 'NST - HO')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view NST - HO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <line x1="12" y1="1" x2="12" y2="23"/>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalExpectedCollection">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Expected Collection value</div>
+                                    <div class="da-modal-metric-sub">Expected closure collection</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Section Card 2: Channel Partner - NON COCO --}}
+                    <div class="da-modal-section-card">
+                        <div class="da-modal-section-head">
+                            <div class="da-modal-section-heading">
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#0284c7" stroke-width="2.2">
+                                    <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                </svg>
+                                <span>Channel Partner - NON COCO Model</span>
+                            </div>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(2,132,199,0.08); color:#0284c7; border-color:rgba(2,132,199,0.2);">NON COCO Hot Products</span>
+                        </div>
+
+                        <div class="da-modal-kpi-grid">
+                            {{-- Card 1: Total Prospect count --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalNonCocoCount">0</div>
+                                    <div class="da-modal-metric-lbl">Total Prospect count</div>
+                                    <div class="da-modal-metric-sub">NON COCO Hot products</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 2: Deal Value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalNonCocoDealValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Deal Value</div>
+                                    <div class="da-modal-metric-sub">Total Deal value of NON COCO</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 3: Expected Collection value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <line x1="12" y1="1" x2="12" y2="23"/>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalNonCocoExpectedValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Expected Value</div>
+                                    <div class="da-modal-metric-sub">Expected closure value</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Section Card 3: Channel Partner - COCO --}}
+                    <div class="da-modal-section-card">
+                        <div class="da-modal-section-head">
+                            <div class="da-modal-section-heading">
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#7c3aed" stroke-width="2.2">
+                                    <path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                <span>Channel Partner - COCO Model</span>
+                            </div>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(124,58,237,0.08); color:#7c3aed; border-color:rgba(124,58,237,0.2);">COCO Hot Products</span>
+                        </div>
+
+                        <div class="da-modal-kpi-grid">
+                            {{-- Card 1: Total Prospect count --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCocoCount">0</div>
+                                    <div class="da-modal-metric-lbl">Total Prospect count</div>
+                                    <div class="da-modal-metric-sub">COCO Hot products</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 2: Deal Value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #a855f7 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCocoDealValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Deal Value</div>
+                                    <div class="da-modal-metric-sub">Total Deal value of COCO</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 3: Expected Collection value --}}
+                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <line x1="12" y1="1" x2="12" y2="23"/>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCocoExpectedValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Expected Value</div>
+                                    <div class="da-modal-metric-sub">Expected closure value</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- ── Right 6 Columns: Active Branches Table ── --}}
+                <div class="da-modal-col-right">
+                    <div class="da-modal-section-card" style="height:100%; display:flex; flex-direction:column;">
+                        <div class="da-modal-section-head">
+                            <div class="da-modal-section-heading">
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="var(--da-orange)" stroke-width="2.2">
+                                    <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                </svg>
+                                <span>Active Branches</span>
+                            </div>
+                            <span class="da-badge" id="daModalBranchBadge" style="font-size:10px; font-weight:700; background:rgba(254,95,4,0.08); color:var(--da-orange); border-color:rgba(254,95,4,0.2);">Current Month Hot Prospects</span>
+                        </div>
+
+                        <div class="da-modal-table-wrap">
+                            <table class="da-modal-table">
+                                <thead>
+                                    <tr>
+                                        <th>Branch</th>
+                                        <th style="text-align:center;">Total Prospect Count</th>
+                                        <th style="text-align:right;">Deal Value</th>
+                                        <th style="text-align:right;">Expected Collection value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="daModalBranchesTableBody">
+                                    <tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">Loading branches...</td></tr>
+                                </tbody>
+                                <tfoot id="daModalBranchesTableFoot">
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ── Branch Hot Leads Detail Modal (Stacked on top of Key Metrics) ── --}}
+<div class="da-submodal-overlay" id="daBranchHotLeadsModal" onclick="if(event.target === this) closeBranchHotLeadsModal()">
+    <div class="da-submodal-container" role="dialog" aria-modal="true" aria-labelledby="daBranchModalTitle">
+        <div class="da-submodal-head">
+            <div class="da-submodal-title-wrap">
+                <div class="da-submodal-icon">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+                        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="da-submodal-title" id="daBranchModalTitle">Branch Hot Prospects</span>
+                        <span class="da-badge" id="daBranchModalTypeBadge" style="display:none; font-size:11px; font-weight:700;"></span>
+                        <span class="da-badge" id="daBranchModalPeriodBadge" style="font-size:11px; font-weight:700; background:#fee2e2; color:#b91c1c; border-color:#fecaca;">Current Month</span>
+                    </div>
+                    <div class="da-submodal-sub" id="daBranchModalSummary">Hot prospect leads for current month closure</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button type="button" class="da-modal-close" onclick="closeBranchHotLeadsModal()" title="Back to Key Metrics (Esc)">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="da-submodal-body">
+            <div class="da-submodal-table-wrap">
+                <table class="da-submodal-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">#</th>
+                            <th>Company Name</th>
+                            <th>Customer Name</th>
+                            <th>Product Name</th>
+                            <th style="text-align: center;">Status</th>
+                            <th style="text-align: right;">Deal Value</th>
+                            <th style="text-align: right;">Expected Amount</th>
+                            <th style="text-align: center;">Closure Date</th>
+                            <th>Executive Name</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daBranchHotLeadsBody">
+                        <tr>
+                            <td colspan="9" style="text-align: center; padding: 36px; color: #94a3b8;">
+                                Loading branch prospects...
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot id="daBranchHotLeadsFoot">
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -1390,17 +2067,61 @@ function renderForecasting(d) {
 
     var hotCount = fc.total_prospects !== undefined
         ? fc.total_prospects
-        : (k.current_month_hot_products_count !== undefined
-            ? k.current_month_hot_products_count
-            : (k.total_prospects !== undefined ? k.total_prospects : 0));
+        : (fc.hot_products_count !== undefined
+            ? fc.hot_products_count
+            : (k.current_month_hot_products_count !== undefined
+                ? k.current_month_hot_products_count
+                : (k.total_prospects !== undefined ? k.total_prospects : 0)));
 
-    var hotValue = fc.hot_products_value !== undefined
-        ? fc.hot_products_value
-        : (k.current_month_hot_products_value || 0);
+    var hotValue = fc.deal_value !== undefined
+        ? fc.deal_value
+        : (fc.hot_products_value !== undefined
+            ? fc.hot_products_value
+            : (k.current_month_hot_products_value || 0));
+
+    var expectedCollection = fc.expected_collection_value !== undefined
+        ? fc.expected_collection_value
+        : (k.current_month_expected_collection || 0);
+
+    var monthName = fc.month_name || 'Current Month';
+
+    var nonCoco = fc.non_coco || {
+        count: k.non_coco_prospects_count || 0,
+        deal_value: k.non_coco_deal_value || 0,
+        expected_value: k.non_coco_expected_value || 0,
+        product_name: 'Channel Partner NON COCO Model'
+    };
+
+    var coco = fc.coco || {
+        count: k.coco_prospects_count || 0,
+        deal_value: k.coco_deal_value || 0,
+        expected_value: k.coco_expected_value || 0,
+        product_name: 'Channel Partner COCO Model'
+    };
+
+    var nstHo = fc.nst_ho || {
+        count: k.nst_ho_prospects_count !== undefined ? k.nst_ho_prospects_count : hotCount,
+        deal_value: k.nst_ho_deal_value !== undefined ? k.nst_ho_deal_value : hotValue,
+        expected_value: k.nst_ho_expected_value !== undefined ? k.nst_ho_expected_value : expectedCollection
+    };
+
+    var activeBranches = fc.active_branches || [];
+
+    // Store metrics for modal popup
+    window.currentProspectsMetrics = {
+        count: hotCount,
+        dealValue: hotValue,
+        expectedCollection: expectedCollection,
+        monthName: monthName,
+        nstHo: nstHo,
+        nonCoco: nonCoco,
+        coco: coco,
+        activeBranches: activeBranches
+    };
 
     var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • Hot products') : 'Current month Hot products';
 
-    var cardHtml = '<div class="da-kpi" onclick="viewHotProducts()" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%);cursor:pointer;" title="Click to view Hot Products">' +
+    var cardHtml = '<div class="da-kpi" onclick="openTotalProspectsModal()" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%);cursor:pointer;" title="Click to view Key Metrics">' +
         '<div class="da-kpi-icon">' +
         '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
         '<path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>' +
@@ -1411,6 +2132,279 @@ function renderForecasting(d) {
 
     gridEl.innerHTML = cardHtml;
 }
+
+window.openTotalProspectsModal = function() {
+    var modal = document.getElementById('daTotalProspectsModal');
+    if (!modal) return;
+
+    var m = window.currentProspectsMetrics || {};
+    var badgeEl = document.getElementById('daModalPeriodBadge');
+    var subEl = document.getElementById('daModalProspectSub');
+
+    if (badgeEl && m.monthName) badgeEl.textContent = m.monthName;
+    if (subEl) subEl.textContent = 'Default Branch (HO) • Excl. CP';
+
+    // 1. NST - HO (Without Channel Partner)
+    var nstHo = m.nstHo || {};
+    var countEl = document.getElementById('daModalProspectCount');
+    var dealEl = document.getElementById('daModalDealValue');
+    var expEl = document.getElementById('daModalExpectedCollection');
+    if (countEl) countEl.textContent = nstHo.count !== undefined ? nstHo.count : 0;
+    if (dealEl) dealEl.textContent = fmt(nstHo.deal_value || 0);
+    if (expEl) expEl.textContent = fmt(nstHo.expected_value || 0);
+
+    // 2. Channel Partner - NON COCO
+    var nonCoco = m.nonCoco || {};
+    var nonCocoCountEl = document.getElementById('daModalNonCocoCount');
+    var nonCocoDealEl = document.getElementById('daModalNonCocoDealValue');
+    var nonCocoExpEl = document.getElementById('daModalNonCocoExpectedValue');
+    if (nonCocoCountEl) nonCocoCountEl.textContent = nonCoco.count !== undefined ? nonCoco.count : 0;
+    if (nonCocoDealEl) nonCocoDealEl.textContent = fmt(nonCoco.deal_value || 0);
+    if (nonCocoExpEl) nonCocoExpEl.textContent = fmt(nonCoco.expected_value || 0);
+
+    // 3. Channel Partner - COCO
+    var coco = m.coco || {};
+    var cocoCountEl = document.getElementById('daModalCocoCount');
+    var cocoDealEl = document.getElementById('daModalCocoDealValue');
+    var cocoExpEl = document.getElementById('daModalCocoExpectedValue');
+    if (cocoCountEl) cocoCountEl.textContent = coco.count !== undefined ? coco.count : 0;
+    if (cocoDealEl) cocoDealEl.textContent = fmt(coco.deal_value || 0);
+    if (cocoExpEl) cocoExpEl.textContent = fmt(coco.expected_value || 0);
+
+    // 4. Active Branches Table (Excluding default branch / HO)
+    var branches = (m.activeBranches || []).filter(function(b) {
+        return !b.is_default;
+    });
+    var tbody = document.getElementById('daModalBranchesTableBody');
+    var tfoot = document.getElementById('daModalBranchesTableFoot');
+
+    if (tbody) {
+        if (branches.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No active branches found.</td></tr>';
+            if (tfoot) tfoot.innerHTML = '';
+        } else {
+            var rowsHtml = '';
+            var totalProspectsSum = 0;
+            var totalDealSum = 0;
+            var totalExpSum = 0;
+
+            branches.forEach(function(b) {
+                var pCount = parseInt(b.prospect_count) || 0;
+                var dVal = parseFloat(b.deal_value) || 0;
+                var eVal = parseFloat(b.expected_value) || 0;
+
+                totalProspectsSum += pCount;
+                totalDealSum += dVal;
+                totalExpSum += eVal;
+
+                var badgesHtml = '';
+                if (b.is_default) {
+                    badgesHtml += ' <span style="font-size:10px; font-weight:700; background:#e0e7ff; color:#4338ca; padding:1px 6px; border-radius:4px; margin-left:4px;">HO</span>';
+                }
+                if (b.branch_type) {
+                    var typeBg = b.branch_type === 'COCO' ? '#f3e8ff' : '#e0f2fe';
+                    var typeColor = b.branch_type === 'COCO' ? '#7e22ce' : '#0369a1';
+                    badgesHtml += ' <span style="font-size:10px; font-weight:700; background:' + typeBg + '; color:' + typeColor + '; padding:1px 6px; border-radius:4px; margin-left:4px;">' + b.branch_type + '</span>';
+                }
+
+                var safeName = (b.name ? b.name.replace(/'/g, "\\'") : '');
+                var clickAction = 'openBranchHotLeadsModal(' + b.id + ', \'' + safeName + '\')';
+
+                rowsHtml += '<tr onclick="' + clickAction + '" style="cursor:pointer;" title="Click to view hot prospects for ' + (b.name || '') + '">' +
+                    '<td>' +
+                        '<div style="font-weight:700; color:var(--da-text); display:flex; align-items:center; flex-wrap:wrap; gap:4px;">' +
+                            '<span style="color:var(--da-orange); text-decoration:underline; text-underline-offset:2px;">' + (b.name || 'Unnamed Branch') + '</span>' +
+                            badgesHtml +
+                        '</div>' +
+                        (b.code ? '<div style="font-size:10px; color:#94a3b8;">' + b.code + '</div>' : '') +
+                    '</td>' +
+                    '<td style="text-align:center;">' +
+                        '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
+                            pCount +
+                        '</span>' +
+                    '</td>' +
+                    '<td style="text-align:right; font-weight:700; color:' + (dVal > 0 ? 'var(--da-text)' : '#94a3b8') + ';">' +
+                        fmt(dVal) +
+                    '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:' + (eVal > 0 ? '#059669' : '#94a3b8') + ';">' +
+                        fmt(eVal) +
+                    '</td>' +
+                '</tr>';
+            });
+
+            tbody.innerHTML = rowsHtml;
+
+            if (tfoot) {
+                tfoot.innerHTML = '<tr>' +
+                    '<td>Total (' + branches.length + ' Branches)</td>' +
+                    '<td style="text-align:center; font-weight:800;">' + totalProspectsSum + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totalDealSum) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(totalExpSum) + '</td>' +
+                '</tr>';
+            }
+        }
+    }
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+};
+
+window.closeTotalProspectsModal = function() {
+    var modal = document.getElementById('daTotalProspectsModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+};
+
+/* ── Branch Hot Leads Stacked Modal ── */
+window.openBranchHotLeadsModal = function(target, targetName) {
+    var modal = document.getElementById('daBranchHotLeadsModal');
+    if (!modal) return;
+
+    var titleEl = document.getElementById('daBranchModalTitle');
+    var badgeTypeEl = document.getElementById('daBranchModalTypeBadge');
+    var summaryEl = document.getElementById('daBranchModalSummary');
+    var tbody = document.getElementById('daBranchHotLeadsBody');
+    var tfoot = document.getElementById('daBranchHotLeadsFoot');
+
+    if (titleEl) titleEl.textContent = (targetName || 'Hot Prospects');
+    if (summaryEl) summaryEl.textContent = 'Loading hot prospects for ' + (targetName || 'category') + '...';
+    if (badgeTypeEl) badgeTypeEl.style.display = 'none';
+
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading hot prospects...</span></div></td></tr>';
+    }
+    if (tfoot) tfoot.innerHTML = '';
+
+    modal.classList.add('open');
+
+    // Build URL: support target string ('nst_ho', 'non_coco', 'coco') or numeric branch ID
+    var isType = typeof target === 'string' && isNaN(Number(target));
+    var queryParam = isType ? ('type=' + encodeURIComponent(target)) : ('branch_id=' + encodeURIComponent(target));
+    var url = '{{ url("/dashboard/branch-hot-leads") }}?' + queryParam;
+    if (state.user) {
+        url += '&user_id=' + encodeURIComponent(state.user);
+    }
+
+    var headers = { 'Accept': 'application/json' };
+    if (API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) {
+            if (!res.ok) {
+                // Try API endpoint fallback
+                return fetch('{{ url("/api/dashboard/branch-hot-leads") }}?' + queryParam + (state.user ? '&user_id=' + encodeURIComponent(state.user) : ''), {
+                    headers: headers,
+                    credentials: 'same-origin'
+                }).then(function(r2) { return r2.json(); });
+            }
+            return res.json();
+        })
+        .then(function(res) {
+            var data = (res && res.data) || {};
+            var branch = data.branch || {};
+            var leads = data.leads || [];
+
+            if (titleEl) titleEl.textContent = (branch.name || targetName || 'Hot Prospects') + ' - Hot Prospects';
+            if (badgeTypeEl) {
+                if (branch.branch_type) {
+                    badgeTypeEl.textContent = branch.branch_type;
+                    badgeTypeEl.style.display = 'inline-block';
+                    badgeTypeEl.style.background = branch.branch_type === 'COCO' ? '#f3e8ff' : '#e0f2fe';
+                    badgeTypeEl.style.color = branch.branch_type === 'COCO' ? '#7e22ce' : '#0369a1';
+                } else {
+                    badgeTypeEl.style.display = 'none';
+                }
+            }
+
+            if (summaryEl) {
+                var subPrefix = branch.subtitle ? (branch.subtitle + ' • ') : '';
+                summaryEl.innerHTML = subPrefix + 'Showing <strong>' + leads.length + '</strong> Hot prospect' + (leads.length !== 1 ? 's' : '') +
+                    ' • Total Deal: <strong>' + fmt(data.total_deal || 0) + '</strong>' +
+                    ' • Expected Collection: <strong style="color:#059669;">' + fmt(data.total_expected || 0) + '</strong>';
+            }
+
+            if (!tbody) return;
+
+            if (leads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;">No hot prospects found in current month.</td></tr>';
+                if (tfoot) tfoot.innerHTML = '';
+                return;
+            }
+
+            var rowsHtml = '';
+            var sumDeal = 0;
+            var sumExp = 0;
+
+            leads.forEach(function(l, i) {
+                var dVal = parseFloat(l.deal_value) || 0;
+                var eVal = parseFloat(l.expected_value) || 0;
+                sumDeal += dVal;
+                sumExp += eVal;
+
+                var custCol = l.lead_view_url
+                    ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
+                    : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>';
+
+                rowsHtml += '<tr>' +
+                    '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+                    '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
+                    '<td>' + custCol + '</td>' +
+                    '<td style="font-weight:600; color:#334155;">' + (l.product_name || '-') + '</td>' +
+                    '<td style="text-align:center;">' +
+                        '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca;">' +
+                            '🔥 ' + (l.status || 'Hot') +
+                        '</span>' +
+                    '</td>' +
+                    '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(eVal) + '</td>' +
+                    '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + (l.closure_date || '-') + '</td>' +
+                    '<td style="font-weight:600; color:#1e293b;">' + (l.executive_name || '-') + '</td>' +
+                '</tr>';
+            });
+
+            tbody.innerHTML = rowsHtml;
+
+            if (tfoot) {
+                tfoot.innerHTML = '<tr>' +
+                    '<td colspan="5" style="font-weight:800;">Total (' + leads.length + ' Hot Prospects)</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+                    '<td colspan="2"></td>' +
+                '</tr>';
+            }
+        })
+        .catch(function(err) {
+            console.error('[Branch Hot Leads Error]', err);
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#ef4444;">Failed to load branch leads: ' + (err.message || 'Server error') + '</td></tr>';
+            }
+        });
+};
+
+window.closeBranchHotLeadsModal = function() {
+    var modal = document.getElementById('daBranchHotLeadsModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+};
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var subModal = document.getElementById('daBranchHotLeadsModal');
+        if (subModal && subModal.classList.contains('open')) {
+            window.closeBranchHotLeadsModal();
+            return;
+        }
+
+        var modal = document.getElementById('daTotalProspectsModal');
+        if (modal && modal.classList.contains('open')) {
+            window.closeTotalProspectsModal();
+        }
+    }
+});
 
 window.viewHotProducts = function() {
     window.location.href = LEAD_BASE + '/products?product_status=hot';

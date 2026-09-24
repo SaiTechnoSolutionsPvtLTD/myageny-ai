@@ -109,6 +109,8 @@ Route::middleware(['auth'])->group(function () {
      // Super Admin Dashboard (API-integrated blade)
     Route::get('/dashboard/admin', [DashboardController::class, 'index'])
         ->name('dashboard.admin');
+    Route::get('/dashboard/branch-hot-leads', [SuperAdminDashboardController::class, 'branchHotLeads'])
+        ->name('dashboard.branch-hot-leads');
 
     Route::get('/product-dashboard/admin', [SuperAdminDashboardController::class, 'adminProductindex'])
         ->middleware('can:dashboard.view');

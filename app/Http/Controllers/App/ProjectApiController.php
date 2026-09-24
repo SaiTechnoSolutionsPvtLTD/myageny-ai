@@ -1471,6 +1471,12 @@ class ProjectApiController extends Controller
             'day_closing_update' => ['nullable', 'string'],
             'poster_count'       => ['nullable', 'integer', 'min:0'],
             'video_count'        => ['nullable', 'integer', 'min:0'],
+            'attachments'        => ['nullable', 'array'],
+            'attachments.*'      => ['nullable', 'file', 'max:25600'],
+            'removed_attachments'   => ['nullable', 'array'],
+            'removed_attachments.*' => ['nullable', 'string'],
+        ], [
+            'attachments.*.max' => 'Each attached file must not exceed 25MB.',
         ]);
 
         $updateData = [];
@@ -1495,6 +1501,52 @@ class ProjectApiController extends Controller
         }
         if (isset($validated['video_count'])) {
             $updateData['video_count'] = (int) $validated['video_count'];
+        }
+
+        // Handle attachment modifications
+        $existing = is_array($timesheet->attachments) ? $timesheet->attachments : [];
+        $attachmentsModified = false;
+
+        if (!empty($validated['removed_attachments'])) {
+            $removed = (array) $validated['removed_attachments'];
+            $existing = array_values(array_filter($existing, function ($item) use ($removed) {
+                $p = is_array($item) ? ($item['path'] ?? '') : (string) $item;
+                return !in_array($p, $removed, true);
+            }));
+            $attachmentsModified = true;
+        }
+
+        if ($request->hasFile('attachments')) {
+            $files = $request->file('attachments');
+            if (! is_array($files)) {
+                $files = [$files];
+            }
+            $targetDir = public_path('uploads/timesheets');
+            if (! file_exists($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            foreach ($files as $file) {
+                if ($file && $file->isValid()) {
+                    $origName = $file->getClientOriginalName();
+                    $fileSize = $file->getSize();
+                    $mimeType = $file->getClientMimeType();
+                    $ext = $file->getClientOriginalExtension() ?: pathinfo($origName, PATHINFO_EXTENSION);
+                    $fileName = time() . '_' . \Illuminate\Support\Str::random(8) . ($ext ? '.' . strtolower($ext) : '');
+                    $file->move($targetDir, $fileName);
+
+                    $existing[] = [
+                        'path' => 'uploads/timesheets/' . $fileName,
+                        'name' => $origName,
+                        'size' => $fileSize ?: (file_exists($targetDir . '/' . $fileName) ? filesize($targetDir . '/' . $fileName) : 0),
+                        'mime_type' => $mimeType,
+                    ];
+                    $attachmentsModified = true;
+                }
+            }
+        }
+
+        if ($attachmentsModified) {
+            $updateData['attachments'] = $existing;
         }
 
         if (! empty($updateData)) {
@@ -2170,6 +2222,7 @@ class ProjectApiController extends Controller
             'submitted_at'          => $ts->created_at?->toDateTimeString(),
             // Fixed: read the real status column instead of comparing dates.
             'is_completed'          => $ts->status === 'completed',
+            'attachments'           => $ts->attachment_list,
         ];
     }
 
