@@ -84,6 +84,7 @@ class DashboardController extends Controller
             'sources'   => $sources,
             'statuses'  => $statuses,
             'companyId' => $user->company_id,
+            'canViewForecasting' => (bool) ($user->isSuperAdmin() || $user->isCompanyAdminRole() || $user->isCbo()),
         ]);
 
     }

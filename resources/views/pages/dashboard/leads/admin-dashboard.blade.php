@@ -462,6 +462,236 @@
     border-bottom: none;
 }
 
+/* ─── Active Branches Tabs & Compare View inside Key Metrics Modal ─── */
+.da-branch-tabs-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--da-border);
+    flex-wrap: wrap;
+}
+.da-branch-tab-btn {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+.da-branch-tab-btn:hover {
+    border-color: #cbd5e1;
+    color: #0f172a;
+    background: #f1f5f9;
+}
+.da-branch-tab-btn.active {
+    background: var(--da-orange);
+    border-color: var(--da-orange);
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(254, 95, 4, 0.25);
+}
+.da-branch-tab-badge {
+    background: rgba(0, 0, 0, 0.08);
+    color: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+.da-branch-tab-btn.active .da-branch-tab-badge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+
+/* Compare View Styles */
+.da-compare-container {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    max-height: calc(100vh - 160px);
+}
+.da-compare-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+@media (max-width: 640px) {
+    .da-compare-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.da-compare-card {
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.da-compare-card.coco {
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    border: 1.5px solid #d8b4fe;
+}
+.da-compare-card.non-coco {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1.5px solid #7dd3fc;
+}
+.da-compare-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.da-compare-card-title {
+    font-size: 13px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.da-compare-card.coco .da-compare-card-title { color: #6b21a8; }
+.da-compare-card.non-coco .da-compare-card-title { color: #0369a1; }
+.da-compare-stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.75);
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+.da-compare-stat-label {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.da-compare-stat-val {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-top: 2px;
+}
+.da-compare-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+}
+.da-compare-card.coco .da-compare-btn {
+    background: #7e22ce;
+    color: #ffffff;
+}
+.da-compare-card.coco .da-compare-btn:hover { background: #6b21a8; }
+.da-compare-card.non-coco .da-compare-btn {
+    background: #0284c7;
+    color: #ffffff;
+}
+.da-compare-card.non-coco .da-compare-btn:hover { background: #0369a1; }
+
+.da-compare-table-wrap {
+    background: #ffffff;
+    border: 1px solid var(--da-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.da-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.da-compare-table th {
+    background: #f8fafc;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    border-bottom: 1.5px solid var(--da-border);
+}
+.da-compare-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.da-compare-table tr:hover {
+    background: #fdfaf6;
+}
+
+/* Submodal Toolbar & Pivot Tabs */
+.da-submodal-toolbar {
+    padding: 10px 20px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--da-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+.da-submodal-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.da-submodal-tab-btn {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+.da-submodal-tab-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+.da-submodal-tab-btn.active {
+    background: var(--da-orange);
+    color: #ffffff;
+    border-color: var(--da-orange);
+    box-shadow: 0 1px 3px rgba(254, 95, 4, 0.25);
+}
+.da-submodal-tab-btn.active .da-branch-tab-badge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+.da-submodal-search {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: 250px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+.da-submodal-search:focus {
+    border-color: var(--da-orange);
+    box-shadow: 0 0 0 2px rgba(254, 95, 4, 0.15);
+}
+
 /* Active chips */
 .da-chips { display:none; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 24px 8px; }
 .da-chips.show { display:flex; }
@@ -956,10 +1186,19 @@
                 Reset
             </button>
 
+            @php
+                $canViewForecasting = $canViewForecasting ?? (bool) (
+                    auth()->user()?->isSuperAdmin()
+                    || auth()->user()?->isCompanyAdminRole()
+                    || auth()->user()?->isCbo()
+                );
+            @endphp
+            @if($canViewForecasting)
             <button type="button" class="da-forecast-btn" id="daForecastBtn" onclick="toggleForecasting()" title="View Forecasting & Current Month Hot Prospects">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.3"/></svg>
                 <span id="daForecastBtnText">Forecasting</span>
             </button>
+            @endif
         </div>
 
         {{-- Active chips --}}
@@ -998,6 +1237,7 @@
         </div>
 
         {{-- ── Forecasting Section ── --}}
+        @if($canViewForecasting)
         <div id="daForecastSection" style="display:none;">
             <div class="da-section-head">
                 <div class="da-section-title">
@@ -1020,6 +1260,7 @@
                 </div>
             </div>
         </div>
+        @endif
 
         {{-- ── Target Tracking Card ── --}}
         <div class="da-target-card" style="display:none;" id="daTargetCard">
@@ -1449,7 +1690,7 @@
                     </div>
                 </div>
 
-                {{-- ── Right 6 Columns: Active Branches Table ── --}}
+                {{-- ── Right 6 Columns: Active Branches Table & Comparison ── --}}
                 <div class="da-modal-col-right">
                     <div class="da-modal-section-card" style="height:100%; display:flex; flex-direction:column;">
                         <div class="da-modal-section-head">
@@ -1462,7 +1703,28 @@
                             <span class="da-badge" id="daModalBranchBadge" style="font-size:10px; font-weight:700; background:rgba(254,95,4,0.08); color:var(--da-orange); border-color:rgba(254,95,4,0.2);">Current Month Hot Prospects</span>
                         </div>
 
-                        <div class="da-modal-table-wrap">
+                        {{-- ── 4 Tabs: All Branches, COCO Branches, NON COC Branches, COCO & NON COC Compare ── --}}
+                        <div class="da-branch-tabs-bar">
+                            <button type="button" class="da-branch-tab-btn active" id="daBranchTabAll" onclick="switchBranchTab('all')">
+                                <span>All Branches</span>
+                                <span class="da-branch-tab-badge" id="daBranchTabAllBadge">0</span>
+                            </button>
+                            <button type="button" class="da-branch-tab-btn" id="daBranchTabCoco" onclick="switchBranchTab('coco')">
+                                <span>COCO Branches</span>
+                                <span class="da-branch-tab-badge" id="daBranchTabCocoBadge">0</span>
+                            </button>
+                            <button type="button" class="da-branch-tab-btn" id="daBranchTabNonCoco" onclick="switchBranchTab('non_coco')">
+                                <span>NON COC Branches</span>
+                                <span class="da-branch-tab-badge" id="daBranchTabNonCocoBadge">0</span>
+                            </button>
+                            <button type="button" class="da-branch-tab-btn" id="daBranchTabCompare" onclick="switchBranchTab('compare')">
+                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                <span>COCO &amp; NON COC Compare</span>
+                            </button>
+                        </div>
+
+                        {{-- ── Filtered Branches Table View (All, COCO, NON COC) ── --}}
+                        <div class="da-modal-table-wrap" id="daModalBranchTableWrap">
                             <table class="da-modal-table">
                                 <thead>
                                     <tr>
@@ -1478,6 +1740,88 @@
                                 <tfoot id="daModalBranchesTableFoot">
                                 </tfoot>
                             </table>
+                        </div>
+
+                        {{-- ── COCO & NON COC Compare View Container ── --}}
+                        <div class="da-compare-container" id="daModalBranchCompareWrap" style="display:none;">
+                            <div class="da-compare-grid">
+                                {{-- COCO Card --}}
+                                <div class="da-compare-card coco">
+                                    <div class="da-compare-card-head">
+                                        <span class="da-compare-card-title">
+                                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#7e22ce;"></span>
+                                            COCO Branches
+                                        </span>
+                                        <span class="da-badge" id="daCompareCocoCountBadge" style="font-size:10px; font-weight:800; background:#f3e8ff; color:#7e22ce; border-color:#d8b4fe;">0 Branches</span>
+                                    </div>
+                                    <div class="da-compare-stat-row">
+                                        <div>
+                                            <div class="da-compare-stat-label">Prospects</div>
+                                            <div class="da-compare-stat-val" id="daCompareCocoProspects">0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Deal Value</div>
+                                            <div class="da-compare-stat-val" id="daCompareCocoDeal">₹0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Expected Value</div>
+                                            <div class="da-compare-stat-val" style="color:#059669;" id="daCompareCocoExpected">₹0</div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end;">
+                                        <button type="button" class="da-compare-btn" onclick="openBranchHotLeadsModal('coco', 'COCO Branches')">
+                                            <span>View All COCO Prospects ↗</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {{-- NON COCO Card --}}
+                                <div class="da-compare-card non-coco">
+                                    <div class="da-compare-card-head">
+                                        <span class="da-compare-card-title">
+                                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0284c7;"></span>
+                                            NON COC Branches
+                                        </span>
+                                        <span class="da-badge" id="daCompareNonCocoCountBadge" style="font-size:10px; font-weight:800; background:#e0f2fe; color:#0369a1; border-color:#bae6fd;">0 Branches</span>
+                                    </div>
+                                    <div class="da-compare-stat-row">
+                                        <div>
+                                            <div class="da-compare-stat-label">Prospects</div>
+                                            <div class="da-compare-stat-val" id="daCompareNonCocoProspects">0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Deal Value</div>
+                                            <div class="da-compare-stat-val" id="daCompareNonCocoDeal">₹0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Expected Value</div>
+                                            <div class="da-compare-stat-val" style="color:#059669;" id="daCompareNonCocoExpected">₹0</div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end;">
+                                        <button type="button" class="da-compare-btn" onclick="openBranchHotLeadsModal('non_coco', 'NON COC Branches')">
+                                            <span>View All NON COC Prospects ↗</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Head to Head Comparison Table --}}
+                            <div class="da-compare-table-wrap">
+                                <table class="da-compare-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Key Metric Comparison</th>
+                                            <th style="text-align:right; color:#7e22ce;">COCO</th>
+                                            <th style="text-align:right; color:#0284c7;">NON COC</th>
+                                            <th style="text-align:right;">Total / Overall</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="daCompareTableBody">
+                                        {{-- Rendered dynamically in JS --}}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1513,8 +1857,33 @@
             </div>
         </div>
 
+        {{-- ── Submodal Toolbar: 3 Pivot Tabs + Quick Search ── --}}
+        <div class="da-submodal-toolbar">
+            <div class="da-submodal-tabs">
+                <button type="button" class="da-submodal-tab-btn active" id="daSubmodalTabFull" onclick="switchPivotTab('full')">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                    <span>Full Details</span>
+                    <span class="da-branch-tab-badge" id="daSubmodalCountFull">0</span>
+                </button>
+                <button type="button" class="da-submodal-tab-btn" id="daSubmodalTabProduct" onclick="switchPivotTab('product')">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    <span>Product Wise Pivot</span>
+                    <span class="da-branch-tab-badge" id="daSubmodalCountProduct">0</span>
+                </button>
+                <button type="button" class="da-submodal-tab-btn" id="daSubmodalTabExecutive" onclick="switchPivotTab('executive')">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span>Executive Wise Pivot</span>
+                    <span class="da-branch-tab-badge" id="daSubmodalCountExecutive">0</span>
+                </button>
+            </div>
+            <div>
+                <input type="text" id="daSubmodalSearch" class="da-submodal-search" placeholder="Filter current view..." oninput="onSubmodalSearchChange(this.value)">
+            </div>
+        </div>
+
         <div class="da-submodal-body">
-            <div class="da-submodal-table-wrap">
+            {{-- 1. Full Details View --}}
+            <div class="da-submodal-table-wrap" id="daSubmodalWrapFull">
                 <table class="da-submodal-table">
                     <thead>
                         <tr>
@@ -1537,6 +1906,50 @@
                         </tr>
                     </tbody>
                     <tfoot id="daBranchHotLeadsFoot">
+                    </tfoot>
+                </table>
+            </div>
+
+            {{-- 2. Product Wise Pivot View --}}
+            <div class="da-submodal-table-wrap" id="daSubmodalWrapProduct" style="display:none;">
+                <table class="da-submodal-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">#</th>
+                            <th>Product / Service Name</th>
+                            <th style="text-align: center;">Prospects Count</th>
+                            <th style="text-align: right;">Total Deal Value</th>
+                            <th style="text-align: right;">Expected Collection Value</th>
+                            <th style="text-align: right;">Avg Deal Value</th>
+                            <th style="text-align: center;">Filter</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daBranchProductPivotBody">
+                        <tr><td colspan="7" style="text-align: center; padding: 36px; color: #94a3b8;">No product data available</td></tr>
+                    </tbody>
+                    <tfoot id="daBranchProductPivotFoot">
+                    </tfoot>
+                </table>
+            </div>
+
+            {{-- 3. Executive Wise Pivot View --}}
+            <div class="da-submodal-table-wrap" id="daSubmodalWrapExecutive" style="display:none;">
+                <table class="da-submodal-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">#</th>
+                            <th>Sales Executive Name</th>
+                            <th style="text-align: center;">Prospects Count</th>
+                            <th style="text-align: right;">Total Deal Value</th>
+                            <th style="text-align: right;">Expected Collection Value</th>
+                            <th style="text-align: right;">Avg Deal Value</th>
+                            <th style="text-align: center;">Filter</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daBranchExecutivePivotBody">
+                        <tr><td colspan="7" style="text-align: center; padding: 36px; color: #94a3b8;">No executive data available</td></tr>
+                    </tbody>
+                    <tfoot id="daBranchExecutivePivotFoot">
                     </tfoot>
                 </table>
             </div>
@@ -2171,79 +2584,28 @@ window.openTotalProspectsModal = function() {
     if (cocoDealEl) cocoDealEl.textContent = fmt(coco.deal_value || 0);
     if (cocoExpEl) cocoExpEl.textContent = fmt(coco.expected_value || 0);
 
-    // 4. Active Branches Table (Excluding default branch / HO)
-    var branches = (m.activeBranches || []).filter(function(b) {
+    // 4. Filter branches list
+    activeBranchesList = (m.activeBranches || []).filter(function(b) {
         return !b.is_default;
     });
-    var tbody = document.getElementById('daModalBranchesTableBody');
-    var tfoot = document.getElementById('daModalBranchesTableFoot');
 
-    if (tbody) {
-        if (branches.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No active branches found.</td></tr>';
-            if (tfoot) tfoot.innerHTML = '';
-        } else {
-            var rowsHtml = '';
-            var totalProspectsSum = 0;
-            var totalDealSum = 0;
-            var totalExpSum = 0;
+    var cocoCount = activeBranchesList.filter(function(b) {
+        return (b.branch_type || '').toUpperCase() === 'COCO';
+    }).length;
+    var nonCocoCount = activeBranchesList.filter(function(b) {
+        return (b.branch_type || '').toUpperCase() !== 'COCO';
+    }).length;
 
-            branches.forEach(function(b) {
-                var pCount = parseInt(b.prospect_count) || 0;
-                var dVal = parseFloat(b.deal_value) || 0;
-                var eVal = parseFloat(b.expected_value) || 0;
+    // Update tab badges
+    var allBadge = document.getElementById('daBranchTabAllBadge');
+    var cocoBadge = document.getElementById('daBranchTabCocoBadge');
+    var nonCocoBadge = document.getElementById('daBranchTabNonCocoBadge');
+    if (allBadge) allBadge.textContent = activeBranchesList.length;
+    if (cocoBadge) cocoBadge.textContent = cocoCount;
+    if (nonCocoBadge) nonCocoBadge.textContent = nonCocoCount;
 
-                totalProspectsSum += pCount;
-                totalDealSum += dVal;
-                totalExpSum += eVal;
-
-                var badgesHtml = '';
-                if (b.is_default) {
-                    badgesHtml += ' <span style="font-size:10px; font-weight:700; background:#e0e7ff; color:#4338ca; padding:1px 6px; border-radius:4px; margin-left:4px;">HO</span>';
-                }
-                if (b.branch_type) {
-                    var typeBg = b.branch_type === 'COCO' ? '#f3e8ff' : '#e0f2fe';
-                    var typeColor = b.branch_type === 'COCO' ? '#7e22ce' : '#0369a1';
-                    badgesHtml += ' <span style="font-size:10px; font-weight:700; background:' + typeBg + '; color:' + typeColor + '; padding:1px 6px; border-radius:4px; margin-left:4px;">' + b.branch_type + '</span>';
-                }
-
-                var safeName = (b.name ? b.name.replace(/'/g, "\\'") : '');
-                var clickAction = 'openBranchHotLeadsModal(' + b.id + ', \'' + safeName + '\')';
-
-                rowsHtml += '<tr onclick="' + clickAction + '" style="cursor:pointer;" title="Click to view hot prospects for ' + (b.name || '') + '">' +
-                    '<td>' +
-                        '<div style="font-weight:700; color:var(--da-text); display:flex; align-items:center; flex-wrap:wrap; gap:4px;">' +
-                            '<span style="color:var(--da-orange); text-decoration:underline; text-underline-offset:2px;">' + (b.name || 'Unnamed Branch') + '</span>' +
-                            badgesHtml +
-                        '</div>' +
-                        (b.code ? '<div style="font-size:10px; color:#94a3b8;">' + b.code + '</div>' : '') +
-                    '</td>' +
-                    '<td style="text-align:center;">' +
-                        '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
-                            pCount +
-                        '</span>' +
-                    '</td>' +
-                    '<td style="text-align:right; font-weight:700; color:' + (dVal > 0 ? 'var(--da-text)' : '#94a3b8') + ';">' +
-                        fmt(dVal) +
-                    '</td>' +
-                    '<td style="text-align:right; font-weight:800; color:' + (eVal > 0 ? '#059669' : '#94a3b8') + ';">' +
-                        fmt(eVal) +
-                    '</td>' +
-                '</tr>';
-            });
-
-            tbody.innerHTML = rowsHtml;
-
-            if (tfoot) {
-                tfoot.innerHTML = '<tr>' +
-                    '<td>Total (' + branches.length + ' Branches)</td>' +
-                    '<td style="text-align:center; font-weight:800;">' + totalProspectsSum + '</td>' +
-                    '<td style="text-align:right; font-weight:800;">' + fmt(totalDealSum) + '</td>' +
-                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(totalExpSum) + '</td>' +
-                '</tr>';
-            }
-        }
-    }
+    // Switch to current tab (default 'all')
+    switchBranchTab(currentBranchTab || 'all');
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -2256,6 +2618,529 @@ window.closeTotalProspectsModal = function() {
     document.body.style.overflow = '';
 };
 
+/* ═══════════════════════════════════════════════════════
+   ACTIVE BRANCHES TABS & COMPARISON LOGIC
+═══════════════════════════════════════════════════════ */
+var currentBranchTab = 'all';
+var activeBranchesList = [];
+
+window.switchBranchTab = function(tab) {
+    currentBranchTab = tab;
+    ['all', 'coco', 'non_coco', 'compare'].forEach(function(t) {
+        var btn = document.getElementById(t === 'all' ? 'daBranchTabAll' : (t === 'coco' ? 'daBranchTabCoco' : (t === 'non_coco' ? 'daBranchTabNonCoco' : 'daBranchTabCompare')));
+        if (btn) {
+            if (t === tab) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+    });
+
+    var tableWrap = document.getElementById('daModalBranchTableWrap');
+    var compareWrap = document.getElementById('daModalBranchCompareWrap');
+
+    if (tab === 'compare') {
+        if (tableWrap) tableWrap.style.display = 'none';
+        if (compareWrap) compareWrap.style.display = 'flex';
+        renderBranchComparison();
+    } else {
+        if (compareWrap) compareWrap.style.display = 'none';
+        if (tableWrap) tableWrap.style.display = 'block';
+        renderActiveBranchesTable(tab);
+    }
+};
+
+function renderActiveBranchesTable(filterType) {
+    var tbody = document.getElementById('daModalBranchesTableBody');
+    var tfoot = document.getElementById('daModalBranchesTableFoot');
+    if (!tbody) return;
+
+    var filtered = activeBranchesList;
+    if (filterType === 'coco') {
+        filtered = activeBranchesList.filter(function(b) {
+            return (b.branch_type || '').toUpperCase() === 'COCO';
+        });
+    } else if (filterType === 'non_coco') {
+        filtered = activeBranchesList.filter(function(b) {
+            return (b.branch_type || '').toUpperCase() !== 'COCO';
+        });
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + (filterType === 'coco' ? 'COCO' : (filterType === 'non_coco' ? 'NON COC' : 'selected category')) + '.</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var totalProspectsSum = 0;
+    var totalDealSum = 0;
+    var totalExpSum = 0;
+
+    filtered.forEach(function(b) {
+        var pCount = parseInt(b.prospect_count) || 0;
+        var dVal = parseFloat(b.deal_value) || 0;
+        var eVal = parseFloat(b.expected_value) || 0;
+
+        totalProspectsSum += pCount;
+        totalDealSum += dVal;
+        totalExpSum += eVal;
+
+        var badgesHtml = '';
+        if (b.is_default) {
+            badgesHtml += ' <span style="font-size:10px; font-weight:700; background:#e0e7ff; color:#4338ca; padding:1px 6px; border-radius:4px; margin-left:4px;">HO</span>';
+        }
+        if (b.branch_type) {
+            var typeBg = b.branch_type === 'COCO' ? '#f3e8ff' : '#e0f2fe';
+            var typeColor = b.branch_type === 'COCO' ? '#7e22ce' : '#0369a1';
+            badgesHtml += ' <span style="font-size:10px; font-weight:700; background:' + typeBg + '; color:' + typeColor + '; padding:1px 6px; border-radius:4px; margin-left:4px;">' + b.branch_type + '</span>';
+        }
+
+        var safeName = (b.name ? b.name.replace(/'/g, "\\'") : '');
+        var clickAction = 'openBranchHotLeadsModal(' + b.id + ', \'' + safeName + '\')';
+
+        rowsHtml += '<tr onclick="' + clickAction + '" style="cursor:pointer;" title="Click to view hot prospects for ' + (b.name || '') + '">' +
+            '<td>' +
+                '<div style="font-weight:700; color:var(--da-text); display:flex; align-items:center; flex-wrap:gap; gap:4px;">' +
+                    '<span style="color:var(--da-orange); text-decoration:underline; text-underline-offset:2px;">' + (b.name || 'Unnamed Branch') + '</span>' +
+                    badgesHtml +
+                '</div>' +
+                (b.code ? '<div style="font-size:10px; color:#94a3b8;">' + b.code + '</div>' : '') +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
+                    pCount +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:' + (dVal > 0 ? 'var(--da-text)' : '#94a3b8') + ';">' +
+                fmt(dVal) +
+            '</td>' +
+            '<td style="text-align:right; font-weight:800; color:' + (eVal > 0 ? '#059669' : '#94a3b8') + ';">' +
+                fmt(eVal) +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        var label = filterType === 'coco' ? 'COCO Branches' : (filterType === 'non_coco' ? 'NON COC Branches' : 'All Branches');
+        tfoot.innerHTML = '<tr>' +
+            '<td>Total (' + filtered.length + ' ' + label + ')</td>' +
+            '<td style="text-align:center; font-weight:800;">' + totalProspectsSum + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(totalDealSum) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(totalExpSum) + '</td>' +
+        '</tr>';
+    }
+}
+
+function renderBranchComparison() {
+    var cocoList = activeBranchesList.filter(function(b) {
+        return (b.branch_type || '').toUpperCase() === 'COCO';
+    });
+    var nonCocoList = activeBranchesList.filter(function(b) {
+        return (b.branch_type || '').toUpperCase() !== 'COCO';
+    });
+
+    var cocoP = 0, cocoD = 0, cocoE = 0;
+    cocoList.forEach(function(b) {
+        cocoP += parseInt(b.prospect_count) || 0;
+        cocoD += parseFloat(b.deal_value) || 0;
+        cocoE += parseFloat(b.expected_value) || 0;
+    });
+
+    var nonCocoP = 0, nonCocoD = 0, nonCocoE = 0;
+    nonCocoList.forEach(function(b) {
+        nonCocoP += parseInt(b.prospect_count) || 0;
+        nonCocoD += parseFloat(b.deal_value) || 0;
+        nonCocoE += parseFloat(b.expected_value) || 0;
+    });
+
+    // Update top cards
+    var cBadge = document.getElementById('daCompareCocoCountBadge');
+    var cP = document.getElementById('daCompareCocoProspects');
+    var cD = document.getElementById('daCompareCocoDeal');
+    var cE = document.getElementById('daCompareCocoExpected');
+
+    if (cBadge) cBadge.textContent = cocoList.length + ' Branches';
+    if (cP) cP.textContent = cocoP;
+    if (cD) cD.textContent = fmt(cocoD);
+    if (cE) cE.textContent = fmt(cocoE);
+
+    var ncBadge = document.getElementById('daCompareNonCocoCountBadge');
+    var ncP = document.getElementById('daCompareNonCocoProspects');
+    var ncD = document.getElementById('daCompareNonCocoDeal');
+    var ncE = document.getElementById('daCompareNonCocoExpected');
+
+    if (ncBadge) ncBadge.textContent = nonCocoList.length + ' Branches';
+    if (ncP) ncP.textContent = nonCocoP;
+    if (ncD) ncD.textContent = fmt(nonCocoD);
+    if (ncE) ncE.textContent = fmt(nonCocoE);
+
+    // Update table
+    var compareBody = document.getElementById('daCompareTableBody');
+    if (!compareBody) return;
+
+    var totalBranches = cocoList.length + nonCocoList.length;
+    var totalP = cocoP + nonCocoP;
+    var totalD = cocoD + nonCocoD;
+    var totalE = cocoE + nonCocoE;
+
+    var cocoAvgDeal = cocoList.length > 0 ? (cocoD / cocoList.length) : 0;
+    var nonCocoAvgDeal = nonCocoList.length > 0 ? (nonCocoD / nonCocoList.length) : 0;
+    var overallAvgDeal = totalBranches > 0 ? (totalD / totalBranches) : 0;
+
+    var cocoAvgP = cocoList.length > 0 ? (cocoP / cocoList.length).toFixed(1) : '0';
+    var nonCocoAvgP = nonCocoList.length > 0 ? (nonCocoP / nonCocoList.length).toFixed(1) : '0';
+    var overallAvgP = totalBranches > 0 ? (totalP / totalBranches).toFixed(1) : '0';
+
+    var cocoShare = totalD > 0 ? ((cocoD / totalD) * 100).toFixed(1) + '%' : '0%';
+    var nonCocoShare = totalD > 0 ? ((nonCocoD / totalD) * 100).toFixed(1) + '%' : '0%';
+
+    var rows = [
+        { metric: 'Active Branches Count', coco: cocoList.length, nonCoco: nonCocoList.length, total: totalBranches, isBold: true },
+        { metric: 'Hot Prospects Count', coco: cocoP, nonCoco: nonCocoP, total: totalP, isBold: true },
+        { metric: 'Total Deal Value', coco: fmt(cocoD), nonCoco: fmt(nonCocoD), total: fmt(totalD), isBold: true },
+        { metric: 'Expected Collection Value', coco: fmt(cocoE), nonCoco: fmt(nonCocoE), total: fmt(totalE), isGreen: true },
+        { metric: 'Avg Deal Value per Branch', coco: fmt(cocoAvgDeal), nonCoco: fmt(nonCocoAvgDeal), total: fmt(overallAvgDeal) },
+        { metric: 'Avg Prospects per Branch', coco: cocoAvgP, nonCoco: nonCocoAvgP, total: overallAvgP },
+        { metric: '% Contribution to Deal Value', coco: cocoShare, nonCoco: nonCocoShare, total: '100%' }
+    ];
+
+    compareBody.innerHTML = rows.map(function(r) {
+        var style = r.isBold ? 'font-weight:700;' : '';
+        var colorCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:700; color:#7e22ce;' : '');
+        var colorNonCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:700; color:#0284c7;' : '');
+        var colorTotal = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:800;' : 'font-weight:600;');
+
+        return '<tr>' +
+            '<td style="' + style + ' color:#334155;">' + r.metric + '</td>' +
+            '<td style="text-align:right; ' + colorCoco + '">' + r.coco + '</td>' +
+            '<td style="text-align:right; ' + colorNonCoco + '">' + r.nonCoco + '</td>' +
+            '<td style="text-align:right; ' + colorTotal + '">' + r.total + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════
+   BRANCH HOT LEADS & PIVOT VIEWS (FULL, PRODUCT, EXECUTIVE)
+═══════════════════════════════════════════════════════ */
+var currentLoadedLeads = [];
+var currentSubmodalTab = 'full';
+var currentSubmodalSearch = '';
+
+window.switchPivotTab = function(tab) {
+    currentSubmodalTab = tab;
+    ['full', 'product', 'executive'].forEach(function(t) {
+        var btn = document.getElementById(t === 'full' ? 'daSubmodalTabFull' : (t === 'product' ? 'daSubmodalTabProduct' : 'daSubmodalTabExecutive'));
+        var wrap = document.getElementById(t === 'full' ? 'daSubmodalWrapFull' : (t === 'product' ? 'daSubmodalWrapProduct' : 'daSubmodalWrapExecutive'));
+        if (btn) {
+            if (t === tab) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+        if (wrap) {
+            wrap.style.display = (t === tab) ? 'block' : 'none';
+        }
+    });
+
+    filterSubmodalViews();
+};
+
+window.onSubmodalSearchChange = function(val) {
+    currentSubmodalSearch = (val || '').toLowerCase().trim();
+    filterSubmodalViews();
+};
+
+window.filterFullByItem = function(val) {
+    var searchInput = document.getElementById('daSubmodalSearch');
+    if (searchInput) searchInput.value = val;
+    currentSubmodalSearch = (val || '').toLowerCase().trim();
+    switchPivotTab('full');
+};
+
+function renderSubmodalViews(leads) {
+    currentLoadedLeads = leads || [];
+    filterSubmodalViews();
+}
+
+function filterSubmodalViews() {
+    var q = currentSubmodalSearch;
+
+    // 1. Filtered Leads for Full Details
+    var filteredLeads = currentLoadedLeads.filter(function(l) {
+        if (!q) return true;
+        var text = ((l.company_name || '') + ' ' + (l.customer_name || '') + ' ' + (l.product_name || '') + ' ' + (l.executive_name || '') + ' ' + (l.status || '')).toLowerCase();
+        return text.indexOf(q) !== -1;
+    });
+
+    renderFullDetailsTable(filteredLeads);
+
+    // 2. Product Wise Pivot
+    renderProductPivotTable(currentLoadedLeads, q);
+
+    // 3. Executive Wise Pivot
+    renderExecutivePivotTable(currentLoadedLeads, q);
+}
+
+function renderFullDetailsTable(leads) {
+    var tbody = document.getElementById('daBranchHotLeadsBody');
+    var tfoot = document.getElementById('daBranchHotLeadsFoot');
+    var countBadge = document.getElementById('daSubmodalCountFull');
+    if (countBadge) countBadge.textContent = leads.length;
+
+    if (!tbody) return;
+
+    if (leads.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;">' + (currentSubmodalSearch ? 'No matching leads found.' : 'No hot prospects found in current month.') + '</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var sumDeal = 0;
+    var sumExp = 0;
+
+    leads.forEach(function(l, i) {
+        var dVal = parseFloat(l.deal_value) || 0;
+        var eVal = parseFloat(l.expected_value) || 0;
+        sumDeal += dVal;
+        sumExp += eVal;
+
+        var custCol = l.lead_view_url
+            ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
+            : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>';
+
+        rowsHtml += '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
+            '<td>' + custCol + '</td>' +
+            '<td style="font-weight:600; color:#334155;">' + (l.product_name || '-') + '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca;">' +
+                    '🔥 ' + (l.status || 'Hot') +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(eVal) + '</td>' +
+            '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + (l.closure_date || '-') + '</td>' +
+            '<td style="font-weight:600; color:#1e293b;">' + (l.executive_name || '-') + '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="5" style="font-weight:800;">Total (' + leads.length + ' Hot Prospects)</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+            '<td colspan="2"></td>' +
+        '</tr>';
+    }
+}
+
+function renderProductPivotTable(allLeads, searchQ) {
+    var tbody = document.getElementById('daBranchProductPivotBody');
+    var tfoot = document.getElementById('daBranchProductPivotFoot');
+    var countBadge = document.getElementById('daSubmodalCountProduct');
+
+    // Aggregate by product
+    var productMap = {};
+    var totalOverallDeal = 0;
+
+    allLeads.forEach(function(l) {
+        var pName = (l.product_name || 'Unspecified Product').trim();
+        var dVal = parseFloat(l.deal_value) || 0;
+        var eVal = parseFloat(l.expected_value) || 0;
+        totalOverallDeal += dVal;
+
+        if (!productMap[pName]) {
+            productMap[pName] = {
+                name: pName,
+                count: 0,
+                deal_value: 0,
+                expected_value: 0
+            };
+        }
+        productMap[pName].count += 1;
+        productMap[pName].deal_value += dVal;
+        productMap[pName].expected_value += eVal;
+    });
+
+    var productList = Object.keys(productMap).map(function(k) {
+        return productMap[k];
+    });
+
+    // Sort descending by deal value
+    productList.sort(function(a, b) {
+        return b.deal_value - a.deal_value;
+    });
+
+    if (countBadge) countBadge.textContent = productList.length;
+
+    // Filter by search query if in product tab or global query
+    var filteredProducts = productList.filter(function(p) {
+        if (!searchQ) return true;
+        return p.name.toLowerCase().indexOf(searchQ) !== -1;
+    });
+
+    if (!tbody) return;
+
+    if (filteredProducts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching products found.' : 'No products found.') + '</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var sumCount = 0;
+    var sumDeal = 0;
+    var sumExp = 0;
+
+    filteredProducts.forEach(function(p, i) {
+        sumCount += p.count;
+        sumDeal += p.deal_value;
+        sumExp += p.expected_value;
+
+        var avgVal = p.count > 0 ? (p.deal_value / p.count) : 0;
+        var safeProdName = p.name.replace(/'/g, "\\'");
+
+        rowsHtml += '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:700; color:var(--da-text);">' +
+                '<span onclick="filterFullByItem(\'' + safeProdName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeProdName + '">' +
+                    p.name +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#fee2e2; color:#b91c1c;">' +
+                    p.count +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(p.deal_value) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(p.expected_value) + '</td>' +
+            '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
+            '<td style="text-align:center;">' +
+                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeProdName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads ↗' +
+                '</button>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="2" style="font-weight:800;">Total (' + filteredProducts.length + ' Products)</td>' +
+            '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+            '<td colspan="2"></td>' +
+        '</tr>';
+    }
+}
+
+function renderExecutivePivotTable(allLeads, searchQ) {
+    var tbody = document.getElementById('daBranchExecutivePivotBody');
+    var tfoot = document.getElementById('daBranchExecutivePivotFoot');
+    var countBadge = document.getElementById('daSubmodalCountExecutive');
+
+    // Aggregate by executive
+    var execMap = {};
+    var totalOverallDeal = 0;
+
+    allLeads.forEach(function(l) {
+        var eName = (l.executive_name || 'Unassigned').trim();
+        var dVal = parseFloat(l.deal_value) || 0;
+        var eVal = parseFloat(l.expected_value) || 0;
+        totalOverallDeal += dVal;
+
+        if (!execMap[eName]) {
+            execMap[eName] = {
+                name: eName,
+                count: 0,
+                deal_value: 0,
+                expected_value: 0
+            };
+        }
+        execMap[eName].count += 1;
+        execMap[eName].deal_value += dVal;
+        execMap[eName].expected_value += eVal;
+    });
+
+    var execList = Object.keys(execMap).map(function(k) {
+        return execMap[k];
+    });
+
+    // Sort descending by deal value
+    execList.sort(function(a, b) {
+        return b.deal_value - a.deal_value;
+    });
+
+    if (countBadge) countBadge.textContent = execList.length;
+
+    // Filter by search query if in executive tab or global query
+    var filteredExecs = execList.filter(function(e) {
+        if (!searchQ) return true;
+        return e.name.toLowerCase().indexOf(searchQ) !== -1;
+    });
+
+    if (!tbody) return;
+
+    if (filteredExecs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching executives found.' : 'No sales executives found.') + '</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var sumCount = 0;
+    var sumDeal = 0;
+    var sumExp = 0;
+
+    filteredExecs.forEach(function(e, i) {
+        sumCount += e.count;
+        sumDeal += e.deal_value;
+        sumExp += e.expected_value;
+
+        var avgVal = e.count > 0 ? (e.deal_value / e.count) : 0;
+        var safeExecName = e.name.replace(/'/g, "\\'");
+
+        rowsHtml += '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:700; color:var(--da-text);">' +
+                '<span onclick="filterFullByItem(\'' + safeExecName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeExecName + '">' +
+                    e.name +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#fee2e2; color:#b91c1c;">' +
+                    e.count +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(e.deal_value) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(e.expected_value) + '</td>' +
+            '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
+            '<td style="text-align:center;">' +
+                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeExecName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads ↗' +
+                '</button>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="2" style="font-weight:800;">Total (' + filteredExecs.length + ' Executives)</td>' +
+            '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+            '<td colspan="2"></td>' +
+        '</tr>';
+    }
+}
+
 /* ── Branch Hot Leads Stacked Modal ── */
 window.openBranchHotLeadsModal = function(target, targetName) {
     var modal = document.getElementById('daBranchHotLeadsModal');
@@ -2266,10 +3151,16 @@ window.openBranchHotLeadsModal = function(target, targetName) {
     var summaryEl = document.getElementById('daBranchModalSummary');
     var tbody = document.getElementById('daBranchHotLeadsBody');
     var tfoot = document.getElementById('daBranchHotLeadsFoot');
+    var searchInput = document.getElementById('daSubmodalSearch');
 
     if (titleEl) titleEl.textContent = (targetName || 'Hot Prospects');
     if (summaryEl) summaryEl.textContent = 'Loading hot prospects for ' + (targetName || 'category') + '...';
     if (badgeTypeEl) badgeTypeEl.style.display = 'none';
+    if (searchInput) searchInput.value = '';
+    currentSubmodalSearch = '';
+
+    // Reset view to 'full'
+    switchPivotTab('full');
 
     if (tbody) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading hot prospects...</span></div></td></tr>';
@@ -2326,55 +3217,8 @@ window.openBranchHotLeadsModal = function(target, targetName) {
                     ' • Expected Collection: <strong style="color:#059669;">' + fmt(data.total_expected || 0) + '</strong>';
             }
 
-            if (!tbody) return;
-
-            if (leads.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;">No hot prospects found in current month.</td></tr>';
-                if (tfoot) tfoot.innerHTML = '';
-                return;
-            }
-
-            var rowsHtml = '';
-            var sumDeal = 0;
-            var sumExp = 0;
-
-            leads.forEach(function(l, i) {
-                var dVal = parseFloat(l.deal_value) || 0;
-                var eVal = parseFloat(l.expected_value) || 0;
-                sumDeal += dVal;
-                sumExp += eVal;
-
-                var custCol = l.lead_view_url
-                    ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
-                    : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>';
-
-                rowsHtml += '<tr>' +
-                    '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
-                    '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
-                    '<td>' + custCol + '</td>' +
-                    '<td style="font-weight:600; color:#334155;">' + (l.product_name || '-') + '</td>' +
-                    '<td style="text-align:center;">' +
-                        '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca;">' +
-                            '🔥 ' + (l.status || 'Hot') +
-                        '</span>' +
-                    '</td>' +
-                    '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +
-                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(eVal) + '</td>' +
-                    '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + (l.closure_date || '-') + '</td>' +
-                    '<td style="font-weight:600; color:#1e293b;">' + (l.executive_name || '-') + '</td>' +
-                '</tr>';
-            });
-
-            tbody.innerHTML = rowsHtml;
-
-            if (tfoot) {
-                tfoot.innerHTML = '<tr>' +
-                    '<td colspan="5" style="font-weight:800;">Total (' + leads.length + ' Hot Prospects)</td>' +
-                    '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
-                    '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-                    '<td colspan="2"></td>' +
-                '</tr>';
-            }
+            // Render all views: Full details, Product Pivot, Executive Pivot
+            renderSubmodalViews(leads);
         })
         .catch(function(err) {
             console.error('[Branch Hot Leads Error]', err);
@@ -2416,6 +3260,8 @@ window.toggleForecasting = function(forcedState) {
     var forecastSec = document.getElementById('daForecastSection');
     var btn = document.getElementById('daForecastBtn');
     var btnText = document.getElementById('daForecastBtnText');
+
+    if (!forecastSec) return;
 
     if (typeof forcedState === 'boolean') {
         window.isForecastingActive = forcedState;
