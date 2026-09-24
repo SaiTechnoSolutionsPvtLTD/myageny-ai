@@ -1189,6 +1189,8 @@ class LeadController extends Controller
                         'payment_status'    => $p->payment_status,
                         'amount_paid'       => (float) $p->amount_paid,
                         'amount_pending'    => (float) $p->amount_pending,
+                        'expected_value'    => $p->expected_value ? (float) $p->expected_value : null,
+                        'closure_date'      => $p->closure_date ? (is_string($p->closure_date) ? $p->closure_date : $p->closure_date->format('Y-m-d')) : null,
                         'production'        => $this->formatProductionInitiation($p->latestProductionInitiation),
 
                         'payments' => $p->relationLoaded('payments')
