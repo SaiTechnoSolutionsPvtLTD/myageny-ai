@@ -146,7 +146,11 @@
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
                 <div style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.06em; display:flex; align-items:center; gap:6px;">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fe5f04" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-                    <span>CST Department Metrics ({{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }})</span>
+                    @if(!empty($fromDate) && !empty($toDate) && $fromDate !== $toDate)
+                        <span>CST Department Metrics ({{ \Carbon\Carbon::parse($fromDate)->format('d M Y') }} – {{ \Carbon\Carbon::parse($toDate)->format('d M Y') }})</span>
+                    @else
+                        <span>CST Department Metrics ({{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }})</span>
+                    @endif
                 </div>
                 <div style="font-size:12px; color:#64748b; font-weight:600;">
                     @if($canViewAll)
@@ -268,8 +272,13 @@
         <div class="sdc-filter-card">
             <form method="GET" action="{{ route('cst.day-closing.index') }}" class="sdc-filter-form">
                 <div class="sdc-filter-group">
-                    <label class="sdc-label">Date</label>
-                    <input type="date" name="date" value="{{ request('date', $selectedDate) }}" class="sdc-input">
+                    <label class="sdc-label">From Date</label>
+                    <input type="date" name="from_date" value="{{ request('from_date', $fromDate) }}" class="sdc-input">
+                </div>
+
+                <div class="sdc-filter-group">
+                    <label class="sdc-label">To Date</label>
+                    <input type="date" name="to_date" value="{{ request('to_date', $toDate) }}" class="sdc-input">
                 </div>
 
                 @if($canViewAll)
@@ -282,27 +291,7 @@
                             @endforeach
                         </select>
                     </div>
-
-                    <div class="sdc-filter-group">
-                        <label class="sdc-label">Branch</label>
-                        <select name="branch_id" class="sdc-select">
-                            <option value="">All Branches</option>
-                            @foreach($branches as $b)
-                                <option value="{{ $b->id }}" @selected(request('branch_id') == $b->id)>{{ $b->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
                 @endif
-
-                <div class="sdc-filter-group">
-                    <label class="sdc-label">Status</label>
-                    <select name="status" class="sdc-select">
-                        <option value="">All Statuses</option>
-                        <option value="submitted" @selected(request('status') === 'submitted')>Submitted</option>
-                        <option value="reviewed" @selected(request('status') === 'reviewed')>Reviewed</option>
-                        <option value="approved" @selected(request('status') === 'approved')>Approved</option>
-                    </select>
-                </div>
 
                 <div class="sdc-filter-group">
                     <label class="sdc-label">Search Keyword</label>
@@ -338,8 +327,7 @@
                             <th style="width:310px;">CST Metrics Breakdown</th>
                             <th style="min-width:240px;">Remarks / Update</th>
                             <th style="width:200px;">Tomorrow&apos;s Plan &amp; Target</th>
-                            <th style="width:120px; text-align:center;">Review Status</th>
-                            <th style="width:130px; text-align:center;">Actions</th>
+                            <th style="width:110px; text-align:center;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -384,11 +372,13 @@
                                 <td>
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <div style="width:32px; height:32px; border-radius:50%; background:#fff7ed; color:#fe5f04; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; border:1px solid #fed7aa; flex-shrink:0;">
-                                            {{ strtoupper(substr($closing->user?->name ?? 'U', 0, 1)) }}
+                                             {{ strtoupper(substr($closing->user?->name ?? 'U', 0, 1)) }}
                                         </div>
                                         <div>
                                             <div style="font-weight:800; color:#0f172a;">{{ $closing->user?->name ?? 'Team Member' }}</div>
-                                            <div style="font-size:11px; color:#64748b;">{{ $closing->branch?->name ?? 'General' }}</div>
+                                            @if($closing->user?->designation)
+                                                <div style="font-size:11px; color:#64748b;">{{ $closing->user->designation }}</div>
+                                            @endif
                                         </div>
                                     </div>
                                 </td>
@@ -457,21 +447,6 @@
                                     @endif
                                 </td>
                                 <td style="text-align:center;">
-                                    @if($canViewAll)
-                                        <select class="status-dropdown {{ $closing->status }}"
-                                                data-update-url="{{ route('cst.day-closing.review', $closing->id) }}"
-                                                title="Change Review Status">
-                                            <option value="submitted" @selected($closing->status === 'submitted')>Submitted</option>
-                                            <option value="reviewed" @selected($closing->status === 'reviewed')>Reviewed</option>
-                                            <option value="approved" @selected($closing->status === 'approved')>Approved</option>
-                                        </select>
-                                    @else
-                                        <span class="sdc-badge {{ $closing->status }}">
-                                            {{ ucfirst($closing->status) }}
-                                        </span>
-                                    @endif
-                                </td>
-                                <td style="text-align:center;">
                                     <div style="display:inline-flex; align-items:center; gap:6px;">
                                         <button type="button" class="sdc-btn open-view-btn" style="padding:6px 9px; height:32px;" title="View Details" data-closing='{{ $closingJson }}'>
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -481,21 +456,12 @@
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                             </button>
                                         @endif
-                                        @if($closing->user_id === auth()->id() || $isAdminLike)
-                                            <form action="{{ route('cst.day-closing.destroy', $closing->id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this daily closing update?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="sdc-btn" style="padding:6px 9px; height:32px; color:#ef4444;" title="Delete">
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                                </button>
-                                            </form>
-                                        @endif
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" style="text-align:center; padding:48px 16px; color:#94a3b8;">
+                                <td colspan="7" style="text-align:center; padding:48px 16px; color:#94a3b8;">
                                     <div style="font-size:14px; font-weight:700; color:#475569; margin-bottom:4px;">No CST Daily Closing submissions found</div>
                                     <div style="font-size:12px;">Submit your daily closing update using the button above.</div>
                                 </td>
@@ -1073,7 +1039,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             document.getElementById('viewModalUserName').textContent = data.user_name || 'Team Member';
-            document.getElementById('viewModalDateBranch').textContent = (data.formatted_date || data.closing_date || '') + ' | ' + (data.branch_name || 'Customer Success');
+            document.getElementById('viewModalDateBranch').textContent = (data.formatted_date || data.closing_date || '') + (data.designation ? ' | ' + data.designation : '');
 
             document.getElementById('viewMonthlyTarget').textContent = '₹' + Math.round(data.monthly_target || 0).toLocaleString('en-IN');
             document.getElementById('viewTodayRevenue').textContent = '₹' + Math.round(data.today_revenue || 0).toLocaleString('en-IN');

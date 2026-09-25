@@ -67,6 +67,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/branch-hot-leads', [SuperAdminDashboardController::class, 'branchHotLeads']);
     Route::get('/product-dashboard-data', [AdminDashboardProductController::class, 'index']);
     Route::get('/product-dashboard-data/filters', [AdminDashboardProductController::class, 'filterOptions']);
+    Route::get('/day-sales-tracker/data', [\App\Http\Controllers\DaySalesTrackerController::class, 'data']);
+    Route::get('/day-sales-tracker/categories', [\App\Http\Controllers\DaySalesTrackerController::class, 'categories']);
+    Route::post('/day-sales-tracker/categories', [\App\Http\Controllers\DaySalesTrackerController::class, 'addCategory']);
+    Route::post('/day-sales-tracker/categories/{id}/update', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateCategoryName']);
+    Route::post('/day-sales-tracker/categories/{id}/delete', [\App\Http\Controllers\DaySalesTrackerController::class, 'deleteCategory']);
+    Route::post('/day-sales-tracker/update-category', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateCategory']);
+    Route::post('/day-sales-tracker/update-sale-type', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateSaleType']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {

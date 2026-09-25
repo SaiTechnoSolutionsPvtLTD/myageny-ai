@@ -56,6 +56,8 @@ class LeadProduct extends Model
         'amount_paid', 'created_by', 'company_id',
         'payment_status', 'converted_at',
         'closure_date', 'expected_value',
+        'day_sales_category',
+        'sale_type',
     ];
 
     protected $casts = [

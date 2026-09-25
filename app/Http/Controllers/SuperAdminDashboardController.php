@@ -612,10 +612,37 @@ class SuperAdminDashboardController extends ApiController
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
 
+        // ── Day Sales Tracker (Current Date Converted Products) ──
+        $todayConvertedQuery = LeadProduct::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('lead_status_id', 5);
+            })
+            ->where(function ($q) {
+                $q->whereDate('converted_at', today())
+                  ->orWhere(function ($sub) {
+                      $sub->whereNull('converted_at')->whereDate('created_at', today());
+                  });
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId)        $lq->where('branch_id', $branchId);
+                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
+            });
+        $todayConvertedCount = (clone $todayConvertedQuery)->count();
+        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
+        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
             'filters_applied' => $filtersApplied,
+
+            'day_sales_tracker' => [
+                'count'            => $todayConvertedCount,
+                'total_value'      => $todayConvertedValue,
+                'total_collection' => $todayConvertedCollection,
+            ],
 
             'kpis' => [
                 'total_leads'                => $totalLeads,
@@ -1690,10 +1717,37 @@ class SuperAdminDashboardController extends ApiController
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
 
+        // ── Day Sales Tracker (Current Date Converted Products) ──
+        $todayConvertedQuery = LeadProduct::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('lead_status_id', 5);
+            })
+            ->where(function ($q) {
+                $q->whereDate('converted_at', today())
+                  ->orWhere(function ($sub) {
+                      $sub->whereNull('converted_at')->whereDate('created_at', today());
+                  });
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($userId)   $lq->where('assigned_to', $userId);
+            });
+        $todayConvertedCount = (clone $todayConvertedQuery)->count();
+        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
+        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
+
         // ── Build response ────────────────────────────────────────
         return $this->success([
 
             'filters_applied' => $filtersApplied,
+
+            'day_sales_tracker' => [
+                'count'            => $todayConvertedCount,
+                'total_value'      => $todayConvertedValue,
+                'total_collection' => $todayConvertedCollection,
+            ],
 
             'kpis' => [
                 'total_leads'       => $totalLeads,

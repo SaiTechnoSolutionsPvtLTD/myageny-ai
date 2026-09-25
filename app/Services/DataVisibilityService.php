@@ -204,7 +204,22 @@ class DataVisibilityService
             return $this->mappedTlUserIds($user)->push($user->id)->unique()->values()->all();
         }
 
+        $descendants = $this->descendantUserIds($user);
+        if ($descendants->isNotEmpty()) {
+            return $descendants->push($user->id)->unique()->values()->all();
+        }
+
         return [$user->id];
+    }
+
+    public function customerSupportUserIds(?User $user = null): array
+    {
+        $user ??= auth()->user();
+        if (! $user) {
+            return [];
+        }
+
+        return $this->descendantUserIds($user)->push($user->id)->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     public function descendantUserIds(User $manager): Collection
@@ -359,9 +374,10 @@ class DataVisibilityService
         }
 
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
-            return $query->where(function ($q) use ($user) {
-                $q->where('customer_support_tl_id', $user->id)
-                  ->orWhere('customer_support_executive_id', $user->id);
+            $supportUserIds = $this->customerSupportUserIds($user);
+            return $query->where(function ($q) use ($supportUserIds) {
+                $q->whereIn('customer_support_tl_id', $supportUserIds)
+                  ->orWhereIn('customer_support_executive_id', $supportUserIds);
             });
         }
 
@@ -386,9 +402,10 @@ class DataVisibilityService
 
         $user ??= auth()->user();
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
-            return $query->whereHas($relation, function ($q) use ($user) {
-                $q->where('customer_support_tl_id', $user->id)
-                  ->orWhere('customer_support_executive_id', $user->id);
+            $supportUserIds = $this->customerSupportUserIds($user);
+            return $query->whereHas($relation, function ($q) use ($supportUserIds) {
+                $q->whereIn('customer_support_tl_id', $supportUserIds)
+                  ->orWhereIn('customer_support_executive_id', $supportUserIds);
             });
         }
 
@@ -409,11 +426,12 @@ class DataVisibilityService
 
         $user ??= auth()->user();
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
-            return $query->where(function (Builder $quotationQuery) use ($user) {
+            $supportUserIds = $this->customerSupportUserIds($user);
+            return $query->where(function (Builder $quotationQuery) use ($supportUserIds) {
                 $quotationQuery
-                    ->whereHas('lead', function (Builder $leadQuery) use ($user) {
-                        $leadQuery->where('customer_support_tl_id', $user->id)
-                                  ->orWhere('customer_support_executive_id', $user->id);
+                    ->whereHas('lead', function (Builder $leadQuery) use ($supportUserIds) {
+                        $leadQuery->whereIn('customer_support_tl_id', $supportUserIds)
+                                  ->orWhereIn('customer_support_executive_id', $supportUserIds);
                     });
             });
         }
@@ -467,8 +485,9 @@ class DataVisibilityService
         }
 
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
-            return (int) $lead->customer_support_tl_id === $user->id
-                || (int) $lead->customer_support_executive_id === $user->id;
+            $supportUserIds = $this->customerSupportUserIds($user);
+            return in_array((int) $lead->customer_support_tl_id, $supportUserIds, true)
+                || in_array((int) $lead->customer_support_executive_id, $supportUserIds, true);
         }
 
         if ($user && ($user->isBranchManager() || $user->isBranchAdmin() || $this->hasBranchAdminRole($user) || $this->hasBranchManagerRole($user))) {
@@ -495,8 +514,9 @@ class DataVisibilityService
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             $quotation->loadMissing('lead:id,customer_support_tl_id,customer_support_executive_id');
             if ($quotation->lead) {
-                return (int) $quotation->lead->customer_support_tl_id === $user->id
-                    || (int) $quotation->lead->customer_support_executive_id === $user->id;
+                $supportUserIds = $this->customerSupportUserIds($user);
+                return in_array((int) $quotation->lead->customer_support_tl_id, $supportUserIds, true)
+                    || in_array((int) $quotation->lead->customer_support_executive_id, $supportUserIds, true);
             }
             return false;
         }

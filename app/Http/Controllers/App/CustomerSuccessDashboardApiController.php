@@ -84,12 +84,18 @@ class CustomerSuccessDashboardApiController extends Controller
 
             $applySupportScope = function ($query) use ($filters, $currentUser, $isSupportTl, $isSupportExec, $isAdmin) {
                 if (!empty($filters['user_id'])) {
-                    $query->where('leads.customer_support_executive_id', (int) $filters['user_id']);
+                    $targetUid = (int) $filters['user_id'];
+                    $query->where(function ($q) use ($targetUid) {
+                        $q->where('leads.customer_support_executive_id', $targetUid)
+                          ->orWhere('leads.customer_support_tl_id', $targetUid);
+                    });
                 } else {
-                    if ($isSupportTl && !$isAdmin) {
-                        $query->where('leads.customer_support_tl_id', $currentUser->id);
-                    } elseif ($isSupportExec && !$isAdmin) {
-                        $query->where('leads.customer_support_executive_id', $currentUser->id);
+                    if (($isSupportTl || $isSupportExec) && !$isAdmin) {
+                        $subordinateIds = $this->visibility->customerSupportUserIds($currentUser);
+                        $query->where(function ($q) use ($subordinateIds) {
+                            $q->whereIn('leads.customer_support_executive_id', $subordinateIds)
+                              ->orWhereIn('leads.customer_support_tl_id', $subordinateIds);
+                        });
                     } else {
                         $comp = $currentUser->company_id;
                         if ($comp) {
@@ -299,29 +305,29 @@ class CustomerSuccessDashboardApiController extends Controller
             // 5. User-wise aggregates
             $userStats = [];
             $displayUserQuery = User::whereIn('id', $supportUserIds);
-            if ($isSupportTl && !$isAdmin) {
-                $assignedExecIds = Lead::where('customer_support_tl_id', $currentUser->id)
+            if (($isSupportTl || $isSupportExec) && !$isAdmin) {
+                $subordinateIds = $this->visibility->customerSupportUserIds($currentUser);
+                $assignedExecIds = Lead::whereIn('customer_support_tl_id', $subordinateIds)
                     ->whereNotNull('customer_support_executive_id')
                     ->pluck('customer_support_executive_id')->unique()->toArray();
-                $displayUserQuery->whereIn('id', array_merge([$currentUser->id], $assignedExecIds));
-            } elseif ($isSupportExec && !$isAdmin) {
-                $displayUserQuery->where('id', $currentUser->id);
+                $displayUserQuery->whereIn('id', array_values(array_unique(array_merge($subordinateIds, $assignedExecIds))));
             }
             $supportUsers = $displayUserQuery->orderBy('name')->get();
 
             foreach ($supportUsers as $user) {
                 $uid = $user->id;
-                $userIsTl = $user->hasCustomerSupportLikeRole() && $user->hasTlLikeRole();
 
-                $handledCount = Lead::where(function ($q) use ($uid, $userIsTl) {
-                        $userIsTl ? $q->where('customer_support_tl_id', $uid) : $q->where('customer_support_executive_id', $uid);
+                $handledCount = Lead::where(function ($q) use ($uid) {
+                        $q->where('customer_support_executive_id', $uid)
+                          ->orWhere('customer_support_tl_id', $uid);
                     })
                     ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
                     ->when($toDate, fn($q) => $q->whereDate('lead_date', '<=', $toDate))
                     ->count();
 
-                $convertedCount = Lead::where(function ($q) use ($uid, $userIsTl) {
-                        $userIsTl ? $q->where('customer_support_tl_id', $uid) : $q->where('customer_support_executive_id', $uid);
+                $convertedCount = Lead::where(function ($q) use ($uid) {
+                        $q->where('customer_support_executive_id', $uid)
+                          ->orWhere('customer_support_tl_id', $uid);
                     })
                     ->where('lead_status_id', 5)
                     ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
@@ -552,7 +558,7 @@ class CustomerSuccessDashboardApiController extends Controller
 
     private function getSupportUserIds(User $user): array
     {
-        $visibleUserIds = $this->visibility->visibleUserIds();
+        $visibleUserIds = $this->visibility->visibleUserIds($user);
 
         $supportUserIds = User::where(function ($query) {
             $query->whereHas('roles.department', function ($q) {

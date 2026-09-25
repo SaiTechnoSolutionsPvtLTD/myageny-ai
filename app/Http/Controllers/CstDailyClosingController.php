@@ -91,9 +91,9 @@ class CstDailyClosingController extends Controller
         $user = auth()->user();
         $today = now()->toDateString();
 
-        $selectedDate = $request->filled('date') ? $request->input('date') : $today;
-        $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
-        $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
+        $fromDate = $request->input('from_date') ?: $request->input('date_from');
+        $toDate = $request->input('to_date') ?: $request->input('date_to');
+        $selectedDate = $toDate ?: ($fromDate ?: ($request->input('date') ?: $today));
 
         $canViewAll = $this->canViewAllCst($user);
         $isAdminLike = $canViewAll;
@@ -129,22 +129,14 @@ class CstDailyClosingController extends Controller
             $query->where('user_id', (int) $request->input('user_id'));
         }
 
-        if ($canViewAll && $request->filled('branch_id')) {
-            $query->where('branch_id', (int) $request->input('branch_id'));
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
-        }
-
-        if ($dateFrom && $dateTo) {
-            $query->whereBetween('closing_date', [$dateFrom, $dateTo]);
-        } elseif ($dateFrom) {
-            $query->whereDate('closing_date', '>=', $dateFrom);
-        } elseif ($dateTo) {
-            $query->whereDate('closing_date', '<=', $dateTo);
+        if ($fromDate && $toDate) {
+            $query->whereBetween('closing_date', [$fromDate, $toDate]);
+        } elseif ($fromDate) {
+            $query->whereDate('closing_date', '>=', $fromDate);
+        } elseif ($toDate) {
+            $query->whereDate('closing_date', '<=', $toDate);
         } elseif ($request->filled('date')) {
-            $query->whereDate('closing_date', $selectedDate);
+            $query->whereDate('closing_date', $request->input('date'));
         }
 
         if ($request->filled('search')) {
@@ -179,8 +171,8 @@ class CstDailyClosingController extends Controller
             'closings',
             'kpiStats',
             'selectedDate',
-            'dateFrom',
-            'dateTo',
+            'fromDate',
+            'toDate',
             'today',
             'assignableUsers',
             'branches',

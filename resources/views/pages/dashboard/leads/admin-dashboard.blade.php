@@ -75,7 +75,46 @@
     .da-forecast-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
-    .da-forecast-grid { grid-template-columns:1fr; }
+}
+
+/* ─── Day Sales Tracker Modal Specific Styles ─── */
+.da-dst-cat-select {
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    min-width: 145px;
+    color: #1e293b;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+.da-dst-cat-select:focus {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+.da-dst-plus-btn {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 800;
+    color: #0284c7;
+    font-size: 15px;
+    padding: 0;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+.da-dst-plus-btn:hover {
+    background: #e0f2fe;
+    border-color: #0284c7;
+    color: #0369a1;
 }
 
 /* ─── Total Prospects Key Metrics Full Page Modal ─── */
@@ -1806,6 +1845,122 @@
     </div>
 </div>
 
+{{-- ── Day Sales Tracker Full Modal ── --}}
+<div class="da-modal-overlay" id="daDaySalesTrackerModal" onclick="if(event.target === this) closeDaySalesTrackerModal()">
+    <div class="da-modal-container" role="dialog" aria-modal="true" aria-labelledby="daDstModalMainTitle">
+        <div class="da-modal-head">
+            <div class="da-modal-title-wrap">
+                <div class="da-modal-title" id="daDstModalMainTitle">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#0284c7" stroke-width="2.2">
+                        <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                    </svg>
+                    <span>Day Sales Tracker</span>
+                </div>
+                <span class="da-badge" id="daDstDateBadge" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd; font-weight:700;">Today</span>
+                <span class="da-badge" id="daDstCountBadge" style="background:#dcfce7; color:#15803d; border-color:#bbf7d0; font-weight:700;">0 Converted</span>
+                <span class="da-badge" id="daDstCollectionBadge" style="background:#fef3c7; color:#b45309; border-color:#fde68a; font-weight:700;">₹0.00 Collection</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Date:</label>
+                    <input type="date" id="daDstDatePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:135px;" onchange="loadDaySalesTrackerData(this.value)">
+                </div>
+                <input type="text" id="daDstSearchInput" placeholder="Quick search..." class="form-control" style="font-size:12px; height:34px; padding:4px 10px; border-radius:8px; border:1px solid #cbd5e1; width:200px;" oninput="filterDaySalesTable(this.value)">
+                <button type="button" class="btn btn-sm" onclick="openAddCategoryModal()" style="background:#f0f9ff; color:#0284c7; border:1px solid #bae6fd; font-size:12px; height:34px; padding:0 12px; border-radius:8px; display:inline-flex; align-items:center; gap:5px; font-weight:700; cursor:pointer;" title="Add new category to list">
+                    <span style="font-size:16px; line-height:1;">+</span> Category
+                </button>
+                <button type="button" class="da-modal-close" onclick="closeDaySalesTrackerModal()" title="Close (Esc)">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="da-modal-body" style="padding:16px 28px 28px; max-width:1700px;">
+            <div class="da-modal-table-wrap" style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <table class="da-modal-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:45px;">#</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:70px;">Mon</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:100px;">Date</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Branch</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:100px;">Branch Type</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Team Leader</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Team Member name</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:180px;">Category</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:150px;">Sale Type</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Account name</th>
+                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:160px;">Current Month Collection</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daDstTableBody">
+                        <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading converted product details...</td></tr>
+                    </tbody>
+                    <tfoot id="daDstTableFoot">
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ── Add / Manage Category Modal ── --}}
+<div class="da-modal-overlay" id="daDstAddCategoryModal" style="display:none; z-index:100001; align-items:center; justify-content:center; background:rgba(15,23,42,0.6);" onclick="if(event.target === this) closeAddCategoryModal()">
+    <div style="background:#ffffff; border-radius:14px; width:560px; max-width:92%; padding:22px 24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); animation:daModalPop 0.18s ease-out; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-flex; width:32px; height:32px; border-radius:8px; background:#e0f2fe; color:#0284c7; align-items:center; justify-content:center; font-weight:bold; font-size:16px;">🏷️</span>
+                <div>
+                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Manage Day Sales Categories</h5>
+                    <div style="font-size:11px; color:#64748b; margin-top:1px;">Add, view, edit or delete categories</div>
+                </div>
+            </div>
+            <button type="button" onclick="closeAddCategoryModal()" style="border:none; background:transparent; font-size:18px; line-height:1; cursor:pointer; color:#94a3b8;" title="Close (Esc)">✕</button>
+        </div>
+
+        {{-- Add Category Form --}}
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:16px;">
+            <label style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px; display:block; text-transform:uppercase; letter-spacing:0.5px;">Add New Category</label>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="daDstNewCatInput" class="form-control" placeholder="e.g. Social Media Marketing, SEO, ERP..." style="font-size:13px; border-radius:8px; border:1px solid #cbd5e1; height:36px; flex:1;" onkeydown="if(event.key==='Enter') submitNewCategory()">
+                <button type="button" class="btn btn-primary btn-sm" id="daDstSubmitCatBtn" onclick="submitNewCategory()" style="font-size:12px; border-radius:8px; font-weight:700; background:#0284c7; border-color:#0284c7; padding:0 16px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px;">
+                    <span>+ Add</span>
+                </button>
+            </div>
+            <div id="daDstCatError" style="display:none; color:#e11d48; font-size:11px; margin-top:5px; font-weight:600;"></div>
+            <div id="daDstCatSuccess" style="display:none; color:#16a34a; font-size:11px; margin-top:5px; font-weight:600;"></div>
+        </div>
+
+        {{-- Categories Table --}}
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:12px; font-weight:700; color:#334155;">
+                Existing Categories <span id="daDstCatCountBadge" class="da-badge" style="background:#f1f5f9; color:#475569; font-size:11px; font-weight:700; margin-left:4px;">0</span>
+            </div>
+            <button type="button" onclick="loadDstCategories()" style="background:transparent; border:none; color:#0284c7; font-size:11px; font-weight:700; cursor:pointer;" title="Refresh Categories">↻ Refresh</button>
+        </div>
+
+        <div style="flex:1; max-height:280px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:1;">
+                        <th style="padding:8px 12px; text-align:center; font-weight:700; color:#64748b; width:45px;">#</th>
+                        <th style="padding:8px 12px; text-align:left; font-weight:700; color:#475569;">Category Name</th>
+                        <th style="padding:8px 12px; text-align:right; font-weight:700; color:#475569; width:130px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="daDstCatTableBody">
+                    <tr><td colspan="3" style="text-align:center; padding:20px; color:#94a3b8;">Loading categories...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; padding-top:10px; border-top:1px solid #f1f5f9;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeAddCategoryModal()" style="font-size:12px; border-radius:7px; font-weight:600; padding:6px 16px;">Close</button>
+        </div>
+    </div>
+</div>
+
 {{-- ── Branch Hot Leads Detail Modal (Stacked on top of Key Metrics) ── --}}
 <div class="da-submodal-overlay" id="daBranchHotLeadsModal" onclick="if(event.target === this) closeBranchHotLeadsModal()">
     <div class="da-submodal-container" role="dialog" aria-modal="true" aria-labelledby="daBranchModalTitle">
@@ -2537,7 +2692,21 @@ function renderForecasting(d) {
         '<div class="da-kpi-lbl">Total Prospects</div>' +
         '<div class="da-kpi-sub">' + subText + '</div></div>';
 
-    gridEl.innerHTML = cardHtml;
+    var daySales = (d && d.day_sales_tracker) || {};
+    var daySalesCount = daySales.count !== undefined ? daySales.count : 0;
+    var daySalesCol = daySales.total_collection !== undefined ? daySales.total_collection : 0;
+    var daySalesSub = daySalesCol > 0 ? (fmtL(daySalesCol) + ' • Today\'s Collection') : 'Current date converted products';
+
+    var daySalesCardHtml = '<div class="da-kpi" onclick="openDaySalesTrackerModal()" style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%);cursor:pointer;" title="Click to view Day Sales Tracker">' +
+        '<div class="da-kpi-icon">' +
+        '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
+        '<path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>' +
+        '</svg></div>' +
+        '<div class="da-kpi-val">' + daySalesCount + '</div>' +
+        '<div class="da-kpi-lbl">Day Sales Tracker</div>' +
+        '<div class="da-kpi-sub">' + daySalesSub + '</div></div>';
+
+    gridEl.innerHTML = cardHtml + daySalesCardHtml;
 }
 
 window.openTotalProspectsModal = function() {
@@ -2605,11 +2774,540 @@ window.openTotalProspectsModal = function() {
     document.body.style.overflow = 'hidden';
 };
 
-window.closeTotalProspectsModal = function() {
-    var modal = document.getElementById('daTotalProspectsModal');
+/* ═══════════════════════════════════════════════════════
+   DAY SALES TRACKER MODAL LOGIC
+═══════════════════════════════════════════════════════ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+    });
+}
+
+window.dstData = { items: [], categories: [], date: '' };
+window.dstTargetLeadProductId = null;
+
+window.openDaySalesTrackerModal = function() {
+    var modal = document.getElementById('daDaySalesTrackerModal');
+    if (!modal) return;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    var datePicker = document.getElementById('daDstDatePicker');
+    var todayStr = new Date().toISOString().split('T')[0];
+    if (datePicker && !datePicker.value) {
+        datePicker.value = todayStr;
+    }
+    var selectedDate = (datePicker && datePicker.value) ? datePicker.value : todayStr;
+    loadDaySalesTrackerData(selectedDate);
+};
+
+window.closeDaySalesTrackerModal = function() {
+    var modal = document.getElementById('daDaySalesTrackerModal');
     if (!modal) return;
     modal.classList.remove('open');
     document.body.style.overflow = '';
+};
+
+window.loadDaySalesTrackerData = function(date) {
+    var tbody = document.getElementById('daDstTableBody');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#94a3b8;"><span class="spinner-border spinner-border-sm" role="status" style="margin-right:6px;"></span> Loading converted product details...</td></tr>';
+    }
+
+    var url = '{{ url("/api/day-sales-tracker/data") }}';
+    if (date) {
+        url += '?date=' + encodeURIComponent(date);
+    }
+
+    var headers = {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) {
+            if (!res.ok) throw new Error('Network error (' + res.status + ')');
+            return res.json();
+        })
+        .then(function(res) {
+            if (!res.success) throw new Error(res.message || 'Failed to load data');
+            var d = res.data || {};
+            window.dstData.items = d.items || [];
+            window.dstData.categories = d.categories || [];
+            window.dstData.date = d.date || '';
+
+            var dateBadge = document.getElementById('daDstDateBadge');
+            var countBadge = document.getElementById('daDstCountBadge');
+            var colBadge = document.getElementById('daDstCollectionBadge');
+
+            if (dateBadge) dateBadge.textContent = d.formatted_date || d.date || 'Today';
+            if (countBadge) countBadge.textContent = (d.total_count || 0) + ' Converted';
+            if (colBadge) colBadge.textContent = fmt(d.total_collection || 0) + ' Collection';
+
+            renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);
+        })
+        .catch(function(err) {
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:32px; color:#e11d48;">Failed to load data: ' + escapeHtml(err.message || 'Unknown error') + '</td></tr>';
+            }
+        });
+};
+
+window.renderDaySalesTrackerTable = function(items, categories) {
+    var tbody = document.getElementById('daDstTableBody');
+    var tfoot = document.getElementById('daDstTableFoot');
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:36px; color:#64748b; font-size:13px;">No converted products found for this date.</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var totalCollection = 0;
+    var html = items.map(function(item, idx) {
+        totalCollection += parseFloat(item.current_month_collection || 0);
+
+        var catOptions = (categories || []).map(function(c) {
+            var selected = (item.category && item.category.trim().toLowerCase() === c.trim().toLowerCase()) ? 'selected' : '';
+            return '<option value="' + escapeHtml(c) + '" ' + selected + '>' + escapeHtml(c) + '</option>';
+        }).join('');
+
+        var saleTypeVal = (item.sale_type || '').toUpperCase();
+
+        return '<tr style="border-bottom:1px solid #f1f5f9; transition:background 0.1s ease;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#ffffff\'">' +
+            '<td style="padding:10px 14px; text-align:center; font-weight:700; color:#64748b; font-size:12px;">' + (idx + 1) + '</td>' +
+            '<td style="padding:10px 14px; font-weight:600; color:#0f172a; font-size:12px;"><span class="da-badge" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd; font-size:10px; font-weight:700;">' + escapeHtml(item.mon) + '</span></td>' +
+            '<td style="padding:10px 14px; font-size:12px; color:#334155; font-weight:500;">' + escapeHtml(item.date) + '</td>' +
+            '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:600;">' + escapeHtml(item.branch) + '</td>' +
+            '<td style="padding:10px 14px; font-size:12px; color:#475569;"><span class="da-badge" style="font-size:10px; font-weight:600; background:#f1f5f9; color:#475569; border-color:#e2e8f0;">' + escapeHtml(item.branch_type) + '</span></td>' +
+            '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:500;">' + escapeHtml(item.team_leader) + '</td>' +
+            '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:600;">' + escapeHtml(item.team_member) + '</td>' +
+            '<td style="padding:10px 14px;">' +
+                '<div style="display:inline-flex; align-items:center; gap:5px;">' +
+                    '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstCategory(' + item.id + ', this.value)">' +
+                        '<option value="">Select Category</option>' +
+                        catOptions +
+                    '</select>' +
+                    '<span id="daDstSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
+                '</div>' +
+            '</td>' +
+            '<td style="padding:10px 14px;">' +
+                '<div style="display:inline-flex; align-items:center; gap:5px;">' +
+                    '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstSaleType(' + item.id + ', this.value)" style="min-width:130px;">' +
+                        '<option value="">Select Sale Type</option>' +
+                        '<option value="NST" ' + (saleTypeVal === 'NST' ? 'selected' : '') + '>NST</option>' +
+                        '<option value="CST" ' + (saleTypeVal === 'CST' ? 'selected' : '') + '>CST</option>' +
+                    '</select>' +
+                    '<span id="daDstSaleTypeSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
+                '</div>' +
+            '</td>' +
+            '<td style="padding:10px 14px; font-size:12px;">' +
+                '<a href="' + escapeHtml(item.lead_url) + '" target="_blank" style="color:#0284c7; font-weight:600; text-decoration:none;" title="Open Lead Details">' + escapeHtml(item.account_name) + '</a>' +
+                '<div style="font-size:11px; color:#64748b;">' + escapeHtml(item.product_name) + '</div>' +
+            '</td>' +
+            '<td style="padding:10px 14px; font-size:13px; font-weight:700; color:#16a34a; text-align:right;">' + fmt(item.current_month_collection) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr style="background:#f8fafc; border-top:2px solid #cbd5e1; font-weight:800;">' +
+            '<td colspan="10" style="padding:12px 14px; text-align:right; font-size:12px; color:#1e293b; text-transform:uppercase;">Total Converted Collection (' + items.length + ' Products):</td>' +
+            '<td style="padding:12px 14px; text-align:right; font-size:14px; color:#16a34a;">' + fmt(totalCollection) + '</td>' +
+        '</tr>';
+    }
+};
+
+window.filterDaySalesTable = function(q) {
+    if (!window.dstData || !window.dstData.items) return;
+    var query = (q || '').trim().toLowerCase();
+    if (!query) {
+        renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);
+        return;
+    }
+    var filtered = window.dstData.items.filter(function(item) {
+        return (item.account_name && item.account_name.toLowerCase().indexOf(query) !== -1) ||
+               (item.branch && item.branch.toLowerCase().indexOf(query) !== -1) ||
+               (item.team_leader && item.team_leader.toLowerCase().indexOf(query) !== -1) ||
+               (item.team_member && item.team_member.toLowerCase().indexOf(query) !== -1) ||
+               (item.category && item.category.toLowerCase().indexOf(query) !== -1) ||
+               (item.sale_type && item.sale_type.toLowerCase().indexOf(query) !== -1) ||
+               (item.product_name && item.product_name.toLowerCase().indexOf(query) !== -1);
+    });
+    renderDaySalesTrackerTable(filtered, window.dstData.categories);
+};
+
+window.saveDstCategory = function(leadProductId, category) {
+    var indicator = document.getElementById('daDstSaved_' + leadProductId);
+    var url = '{{ url("/api/day-sales-tracker/update-category") }}';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+    var headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrfToken
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            lead_product_id: leadProductId,
+            category: category
+        })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (res.success) {
+            var itm = (window.dstData.items || []).find(function(x) { return x.id === leadProductId; });
+            if (itm) itm.category = category;
+
+            if (indicator) {
+                indicator.style.display = 'inline';
+                setTimeout(function() { indicator.style.display = 'none'; }, 2000);
+            }
+        }
+    })
+    .catch(function(err) {
+        console.error('Failed to save category:', err);
+    });
+};
+
+window.saveDstSaleType = function(leadProductId, saleType) {
+    var indicator = document.getElementById('daDstSaleTypeSaved_' + leadProductId);
+    var url = '{{ url("/api/day-sales-tracker/update-sale-type") }}';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+    var headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrfToken
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            lead_product_id: leadProductId,
+            sale_type: saleType
+        })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (res.success) {
+            var itm = (window.dstData.items || []).find(function(x) { return x.id === leadProductId; });
+            if (itm) itm.sale_type = saleType;
+
+            if (indicator) {
+                indicator.style.display = 'inline';
+                setTimeout(function() { indicator.style.display = 'none'; }, 2000);
+            }
+        }
+    })
+    .catch(function(err) {
+        console.error('Failed to save sale type:', err);
+    });
+};
+
+window.dstCategoriesList = [];
+
+window.openAddCategoryModal = function(leadProductId) {
+    window.dstTargetLeadProductId = leadProductId || null;
+    var modal = document.getElementById('daDstAddCategoryModal');
+    var input = document.getElementById('daDstNewCatInput');
+    var err = document.getElementById('daDstCatError');
+    var succ = document.getElementById('daDstCatSuccess');
+    if (err) err.style.display = 'none';
+    if (succ) succ.style.display = 'none';
+    if (input) input.value = '';
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(function() { if (input) input.focus(); }, 100);
+    }
+    loadDstCategories();
+};
+
+window.closeAddCategoryModal = function() {
+    var modal = document.getElementById('daDstAddCategoryModal');
+    if (modal) modal.style.display = 'none';
+    window.dstTargetLeadProductId = null;
+};
+
+window.loadDstCategories = function() {
+    var tbody = document.getElementById('daDstCatTableBody');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:18px; color:#94a3b8;"><span class="spinner-border spinner-border-sm" role="status" style="margin-right:6px;"></span> Loading categories...</td></tr>';
+    }
+
+    var url = '{{ url("/api/day-sales-tracker/categories") }}';
+    var headers = {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(res) {
+            if (res.success) {
+                window.dstCategoriesList = res.data || [];
+                renderDstCategoriesList(window.dstCategoriesList);
+                if (window.dstData) {
+                    window.dstData.categories = window.dstCategoriesList.map(function(c) { return c.name; });
+                }
+            } else {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:18px; color:#e11d48;">Failed to load categories.</td></tr>';
+            }
+        })
+        .catch(function(err) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:18px; color:#e11d48;">Error: ' + escapeHtml(err.message || 'Unknown error') + '</td></tr>';
+        });
+};
+
+window.renderDstCategoriesList = function(list) {
+    var tbody = document.getElementById('daDstCatTableBody');
+    var badge = document.getElementById('daDstCatCountBadge');
+    if (badge) badge.textContent = (list || []).length;
+    if (!tbody) return;
+
+    if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:24px; color:#94a3b8;">No categories found. Add one above!</td></tr>';
+        return;
+    }
+
+    var rowsHtml = list.map(function(c, idx) {
+        var safeName = (c.name || '').replace(/'/g, "\\'");
+        return '<tr id="daDstCatRow_' + c.id + '" style="border-bottom:1px solid #f1f5f9;">' +
+            '<td style="padding:8px 12px; text-align:center; font-weight:700; color:#94a3b8; font-size:11px;">' + (idx + 1) + '</td>' +
+            '<td style="padding:8px 12px;">' +
+                '<span id="daDstCatText_' + c.id + '" style="font-weight:600; color:#1e293b; font-size:12px;">' + escapeHtml(c.name) + '</span>' +
+                '<div id="daDstCatEditWrap_' + c.id + '" style="display:none; align-items:center; gap:6px;">' +
+                    '<input type="text" id="daDstCatEditInput_' + c.id + '" value="' + escapeHtml(c.name) + '" class="form-control" style="height:30px; font-size:12px; padding:2px 8px; border-radius:6px; flex:1;" onkeydown="if(event.key===\'Enter\') saveEditDstCat(' + c.id + ')">' +
+                    '<button type="button" onclick="saveEditDstCat(' + c.id + ')" style="background:#16a34a; color:#fff; border:none; border-radius:5px; padding:3px 8px; font-size:11px; font-weight:700; cursor:pointer;" title="Save">✓</button>' +
+                    '<button type="button" onclick="cancelEditDstCat(' + c.id + ')" style="background:#64748b; color:#fff; border:none; border-radius:5px; padding:3px 8px; font-size:11px; font-weight:700; cursor:pointer;" title="Cancel">✕</button>' +
+                '</div>' +
+            '</td>' +
+            '<td style="padding:8px 12px; text-align:right; white-space:nowrap;" id="daDstCatActionWrap_' + c.id + '">' +
+                '<button type="button" onclick="startEditDstCat(' + c.id + ')" style="background:#f1f5f9; color:#0284c7; border:1px solid #cbd5e1; border-radius:6px; padding:3px 8px; font-size:11px; font-weight:700; cursor:pointer; margin-right:5px;" title="Edit Category">✎ Edit</button>' +
+                '<button type="button" onclick="deleteDstCat(' + c.id + ', \'' + safeName + '\')" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:6px; padding:3px 8px; font-size:11px; font-weight:700; cursor:pointer;" title="Delete Category">🗑 Delete</button>' +
+            '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.innerHTML = rowsHtml;
+};
+
+window.submitNewCategory = function() {
+    var input = document.getElementById('daDstNewCatInput');
+    var err = document.getElementById('daDstCatError');
+    var succ = document.getElementById('daDstCatSuccess');
+    var btn = document.getElementById('daDstSubmitCatBtn');
+    var val = (input ? input.value : '').trim();
+
+    if (err) err.style.display = 'none';
+    if (succ) succ.style.display = 'none';
+
+    if (!val) {
+        if (err) { err.textContent = 'Please enter a category name.'; err.style.display = 'block'; }
+        return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    var url = '{{ url("/api/day-sales-tracker/categories") }}';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+    var headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrfToken
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ name: val })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
+        if (res.success) {
+            if (input) input.value = '';
+            if (succ) {
+                succ.textContent = 'Category added successfully!';
+                succ.style.display = 'block';
+                setTimeout(function() { if (succ) succ.style.display = 'none'; }, 2500);
+            }
+
+            window.dstCategoriesList = res.categories_list || [];
+            renderDstCategoriesList(window.dstCategoriesList);
+
+            if (window.dstData) {
+                window.dstData.categories = res.categories || [];
+                renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);
+            }
+
+            var targetId = window.dstTargetLeadProductId;
+            if (targetId) {
+                var selectEl = document.querySelector('.da-dst-cat-select[data-id="' + targetId + '"]');
+                if (selectEl) {
+                    selectEl.value = res.category;
+                    saveDstCategory(targetId, res.category);
+                }
+            }
+        } else {
+            if (err) { err.textContent = res.message || 'Failed to save.'; err.style.display = 'block'; }
+        }
+    })
+    .catch(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
+        if (err) { err.textContent = e.message || 'Failed to save category.'; err.style.display = 'block'; }
+    });
+};
+
+window.startEditDstCat = function(id) {
+    var textEl = document.getElementById('daDstCatText_' + id);
+    var editWrap = document.getElementById('daDstCatEditWrap_' + id);
+    var actionWrap = document.getElementById('daDstCatActionWrap_' + id);
+    var input = document.getElementById('daDstCatEditInput_' + id);
+
+    if (textEl) textEl.style.display = 'none';
+    if (actionWrap) actionWrap.style.display = 'none';
+    if (editWrap) {
+        editWrap.style.display = 'flex';
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }
+};
+
+window.cancelEditDstCat = function(id) {
+    var textEl = document.getElementById('daDstCatText_' + id);
+    var editWrap = document.getElementById('daDstCatEditWrap_' + id);
+    var actionWrap = document.getElementById('daDstCatActionWrap_' + id);
+
+    if (editWrap) editWrap.style.display = 'none';
+    if (textEl) textEl.style.display = 'inline';
+    if (actionWrap) actionWrap.style.display = 'table-cell';
+};
+
+window.saveEditDstCat = function(id) {
+    var input = document.getElementById('daDstCatEditInput_' + id);
+    var val = (input ? input.value : '').trim();
+    if (!val) {
+        alert('Category name cannot be empty.');
+        return;
+    }
+
+    var url = '{{ url("/api/day-sales-tracker/categories") }}/' + id + '/update';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+    var headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrfToken
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ name: val })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (res.success) {
+            window.dstCategoriesList = res.categories_list || [];
+            renderDstCategoriesList(window.dstCategoriesList);
+
+            if (window.dstData) {
+                window.dstData.categories = res.categories || [];
+                renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);
+            }
+        } else {
+            alert(res.message || 'Failed to update category.');
+        }
+    })
+    .catch(function(err) {
+        alert(err.message || 'Error updating category.');
+    });
+};
+
+window.deleteDstCat = function(id, name) {
+    if (!confirm('Are you sure you want to delete category "' + name + '"?\nThis will remove it from the category list.')) {
+        return;
+    }
+
+    var url = '{{ url("/api/day-sales-tracker/categories") }}/' + id + '/delete';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+    var headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrfToken
+    };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'same-origin'
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+        if (res.success) {
+            window.dstCategoriesList = res.categories_list || [];
+            renderDstCategoriesList(window.dstCategoriesList);
+
+            if (window.dstData) {
+                window.dstData.categories = res.categories || [];
+                if (window.dstData.items) {
+                    window.dstData.items.forEach(function(item) {
+                        if (item.category === name) {
+                            item.category = '';
+                        }
+                    });
+                }
+                renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);
+            }
+        } else {
+            alert(res.message || 'Failed to delete category.');
+        }
+    })
+    .catch(function(err) {
+        alert(err.message || 'Error deleting category.');
+    });
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -3231,6 +3929,18 @@ window.closeBranchHotLeadsModal = function() {
 // Close modal on Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+        var dstAddCatModal = document.getElementById('daDstAddCategoryModal');
+        if (dstAddCatModal && dstAddCatModal.classList.contains('open')) {
+            window.closeAddCategoryModal();
+            return;
+        }
+
+        var dstModal = document.getElementById('daDaySalesTrackerModal');
+        if (dstModal && dstModal.classList.contains('open')) {
+            window.closeDaySalesTrackerModal();
+            return;
+        }
+
         var subModal = document.getElementById('daBranchHotLeadsModal');
         if (subModal && subModal.classList.contains('open')) {
             window.closeBranchHotLeadsModal();

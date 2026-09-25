@@ -115,12 +115,23 @@ class CstAllocationController extends Controller
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
         $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
 
-        if ($isTl) {
+        $subordinateIds = $this->visibility->customerSupportUserIds($currentUser);
+
+        if ($isAdmin) {
             $pendingLeads = $eligibleLeads->whereNull('customer_support_executive_id');
             $completedLeads = $eligibleLeads->whereNotNull('customer_support_executive_id');
+        } elseif ($isTl) {
+            $pendingLeads = $eligibleLeads->whereNull('customer_support_executive_id');
+            $completedLeads = $eligibleLeads->filter(function($lead) use ($subordinateIds) {
+                return in_array((int) $lead->customer_support_executive_id, $subordinateIds, true)
+                    || in_array((int) $lead->customer_support_tl_id, $subordinateIds, true);
+            });
         } else {
             $pendingLeads = collect();
-            $completedLeads = $eligibleLeads->where('customer_support_executive_id', $currentUser->id);
+            $completedLeads = $eligibleLeads->filter(function($lead) use ($subordinateIds) {
+                return in_array((int) $lead->customer_support_executive_id, $subordinateIds, true)
+                    || in_array((int) $lead->customer_support_tl_id, $subordinateIds, true);
+            });
         }
 
         // Paginate both collections separately (so pagination links don't conflict)
@@ -128,7 +139,7 @@ class CstAllocationController extends Controller
         $completedLeadsPaginated = self::paginateCollection($completedLeads, 15, 'page_completed');
 
         // 5. Retrieve active support Users for assignment dropdowns
-        $cstUsers = User::where('user_status', '=', 'active')
+        $cstUsersQuery = User::where('user_status', '=', 'active')
             ->where(function($query) {
                 $query->whereHas('roles.department', function($q) {
                     $q->where('name', 'like', '%customer support%')
@@ -137,12 +148,27 @@ class CstAllocationController extends Controller
                 })->orWhereHas('employeeOnboarding', function($q) {
                     $q->where('department_id', 5);
                 });
-            })->orderBy('name')->get(['id', 'name']);
+            });
+
+        if (!$isAdmin) {
+            $cstUsersQuery->whereIn('id', $subordinateIds);
+        }
+
+        $cstUsers = $cstUsersQuery->orderBy('name')->get(['id', 'name']);
 
         // Fetch Lead Accounts for filter dropdown
-        $leadAccounts = Lead::whereHas('products', function($q) {
+        $leadAccountsQuery = Lead::whereHas('products', function($q) {
                 $q->where('product_status', '=', 'converted');
-            })
+            });
+
+        if (!$isAdmin) {
+            $leadAccountsQuery->where(function($q) use ($subordinateIds) {
+                $q->whereIn('customer_support_executive_id', $subordinateIds)
+                  ->orWhereIn('customer_support_tl_id', $subordinateIds);
+            });
+        }
+
+        $leadAccounts = $leadAccountsQuery
             ->select('id', 'company_name', 'contact_name')
             ->orderBy('company_name')
             ->orderBy('contact_name')
@@ -202,9 +228,10 @@ class CstAllocationController extends Controller
     {
         $currentUser = Auth::user();
         $isAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        $isTl = $isAdmin || ($currentUser->hasCustomerSupportLikeRole() && $currentUser->hasTlLikeRole()) || $currentUser->hasTlLikeRole();
 
         // Verify authorization
-        if (!$isAdmin) {
+        if (!$isAdmin && !$isTl) {
             abort(403, 'Unauthorized action.');
         }
 

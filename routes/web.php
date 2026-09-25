@@ -131,6 +131,22 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/cst-allocation/{lead}/allocate-executive', [\App\Http\Controllers\CstAllocationController::class, 'allocateExecutive'])
         ->name('cst-allocation.allocate-executive');
 
+    // Day Sales Tracker
+    Route::get('/api/day-sales-tracker/data', [\App\Http\Controllers\DaySalesTrackerController::class, 'data'])
+        ->name('day-sales-tracker.data');
+    Route::get('/api/day-sales-tracker/categories', [\App\Http\Controllers\DaySalesTrackerController::class, 'categories'])
+        ->name('day-sales-tracker.categories');
+    Route::post('/api/day-sales-tracker/categories', [\App\Http\Controllers\DaySalesTrackerController::class, 'addCategory'])
+        ->name('day-sales-tracker.add-category');
+    Route::post('/api/day-sales-tracker/categories/{id}/update', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateCategoryName'])
+        ->name('day-sales-tracker.categories.update');
+    Route::post('/api/day-sales-tracker/categories/{id}/delete', [\App\Http\Controllers\DaySalesTrackerController::class, 'deleteCategory'])
+        ->name('day-sales-tracker.categories.delete');
+    Route::post('/api/day-sales-tracker/update-category', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateCategory'])
+        ->name('day-sales-tracker.update-category');
+    Route::post('/api/day-sales-tracker/update-sale-type', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateSaleType'])
+        ->name('day-sales-tracker.update-sale-type');
+
     // Default redirect by role
     Route::get('/dashboard', function () {
         $user = auth()->user();
