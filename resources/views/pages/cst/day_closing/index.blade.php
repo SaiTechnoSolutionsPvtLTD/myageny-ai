@@ -149,7 +149,15 @@
                     <span>CST Department Metrics ({{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }})</span>
                 </div>
                 <div style="font-size:12px; color:#64748b; font-weight:600;">
-                    Real-time aggregated department metrics
+                    @if($canViewAll)
+                        @if($targetUser)
+                            Viewing CST Executive: <strong style="color:#0f172a;">{{ $targetUser->name }}</strong>
+                        @else
+                            Viewing Company-wide CST Team Metrics (All Executives)
+                        @endif
+                    @else
+                        Viewing Your Allocated Accounts &amp; Metrics (<strong style="color:#0f172a;">{{ auth()->user()->name }}</strong>)
+                    @endif
                 </div>
             </div>
 
@@ -163,7 +171,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#fe5f04;">₹{{ number_format($kpiStats['monthly_target']) }}</div>
-                    <div class="sdc-kpi-sub">Current month prospect value</div>
+                    <div class="sdc-kpi-sub">Prospect + Renewals + Dev &gt;60%</div>
                 </div>
 
                 <!-- 2. Today's Revenue (Today Received Value) -->
@@ -211,7 +219,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#ca8a04;">{{ number_format($kpiStats['current_week_meetings']) }}</div>
-                    <div class="sdc-kpi-sub">Meetings attended this week</div>
+                    <div class="sdc-kpi-sub">Meetings, Weekly Updates, Reviews &amp; Escalations</div>
                 </div>
 
                 <!-- 6. Total Allocated Account -->
@@ -223,7 +231,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#0d9488;">{{ number_format($kpiStats['total_allocated_accounts']) }}</div>
-                    <div class="sdc-kpi-sub">Overall unique accounts</div>
+                    <div class="sdc-kpi-sub">Active accounts allocated to CST</div>
                 </div>
 
                 <!-- 7. Today's Added Account -->
@@ -235,7 +243,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#0891b2;">{{ number_format($kpiStats['today_added_accounts']) }}</div>
-                    <div class="sdc-kpi-sub">Newly added accounts today</div>
+                    <div class="sdc-kpi-sub">Newly allocated to CST today</div>
                 </div>
 
                 <!-- 8. Welcome Call Pending Account Count -->
@@ -247,7 +255,11 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#e11d48;">{{ number_format($kpiStats['welcome_call_pending_count']) }}</div>
-                    <div class="sdc-kpi-sub">Production initiated, call pending</div>
+                    <div class="sdc-kpi-sub" style="display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin-top:4px;">
+                        <span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:5px; font-weight:700; font-size:10.5px;">{{ number_format($kpiStats['welcome_call_new_count'] ?? 0) }} New</span>
+                        <span style="background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:5px; font-weight:700; font-size:10.5px;">{{ number_format($kpiStats['welcome_call_pending_status_count'] ?? 0) }} Pending</span>
+                        <span style="background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:5px; font-weight:700; font-size:10.5px;">{{ number_format($kpiStats['welcome_call_overdue_count'] ?? 0) }} Overdue</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -260,7 +272,7 @@
                     <input type="date" name="date" value="{{ request('date', $selectedDate) }}" class="sdc-input">
                 </div>
 
-                @if($isAdminLike || $isTlLike)
+                @if($canViewAll)
                     <div class="sdc-filter-group">
                         <label class="sdc-label">CST Executive</label>
                         <select name="user_id" class="sdc-select">
@@ -445,7 +457,7 @@
                                     @endif
                                 </td>
                                 <td style="text-align:center;">
-                                    @if($isAdminLike || $isTlLike)
+                                    @if($canViewAll)
                                         <select class="status-dropdown {{ $closing->status }}"
                                                 data-update-url="{{ route('cst.day-closing.review', $closing->id) }}"
                                                 title="Change Review Status">
@@ -536,7 +548,7 @@
                 </div>
                 <div>
                     <label class="sdc-label">CST Executive</label>
-                    @if($isAdminLike || $isTlLike)
+                    @if($canViewAll)
                         <select name="user_id" id="modalUserId" class="sdc-select">
                             @foreach($assignableUsers as $u)
                                 <option value="{{ $u->id }}" @selected($u->id === auth()->id())>{{ $u->name }}</option>
@@ -590,6 +602,7 @@
                     <div style="background:#fff; border:1px solid #ffedd5; padding:8px 10px; border-radius:8px;">
                         <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">Welcome Pending</div>
                         <div id="statWelcomePending" style="font-size:16px; font-weight:900; color:#e11d48;">0</div>
+                        <div id="statWelcomePendingBreakdown" style="font-size:9.5px; color:#64748b; font-weight:600; margin-top:2px;">0 New • 0 Pend • 0 Overdue</div>
                     </div>
                 </div>
             </div>
@@ -963,6 +976,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (statTotalAllocated) statTotalAllocated.textContent = s.total_allocated_accounts || 0;
         if (statTodayAdded) statTodayAdded.textContent = s.today_added_accounts || 0;
         if (statWelcomePending) statWelcomePending.textContent = s.welcome_call_pending_count || 0;
+        const statWelcomePendingBreakdown = document.getElementById('statWelcomePendingBreakdown');
+        if (statWelcomePendingBreakdown) {
+            statWelcomePendingBreakdown.textContent = `${s.welcome_call_new_count || 0} New • ${s.welcome_call_pending_status_count || 0} Pend • ${s.welcome_call_overdue_count || 0} Overdue`;
+        }
 
         if (modalInputMonthlyTarget) modalInputMonthlyTarget.value = s.monthly_target || 0;
         if (modalInputTodayRevenue) modalInputTodayRevenue.value = s.today_revenue || 0;

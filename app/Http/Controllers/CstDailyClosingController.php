@@ -25,11 +25,30 @@ class CstDailyClosingController extends Controller
     public function __construct(private readonly DataVisibilityService $visibility) {}
 
     /**
+     * Determine if the user has full company-wide visibility for CST (Company Admin, CBO, Super Admin).
+     */
+    private function canViewAllCst(User $user): bool
+    {
+        return $user->isSuperAdmin()
+            || $user->isCompanyAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->isCbo()
+            || collect($user->roleKeys()->all())->intersect([
+                'super_admin',
+                'company_admin',
+                'cbo',
+                'chief_business_officer',
+                'cheif_business_officer',
+            ])->isNotEmpty();
+    }
+
+    /**
      * Get Customer Support Team user IDs.
      */
-    private function getSupportUserIds(User $user): array
+    private function getSupportUserIds(?User $user = null): array
     {
-        $visibleUserIds = $this->visibility->visibleUserIds();
+        $user = $user ?? auth()->user();
+        $visibleUserIds = $user ? $this->visibility->visibleUserIds() : null;
 
         $supportUserIds = User::where(function($query) {
             $query->whereHas('roles.department', function($q) {
@@ -47,11 +66,21 @@ class CstDailyClosingController extends Controller
             });
         })->pluck('id')->toArray();
 
+        // Also merge any users who have leads allocated in customer_support_executive_id or customer_support_tl_id
+        $allocatedUserIds = Lead::whereNotNull('customer_support_executive_id')
+            ->distinct()
+            ->pluck('customer_support_executive_id')
+            ->filter()
+            ->map(fn($id) => (int) $id)
+            ->all();
+
+        $allSupportIds = array_values(array_unique(array_merge($supportUserIds, $allocatedUserIds)));
+
         if ($visibleUserIds !== null) {
-            return array_values(array_intersect($visibleUserIds, $supportUserIds));
+            return array_values(array_intersect($visibleUserIds, $allSupportIds));
         }
 
-        return $supportUserIds;
+        return $allSupportIds;
     }
 
     /**
@@ -66,16 +95,21 @@ class CstDailyClosingController extends Controller
         $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
         $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
 
-        $isAdminLike = $user->hasAdminLikeRole() || $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin();
-        $isTlLike = $user->hasTlLikeRole();
+        $canViewAll = $this->canViewAllCst($user);
+        $isAdminLike = $canViewAll;
+        $isTlLike = false; // Only Company Admin & CBO see all; remaining users see only what is allocated to them
 
         $supportUserIds = $this->getSupportUserIds($user);
         if (empty($supportUserIds)) {
             $supportUserIds = [$user->id];
         }
 
-        $assignableUsers = User::whereIn('id', $supportUserIds)->orderBy('name')->get(['id', 'name']);
-        if ($assignableUsers->isEmpty()) {
+        if ($canViewAll) {
+            $assignableUsers = User::whereIn('id', $supportUserIds)->orderBy('name')->get(['id', 'name']);
+            if ($assignableUsers->isEmpty()) {
+                $assignableUsers = collect([$user]);
+            }
+        } else {
             $assignableUsers = collect([$user]);
         }
 
@@ -88,22 +122,14 @@ class CstDailyClosingController extends Controller
             'reviewer:id,name',
         ])->latest('closing_date')->latest('id');
 
-        // Apply visibility
-        if (!$isAdminLike) {
-            if ($isTlLike) {
-                $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                $query->whereIn('user_id', $subordinateIds);
-            } else {
-                $query->where('user_id', $user->id);
-            }
-        }
-
-        // Apply filters
-        if ($request->filled('user_id')) {
+        // Apply visibility: Company Admin and CBO can see all submissions, remaining users only see their own
+        if (!$canViewAll) {
+            $query->where('user_id', $user->id);
+        } elseif ($request->filled('user_id') && (int) $request->input('user_id') > 0) {
             $query->where('user_id', (int) $request->input('user_id'));
         }
 
-        if ($request->filled('branch_id')) {
+        if ($canViewAll && $request->filled('branch_id')) {
             $query->where('branch_id', (int) $request->input('branch_id'));
         }
 
@@ -134,11 +160,14 @@ class CstDailyClosingController extends Controller
 
         $closings = $query->paginate(15)->withQueryString();
 
-        // Calculate KPI summary for the selected date & user filter
-        $targetUserId = $request->filled('user_id')
-            ? (int) $request->input('user_id')
-            : ($isAdminLike || $isTlLike ? null : $user->id);
+        // Target user for KPI stats:
+        // - Non-admin/CBO: always current user (only their allocated accounts & achievements)
+        // - Admin/CBO: specific user if selected in filter, otherwise null (company-wide CST stats)
+        $targetUserId = $canViewAll
+            ? ($request->filled('user_id') && (int) $request->input('user_id') > 0 ? (int) $request->input('user_id') : null)
+            : $user->id;
 
+        $targetUser = $targetUserId ? User::find($targetUserId) : null;
         $kpiStats = $this->calculateCstStats($targetUserId, $selectedDate);
 
         // Check if the current user has submitted today's closing
@@ -157,6 +186,9 @@ class CstDailyClosingController extends Controller
             'branches',
             'isAdminLike',
             'isTlLike',
+            'canViewAll',
+            'targetUserId',
+            'targetUser',
             'myTodayClosing'
         ));
     }
@@ -167,11 +199,16 @@ class CstDailyClosingController extends Controller
     public function getStats(Request $request): JsonResponse
     {
         $user = auth()->user();
-        $targetUserId = $request->filled('user_id') ? (int) $request->input('user_id') : $user->id;
+        $canViewAll = $this->canViewAllCst($user);
         $closingDate = trim((string) $request->input('closing_date', now()->toDateString()));
 
-        if ($targetUserId !== $user->id && !$user->hasAdminLikeRole() && !$user->hasTlLikeRole()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized access'], 403);
+        // If not company admin / CBO, strictly force targetUserId to current user
+        if (!$canViewAll) {
+            $targetUserId = $user->id;
+        } else {
+            $targetUserId = $request->filled('user_id') && (int) $request->input('user_id') > 0
+                ? (int) $request->input('user_id')
+                : null;
         }
 
         try {
@@ -183,7 +220,8 @@ class CstDailyClosingController extends Controller
         $stats = $this->calculateCstStats($targetUserId, $date);
 
         // Check if closing already exists for this user and date
-        $existing = CstDailyClosing::where('user_id', $targetUserId)
+        $lookupUserId = $targetUserId ?? $user->id;
+        $existing = CstDailyClosing::where('user_id', $lookupUserId)
             ->whereDate('closing_date', $date)
             ->first();
 
@@ -250,7 +288,8 @@ class CstDailyClosingController extends Controller
             'remarks.required'             => 'Please enter your CST day closing remarks.',
         ]);
 
-        $targetUserId = !empty($validated['user_id']) && ($currentUser->hasAdminLikeRole() || $currentUser->hasTlLikeRole())
+        $canViewAll = $this->canViewAllCst($currentUser);
+        $targetUserId = !empty($validated['user_id']) && $canViewAll
             ? (int) $validated['user_id']
             : $currentUser->id;
 
@@ -341,8 +380,9 @@ class CstDailyClosingController extends Controller
     {
         $currentUser = auth()->user();
 
-        // Only owner or Admin/TL can update
-        if ($closing->user_id !== $currentUser->id && !$currentUser->hasAdminLikeRole() && !$currentUser->hasTlLikeRole()) {
+        $canViewAll = $this->canViewAllCst($currentUser);
+        // Only owner or Company Admin / CBO can update
+        if ($closing->user_id !== $currentUser->id && !$canViewAll) {
             abort(403, 'Unauthorized to edit this CST closing update.');
         }
 
@@ -419,13 +459,13 @@ class CstDailyClosingController extends Controller
     }
 
     /**
-     * Review / Approve closing by TL or Admin.
+     * Review / Approve closing by Company Admin or CBO.
      */
     public function review(Request $request, CstDailyClosing $closing): JsonResponse|RedirectResponse
     {
         $user = auth()->user();
-        if (!$user->hasAdminLikeRole() && !$user->hasTlLikeRole()) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized action.'], 403);
+        if (!$this->canViewAllCst($user)) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized action. Only Company Admin and CBO can review day closings.'], 403);
         }
 
         $validated = $request->validate([
@@ -458,7 +498,7 @@ class CstDailyClosingController extends Controller
     {
         $currentUser = auth()->user();
 
-        if ($closing->user_id !== $currentUser->id && !$currentUser->hasAdminLikeRole()) {
+        if ($closing->user_id !== $currentUser->id && !$this->canViewAllCst($currentUser)) {
             abort(403, 'Unauthorized.');
         }
 
@@ -487,7 +527,7 @@ class CstDailyClosingController extends Controller
     public function deleteAttachment(Request $request, CstDailyClosing $closing): JsonResponse
     {
         $currentUser = auth()->user();
-        if ($closing->user_id !== $currentUser->id && !$currentUser->hasAdminLikeRole() && !$currentUser->hasTlLikeRole()) {
+        if ($closing->user_id !== $currentUser->id && !$this->canViewAllCst($currentUser)) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -518,6 +558,37 @@ class CstDailyClosingController extends Controller
     /**
      * Calculate CST Department stats for a specific user and date.
      */
+    /**
+     * Extract renewal date string from ProductionInitiation custom_form_data or project_delivery_date.
+     */
+    private function extractRenewalDate($pi): ?string
+    {
+        $formData = is_array($pi->custom_form_data) ? $pi->custom_form_data : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+
+        foreach ($formData as $field) {
+            if (!is_array($field)) continue;
+            $fieldKey = $field['field_name'] ?? '';
+            $fieldVal = $field['value'] ?? '';
+
+            $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
+            if (is_array($fieldVal)) {
+                $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal)));
+            } else {
+                $value = trim((string) $fieldVal);
+            }
+            if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date']) && !empty($value)) {
+                try {
+                    return Carbon::parse($value)->toDateString();
+                } catch (\Exception $e) {}
+            }
+        }
+
+        return $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date)->toDateString() : null;
+    }
+
+    /**
+     * Calculate CST Department stats for a specific user and date.
+     */
     public function calculateCstStats(?int $userId, string $date): array
     {
         $currentUser = auth()->user();
@@ -525,10 +596,16 @@ class CstDailyClosingController extends Controller
 
         $parsedDate = Carbon::parse($date);
         $monthStart = (clone $parsedDate)->startOfMonth();
-        $weekStart = (clone $parsedDate)->startOfWeek();
-        $weekEnd = (clone $parsedDate)->endOfWeek();
+        $monthEnd   = (clone $parsedDate)->endOfMonth();
+        $weekStart  = (clone $parsedDate)->startOfWeek();
+        $weekEnd    = (clone $parsedDate)->endOfWeek();
 
-        // 1. Monthly Target : Current Month Prospect Value show pananum default
+        // ---------------------------------------------------------------------------------
+        // 1. Monthly Target :
+        // a) CST Allocated Leads Current Month Prospect Value (hot status)
+        // b) Renewal Product Yes & Current Month Renewal Value
+        // c) Development Received Payment >= 60% of Total Payment -> Remaining Value/Target
+        // ---------------------------------------------------------------------------------
         $prospectQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
             ->whereMonth('closure_date', $monthStart->month)
@@ -537,27 +614,125 @@ class CstDailyClosingController extends Controller
         if ($userId) {
             $prospectQuery->whereHas('lead', function($lq) use ($userId) {
                 $lq->where('customer_support_executive_id', $userId)
-                   ->orWhere('customer_support_tl_id', $userId)
-                   ->orWhere('assigned_to', $userId);
+                   ->orWhere('customer_support_tl_id', $userId);
             });
         } elseif (!empty($supportUserIds)) {
             $prospectQuery->whereHas('lead', function($lq) use ($supportUserIds) {
                 $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                   ->orWhereIn('customer_support_tl_id', $supportUserIds)
-                   ->orWhereIn('assigned_to', $supportUserIds);
+                   ->orWhereIn('customer_support_tl_id', $supportUserIds);
+            });
+        }
+        $prospectVal = (float) $prospectQuery->sum('total_price');
+
+        // Renewal Product Yes & Current month renewal
+        $renewalQuery = ProductionInitiation::query()
+            ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+            ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+            ->join('products', 'products.id', '=', 'production_initiations.product_id')
+            ->where(function($q) {
+                $q->where('products.is_this_renewal_product', true)
+                  ->orWhere('products.count_wise_report', true);
+            });
+
+        if ($userId) {
+            $renewalQuery->where(function($q) use ($userId) {
+                $q->where('leads.customer_support_executive_id', $userId)
+                  ->orWhere('leads.customer_support_tl_id', $userId);
+            });
+        } elseif (!empty($supportUserIds)) {
+            $renewalQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('leads.customer_support_executive_id', $supportUserIds)
+                  ->orWhereIn('leads.customer_support_tl_id', $supportUserIds);
             });
         }
 
-        $prospectVal = (float) $prospectQuery->sum('total_price');
+        $renewalInitiations = $renewalQuery->select([
+            'production_initiations.id',
+            'production_initiations.project_delivery_date',
+            'production_initiations.custom_form_data',
+            'lead_products.total_price',
+            'lead_products.closure_date',
+        ])->get();
 
-        if ($prospectVal <= 0 && $userId) {
+        $renewalVal = 0.0;
+        foreach ($renewalInitiations as $ri) {
+            $rDateStr = $this->extractRenewalDate($ri);
+            if ($rDateStr) {
+                $rDate = Carbon::parse($rDateStr);
+                if ($rDate->month === $monthStart->month && $rDate->year === $monthStart->year) {
+                    $renewalVal += (float) $ri->total_price;
+                }
+            } elseif ($ri->closure_date) {
+                $cDate = Carbon::parse($ri->closure_date);
+                if ($cDate->month === $monthStart->month && $cDate->year === $monthStart->year) {
+                    $renewalVal += (float) $ri->total_price;
+                }
+            }
+        }
+
+        // Direct renewal lead products (not through production_initiations)
+        $directRenewalQuery = LeadProduct::query()
+            ->whereMonth('closure_date', $monthStart->month)
+            ->whereYear('closure_date', $monthStart->year)
+            ->whereHas('product', fn($q) => $q->where('is_this_renewal_product', true))
+            ->whereDoesntHave('productionInitiations');
+
+        if ($userId) {
+            $directRenewalQuery->whereHas('lead', function($lq) use ($userId) {
+                $lq->where('customer_support_executive_id', $userId)
+                   ->orWhere('customer_support_tl_id', $userId);
+            });
+        } elseif (!empty($supportUserIds)) {
+            $directRenewalQuery->whereHas('lead', function($lq) use ($supportUserIds) {
+                $lq->whereIn('customer_support_executive_id', $supportUserIds)
+                   ->orWhereIn('customer_support_tl_id', $supportUserIds);
+            });
+        }
+        $renewalVal += (float) $directRenewalQuery->sum('total_price');
+
+        // Development received payment >= 60% of total payment -> map that value
+        $devQuery = ProductionInitiation::query()
+            ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+            ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+            ->where('production_initiations.department_id', 1); // 1 = Development
+
+        if ($userId) {
+            $devQuery->where(function($q) use ($userId) {
+                $q->where('leads.customer_support_executive_id', $userId)
+                  ->orWhere('leads.customer_support_tl_id', $userId);
+            });
+        } elseif (!empty($supportUserIds)) {
+            $devQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('leads.customer_support_executive_id', $supportUserIds)
+                  ->orWhereIn('leads.customer_support_tl_id', $supportUserIds);
+            });
+        }
+
+        $devInitiations = $devQuery->select([
+            'lead_products.total_price',
+            'lead_products.amount_paid',
+        ])->get();
+
+        $devVal = 0.0;
+        foreach ($devInitiations as $di) {
+            $tPrice = (float) $di->total_price;
+            $aPaid = (float) $di->amount_paid;
+            if ($tPrice > 0 && ($aPaid / $tPrice) >= 0.60) {
+                $pending = max(0, $tPrice - $aPaid);
+                $devVal += ($pending > 0 ? $pending : $tPrice);
+            }
+        }
+
+        $computedMonthlyTarget = $prospectVal + $renewalVal + $devVal;
+
+        if ($computedMonthlyTarget <= 0 && $userId) {
             $targetMonthStr = $monthStart->format('Y-m');
             $explicitTarget = (float) (SalesTarget::where('user_id', $userId)->where('target_month', $targetMonthStr)->value('target_amount')
                 ?? SalesTarget::where('user_id', $userId)->value('target_amount')
                 ?? 0);
             $monthlyTarget = $explicitTarget;
         } else {
-            $monthlyTarget = $prospectVal;
+            $monthlyTarget = $computedMonthlyTarget;
         }
 
         // 2. Today's Revenue : Today Received Value
@@ -598,7 +773,9 @@ class CstDailyClosingController extends Controller
         // 4. Completed Percentage : Till date varaikum achieve paniruka amount percentage
         $completedPercentage = $monthlyTarget > 0 ? round(($tillNowAchieved / $monthlyTarget) * 100, 1) : 0.0;
 
-        // 5. Current Week Meetings : Current week attend pana meeting count
+        // ---------------------------------------------------------------------------------
+        // 5. Current Week Meetings, Weekly Updates, Reviews & Escalations
+        // ---------------------------------------------------------------------------------
         $meetingsQuery = LeadReminder::query()
             ->where(function($q) {
                 $q->where('type', 'meeting')
@@ -611,66 +788,143 @@ class CstDailyClosingController extends Controller
         } elseif (!empty($supportUserIds)) {
             $meetingsQuery->whereIn('user_id', $supportUserIds);
         }
-        $currentWeekMeetings = (int) $meetingsQuery->count();
+        $remindersMeetingCount = (int) $meetingsQuery->count();
 
-        // 6. Total Allocated Account : Overall Allocated Accounts (Unique)
-        $allocQuery = Lead::query();
+        // CST Executive added Weekly Updates, Reviews, Escalations
+        $cstUpdatesQuery = \App\Models\LeadCstUpdate::query()
+            ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+
         if ($userId) {
-            $allocQuery->where(function($q) use ($userId) {
-                $q->where('customer_support_executive_id', $userId)
-                  ->orWhere('customer_support_tl_id', $userId);
+            $cstUpdatesQuery->where('user_id', $userId);
+        } elseif (!empty($supportUserIds)) {
+            $cstUpdatesQuery->whereIn('user_id', $supportUserIds);
+        }
+
+        $weeklyUpdatesCount = (clone $cstUpdatesQuery)->where('update_type', 'weekly_update')->count();
+        $reviewsCount       = (clone $cstUpdatesQuery)->where('update_type', 'review')->count();
+        $escalationsCount   = (clone $cstUpdatesQuery)->where('update_type', 'escalation')->count();
+
+        $currentWeekMeetings = $remindersMeetingCount + $weeklyUpdatesCount + $reviewsCount + $escalationsCount;
+
+        // ---------------------------------------------------------------------------------
+        // 6. Total Allocated Account : Matches CST Allocation (leads with converted products allocated to CST)
+        // ---------------------------------------------------------------------------------
+        $allocQuery = Lead::query()
+            ->whereNull('deleted_at')
+            ->whereHas('products', function($pq) {
+                $pq->where('product_status', '=', 'converted');
+            });
+
+        if ($userId) {
+            $allocQuery->where('customer_support_executive_id', $userId);
+        } elseif (!empty($supportUserIds)) {
+            $allocQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('customer_support_executive_id', $supportUserIds)
+                  ->orWhereNotNull('customer_support_executive_id');
             });
         } else {
             $allocQuery->whereNotNull('customer_support_executive_id');
         }
-        $totalAllocatedAccounts = (int) $allocQuery->distinct()->count('id');
+        $totalAllocatedAccounts = (int) $allocQuery->distinct()->count('leads.id');
 
-        // 7. Today's Added Account : Today Newly Added Count
-        $todayAddedQuery = Lead::query();
+        // ---------------------------------------------------------------------------------
+        // 7. Today's Added Account : Matches CST Allocation newly allocated today
+        // ---------------------------------------------------------------------------------
+        $todayAddedQuery = Lead::query()
+            ->whereNull('deleted_at')
+            ->whereHas('products', function($pq) {
+                $pq->where('product_status', '=', 'converted');
+            })
+            ->where(function($q) use ($date) {
+                $q->whereDate('customer_support_allocated_at', $date)
+                  ->orWhere(function($sub) use ($date) {
+                      $sub->whereNull('customer_support_allocated_at')
+                          ->whereDate('created_at', $date);
+                  });
+            });
+
         if ($userId) {
-            $todayAddedQuery->where(function($q) use ($userId) {
-                $q->where('customer_support_executive_id', $userId)
-                  ->orWhere('customer_support_tl_id', $userId);
+            $todayAddedQuery->where('customer_support_executive_id', $userId);
+        } elseif (!empty($supportUserIds)) {
+            $todayAddedQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('customer_support_executive_id', $supportUserIds)
+                  ->orWhereNotNull('customer_support_executive_id');
             });
         } else {
             $todayAddedQuery->whereNotNull('customer_support_executive_id');
         }
-        $todayAddedAccounts = (int) (clone $todayAddedQuery)->where(function($q) use ($date) {
-            $q->whereDate('customer_support_allocated_at', $date)
-              ->orWhere(function($sub) use ($date) {
-                  $sub->whereNull('customer_support_allocated_at')
-                      ->whereDate('created_at', $date);
-              });
-        })->distinct()->count('id');
+        $todayAddedAccounts = (int) $todayAddedQuery->distinct()->count('leads.id');
 
-        // 8. Welcome Call Pending Account Count : Production Initiate pane inum welcome call pending la iruka count
-        $welcomePendingQuery = ProductionInitiation::query()
-            ->whereNull('welcome_call_date');
+        // 8. Welcome Call Pending Account Count : OVP Modules la Pending, New, Overdue status la iruka count matum
+        $threeDaysAgo = Carbon::now()->subDays(3);
+
+        $ovpWelcomeQuery = ProductionInitiation::query()
+            ->whereIn('status', ['ovp_pending', 'initiated', 'pending']);
 
         if ($userId) {
-            $welcomePendingQuery->whereHas('lead', function($lq) use ($userId) {
-                $lq->where('customer_support_executive_id', $userId)
-                   ->orWhere('customer_support_tl_id', $userId)
-                   ->orWhere('initiated_by', $userId);
+            $ovpWelcomeQuery->where(function($q) use ($userId) {
+                $q->where('ovp_allocated_to', $userId)
+                  ->orWhere(function($sub) use ($userId) {
+                      $sub->whereNull('ovp_allocated_to')
+                          ->whereHas('lead', function($lq) use ($userId) {
+                              $lq->where('customer_support_executive_id', $userId)
+                                 ->orWhere('customer_support_tl_id', $userId);
+                          });
+                  });
             });
         } elseif (!empty($supportUserIds)) {
-            $welcomePendingQuery->whereHas('lead', function($lq) use ($supportUserIds) {
-                $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                   ->orWhereIn('customer_support_tl_id', $supportUserIds)
-                   ->orWhereIn('initiated_by', $supportUserIds);
+            $ovpWelcomeQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('ovp_allocated_to', $supportUserIds)
+                  ->orWhere(function($sub) use ($supportUserIds) {
+                      $sub->whereNull('ovp_allocated_to')
+                          ->whereHas('lead', function($lq) use ($supportUserIds) {
+                              $lq->whereIn('customer_support_executive_id', $supportUserIds)
+                                 ->orWhereIn('customer_support_tl_id', $supportUserIds)
+                                 ->orWhereNotNull('customer_support_executive_id');
+                          });
+                  });
             });
         }
-        $welcomeCallPendingCount = (int) $welcomePendingQuery->distinct()->count('lead_id');
+
+        // Exact match with OvpModuleController::resolveBucket()
+        // 1. Pending: status = 'pending'
+        $ovpPendingCount = (clone $ovpWelcomeQuery)
+            ->where('status', 'pending')
+            ->distinct()->count('production_initiations.id');
+
+        // 2. New: status in ['ovp_pending', 'initiated'] and created within 3 days
+        $ovpNewCount = (clone $ovpWelcomeQuery)
+            ->whereIn('status', ['ovp_pending', 'initiated'])
+            ->where('created_at', '>=', $threeDaysAgo)
+            ->distinct()->count('production_initiations.id');
+
+        // 3. Overdue: status in ['ovp_pending', 'initiated'] and created older than 3 days
+        $ovpOverdueCount = (clone $ovpWelcomeQuery)
+            ->whereIn('status', ['ovp_pending', 'initiated'])
+            ->where('created_at', '<', $threeDaysAgo)
+            ->distinct()->count('production_initiations.id');
+
+        $welcomeCallPendingCount = $ovpPendingCount + $ovpNewCount + $ovpOverdueCount;
 
         return [
-            'monthly_target'             => $monthlyTarget,
-            'today_revenue'              => $todayRevenue,
-            'till_now_achieved'          => $tillNowAchieved,
-            'completed_percentage'       => $completedPercentage,
-            'current_week_meetings'      => $currentWeekMeetings,
-            'total_allocated_accounts'   => $totalAllocatedAccounts,
-            'today_added_accounts'       => $todayAddedAccounts,
-            'welcome_call_pending_count' => $welcomeCallPendingCount,
+            'monthly_target'                    => $monthlyTarget,
+            'today_revenue'                     => $todayRevenue,
+            'till_now_achieved'                 => $tillNowAchieved,
+            'completed_percentage'              => $completedPercentage,
+            'current_week_meetings'             => $currentWeekMeetings,
+            'total_allocated_accounts'          => $totalAllocatedAccounts,
+            'today_added_accounts'              => $todayAddedAccounts,
+            'welcome_call_pending_count'        => $welcomeCallPendingCount,
+            'welcome_call_pending_status_count' => $ovpPendingCount,
+            'welcome_call_new_count'            => $ovpNewCount,
+            'welcome_call_overdue_count'        => $ovpOverdueCount,
+            'prospect_val'               => $prospectVal,
+            'renewal_val'                => $renewalVal,
+            'dev_val'                    => $devVal,
+            'weekly_updates_count'       => $weeklyUpdatesCount,
+            'reviews_count'              => $reviewsCount,
+            'escalations_count'          => $escalationsCount,
+            'meeting_reminders_count'    => $remindersMeetingCount,
         ];
     }
 

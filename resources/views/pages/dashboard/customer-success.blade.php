@@ -196,6 +196,350 @@
     background: #94a3b8;
 }
 
+/* ── Renewal Details Modal ────────────────────────────── */
+.rn-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: rnFadeIn 0.2s ease-out;
+}
+@keyframes rnFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.rn-modal-card {
+    background: #ffffff;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 1280px;
+    max-height: 90vh;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    animation: rnZoomIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes rnZoomIn {
+    from { opacity: 0; transform: scale(0.96) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.rn-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    gap: 16px;
+}
+.rn-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+}
+.rn-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.rn-period-icon {
+    font-size: 26px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+.rn-modal-title {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+.rn-modal-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+.rn-header-stats {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.rn-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+}
+.rn-stat-chip strong {
+    font-weight: 800;
+    font-size: 13px;
+}
+.rn-stat-chip.rn-stat-total strong { color: #0f172a; }
+.rn-stat-chip.rn-stat-value strong { color: #fe5f04; }
+.rn-stat-chip.rn-stat-collected strong { color: #059669; }
+.rn-stat-chip.rn-stat-pending strong { color: #dc2626; }
+.rn-modal-close {
+    background: #f1f5f9;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    color: #64748b;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.rn-modal-close:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    transform: rotate(90deg);
+}
+.rn-modal-toolbar {
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.rn-search-box {
+    position: relative;
+    flex: 1;
+    min-width: 260px;
+    max-width: 480px;
+}
+.rn-search-box .rn-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    color: #94a3b8;
+    pointer-events: none;
+}
+.rn-search-input {
+    width: 100%;
+    padding: 8px 32px 8px 34px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #0f172a;
+    outline: none;
+    transition: all 0.15s;
+}
+.rn-search-input:focus {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.rn-search-clear {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.rn-search-clear:hover { color: #475569; }
+.rn-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.rn-status-select {
+    padding: 7px 12px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    font-size: 12.5px;
+    color: #334155;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+.rn-status-select:focus {
+    border-color: #fe5f04;
+}
+.rn-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.rn-export-btn:hover {
+    background: #059669;
+    color: #ffffff;
+    border-color: #059669;
+}
+.rn-modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    background: #ffffff;
+    min-height: 250px;
+    max-height: calc(90vh - 210px);
+}
+.rn-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+}
+.rn-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.rn-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 10;
+    border-bottom: 2px solid #e2e8f0;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    padding: 10px 14px;
+}
+.rn-table tbody td {
+    padding: 12px 14px;
+    font-size: 12.5px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+.rn-table tbody tr:hover {
+    background: #fefaf8;
+}
+.rn-badge-future {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+}
+.rn-badge-today {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+.rn-badge-overdue {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+.rn-contact-phone {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #3b82f6;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 12px;
+}
+.rn-contact-phone:hover {
+    text-decoration: underline;
+    color: #1d4ed8;
+}
+.rn-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-decoration: none;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.rn-action-btn:hover {
+    background: #fe5f04;
+    color: #ffffff;
+    border-color: #fe5f04;
+}
+.rn-action-lead {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
+.rn-action-lead:hover {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+}
+.rn-modal-footer {
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.rn-footer-info {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+
 @media(max-width:1024px) {
     .dashboard-grid   { grid-template-columns:1fr; }
 }
@@ -400,7 +744,12 @@
 
             {{-- Converted Upsell Deals --}}
             <div class="dashboard-panel dashboard-grid-full">
-                <h4>💎 Converted Upsell Deals (Non-Recurring Contracts)</h4>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <h4>💎 Converted Upsell Deals (Non-Recurring Contracts)</h4>
+                    <button type="button" class="lpd-btn lpd-btn-ghost" style="padding:5px 11px;font-size:11px;" onclick="openUpsellModal()" title="View all upsell deals in popup modal">
+                        <span>🔍 View All in Modal</span>
+                    </button>
+                </div>
                 <div class="table-wrap">
                     <table class="cs-table">
                         <thead>
@@ -490,10 +839,13 @@
             <div class="dashboard-panel dashboard-grid-full">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <h4>📋 Active Month Renewal list</h4>
-                    <div style="display:flex;gap:6px;">
+                    <div style="display:flex;gap:6px;align-items:center;">
                         <button class="btn-apply" style="padding:6px 12px;font-size:11px;" onclick="switchRenewalTab('cmr')">Current Month</button>
                         <button class="btn-reset" style="padding:6px 12px;font-size:11px;" id="btn_nmr" onclick="switchRenewalTab('nmr')">Next Month</button>
                         <button class="btn-reset" style="padding:6px 12px;font-size:11px;" id="btn_lmr" onclick="switchRenewalTab('lmr')">Last Month</button>
+                        <button type="button" class="lpd-btn lpd-btn-ghost" style="padding:5px 11px;font-size:11px;margin-left:6px;" onclick="openRenewalModal(activeRenewalTab)" title="View all renewals in popup modal">
+                            <span>🔍 View in Modal</span>
+                        </button>
                     </div>
                 </div>
                 <div class="table-wrap">
@@ -593,6 +945,286 @@
                     </table>
                 </div>
                 <div id="smmPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Renewal Details Modal Popup --}}
+<div id="renewalModal" class="rn-modal-overlay" style="display:none;" onclick="if(event.target === this) closeRenewalModal()">
+    <div class="rn-modal-card">
+        <!-- Header -->
+        <div class="rn-modal-header">
+            <div class="rn-header-left">
+                <div class="rn-title-row">
+                    <span id="rnModalIcon" class="rn-period-icon">📅</span>
+                    <div>
+                        <h3 id="rnModalTitle" class="rn-modal-title">Current Month Renewal (CMR)</h3>
+                        <div id="rnModalSubtitle" class="rn-modal-subtitle">Renewal accounts &amp; products scheduled for the current month</div>
+                    </div>
+                </div>
+                <!-- Stat Badges -->
+                <div class="rn-header-stats">
+                    <div class="rn-stat-chip rn-stat-total">
+                        <span style="font-weight:600;color:#64748b;">Total Accounts:</span>
+                        <strong id="rnStatCount">0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-value">
+                        <span style="font-weight:600;color:#64748b;">Total Value:</span>
+                        <strong id="rnStatValue">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-collected">
+                        <span style="font-weight:600;color:#64748b;">Collected:</span>
+                        <strong id="rnStatPaid">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-pending">
+                        <span style="font-weight:600;color:#64748b;">Pending:</span>
+                        <strong id="rnStatPending">₹0</strong>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="rn-modal-close" onclick="closeRenewalModal()" title="Close (Esc)">&times;</button>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="rn-modal-toolbar">
+            <div class="rn-search-box">
+                <span class="rn-search-icon">🔍</span>
+                <input type="text" id="rnSearchInput" class="rn-search-input" placeholder="Search account, client, mobile, product, assigned CST executive, branch..." oninput="onRenewalModalSearch(this.value)">
+                <button type="button" id="rnSearchClear" class="rn-search-clear" onclick="clearRenewalSearch()" style="display:none;">&times;</button>
+            </div>
+            <div class="rn-filter-group">
+                <select id="rnStatusFilter" class="rn-status-select" onchange="onRenewalFilterChange()">
+                    <option value="all">All Payment Statuses</option>
+                    <option value="pending">Pending Payment</option>
+                    <option value="partial">Partial Payment</option>
+                    <option value="paid">Fully Paid</option>
+                </select>
+                <button type="button" class="rn-export-btn" onclick="exportRenewalToCsv()" title="Export current list to CSV">
+                    <span>📥 Export CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="rn-modal-body">
+            <div class="rn-table-wrap">
+                <table class="rn-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;text-align:center;">#</th>
+                            <th style="min-width:180px;">Account / Company</th>
+                            <th style="min-width:150px;">Contact &amp; Mobile</th>
+                            <th style="min-width:160px;">Product Package</th>
+                            <th style="min-width:130px;text-align:center;">Renewal Date</th>
+                            <th style="min-width:110px;text-align:right;">Contract Value</th>
+                            <th style="min-width:110px;text-align:right;">Collected</th>
+                            <th style="min-width:120px;text-align:right;">Pending</th>
+                            <th style="min-width:100px;text-align:center;">Payment Status</th>
+                            <th style="min-width:140px;">Assigned CST</th>
+                            <th style="min-width:120px;text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rnTableBody">
+                        <tr><td colspan="11" style="text-align:center;color:var(--cs-muted);padding:30px;">Loading renewal data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="rn-modal-footer">
+            <div class="rn-footer-info" id="rnFooterInfo">
+                Showing 0 of 0 accounts
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <button type="button" class="lpd-btn lpd-btn-ghost" onclick="closeRenewalModal()" style="padding:7px 18px;font-size:12px;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Upsell Deals Modal Popup --}}
+<div id="upsellModal" class="rn-modal-overlay" style="display:none;" onclick="if(event.target === this) closeUpsellModal()">
+    <div class="rn-modal-card">
+        <!-- Header -->
+        <div class="rn-modal-header">
+            <div class="rn-header-left">
+                <div class="rn-title-row">
+                    <span class="rn-period-icon" style="color:#6d28d9;background:#f5f3ff;border-color:#ddd6fe;">💎</span>
+                    <div>
+                        <h3 class="rn-modal-title">Converted Upsell Deals</h3>
+                        <div class="rn-modal-subtitle">Non-recurring product deals successfully closed by Customer Success Team</div>
+                    </div>
+                </div>
+                <!-- Stat Badges -->
+                <div class="rn-header-stats">
+                    <div class="rn-stat-chip rn-stat-total">
+                        <span style="font-weight:600;color:#64748b;">Total Deals:</span>
+                        <strong id="upsellStatCount">0</strong>
+                    </div>
+                    <div class="rn-stat-chip" style="background:#f5f3ff;border-color:#ddd6fe;">
+                        <span style="font-weight:600;color:#6b21a8;">Total Upsell Value:</span>
+                        <strong id="upsellStatValue" style="color:#6d28d9;">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-collected">
+                        <span style="font-weight:600;color:#64748b;">Collected:</span>
+                        <strong id="upsellStatPaid">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-pending">
+                        <span style="font-weight:600;color:#64748b;">Pending:</span>
+                        <strong id="upsellStatPending">₹0</strong>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="rn-modal-close" onclick="closeUpsellModal()" title="Close (Esc)">&times;</button>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="rn-modal-toolbar">
+            <div class="rn-search-box">
+                <span class="rn-search-icon">🔍</span>
+                <input type="text" id="upsellSearchInput" class="rn-search-input" placeholder="Search account, client, mobile, product, branch, closed by..." oninput="onUpsellModalSearch(this.value)">
+                <button type="button" id="upsellSearchClear" class="rn-search-clear" onclick="clearUpsellSearch()" style="display:none;">&times;</button>
+            </div>
+            <div class="rn-filter-group">
+                <select id="upsellStatusFilter" class="rn-status-select" onchange="onUpsellFilterChange()">
+                    <option value="all">All Payment Statuses</option>
+                    <option value="paid">Fully Paid</option>
+                    <option value="partial">Partial Payment</option>
+                    <option value="unpaid">Unpaid</option>
+                </select>
+                <button type="button" class="rn-export-btn" onclick="exportUpsellToCsv()" title="Export current upsell list to CSV">
+                    <span>📥 Export CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="rn-modal-body">
+            <div class="rn-table-wrap">
+                <table class="rn-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;text-align:center;">#</th>
+                            <th style="min-width:180px;">Account / Company</th>
+                            <th style="min-width:150px;">Contact &amp; Mobile</th>
+                            <th style="min-width:160px;">Product Name</th>
+                            <th style="min-width:110px;text-align:right;">Deal Value</th>
+                            <th style="min-width:110px;text-align:right;">Collected</th>
+                            <th style="min-width:120px;text-align:right;">Pending</th>
+                            <th style="min-width:100px;text-align:center;">Payment Status</th>
+                            <th style="min-width:120px;text-align:center;">Converted Date</th>
+                            <th style="min-width:140px;">Closed By</th>
+                            <th style="min-width:110px;text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="upsellTableBody">
+                        <tr><td colspan="11" style="text-align:center;color:var(--cs-muted);padding:30px;">Loading upsell data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="rn-modal-footer">
+            <div class="rn-footer-info" id="upsellFooterInfo">
+                Showing 0 of 0 deals
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <button type="button" class="lpd-btn lpd-btn-ghost" onclick="closeUpsellModal()" style="padding:7px 18px;font-size:12px;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Received Payments Modal Popup (Today / This Month) --}}
+<div id="paymentsModal" class="rn-modal-overlay" style="display:none;" onclick="if(event.target === this) closePaymentsModal()">
+    <div class="rn-modal-card">
+        <!-- Header -->
+        <div class="rn-modal-header">
+            <div class="rn-header-left">
+                <div class="rn-title-row">
+                    <span id="payModalIcon" class="rn-period-icon" style="color:#059669;background:#ecfdf5;border-color:#a7f3d0;">💵</span>
+                    <div>
+                        <h3 id="payModalTitle" class="rn-modal-title">Today Received Payments</h3>
+                        <div id="payModalSubtitle" class="rn-modal-subtitle">Collections and payments recorded by Customer Success Team</div>
+                    </div>
+                </div>
+                <!-- Stat Badges -->
+                <div class="rn-header-stats">
+                    <div class="rn-stat-chip rn-stat-total">
+                        <span style="font-weight:600;color:#64748b;">Total Collections:</span>
+                        <strong id="payStatCount">0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-collected">
+                        <span style="font-weight:600;color:#047857;">Total Received:</span>
+                        <strong id="payStatValue">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip" style="background:#f8fafc;border-color:#e2e8f0;">
+                        <span style="font-weight:600;color:#64748b;">Unique Accounts:</span>
+                        <strong id="payStatAccounts">0</strong>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="rn-modal-close" onclick="closePaymentsModal()" title="Close (Esc)">&times;</button>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="rn-modal-toolbar">
+            <div class="rn-search-box">
+                <span class="rn-search-icon">🔍</span>
+                <input type="text" id="paySearchInput" class="rn-search-input" placeholder="Search account, client, mobile, product, ref no, recorded by, branch..." oninput="onPaymentsModalSearch(this.value)">
+                <button type="button" id="paySearchClear" class="rn-search-clear" onclick="clearPaymentsSearch()" style="display:none;">&times;</button>
+            </div>
+            <div class="rn-filter-group">
+                <select id="payModeFilter" class="rn-status-select" onchange="onPaymentsFilterChange()">
+                    <option value="all">All Payment Modes</option>
+                    <option value="upi">UPI</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="card">Card</option>
+                </select>
+                <button type="button" class="rn-export-btn" onclick="exportPaymentsToCsv()" title="Export current payments list to CSV">
+                    <span>📥 Export CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="rn-modal-body">
+            <div class="rn-table-wrap">
+                <table class="rn-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;text-align:center;">#</th>
+                            <th style="min-width:180px;">Account / Company</th>
+                            <th style="min-width:150px;">Contact &amp; Mobile</th>
+                            <th style="min-width:150px;">Product Name</th>
+                            <th style="min-width:120px;text-align:right;">Amount Received</th>
+                            <th style="min-width:120px;text-align:center;">Payment Mode</th>
+                            <th style="min-width:120px;">Ref / Cheque No</th>
+                            <th style="min-width:110px;text-align:center;">Payment Date</th>
+                            <th style="min-width:130px;">Recorded By</th>
+                            <th style="min-width:130px;">Notes</th>
+                            <th style="min-width:90px;text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payTableBody">
+                        <tr><td colspan="11" style="text-align:center;color:var(--cs-muted);padding:30px;">Loading payment collections...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="rn-modal-footer">
+            <div class="rn-footer-info" id="payFooterInfo">
+                Showing 0 of 0 collections
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <button type="button" class="lpd-btn lpd-btn-ghost" onclick="closePaymentsModal()" style="padding:7px 18px;font-size:12px;">Close</button>
             </div>
         </div>
     </div>
@@ -848,41 +1480,41 @@ function renderDashboard(data) {
     const campNotRenewed = data.campaigns?.cm_not_renewed || { count: 0, value: 0 };
 
     cardsGrid.innerHTML = `
-        <div class="summary-card sc-orange" onclick="navigateCard('lead_products', { is_renewal: true, renewal_period: 'cmr' })" title="Click to view Current Month Renewals in Lead Products">
+        <div class="summary-card sc-orange" onclick="openRenewalModal('cmr')" title="Click to view Current Month Renewal accounts in popup modal">
             <div class="sc-icon">📅</div>
             <div class="sc-value">${fmt(data.cmr.value)}</div>
             <div class="sc-label">Current Month Renewal (CMR)</div>
-            <div class="sc-sub">${data.cmr.count} accounts renewing</div>
+            <div class="sc-sub">${data.cmr.count} accounts renewing &bull; Click to view ↗</div>
         </div>
-        <div class="summary-card sc-emerald" onclick="navigateCard('lead_products', { is_renewal: true, renewal_period: 'cmr_plus' })" title="Click to view Next Month Renewals in Lead Products">
+        <div class="summary-card sc-emerald" onclick="openRenewalModal('cmr_plus')" title="Click to view Next Month Renewal accounts in popup modal">
             <div class="sc-icon">⏭️</div>
             <div class="sc-value">${fmt(data.cmr_plus.value)}</div>
             <div class="sc-label">Next Month Renewal (CMR+1)</div>
-            <div class="sc-sub">${data.cmr_plus.count} accounts renewing</div>
+            <div class="sc-sub">${data.cmr_plus.count} accounts renewing &bull; Click to view ↗</div>
         </div>
-        <div class="summary-card sc-blue" onclick="navigateCard('lead_products', { is_renewal: true, renewal_period: 'cmr_minus' })" title="Click to view Last Month Renewals in Lead Products">
+        <div class="summary-card sc-blue" onclick="openRenewalModal('cmr_minus')" title="Click to view Last Month Renewal accounts in popup modal">
             <div class="sc-icon">⏮️</div>
             <div class="sc-value">${fmt(data.cmr_minus.value)}</div>
             <div class="sc-label">Last Month Renewal (CMR-1)</div>
-            <div class="sc-sub">${data.cmr_minus.count} accounts renewing</div>
+            <div class="sc-sub">${data.cmr_minus.count} accounts renewing &bull; Click to view ↗</div>
         </div>
-        <div class="summary-card sc-purple" onclick="navigateCard('lead_products', { product_status: 'converted' })" title="Click to view Converted Upsell Deals in Lead Products">
+        <div class="summary-card sc-purple" onclick="openUpsellModal()" title="Click to view Converted Upsell Deals in modal popup">
             <div class="sc-icon">💎</div>
             <div class="sc-value">${fmt(data.upsells.value)}</div>
             <div class="sc-label">Upsell Converted (Period)</div>
-            <div class="sc-sub">${data.upsells.count} deals closed</div>
+            <div class="sc-sub">${data.upsells.count} deals closed &bull; Click to view ↗</div>
         </div>
-        <div class="summary-card sc-amber" onclick="navigateCard('payment_collection', { quick_date: 'today' })" title="Click to view Today Payments in Payment Collection Report">
+        <div class="summary-card sc-amber" onclick="openPaymentsModal('today')" title="Click to view Today Received Payments in modal popup">
             <div class="sc-icon">💵</div>
-            <div class="sc-value">${fmt(data.today_payments)}</div>
+            <div class="sc-value">${fmt(data.today_payments?.value ?? data.today_payments)}</div>
             <div class="sc-label">Today Received Payments</div>
-            <div class="sc-sub">Collections received today</div>
+            <div class="sc-sub">${data.today_payments?.count ?? 0} collections &bull; Click to view ↗</div>
         </div>
-        <div class="summary-card sc-teal" onclick="navigateCard('payment_collection', { quick_date: 'month' })" title="Click to view This Month Collections in Payment Collection Report">
+        <div class="summary-card sc-teal" onclick="openPaymentsModal('month')" title="Click to view This Month Collections in modal popup">
             <div class="sc-icon">📊</div>
-            <div class="sc-value">${fmt(data.month_payments)}</div>
+            <div class="sc-value">${fmt(data.month_payments?.value ?? data.month_payments)}</div>
             <div class="sc-label">This Month Collections</div>
-            <div class="sc-sub">Total collected this month</div>
+            <div class="sc-sub">${data.month_payments?.count ?? 0} collections &bull; Click to view ↗</div>
         </div>
         <div class="summary-card sc-indigo" onclick="navigateCard('campaigns', { renewal_filter: 'cm_not_renewed', period: 'cm' })" title="Click to view CM Not Renewed Campaigns in Digital Marketing Campaigns">
             <div class="sc-icon">⚠️</div>
@@ -1832,5 +2464,829 @@ function navigateCard(target, extra = {}) {
         return;
     }
 }
+
+/* ============================================================
+   RENEWAL DETAILS MODAL POPUP LOGIC
+   ============================================================ */
+let currentRenewalPeriod = 'cmr';
+let rawRenewalModalItems = [];
+let filteredRenewalItems = [];
+
+function openRenewalModal(periodKey) {
+    if (!dashboardDataRaw) {
+        alert('Please wait for dashboard data to load.');
+        return;
+    }
+
+    // Normalize periodKey
+    let target = 'cmr';
+    if (periodKey === 'cmr_plus' || periodKey === 'nmr') {
+        target = 'cmr_plus';
+    } else if (periodKey === 'cmr_minus' || periodKey === 'lmr') {
+        target = 'cmr_minus';
+    } else {
+        target = 'cmr';
+    }
+
+    currentRenewalPeriod = target;
+
+    const modal = document.getElementById('renewalModal');
+    const titleEl = document.getElementById('rnModalTitle');
+    const iconEl = document.getElementById('rnModalIcon');
+    const subEl = document.getElementById('rnModalSubtitle');
+
+    let meta = {
+        title: 'Current Month Renewal (CMR)',
+        icon: '📅',
+        sub: 'Renewal accounts & products scheduled for the current month'
+    };
+
+    if (target === 'cmr_plus') {
+        meta = {
+            title: 'Next Month Renewal (CMR+1)',
+            icon: '⏭️',
+            sub: 'Upcoming renewal contracts scheduled for next month'
+        };
+    } else if (target === 'cmr_minus') {
+        meta = {
+            title: 'Last Month Renewal (CMR-1)',
+            icon: '⏮️',
+            sub: 'Renewal accounts from the previous month (renewed or pending)'
+        };
+    }
+
+    if (titleEl) titleEl.textContent = meta.title;
+    if (iconEl) iconEl.textContent = meta.icon;
+    if (subEl) subEl.textContent = meta.sub;
+
+    const dataset = dashboardDataRaw[target] || { count: 0, value: 0, items: [] };
+    rawRenewalModalItems = Array.isArray(dataset.items) ? dataset.items : [];
+
+    // Reset toolbar filters
+    const searchInput = document.getElementById('rnSearchInput');
+    if (searchInput) searchInput.value = '';
+    const statusSelect = document.getElementById('rnStatusFilter');
+    if (statusSelect) statusSelect.value = 'all';
+    const clearBtn = document.getElementById('rnSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    // Calculate & render summary chips
+    let totalVal = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    rawRenewalModalItems.forEach(item => {
+        totalVal += Number(item.value || 0);
+        totalPaid += Number(item.paid || 0);
+        totalPending += Number(item.pending || 0);
+    });
+
+    const cntEl = document.getElementById('rnStatCount');
+    const valEl = document.getElementById('rnStatValue');
+    const paidEl = document.getElementById('rnStatPaid');
+    const pendEl = document.getElementById('rnStatPending');
+
+    if (cntEl) cntEl.textContent = num(rawRenewalModalItems.length);
+    if (valEl) valEl.textContent = fmt(totalVal);
+    if (paidEl) paidEl.textContent = fmt(totalPaid);
+    if (pendEl) pendEl.textContent = fmt(totalPending);
+
+    filterAndRenderRenewalModal();
+
+    if (modal) modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeRenewalModal() {
+    const modal = document.getElementById('renewalModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    document.body.style.overflow = '';
+}
+
+function onRenewalModalSearch(val) {
+    const clearBtn = document.getElementById('rnSearchClear');
+    if (clearBtn) {
+        clearBtn.style.display = val.trim() ? 'block' : 'none';
+    }
+    filterAndRenderRenewalModal();
+}
+
+function clearRenewalSearch() {
+    const searchInput = document.getElementById('rnSearchInput');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('rnSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    filterAndRenderRenewalModal();
+    if (searchInput) searchInput.focus();
+}
+
+function onRenewalFilterChange() {
+    filterAndRenderRenewalModal();
+}
+
+function filterAndRenderRenewalModal() {
+    const searchVal = (document.getElementById('rnSearchInput')?.value || '').trim().toLowerCase();
+    const statusVal = document.getElementById('rnStatusFilter')?.value || 'all';
+
+    filteredRenewalItems = rawRenewalModalItems.filter(item => {
+        const paid = Number(item.paid || 0);
+        const val = Number(item.value || 0);
+        const pending = Number(item.pending || 0);
+
+        // Status filter
+        if (statusVal === 'paid') {
+            if (pending > 0 || (val > 0 && paid < val)) return false;
+        } else if (statusVal === 'pending') {
+            if (pending <= 0 || paid > 0) return false;
+        } else if (statusVal === 'partial') {
+            if (paid <= 0 || pending <= 0) return false;
+        }
+
+        // Search text
+        if (searchVal) {
+            const company = (item.company_name || '').toLowerCase();
+            const contact = (item.contact_name || '').toLowerCase();
+            const mobile = (item.mobile_number || '').toLowerCase();
+            const product = (item.product_name || '').toLowerCase();
+            const assigned = (item.assigned_to_name || '').toLowerCase();
+            const branch = (item.branch_name || '').toLowerCase();
+
+            return company.includes(searchVal) ||
+                   contact.includes(searchVal) ||
+                   mobile.includes(searchVal) ||
+                   product.includes(searchVal) ||
+                   assigned.includes(searchVal) ||
+                   branch.includes(searchVal);
+        }
+
+        return true;
+    });
+
+    renderRenewalTableRows(filteredRenewalItems);
+}
+
+function renderRenewalTableRows(items) {
+    const tb = document.getElementById('rnTableBody');
+    const footerInfo = document.getElementById('rnFooterInfo');
+
+    if (!tb) return;
+
+    if (items.length === 0) {
+        tb.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align:center;padding:40px 20px;color:var(--cs-muted);">
+                    <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+                    <div style="font-weight:700;font-size:14px;color:#334155;">No renewal accounts found</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">Try adjusting your search query or status filter.</div>
+                </td>
+            </tr>
+        `;
+        if (footerInfo) footerInfo.innerHTML = `Showing <strong>0</strong> of <strong>${rawRenewalModalItems.length}</strong> accounts`;
+        return;
+    }
+
+    let runningValue = 0;
+    let runningPending = 0;
+
+    tb.innerHTML = items.map((row, idx) => {
+        runningValue += Number(row.value || 0);
+        runningPending += Number(row.pending || 0);
+
+        // Days diff badge
+        let daysBadge = '';
+        if (row.days_diff === 0) {
+            daysBadge = '<span class="rn-badge-today">Today</span>';
+        } else if (row.days_diff > 0) {
+            daysBadge = `<span class="rn-badge-future">In ${row.days_diff}d</span>`;
+        } else if (row.days_diff < 0) {
+            daysBadge = `<span class="rn-badge-overdue">${Math.abs(row.days_diff)}d ago</span>`;
+        }
+
+        // Payment status badge
+        const pctPaid = row.value > 0 ? Math.round((row.paid / row.value) * 100) : 100;
+        let pStatusBadge = '';
+        if (row.pending <= 0 || pctPaid >= 100) {
+            pStatusBadge = '<span class="cs-badge cs-badge-paid">Paid</span>';
+        } else if (row.paid > 0) {
+            pStatusBadge = `<span class="cs-badge cs-badge-partial">Partial (${pctPaid}%)</span>`;
+        } else {
+            pStatusBadge = '<span class="cs-badge cs-badge-pending">Unpaid</span>';
+        }
+
+        // Branch pill
+        const branchPill = row.branch_name ? `<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px;">${row.branch_name}</span>` : '';
+
+        // Contact info
+        let contactHtml = '—';
+        if (row.contact_name || row.mobile_number) {
+            const cName = row.contact_name ? `<div style="font-weight:600;color:#1e293b;">${row.contact_name}</div>` : '';
+            const cPhone = row.mobile_number && row.mobile_number !== '—' 
+                ? `<a href="tel:${row.mobile_number}" class="rn-contact-phone">📞 ${row.mobile_number}</a>` 
+                : `<span style="color:#94a3b8;font-size:11px;">No Mobile</span>`;
+            contactHtml = `${cName}${cPhone}`;
+        }
+
+        return `
+            <tr>
+                <td style="text-align:center;color:#64748b;font-weight:600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:700;color:#0f172a;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                        <span>${row.company_name}</span>
+                        ${branchPill}
+                    </div>
+                </td>
+                <td>${contactHtml}</td>
+                <td>
+                    <span style="font-weight:600;color:#334155;">${row.product_name}</span>
+                </td>
+                <td style="text-align:center;">
+                    <div style="font-weight:700;color:#0f172a;">${row.renewal_date_formatted || row.renewal_date}</div>
+                    <div style="margin-top:2px;">${daysBadge}</div>
+                </td>
+                <td style="text-align:right;font-weight:800;color:#0f172a;">${fmt(row.value)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--cs-emerald);">${fmt(row.paid)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--cs-rose);">
+                    <div>${fmt(row.pending)}</div>
+                </td>
+                <td style="text-align:center;">${pStatusBadge}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:13px;">👤</span>
+                        <span style="font-weight:600;color:#334155;">${row.assigned_to_name || 'Unassigned'}</span>
+                    </div>
+                </td>
+                <td style="text-align:center;">
+                    <div style="display:inline-flex;gap:4px;align-items:center;">
+                        <a href="${row.project_url}" target="_blank" class="rn-action-btn" title="View Project Details">
+                            <span>👁️ Project</span>
+                        </a>
+                        ${row.lead_url && row.lead_url !== '#' ? `
+                            <a href="${row.lead_url}" target="_blank" class="rn-action-btn rn-action-lead" title="View Lead Details">
+                                <span>👤 Lead</span>
+                            </a>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (footerInfo) {
+        footerInfo.innerHTML = `Showing <strong>${items.length}</strong> of <strong>${rawRenewalModalItems.length}</strong> accounts &bull; Total Value: <strong>${fmt(runningValue)}</strong> (Pending: <span style="color:#dc2626;font-weight:700;">${fmt(runningPending)}</span>)`;
+    }
+}
+
+function exportRenewalToCsv() {
+    if (!filteredRenewalItems || filteredRenewalItems.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    const headers = [
+        '#',
+        'Account / Company Name',
+        'Contact Name',
+        'Mobile Number',
+        'Branch',
+        'Product Package',
+        'Renewal Date',
+        'Days Remaining/Overdue',
+        'Contract Value',
+        'Amount Paid',
+        'Amount Pending',
+        'Payment Status',
+        'Assigned CST Executive'
+    ];
+
+    const escapeCsv = val => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+    };
+
+    const rows = filteredRenewalItems.map((item, index) => [
+        index + 1,
+        escapeCsv(item.company_name),
+        escapeCsv(item.contact_name),
+        escapeCsv(item.mobile_number),
+        escapeCsv(item.branch_name),
+        escapeCsv(item.product_name),
+        escapeCsv(item.renewal_date_formatted || item.renewal_date),
+        escapeCsv(item.days_diff),
+        item.value || 0,
+        item.paid || 0,
+        item.pending || 0,
+        escapeCsv(item.payment_status),
+        escapeCsv(item.assigned_to_name)
+    ].join(','));
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Renewal_Deals_${currentRenewalPeriod}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   UPSELL DEALS MODAL POPUP LOGIC
+   ============================================================ */
+let rawUpsellModalItems = [];
+let filteredUpsellItems = [];
+
+function openUpsellModal() {
+    if (!dashboardDataRaw) {
+        alert('Please wait for dashboard data to load.');
+        return;
+    }
+
+    const modal = document.getElementById('upsellModal');
+    const dataset = dashboardDataRaw.upsells || { count: 0, value: 0, items: [] };
+    rawUpsellModalItems = Array.isArray(dataset.items) ? dataset.items : [];
+
+    // Reset toolbar filters
+    const searchInput = document.getElementById('upsellSearchInput');
+    if (searchInput) searchInput.value = '';
+    const statusSelect = document.getElementById('upsellStatusFilter');
+    if (statusSelect) statusSelect.value = 'all';
+    const clearBtn = document.getElementById('upsellSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    // Summary stats
+    let totalVal = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    rawUpsellModalItems.forEach(item => {
+        totalVal += Number(item.value || 0);
+        totalPaid += Number(item.paid || 0);
+        totalPending += Number(item.pending || 0);
+    });
+
+    const cntEl = document.getElementById('upsellStatCount');
+    const valEl = document.getElementById('upsellStatValue');
+    const paidEl = document.getElementById('upsellStatPaid');
+    const pendEl = document.getElementById('upsellStatPending');
+
+    if (cntEl) cntEl.textContent = num(rawUpsellModalItems.length);
+    if (valEl) valEl.textContent = fmt(totalVal);
+    if (paidEl) paidEl.textContent = fmt(totalPaid);
+    if (pendEl) pendEl.textContent = fmt(totalPending);
+
+    filterAndRenderUpsellModal();
+
+    if (modal) modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeUpsellModal() {
+    const modal = document.getElementById('upsellModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function onUpsellModalSearch(val) {
+    const clearBtn = document.getElementById('upsellSearchClear');
+    if (clearBtn) clearBtn.style.display = val.trim() ? 'block' : 'none';
+    filterAndRenderUpsellModal();
+}
+
+function clearUpsellSearch() {
+    const searchInput = document.getElementById('upsellSearchInput');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('upsellSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    filterAndRenderUpsellModal();
+    if (searchInput) searchInput.focus();
+}
+
+function onUpsellFilterChange() {
+    filterAndRenderUpsellModal();
+}
+
+function filterAndRenderUpsellModal() {
+    const searchVal = (document.getElementById('upsellSearchInput')?.value || '').trim().toLowerCase();
+    const statusVal = document.getElementById('upsellStatusFilter')?.value || 'all';
+
+    filteredUpsellItems = rawUpsellModalItems.filter(item => {
+        const paid = Number(item.paid || 0);
+        const val = Number(item.value || 0);
+        const pending = Number(item.pending || 0);
+
+        if (statusVal === 'paid') {
+            if (pending > 0 || (val > 0 && paid < val)) return false;
+        } else if (statusVal === 'unpaid') {
+            if (paid > 0) return false;
+        } else if (statusVal === 'partial') {
+            if (paid <= 0 || pending <= 0) return false;
+        }
+
+        if (searchVal) {
+            const company = (item.company_name || '').toLowerCase();
+            const contact = (item.contact_name || '').toLowerCase();
+            const mobile = (item.mobile_number || '').toLowerCase();
+            const product = (item.product_name || '').toLowerCase();
+            const closedBy = (item.created_by_name || '').toLowerCase();
+            const branch = (item.branch_name || '').toLowerCase();
+
+            return company.includes(searchVal) ||
+                   contact.includes(searchVal) ||
+                   mobile.includes(searchVal) ||
+                   product.includes(searchVal) ||
+                   closedBy.includes(searchVal) ||
+                   branch.includes(searchVal);
+        }
+
+        return true;
+    });
+
+    renderUpsellTableRows(filteredUpsellItems);
+}
+
+function renderUpsellTableRows(items) {
+    const tb = document.getElementById('upsellTableBody');
+    const footerInfo = document.getElementById('upsellFooterInfo');
+    if (!tb) return;
+
+    if (items.length === 0) {
+        tb.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align:center;padding:40px 20px;color:var(--cs-muted);">
+                    <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+                    <div style="font-weight:700;font-size:14px;color:#334155;">No upsell deals found</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">Try adjusting your search query or status filter.</div>
+                </td>
+            </tr>
+        `;
+        if (footerInfo) footerInfo.innerHTML = `Showing <strong>0</strong> of <strong>${rawUpsellModalItems.length}</strong> deals`;
+        return;
+    }
+
+    let runningValue = 0;
+    let runningPending = 0;
+
+    tb.innerHTML = items.map((row, idx) => {
+        runningValue += Number(row.value || 0);
+        runningPending += Number(row.pending || 0);
+
+        const pctPaid = row.value > 0 ? Math.round((row.paid / row.value) * 100) : 100;
+        let pStatusBadge = '';
+        if (row.pending <= 0 || pctPaid >= 100) {
+            pStatusBadge = '<span class="cs-badge cs-badge-paid">Paid</span>';
+        } else if (row.paid > 0) {
+            pStatusBadge = `<span class="cs-badge cs-badge-partial">Partial (${pctPaid}%)</span>`;
+        } else {
+            pStatusBadge = '<span class="cs-badge cs-badge-pending">Unpaid</span>';
+        }
+
+        const branchPill = row.branch_name ? `<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px;">${row.branch_name}</span>` : '';
+
+        let contactHtml = '—';
+        if (row.contact_name || row.mobile_number) {
+            const cName = row.contact_name ? `<div style="font-weight:600;color:#1e293b;">${row.contact_name}</div>` : '';
+            const cPhone = row.mobile_number && row.mobile_number !== '—' 
+                ? `<a href="tel:${row.mobile_number}" class="rn-contact-phone">📞 ${row.mobile_number}</a>` 
+                : `<span style="color:#94a3b8;font-size:11px;">No Mobile</span>`;
+            contactHtml = `${cName}${cPhone}`;
+        }
+
+        return `
+            <tr>
+                <td style="text-align:center;color:#64748b;font-weight:600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:700;color:#0f172a;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                        <span>${row.company_name}</span>
+                        ${branchPill}
+                    </div>
+                </td>
+                <td>${contactHtml}</td>
+                <td><span style="font-weight:600;color:#334155;">${row.product_name}</span></td>
+                <td style="text-align:right;font-weight:800;color:#6d28d9;">${fmt(row.value)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--cs-emerald);">${fmt(row.paid)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--cs-rose);">${fmt(row.pending)}</td>
+                <td style="text-align:center;">${pStatusBadge}</td>
+                <td style="text-align:center;font-weight:600;color:#334155;">${row.converted_at || row.created_at}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:13px;">👤</span>
+                        <span style="font-weight:600;color:#334155;">${row.created_by_name || 'CST Team'}</span>
+                    </div>
+                </td>
+                <td style="text-align:center;">
+                    <a href="${row.lead_url}" target="_blank" class="rn-action-btn rn-action-lead" title="View Lead Profile">
+                        <span>👤 View Lead</span>
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (footerInfo) {
+        footerInfo.innerHTML = `Showing <strong>${items.length}</strong> of <strong>${rawUpsellModalItems.length}</strong> deals &bull; Total Value: <strong style="color:#6d28d9;">${fmt(runningValue)}</strong> (Pending: <span style="color:#dc2626;font-weight:700;">${fmt(runningPending)}</span>)`;
+    }
+}
+
+function exportUpsellToCsv() {
+    if (!filteredUpsellItems || filteredUpsellItems.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+    const headers = ['#', 'Account / Company Name', 'Contact Name', 'Mobile Number', 'Branch', 'Product Name', 'Deal Value', 'Amount Paid', 'Amount Pending', 'Payment Status', 'Converted Date', 'Closed By'];
+    const escapeCsv = val => {
+        if (val === null || val === undefined) return '""';
+        return `"${String(val).replace(/"/g, '""')}"`;
+    };
+    const rows = filteredUpsellItems.map((item, index) => [
+        index + 1,
+        escapeCsv(item.company_name),
+        escapeCsv(item.contact_name),
+        escapeCsv(item.mobile_number),
+        escapeCsv(item.branch_name),
+        escapeCsv(item.product_name),
+        item.value || 0,
+        item.paid || 0,
+        item.pending || 0,
+        escapeCsv(item.payment_status),
+        escapeCsv(item.converted_at || item.created_at),
+        escapeCsv(item.created_by_name)
+    ].join(','));
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Upsell_Deals_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   PAYMENT COLLECTIONS MODAL POPUP LOGIC (Today / This Month)
+   ============================================================ */
+let currentPaymentsPeriod = 'today';
+let rawPaymentsModalItems = [];
+let filteredPaymentsItems = [];
+
+function openPaymentsModal(periodType) {
+    if (!dashboardDataRaw) {
+        alert('Please wait for dashboard data to load.');
+        return;
+    }
+
+    currentPaymentsPeriod = periodType === 'today' ? 'today' : 'month';
+
+    const modal = document.getElementById('paymentsModal');
+    const titleEl = document.getElementById('payModalTitle');
+    const iconEl = document.getElementById('payModalIcon');
+    const subEl = document.getElementById('payModalSubtitle');
+
+    if (currentPaymentsPeriod === 'today') {
+        if (titleEl) titleEl.textContent = "Today Received Payments";
+        if (iconEl) {
+            iconEl.textContent = "💵";
+            iconEl.style.color = "#b45309";
+            iconEl.style.background = "#fffbeb";
+            iconEl.style.borderColor = "#fde68a";
+        }
+        if (subEl) subEl.textContent = "All collections and customer payments recorded today";
+        const dataset = dashboardDataRaw.today_payments || { count: 0, value: 0, items: [] };
+        rawPaymentsModalItems = Array.isArray(dataset.items) ? dataset.items : [];
+    } else {
+        if (titleEl) titleEl.textContent = "This Month Collections";
+        if (iconEl) {
+            iconEl.textContent = "📊";
+            iconEl.style.color = "#0d9488";
+            iconEl.style.background = "#f0fdfa";
+            iconEl.style.borderColor = "#99f6e4";
+        }
+        if (subEl) subEl.textContent = "All collections and customer payments recorded in the current month";
+        const dataset = dashboardDataRaw.month_payments || { count: 0, value: 0, items: [] };
+        rawPaymentsModalItems = Array.isArray(dataset.items) ? dataset.items : [];
+    }
+
+    // Reset toolbar filters
+    const searchInput = document.getElementById('paySearchInput');
+    if (searchInput) searchInput.value = '';
+    const modeSelect = document.getElementById('payModeFilter');
+    if (modeSelect) modeSelect.value = 'all';
+    const clearBtn = document.getElementById('paySearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    // Summary stats
+    let totalVal = 0;
+    const uniqueAccounts = new Set();
+    rawPaymentsModalItems.forEach(item => {
+        totalVal += Number(item.amount || 0);
+        if (item.lead_id) uniqueAccounts.add(item.lead_id);
+    });
+
+    const cntEl = document.getElementById('payStatCount');
+    const valEl = document.getElementById('payStatValue');
+    const accEl = document.getElementById('payStatAccounts');
+
+    if (cntEl) cntEl.textContent = num(rawPaymentsModalItems.length);
+    if (valEl) valEl.textContent = fmt(totalVal);
+    if (accEl) accEl.textContent = num(uniqueAccounts.size);
+
+    filterAndRenderPaymentsModal();
+
+    if (modal) modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closePaymentsModal() {
+    const modal = document.getElementById('paymentsModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function onPaymentsModalSearch(val) {
+    const clearBtn = document.getElementById('paySearchClear');
+    if (clearBtn) clearBtn.style.display = val.trim() ? 'block' : 'none';
+    filterAndRenderPaymentsModal();
+}
+
+function clearPaymentsSearch() {
+    const searchInput = document.getElementById('paySearchInput');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('paySearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    filterAndRenderPaymentsModal();
+    if (searchInput) searchInput.focus();
+}
+
+function onPaymentsFilterChange() {
+    filterAndRenderPaymentsModal();
+}
+
+function filterAndRenderPaymentsModal() {
+    const searchVal = (document.getElementById('paySearchInput')?.value || '').trim().toLowerCase();
+    const modeVal = document.getElementById('payModeFilter')?.value || 'all';
+
+    filteredPaymentsItems = rawPaymentsModalItems.filter(item => {
+        if (modeVal !== 'all' && (item.payment_mode || '').toLowerCase() !== modeVal.toLowerCase()) {
+            return false;
+        }
+
+        if (searchVal) {
+            const company = (item.company_name || '').toLowerCase();
+            const contact = (item.contact_name || '').toLowerCase();
+            const mobile = (item.mobile_number || '').toLowerCase();
+            const product = (item.product_name || '').toLowerCase();
+            const recorded = (item.recorded_by_name || '').toLowerCase();
+            const ref = (item.reference_number || '').toLowerCase();
+            const mode = (item.payment_mode_label || item.payment_mode || '').toLowerCase();
+            const branch = (item.branch_name || '').toLowerCase();
+
+            return company.includes(searchVal) ||
+                   contact.includes(searchVal) ||
+                   mobile.includes(searchVal) ||
+                   product.includes(searchVal) ||
+                   recorded.includes(searchVal) ||
+                   ref.includes(searchVal) ||
+                   mode.includes(searchVal) ||
+                   branch.includes(searchVal);
+        }
+
+        return true;
+    });
+
+    renderPaymentsTableRows(filteredPaymentsItems);
+}
+
+function renderPaymentsTableRows(items) {
+    const tb = document.getElementById('payTableBody');
+    const footerInfo = document.getElementById('payFooterInfo');
+    if (!tb) return;
+
+    if (items.length === 0) {
+        tb.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align:center;padding:40px 20px;color:var(--cs-muted);">
+                    <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+                    <div style="font-weight:700;font-size:14px;color:#334155;">No payment records found</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">Try adjusting your search query or payment mode filter.</div>
+                </td>
+            </tr>
+        `;
+        if (footerInfo) footerInfo.innerHTML = `Showing <strong>0</strong> of <strong>${rawPaymentsModalItems.length}</strong> payments`;
+        return;
+    }
+
+    let runningTotal = 0;
+
+    tb.innerHTML = items.map((row, idx) => {
+        runningTotal += Number(row.amount || 0);
+
+        const branchPill = row.branch_name ? `<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px;">${row.branch_name}</span>` : '';
+
+        let contactHtml = '—';
+        if (row.contact_name || row.mobile_number) {
+            const cName = row.contact_name ? `<div style="font-weight:600;color:#1e293b;">${row.contact_name}</div>` : '';
+            const cPhone = row.mobile_number && row.mobile_number !== '—' 
+                ? `<a href="tel:${row.mobile_number}" class="rn-contact-phone">📞 ${row.mobile_number}</a>` 
+                : `<span style="color:#94a3b8;font-size:11px;">No Mobile</span>`;
+            contactHtml = `${cName}${cPhone}`;
+        }
+
+        // Mode badge style
+        let modeBg = '#f1f5f9';
+        let modeColor = '#334155';
+        if (row.payment_mode === 'upi') { modeBg = '#fff7ed'; modeColor = '#c2410c'; }
+        else if (row.payment_mode === 'bank_transfer') { modeBg = '#eff6ff'; modeColor = '#1d4ed8'; }
+        else if (row.payment_mode === 'cash') { modeBg = '#ecfdf5'; modeColor = '#047857'; }
+        else if (row.payment_mode === 'cheque') { modeBg = '#f5f3ff'; modeColor = '#6d28d9'; }
+
+        return `
+            <tr>
+                <td style="text-align:center;color:#64748b;font-weight:600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:700;color:#0f172a;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                        <span>${row.company_name}</span>
+                        ${branchPill}
+                    </div>
+                </td>
+                <td>${contactHtml}</td>
+                <td><span style="font-weight:600;color:#334155;">${row.product_name}</span></td>
+                <td style="text-align:right;font-weight:800;color:var(--cs-emerald);font-size:13.5px;">${fmt(row.amount)}</td>
+                <td style="text-align:center;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${modeBg};color:${modeColor};">
+                        <span>${row.payment_mode_icon || '💰'}</span>
+                        <span>${row.payment_mode_label || row.payment_mode}</span>
+                    </span>
+                </td>
+                <td><span style="font-family:monospace;font-size:11px;color:#475569;">${row.reference_number || '—'}</span></td>
+                <td style="text-align:center;font-weight:600;color:#334155;">${row.payment_date_formatted || row.payment_date}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:13px;">👤</span>
+                        <span style="font-weight:600;color:#334155;">${row.recorded_by_name || 'Unknown'}</span>
+                    </div>
+                </td>
+                <td><span style="font-size:11px;color:#64748b;max-width:140px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${row.notes || ''}">${row.notes || '—'}</span></td>
+                <td style="text-align:center;">
+                    <a href="${row.lead_url}" target="_blank" class="rn-action-btn rn-action-lead" title="View Lead Profile">
+                        <span>👤 Lead</span>
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (footerInfo) {
+        footerInfo.innerHTML = `Showing <strong>${items.length}</strong> of <strong>${rawPaymentsModalItems.length}</strong> payments &bull; Total Amount: <strong style="color:#059669;">${fmt(runningTotal)}</strong>`;
+    }
+}
+
+function exportPaymentsToCsv() {
+    if (!filteredPaymentsItems || filteredPaymentsItems.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+    const headers = ['#', 'Account / Company Name', 'Contact Name', 'Mobile Number', 'Branch', 'Product Name', 'Amount Received', 'Payment Mode', 'Reference / Cheque No', 'Payment Date', 'Recorded By', 'Notes'];
+    const escapeCsv = val => {
+        if (val === null || val === undefined) return '""';
+        return `"${String(val).replace(/"/g, '""')}"`;
+    };
+    const rows = filteredPaymentsItems.map((item, index) => [
+        index + 1,
+        escapeCsv(item.company_name),
+        escapeCsv(item.contact_name),
+        escapeCsv(item.mobile_number),
+        escapeCsv(item.branch_name),
+        escapeCsv(item.product_name),
+        item.amount || 0,
+        escapeCsv(item.payment_mode_label || item.payment_mode),
+        escapeCsv(item.reference_number),
+        escapeCsv(item.payment_date_formatted || item.payment_date),
+        escapeCsv(item.recorded_by_name),
+        escapeCsv(item.notes)
+    ].join(','));
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Payment_Collections_${currentPaymentsPeriod}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// Close modals when pressing Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRenewalModal();
+        closeUpsellModal();
+        closePaymentsModal();
+    }
+});
 </script>
 @endpush

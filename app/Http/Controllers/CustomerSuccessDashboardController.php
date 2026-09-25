@@ -178,15 +178,22 @@ class CustomerSuccessDashboardController extends Controller
                 ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
                 ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
                 ->join('products', 'products.id', '=', 'production_initiations.product_id')
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
                 ->select([
                     'production_initiations.id',
+                    'production_initiations.lead_id',
+                    'production_initiations.lead_product_id',
                     'production_initiations.project_delivery_date',
                     'production_initiations.custom_form_data',
                     'production_initiations.product_name',
                     'lead_products.total_price',
                     'lead_products.amount_paid',
+                    'lead_products.payment_status',
                     'leads.company_name',
                     'leads.contact_name',
+                    'leads.mobile_number',
+                    'leads.branch_id',
+                    'branches.name as branch_name',
                     'leads.customer_support_tl_id',
                     'leads.customer_support_executive_id',
                     'products.is_this_renewal_product'
@@ -197,6 +204,11 @@ class CustomerSuccessDashboardController extends Controller
                 ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
                 ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
                 ->get();
+
+            $assignedUserIds = $initiations->pluck('customer_support_executive_id')
+                ->merge($initiations->pluck('customer_support_tl_id'))
+                ->filter()->unique()->all();
+            $assignedUsersMap = !empty($assignedUserIds) ? User::whereIn('id', $assignedUserIds)->pluck('name', 'id') : collect();
 
             $today = Carbon::today();
             $cmStart = $today->copy()->startOfMonth();
@@ -217,16 +229,29 @@ class CustomerSuccessDashboardController extends Controller
                 $rDate = Carbon::parse($rDateStr);
                 $price = (float) $pi->total_price;
                 $paid  = (float) $pi->amount_paid;
+                $assignedId = $pi->customer_support_executive_id ?: $pi->customer_support_tl_id;
+                $assignedName = $assignedId && isset($assignedUsersMap[$assignedId]) ? $assignedUsersMap[$assignedId] : 'Unassigned';
 
                 $item = [
-                    'id'           => $pi->id,
-                    'company_name' => $pi->company_name ?: ($pi->contact_name ?: 'N/A'),
-                    'product_name' => $pi->product_name,
-                    'renewal_date' => $rDateStr,
-                    'value'        => $price,
-                    'paid'         => $paid,
-                    'pending'      => max(0, $price - $paid),
-                    'assigned_to'  => $pi->customer_support_executive_id ?: $pi->customer_support_tl_id
+                    'id'                     => $pi->id,
+                    'lead_id'                => $pi->lead_id,
+                    'lead_product_id'        => $pi->lead_product_id,
+                    'company_name'           => $pi->company_name ?: ($pi->contact_name ?: 'N/A'),
+                    'contact_name'           => $pi->contact_name ?: '',
+                    'mobile_number'          => $pi->mobile_number ?: '—',
+                    'product_name'           => $pi->product_name ?: 'Renewal Product',
+                    'renewal_date'           => $rDateStr,
+                    'renewal_date_formatted' => $rDate->format('d M Y'),
+                    'days_diff'              => (int) round($today->diffInDays($rDate, false)),
+                    'value'                  => $price,
+                    'paid'                   => $paid,
+                    'pending'                => max(0, $price - $paid),
+                    'payment_status'         => $pi->payment_status ?: ($paid >= $price ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid')),
+                    'assigned_to'            => $assignedId,
+                    'assigned_to_name'       => $assignedName,
+                    'branch_name'            => $pi->branch_name ?: 'General',
+                    'lead_url'               => $pi->lead_id ? url('/leads/' . $pi->lead_id) : '#',
+                    'project_url'            => url('/projects-details/' . $pi->id),
                 ];
 
                 if ($rDate->between($cmStart, $cmEnd)) {
@@ -338,6 +363,102 @@ class CustomerSuccessDashboardController extends Controller
                 ->whereBetween('lead_product_payments.payment_date', [$monthStart, $monthEnd])
                 ->sum('lead_product_payments.amount');
 
+            // Format helper for payment records
+            $selectPaymentFields = [
+                'lead_product_payments.id',
+                'lead_product_payments.lead_id',
+                'lead_product_payments.lead_product_id',
+                'lead_product_payments.amount',
+                'lead_product_payments.payment_mode',
+                'lead_product_payments.payment_date',
+                'lead_product_payments.payment_type',
+                'lead_product_payments.reference_number',
+                'lead_product_payments.notes',
+                'lead_product_payments.recorded_by',
+                'leads.company_name',
+                'leads.contact_name',
+                'leads.mobile_number',
+                'leads.branch_id',
+                'branches.name as branch_name',
+                'lead_products.product_name',
+                'lead_products.total_price',
+                'lead_products.amount_paid',
+                'lead_products.payment_status',
+                'users.name as recorded_by_name',
+                'products.product_name as catalog_product_name',
+            ];
+
+            $formatPaymentItem = function($p) {
+                $pDate = $p->payment_date ? Carbon::parse($p->payment_date) : null;
+                $mode = strtolower(trim((string)$p->payment_mode)) ?: 'other';
+                $modeLabels = [
+                    'cash'          => 'Cash',
+                    'bank_transfer' => 'Bank Transfer',
+                    'cheque'        => 'Cheque',
+                    'upi'           => 'UPI',
+                    'card'          => 'Card',
+                ];
+                $modeIcons = [
+                    'cash'          => '💵',
+                    'bank_transfer' => '🏦',
+                    'cheque'        => '📝',
+                    'upi'           => '📱',
+                    'card'          => '💳',
+                ];
+                return [
+                    'id'                     => $p->id,
+                    'lead_id'                => $p->lead_id,
+                    'lead_product_id'        => $p->lead_product_id,
+                    'company_name'           => $p->company_name ?: ($p->contact_name ?: 'N/A'),
+                    'contact_name'           => $p->contact_name ?: '',
+                    'mobile_number'          => $p->mobile_number ?: '—',
+                    'branch_name'            => $p->branch_name ?: 'General',
+                    'product_name'           => $p->catalog_product_name ?: ($p->product_name ?: 'Product'),
+                    'amount'                 => (float) $p->amount,
+                    'payment_mode'           => $mode,
+                    'payment_mode_label'     => $modeLabels[$mode] ?? ucfirst(str_replace('_', ' ', $mode)),
+                    'payment_mode_icon'      => $modeIcons[$mode] ?? '💰',
+                    'payment_type'           => $p->payment_type ?: 'payment',
+                    'payment_date'           => $pDate ? $pDate->toDateString() : '',
+                    'payment_date_formatted' => $pDate ? $pDate->format('d M Y') : '—',
+                    'reference_number'       => $p->reference_number ?: '—',
+                    'notes'                  => $p->notes ?: '',
+                    'recorded_by'            => $p->recorded_by,
+                    'recorded_by_name'       => $p->recorded_by_name ?: 'Unknown',
+                    'total_price'            => (float) $p->total_price,
+                    'amount_paid'            => (float) $p->amount_paid,
+                    'pending_amount'         => max(0, (float)$p->total_price - (float)$p->amount_paid),
+                    'payment_status'         => $p->payment_status ?: 'paid',
+                    'lead_url'               => $p->lead_id ? url('/leads/' . $p->lead_id) : '#',
+                ];
+            };
+
+            $todayPaymentItems = (clone $paymentQuery)
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->leftJoin('users', 'users.id', '=', 'lead_product_payments.recorded_by')
+                ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+                ->whereBetween('lead_product_payments.payment_date', [$todayStart, $todayEnd])
+                ->select($selectPaymentFields)
+                ->orderByDesc('lead_product_payments.payment_date')
+                ->orderByDesc('lead_product_payments.id')
+                ->get()
+                ->map($formatPaymentItem)
+                ->values()
+                ->all();
+
+            $monthPaymentItems = (clone $paymentQuery)
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->leftJoin('users', 'users.id', '=', 'lead_product_payments.recorded_by')
+                ->leftJoin('products', 'products.id', '=', 'lead_products.product_id')
+                ->whereBetween('lead_product_payments.payment_date', [$monthStart, $monthEnd])
+                ->select($selectPaymentFields)
+                ->orderByDesc('lead_product_payments.payment_date')
+                ->orderByDesc('lead_product_payments.id')
+                ->get()
+                ->map($formatPaymentItem)
+                ->values()
+                ->all();
+
             // Daily trend
             $trendQuery = clone $paymentQuery;
             if ($fromDate) {
@@ -384,23 +505,44 @@ class CustomerSuccessDashboardController extends Controller
             $upsellValue = (float) ($upsellStats->upsell_value ?? 0);
 
             $upsellLeadsList = (clone $upsellQuery)
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->leftJoin('users', 'users.id', '=', 'lead_products.created_by')
                 ->select([
-                    'leads.id',
+                    'leads.id as lead_id',
                     'leads.company_name',
                     'leads.contact_name',
+                    'leads.mobile_number',
+                    'leads.branch_id',
+                    'branches.name as branch_name',
+                    'lead_products.id as lead_product_id',
                     'products.product_name',
                     'lead_products.total_price',
-                    'lead_products.created_at'
+                    'lead_products.amount_paid',
+                    'lead_products.payment_status',
+                    'lead_products.created_at',
+                    'lead_products.converted_at',
+                    'lead_products.created_by',
+                    'users.name as created_by_name'
                 ])
                 ->orderByDesc('lead_products.created_at')
-                ->limit(10)
                 ->get()
                 ->map(fn($row) => [
-                    'id'           => $row->id,
-                    'company_name' => $row->company_name ?: ($row->contact_name ?: 'N/A'),
-                    'product_name' => $row->product_name,
-                    'value'        => (float) $row->total_price,
-                    'created_at'   => $row->created_at ? Carbon::parse($row->created_at)->format('d M Y') : '—'
+                    'id'              => $row->lead_id,
+                    'lead_id'         => $row->lead_id,
+                    'lead_product_id' => $row->lead_product_id,
+                    'company_name'    => $row->company_name ?: ($row->contact_name ?: 'N/A'),
+                    'contact_name'    => $row->contact_name ?: '',
+                    'mobile_number'   => $row->mobile_number ?: '—',
+                    'branch_name'     => $row->branch_name ?: 'General',
+                    'product_name'    => $row->product_name ?: 'Upsell Product',
+                    'value'           => (float) $row->total_price,
+                    'paid'            => (float) $row->amount_paid,
+                    'pending'         => max(0, (float)$row->total_price - (float)$row->amount_paid),
+                    'payment_status'  => $row->payment_status ?: 'unpaid',
+                    'created_at'      => $row->created_at ? Carbon::parse($row->created_at)->format('d M Y') : '—',
+                    'converted_at'    => $row->converted_at ? Carbon::parse($row->converted_at)->format('d M Y') : ($row->created_at ? Carbon::parse($row->created_at)->format('d M Y') : '—'),
+                    'created_by_name' => $row->created_by_name ?: 'CST Team',
+                    'lead_url'        => url('/leads/' . $row->lead_id),
                 ])->toArray();
 
             // 5. User-wise aggregates
@@ -838,8 +980,16 @@ class CustomerSuccessDashboardController extends Controller
                         ],
                     ],
                     'dept_product_pending' => $deptProductList,
-                    'today_payments'       => round((float)$todayPayments, 2),
-                    'month_payments'       => round((float)$monthPayments, 2),
+                    'today_payments'       => [
+                        'value' => round((float)$todayPayments, 2),
+                        'count' => count($todayPaymentItems),
+                        'items' => $todayPaymentItems,
+                    ],
+                    'month_payments'       => [
+                        'value' => round((float)$monthPayments, 2),
+                        'count' => count($monthPaymentItems),
+                        'items' => $monthPaymentItems,
+                    ],
                     'upsells' => [
                         'count' => $upsellCount,
                         'value' => round($upsellValue, 2),
@@ -895,8 +1045,8 @@ class CustomerSuccessDashboardController extends Controller
                 'cm_not_renewed' => ['count' => 0, 'value' => 0, 'items' => []],
             ],
             'dept_product_pending' => [],
-            'today_payments'       => 0,
-            'month_payments'       => 0,
+            'today_payments'       => ['count' => 0, 'value' => 0, 'items' => []],
+            'month_payments'       => ['count' => 0, 'value' => 0, 'items' => []],
             'upsells'              => ['count' => 0, 'value' => 0, 'items' => []],
             'daily_trend'          => [],
             'user_performance'     => [],
