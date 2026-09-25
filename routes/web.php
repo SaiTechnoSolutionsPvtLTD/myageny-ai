@@ -621,6 +621,17 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'destroy'])->name('destroy');
     });
 
+    // ── Customer Success Department Day Closing ─────────────────
+    Route::prefix('cst/day-closing')->name('cst.day-closing.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\CstDailyClosingController::class, 'index'])->name('index');
+        Route::get('/stats', [\App\Http\Controllers\CstDailyClosingController::class, 'getStats'])->name('stats');
+        Route::post('/', [\App\Http\Controllers\CstDailyClosingController::class, 'store'])->name('store');
+        Route::patch('/{closing}', [\App\Http\Controllers\CstDailyClosingController::class, 'update'])->name('update');
+        Route::post('/{closing}/review', [\App\Http\Controllers\CstDailyClosingController::class, 'review'])->name('review');
+        Route::delete('/{closing}', [\App\Http\Controllers\CstDailyClosingController::class, 'destroy'])->name('destroy');
+        Route::delete('/{closing}/attachments', [\App\Http\Controllers\CstDailyClosingController::class, 'deleteAttachment'])->name('attachments.delete');
+    });
+
     // ── Pre Sales Management ─────────────────────────────────────
     Route::get('/pre-sales', [\App\Http\Controllers\PreSalesController::class, 'index'])->name('pre-sales.index');
     Route::post('/pre-sales/allocate', [\App\Http\Controllers\PreSalesController::class, 'allocate'])->name('pre-sales.allocate');

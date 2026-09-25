@@ -219,8 +219,20 @@
             <span class="crumb-item">Dashboard</span>
             <span class="crumb-item active" style="color:var(--cs-text);font-weight:700;">Customer Success Dashboard</span>
         </div>
-        <div style="font-size:12px;color:var(--cs-muted);font-weight:500;">
-            🏢 Support & Success Team Scope Only
+        <div style="display:flex; align-items:center; gap:14px;">
+            <a href="{{ route('cst.day-closing.index') }}" class="cs-tab-btn active" style="text-decoration:none; padding:8px 16px; font-weight:800; font-size:12.5px; display:inline-flex; align-items:center; gap:8px; border-radius:10px; background:linear-gradient(135deg, #fe5f04, #ff7c30); color:#fff; box-shadow:0 3px 12px rgba(254,95,4,0.3); transition:all 0.2s;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                    <polyline points="9 16 12 19 16 14"></polyline>
+                </svg>
+                <span>Day Closing</span>
+            </a>
+            <div style="font-size:12px;color:var(--cs-muted);font-weight:500;">
+                🏢 Support &amp; Success Team Scope Only
+            </div>
         </div>
     </header>
 

@@ -727,35 +727,11 @@
 
 /* ─── KPI grid ─── */
 .da-kpi-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; }
-.da-kpi-grid > .da-kpi:nth-child(5),
-.da-kpi-grid > .da-skel-card:nth-child(5) {
-    grid-column: 2 / span 1;
-}
-.da-kpi-grid > .da-kpi:nth-child(6),
-.da-kpi-grid > .da-skel-card:nth-child(6) {
-    grid-column: 3 / span 1;
-}
 @media (max-width: 1024px) and (min-width: 641px) {
     .da-kpi-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-    .da-kpi-grid > .da-kpi:nth-child(5),
-    .da-kpi-grid > .da-skel-card:nth-child(5) {
-        grid-column: auto;
-    }
-    .da-kpi-grid > .da-kpi:nth-child(6),
-    .da-kpi-grid > .da-skel-card:nth-child(6) {
-        grid-column: auto;
-    }
 }
 @media (max-width: 640px) {
     .da-kpi-grid { grid-template-columns:1fr; }
-    .da-kpi-grid > .da-kpi:nth-child(5),
-    .da-kpi-grid > .da-skel-card:nth-child(5) {
-        grid-column: auto;
-    }
-    .da-kpi-grid > .da-kpi:nth-child(6),
-    .da-kpi-grid > .da-skel-card:nth-child(6) {
-        grid-column: auto;
-    }
 }
 .da-kpi { position:relative; overflow:hidden; border:none; border-radius:16px; padding:20px; box-shadow:0 10px 25px -5px rgba(15,23,42,.05), 0 8px 10px -6px rgba(15,23,42,.03); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.3s cubic-bezier(0.4,0,0.2,1); color:#fff; min-height:140px; }
 .da-kpi:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(15,23,42,.15),0 10px 10px -5px rgba(15,23,42,.08); }
@@ -1225,7 +1201,7 @@
                 <span class="da-badge" id="daKpiPeriod">–</span>
             </div>
             <div class="da-kpi-grid" id="daKpiGrid">
-                @for($i = 0; $i < 6; $i++)
+                @for($i = 0; $i < 7; $i++)
                 <div class="da-skel-card">
                     <div class="da-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                     <div class="da-skel" style="height:26px;width:50%;margin-bottom:8px"></div>
@@ -2395,6 +2371,7 @@ function renderKpis(k, filters) {
 
     var gradients = {
         orange: 'linear-gradient(135deg, #fe5f04 0%, #ff8c42 100%)',
+        indigo: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
         blue:   'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
         green:  'linear-gradient(135deg, #047857 0%, #10b981 100%)',
         red:    'linear-gradient(135deg, #b91c1c 0%, #ef4444 100%)',
@@ -2404,10 +2381,27 @@ function renderKpis(k, filters) {
         rose:   'linear-gradient(135deg, #be123c 0%, #f43f5e 100%)'
     };
 
+    var totalProductsCount = k.total_products_count !== undefined
+        ? k.total_products_count
+        : (data && data.financials && data.financials.product_status_dist
+            ? data.financials.product_status_dist.reduce(function(acc, x){ return acc + (x.count || 0); }, 0)
+            : (k.converted_products_count || 0));
+
+    var totalProductsVal = k.total_product_value !== undefined
+        ? k.total_product_value
+        : (data && data.financials ? (data.financials.total_product_value || 0) : 0);
+
+    var productSub = totalProductsVal > 0
+        ? (fmtL(totalProductsVal) + ' Total value')
+        : 'All in scope';
+
     var kpis = [
         { accent:'orange', val:k.total_leads,    label:'Overall Leads Count', sub:'All in scope',
           clickAction: "viewAllLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
+        { accent:'indigo', val:totalProductsCount, label:'Lead Products', sub:productSub,
+          clickAction: "viewLeadProducts()",
+          svg:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>' },
         { accent:'blue',   val:k.won_leads,      label:'Converted customers', sub:'Converted leads count',
           clickAction: "viewConvertedLeads()",
           svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' },
@@ -3412,6 +3406,38 @@ window.viewConvertedLeads = function() {
     }
 
     window.location.href = '{{ url("/leads") }}?' + params.toString();
+};
+
+window.viewLeadProducts = function() {
+    var dates = getFilterDates();
+    var params = new URLSearchParams();
+    if (COMPANY_ID) {
+        params.set('company_id', COMPANY_ID);
+    }
+    if (state.quick) {
+        params.set('quick_date', state.quick);
+    }
+    if (dates.from) {
+        params.set('date_from', dates.from);
+    }
+    if (dates.to) {
+        params.set('date_to', dates.to);
+    }
+    if (state.branch) {
+        params.set('branch_id', state.branch);
+    }
+    if (state.user) {
+        params.set('assigned_to', state.user);
+    }
+    if (state.source) {
+        params.set('source', state.source);
+        params.set('lead_source', state.source);
+    }
+    if (state.stage) {
+        params.set('product_status', state.stage);
+    }
+
+    window.location.href = LEAD_PRODUCTS_BASE + '?' + params.toString();
 };
 
 window.viewConvertedProducts = function() {
