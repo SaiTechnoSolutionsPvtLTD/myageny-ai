@@ -100,8 +100,24 @@ class LeadController extends Controller
             $dateTo   = $request->date_to;
         }
 
-        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'leadSource:id,name', 'leadStatus:id,name'])
-            ->orderByDesc('id');
+        $query = Lead::with(['branch:id,name', 'assignedTo:id,name', 'createdBy:id,name', 'product:id,product_name', 'products', 'leadSource:id,name', 'leadStatus:id,name']);
+
+        $sortBy = $request->input('sort_by', $request->input('sort', 'recent'));
+        switch ($sortBy) {
+            case 'oldest':
+                $query->orderBy('lead_date', 'asc')->orderBy('id', 'asc');
+                break;
+            case 'deal_high':
+                $query->orderBy('deal_value', 'desc')->orderBy('id', 'desc');
+                break;
+            case 'name_asc':
+                $query->orderBy('company_name', 'asc')->orderBy('id', 'desc');
+                break;
+            case 'recent':
+            default:
+                $query->orderBy('lead_date', 'desc')->orderBy('id', 'desc');
+                break;
+        }
 
         $this->visibility->applyLeadVisibility($query, $request->user());
 

@@ -110,6 +110,23 @@ class SalesDailyClosingController extends Controller
             ->whereDate('closing_date', $today)
             ->first();
 
+        if ($request->wantsJson() || $request->is('api/*') || $request->is('mobile/*')) {
+            return response()->json([
+                'success'          => true,
+                'closings'         => $closings,
+                'kpi_stats'        => $kpiStats,
+                'selected_date'    => $selectedDate,
+                'date_from'        => $dateFrom,
+                'date_to'          => $dateTo,
+                'today'            => $today,
+                'assignable_users' => $assignableUsers->map(fn($u) => ['id' => $u->id, 'name' => $u->name]),
+                'branches'         => $branches,
+                'is_admin_like'    => $isAdminLike,
+                'is_tl_like'       => $isTlLike,
+                'my_today_closing' => $myTodayClosing,
+            ]);
+        }
+
         return view('pages.crm.day_closing.index', compact(
             'closings',
             'kpiStats',

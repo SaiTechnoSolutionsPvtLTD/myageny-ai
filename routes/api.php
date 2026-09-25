@@ -703,3 +703,18 @@ Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.re
     // 20/page) so any report's Lead filter can call it, not just SMM's.
     Route::get('/leads-search', [ReportApiController::class, 'leadsSearchApi'])->name('leads-search');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Mobile Day Closing Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->prefix('mobile/day-closing')->name('mobile.day-closing.')->middleware('can:leads.view')->group(function () {
+    Route::get('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'index'])->name('index');
+    Route::get('/stats', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallStats'])->name('stats');
+    Route::get('/call-details', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallDetails'])->name('call-details');
+    Route::post('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'store'])->name('store');
+    Route::patch('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'update'])->name('update');
+    Route::patch('/{closing}/status', [\App\Http\Controllers\SalesDailyClosingController::class, 'updateStatus'])->name('update-status');
+    Route::delete('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'destroy'])->name('destroy');
+});

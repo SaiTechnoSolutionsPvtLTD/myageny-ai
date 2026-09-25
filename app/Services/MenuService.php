@@ -202,14 +202,82 @@ class MenuService
      */
     private function resolveBadgeCount(array $item, User $user): ?int
     {
-        return match ($item['key'] ?? null) {
-            'ovp_module'                       => $this->ovpBadgeCount($user),
-            'production_approvals'             => $this->productionApprovalBadgeCount($user),
-            'notifications'                    => $this->notificationBadgeCount($user),
-            'hrms.outside_office_approval'     => $this->outsideOfficePendingBadgeCount(),
-            'reminders_tasks'                  => $this->remindersTasksOverdueBadgeCount($user),
-            default                => null,
+        $count = match ($item['key'] ?? null) {
+            'ovp_module'                   => $this->ovpBadgeCount($user),
+            'production_approvals'         => $this->productionApprovalBadgeCount($user),
+            'notifications'                => $this->notificationBadgeCount($user),
+            'hrms.outside_office_approval' => $this->outsideOfficePendingBadgeCount(),
+            'reminders_tasks'              => $this->remindersTasksOverdueBadgeCount($user),
+            'hrms.leave'                   => $this->leaveBadgeCount($user),
+            'hrms.permission'              => $this->permissionBadgeCount($user),
+            'hrms.od_request'              => $this->odBadgeCount($user),
+            'hrms.expense_request'         => $this->expenseBadgeCount($user),
+            'price_requests'               => $this->priceRequestBadgeCount($user),
+            default                        => null,
         };
+
+        return ($count !== null && $count > 0) ? $count : null;
+    }
+
+    private function leaveBadgeCount(User $user): int
+    {
+        if (class_exists(\App\Models\LeaveApproval::class)) {
+            return \App\Models\LeaveApproval::where('status', 'pending')
+                ->whereHas('leaveRequest', fn ($q) => $q->where('status', 'pending'))
+                ->where(function ($q) use ($user) {
+                    $q->where('approver_id', $user->id);
+                    if ($user->hasAdminLikeRole()) {
+                        $q->orWhereNull('approver_id');
+                    }
+                })->count();
+        }
+        return 0;
+    }
+
+    private function permissionBadgeCount(User $user): int
+    {
+        if (class_exists(\App\Models\PermissionApproval::class)) {
+            return \App\Models\PermissionApproval::where('status', 'pending')
+                ->whereHas('permissionRequest', fn ($q) => $q->where('status', 'pending'))
+                ->where(function ($q) use ($user) {
+                    $q->where('approver_id', $user->id);
+                    if ($user->hasAdminLikeRole()) {
+                        $q->orWhereNull('approver_id');
+                    }
+                })->count();
+        }
+        return 0;
+    }
+
+    private function odBadgeCount(User $user): int
+    {
+        if (class_exists(\App\Models\OdApproval::class)) {
+            return \App\Models\OdApproval::where('status', 'pending')
+                ->whereHas('odRequest', fn ($q) => $q->where('status', 'pending'))
+                ->where(function ($q) use ($user) {
+                    $q->where('approver_id', $user->id);
+                    if ($user->hasAdminLikeRole()) {
+                        $q->orWhereNull('approver_id');
+                    }
+                })->count();
+        }
+        return 0;
+    }
+
+    private function expenseBadgeCount(User $user): int
+    {
+        if (class_exists(\App\Models\ExpenseRequest::class)) {
+            return \App\Models\ExpenseRequest::where('status', 'pending')->count();
+        }
+        return 0;
+    }
+
+    private function priceRequestBadgeCount(User $user): int
+    {
+        if (class_exists(\App\Models\LeadPriceRequest::class)) {
+            return \App\Models\LeadPriceRequest::where('status', 'pending')->count();
+        }
+        return 0;
     }
 
     /**
@@ -281,10 +349,31 @@ class MenuService
             ->count();
     }
 
-    /** Mirrors the web bell icon's $notificationUnreadCount exactly. */
+    /** Mirrors NotificationApiController's branch-filtered unread count. */
     private function notificationBadgeCount(User $user): int
     {
-        return $user->unreadNotifications()->count();
+        $query = $user->unreadNotifications();
+        $targetBranchId = request()->header('X-Branch-Id') 
+            ?: (request()->filled('branch_id') ? (int) request()->query('branch_id') : $user->branch_id);
+
+        if ($targetBranchId !== null) {
+            $query->where(function ($q) use ($targetBranchId) {
+                $q->where('data->branch_id', $targetBranchId)
+                  ->orWhere('data->branch_id', (string) $targetBranchId);
+            });
+        } elseif (! $user->isSystemAdmin()) {
+            $allowedBranchIds = array_filter($user->getMyBranchIds());
+            if (!empty($allowedBranchIds)) {
+                $query->where(function ($q) use ($allowedBranchIds) {
+                    foreach ($allowedBranchIds as $bId) {
+                        $q->orWhere('data->branch_id', $bId)
+                          ->orWhere('data->branch_id', (string) $bId);
+                    }
+                });
+            }
+        }
+
+        return $query->count();
     }
 
     /** Mirrors sidebar.blade.php's inline $hasRoleKey closure. */
