@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Branch;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Models\Quotation;
@@ -140,26 +141,46 @@ class DataVisibilityService
         }
 
         if ($this->hasBranchManagerRole($user)) {
-            $branchIds = $user->getMyBranchIds();
+            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = [1];
+            }
+
+            // Additional / non-default branches assigned to BM (from branch_user and getMyBranchIds)
+            $allBranchIds = $user->getMyBranchIds();
+            $additionalBranchIds = array_values(array_filter($allBranchIds, fn($id) => !in_array((int)$id, $defaultBranchIds)));
+
+            // Mapped descendants under this manager
             $descendants = $this->descendantUserIds($user);
+
+            // HO descendants: mapped users who are in the default branch
+            $hoDescendantIds = [];
+            if ($descendants->isNotEmpty()) {
+                $hoDescendantIds = User::withoutGlobalScope('branch')
+                    ->whereIn('id', $descendants)
+                    ->whereIn('branch_id', $defaultBranchIds)
+                    ->pluck('id')
+                    ->all();
+            }
 
             try {
                 return User::withoutGlobalScope('branch')
                     ->where('is_active', true)
-                    ->where(function ($query) use ($branchIds, $descendants, $user) {
-                        if ($descendants->isNotEmpty()) {
-                            $query->whereIn('id', $descendants->push($user->id)->unique());
-                        } elseif (!empty($branchIds)) {
-                            $query->whereIn('branch_id', $branchIds)
-                                  ->orWhere('id', $user->id)
-                                  ->orWhereExists(function ($sub) use ($branchIds) {
+                    ->where(function ($query) use ($additionalBranchIds, $hoDescendantIds, $user) {
+                        $query->where('id', $user->id);
+
+                        if (!empty($additionalBranchIds)) {
+                            $query->orWhereIn('branch_id', $additionalBranchIds)
+                                  ->orWhereExists(function ($sub) use ($additionalBranchIds) {
                                       $sub->select(\DB::raw(1))
                                           ->from('branch_user')
                                           ->whereColumn('branch_user.user_id', 'users.id')
-                                          ->whereIn('branch_user.branch_id', $branchIds);
+                                          ->whereIn('branch_user.branch_id', $additionalBranchIds);
                                   });
-                        } else {
-                            $query->where('id', $user->id);
+                        }
+
+                        if (!empty($hoDescendantIds)) {
+                            $query->orWhereIn('id', $hoDescendantIds);
                         }
                     })
                     ->pluck('id')
@@ -168,6 +189,7 @@ class DataVisibilityService
                 return [$user->id];
             }
         }
+
 
         if ($this->hasBranchAdminRole($user)) {
             $branchIds = $user->getMyBranchIds();
