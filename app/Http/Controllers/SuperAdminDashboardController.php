@@ -234,7 +234,10 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 5. Today's follow-ups / Scheduled Followups ───────────
         $currentUser = $request->user();
-        $isUserAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        // Branch Managers excluded from $isUserAdmin to ensure applyLeadVisibility() scopes
+        // their data to their branch's users only (not all company data).
+        $isUserAdmin = ($currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole())
+            && !($currentUser->isBranchManager() || $currentUser->isBranchAdmin());
         $effectiveUserId = $request->filled('user_id') ? (int) $request->user_id : ($isUserAdmin ? null : (int) $currentUser->id);
 
         $recentCallUpdatesQuery = LeadCallUpdate::query()
@@ -1310,7 +1313,11 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 5. Recent call updates (last 20) ───────────────────────────
         $currentUser = $request->user();
-        $isUserAdmin = $currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole();
+        // Branch Managers are excluded from $isUserAdmin so that applyLeadVisibility()
+        // scopes their data to only their branch's users (via visibleUserIds).
+        // If treated as admin, effectiveUserId would be null and they'd see ALL data.
+        $isUserAdmin = ($currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin() || $currentUser->hasAdminLikeRole())
+            && !($currentUser->isBranchManager() || $currentUser->isBranchAdmin());
         $effectiveUserId = $request->filled('user_id') ? (int) $request->user_id : ($isUserAdmin ? null : (int) $currentUser->id);
 
         $recentCallUpdatesQuery = LeadCallUpdate::query()
@@ -2051,12 +2058,16 @@ class SuperAdminDashboardController extends ApiController
 
         // NON COCO Hot query
         $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct) {
-            if ($nonCocoProduct) {
-                $q->where('product_id', $nonCocoProduct->id)
-                  ->orWhere('product_name', 'like', '%NON%COCO%');
-            } else {
-                $q->where('product_name', 'like', '%NON%COCO%');
-            }
+            $q->where(function ($sub) use ($nonCocoProduct) {
+                if ($nonCocoProduct) {
+                    $sub->where('product_id', $nonCocoProduct->id)
+                        ->orWhere('product_name', 'like', '%NON%COCO%');
+                } else {
+                    $sub->where('product_name', 'like', '%NON%COCO%');
+                }
+            })->orWhereHas('lead.branch', function ($bq) {
+                $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+            });
         });
         $nonCocoHotCount = (clone $nonCocoHotQuery)->count();
         $nonCocoDealValue = (float) (clone $nonCocoHotQuery)->sum('total_price');
@@ -2064,18 +2075,22 @@ class SuperAdminDashboardController extends ApiController
 
         // COCO Hot query
         $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct) {
-            if ($cocoProduct) {
-                $q->where(function ($sq) use ($cocoProduct) {
-                    $sq->where('product_id', $cocoProduct->id)
-                       ->orWhere(function ($ssq) {
-                           $ssq->where('product_name', 'like', '%COCO%')
-                               ->where('product_name', 'not like', '%NON%');
-                       });
-                });
-            } else {
-                $q->where('product_name', 'like', '%COCO%')
-                  ->where('product_name', 'not like', '%NON%');
-            }
+            $q->where(function ($sub) use ($cocoProduct) {
+                if ($cocoProduct) {
+                    $sub->where(function ($sq) use ($cocoProduct) {
+                        $sq->where('product_id', $cocoProduct->id)
+                           ->orWhere(function ($ssq) {
+                               $ssq->where('product_name', 'like', '%COCO%')
+                                   ->where('product_name', 'not like', '%NON%');
+                           });
+                    });
+                } else {
+                    $sub->where('product_name', 'like', '%COCO%')
+                        ->where('product_name', 'not like', '%NON%');
+                }
+            })->orWhereHas('lead.branch', function ($bq) {
+                $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+            });
         });
         $cocoHotCount = (clone $cocoHotQuery)->count();
         $cocoDealValue = (float) (clone $cocoHotQuery)->sum('total_price');
@@ -2330,12 +2345,16 @@ class SuperAdminDashboardController extends ApiController
             })->first();
 
             $query->where(function ($q) use ($nonCocoProduct) {
-                if ($nonCocoProduct) {
-                    $q->where('product_id', $nonCocoProduct->id)
-                      ->orWhere('product_name', 'like', '%NON%COCO%');
-                } else {
-                    $q->where('product_name', 'like', '%NON%COCO%');
-                }
+                $q->where(function ($sub) use ($nonCocoProduct) {
+                    if ($nonCocoProduct) {
+                        $sub->where('product_id', $nonCocoProduct->id)
+                            ->orWhere('product_name', 'like', '%NON%COCO%');
+                    } else {
+                        $sub->where('product_name', 'like', '%NON%COCO%');
+                    }
+                })->orWhereHas('lead.branch', function ($bq) {
+                    $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                });
             });
 
         } elseif ($type === 'coco') {
@@ -2360,18 +2379,22 @@ class SuperAdminDashboardController extends ApiController
             })->first();
 
             $query->where(function ($q) use ($cocoProduct) {
-                if ($cocoProduct) {
-                    $q->where(function ($sq) use ($cocoProduct) {
-                        $sq->where('product_id', $cocoProduct->id)
-                           ->orWhere(function ($ssq) {
-                               $ssq->where('product_name', 'like', '%COCO%')
-                                   ->where('product_name', 'not like', '%NON%');
-                           });
-                    });
-                } else {
-                    $q->where('product_name', 'like', '%COCO%')
-                      ->where('product_name', 'not like', '%NON%');
-                }
+                $q->where(function ($sub) use ($cocoProduct) {
+                    if ($cocoProduct) {
+                        $sub->where(function ($sq) use ($cocoProduct) {
+                            $sq->where('product_id', $cocoProduct->id)
+                               ->orWhere(function ($ssq) {
+                                   $ssq->where('product_name', 'like', '%COCO%')
+                                       ->where('product_name', 'not like', '%NON%');
+                               });
+                        });
+                    } else {
+                        $sub->where('product_name', 'like', '%COCO%')
+                            ->where('product_name', 'not like', '%NON%');
+                    }
+                })->orWhereHas('lead.branch', function ($bq) {
+                    $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                });
             });
 
         } else {

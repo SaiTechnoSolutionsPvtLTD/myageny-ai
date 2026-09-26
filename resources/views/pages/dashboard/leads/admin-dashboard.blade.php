@@ -1207,13 +1207,23 @@
                     || auth()->user()?->isCompanyAdminRole()
                     || auth()->user()?->isCbo()
                 );
+                $userRoleType = $userRoleType ?? 'company_admin';
+                $canViewActiveBranches = $canViewActiveBranches ?? (bool) (
+                    auth()->user()?->isSuperAdmin()
+                    || auth()->user()?->isCompanyAdminRole()
+                    || auth()->user()?->isCbo()
+                );
+                $userBranchId = $userBranchId ?? auth()->user()?->branch_id;
+                $userBranchIds = $userBranchIds ?? (auth()->user() ? auth()->user()->getMyBranchIds() : []);
+                $userBranchType = $userBranchType ?? auth()->user()?->branch?->branch_type;
+                $hasDefaultBranch = $hasDefaultBranch ?? false;
+                $hasCocoBranch    = $hasCocoBranch ?? false;
+                $hasNonCocoBranch = $hasNonCocoBranch ?? false;
             @endphp
-            @if($canViewForecasting)
-            <button type="button" class="da-forecast-btn" id="daForecastBtn" onclick="toggleForecasting()" title="View Forecasting & Current Month Hot Prospects">
+            <button type="button" class="da-forecast-btn" id="daForecastBtn" onclick="toggleForecasting()" title="View Forecasting &amp; Current Month Hot Prospects">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.3"/></svg>
                 <span id="daForecastBtnText">Forecasting</span>
             </button>
-            @endif
         </div>
 
         {{-- Active chips --}}
@@ -1252,7 +1262,6 @@
         </div>
 
         {{-- ── Forecasting Section ── --}}
-        @if($canViewForecasting)
         <div id="daForecastSection" style="display:none;">
             <div class="da-section-head">
                 <div class="da-section-title">
@@ -1275,7 +1284,6 @@
                 </div>
             </div>
         </div>
-        @endif
 
         {{-- ── Target Tracking Card ── --}}
         <div class="da-target-card" style="display:none;" id="daTargetCard">
@@ -1527,10 +1535,14 @@
         </div>
 
         <div class="da-modal-body">
-            <div class="da-modal-split-grid">
-                {{-- ── Left 6 Columns: Key Metrics Cards ── --}}
+            <div class="da-modal-split-grid" @if(!($canViewActiveBranches ?? true)) style="grid-template-columns: 1fr;" @endif>
+                {{-- ── Left Column: Key Metrics Cards — shown based on user role ── --}}
                 <div class="da-modal-col-left">
-                    {{-- Section Card 1: NST - HO --}}
+                    {{-- ─────────────────────────────────────────────────────
+                         Section Card 1: NST - HO
+                         Visible to: Company Admin, CBO, or any user with Default/HO branch
+                    ───────────────────────────────────────────────────── --}}
+                    @if($hasDefaultBranch ?? false)
                     <div class="da-modal-section-card">
                         <div class="da-modal-section-head">
                             <div class="da-modal-section-heading">
@@ -1539,7 +1551,19 @@
                                 </svg>
                                 <span>NST - HO</span>
                             </div>
-                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(79,70,229,0.08); color:#4f46e5; border-color:rgba(79,70,229,0.2);">Default Branch (HO) • Excl. Channel Partner</span>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(79,70,229,0.08); color:#4f46e5; border-color:rgba(79,70,229,0.2);">
+                                @if(in_array($userRoleType ?? 'company_admin', ['nst']))
+                                    Your Data • Default Branch (HO)
+                                @elseif(($userRoleType ?? '') === 'tl')
+                                    Team Data • Default Branch (HO)
+                                @elseif(($userRoleType ?? '') === 'branch_manager')
+                                    Your Branch • Excl. Channel Partner
+                                @elseif(($userRoleType ?? '') === 'branch_admin')
+                                    Branch Data • Default Branch (HO)
+                                @else
+                                    Default Branch (HO) • Excl. Channel Partner
+                                @endif
+                            </span>
                         </div>
 
                         <div class="da-modal-kpi-grid">
@@ -1581,14 +1605,19 @@
                                 </div>
                                 <div class="da-modal-metric-content">
                                     <div class="da-modal-metric-val" id="daModalExpectedCollection">₹0.00</div>
-                                    <div class="da-modal-metric-lbl">Expected Collection value</div>
+                                    <div class="da-modal-metric-lbl">Expected value</div>
                                     <div class="da-modal-metric-sub">Expected closure collection</div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    @endif
 
-                    {{-- Section Card 2: Channel Partner - NON COCO --}}
+                    {{-- ─────────────────────────────────────────────────────
+                         Section Card 2: Channel Partner - NON COCO
+                         Visible to: Users associated with NON COCO branches or products
+                    ───────────────────────────────────────────────────── --}}
+                    @if($hasNonCocoBranch ?? false)
                     <div class="da-modal-section-card">
                         <div class="da-modal-section-head">
                             <div class="da-modal-section-heading">
@@ -1597,12 +1626,24 @@
                                 </svg>
                                 <span>Channel Partner - NON COCO Model</span>
                             </div>
-                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(2,132,199,0.08); color:#0284c7; border-color:rgba(2,132,199,0.2);">NON COCO Hot Products</span>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(2,132,199,0.08); color:#0284c7; border-color:rgba(2,132,199,0.2);">
+                                @if(in_array($userRoleType ?? 'company_admin', ['nst']))
+                                    Your Data • NON COCO
+                                @elseif(($userRoleType ?? '') === 'tl')
+                                    Team Data • NON COCO
+                                @elseif(in_array($userRoleType ?? '', ['branch_manager', 'branch_admin']))
+                                    Branch Data • NON COCO
+                                @else
+                                    NON COCO Hot Products
+                                @endif
+                            </span>
                         </div>
 
                         <div class="da-modal-kpi-grid">
                             {{-- Card 1: Total Prospect count --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')"
+                                style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
@@ -1616,7 +1657,9 @@
                             </div>
 
                             {{-- Card 2: Deal Value --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')"
+                                style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1630,7 +1673,9 @@
                             </div>
 
                             {{-- Card 3: Expected Collection value --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('non_coco', 'Channel Partner - NON COCO Model')"
+                                style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view NON COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <line x1="12" y1="1" x2="12" y2="23"/>
@@ -1645,8 +1690,13 @@
                             </div>
                         </div>
                     </div>
+                    @endif
 
-                    {{-- Section Card 3: Channel Partner - COCO --}}
+                    {{-- ─────────────────────────────────────────────────────
+                         Section Card 3: Channel Partner - COCO
+                         Visible to: Users associated with COCO branches or products
+                    ───────────────────────────────────────────────────── --}}
+                    @if($hasCocoBranch ?? false)
                     <div class="da-modal-section-card">
                         <div class="da-modal-section-head">
                             <div class="da-modal-section-heading">
@@ -1655,12 +1705,24 @@
                                 </svg>
                                 <span>Channel Partner - COCO Model</span>
                             </div>
-                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(124,58,237,0.08); color:#7c3aed; border-color:rgba(124,58,237,0.2);">COCO Hot Products</span>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(124,58,237,0.08); color:#7c3aed; border-color:rgba(124,58,237,0.2);">
+                                @if(in_array($userRoleType ?? 'company_admin', ['nst']))
+                                    Your Data • COCO
+                                @elseif(($userRoleType ?? '') === 'tl')
+                                    Team Data • COCO
+                                @elseif(in_array($userRoleType ?? '', ['branch_manager', 'branch_admin']))
+                                    Branch Data • COCO
+                                @else
+                                    COCO Hot Products
+                                @endif
+                            </span>
                         </div>
 
                         <div class="da-modal-kpi-grid">
                             {{-- Card 1: Total Prospect count --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')"
+                                style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
@@ -1674,7 +1736,9 @@
                             </div>
 
                             {{-- Card 2: Deal Value --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #a855f7 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')"
+                                style="background:linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #a855f7 100%); cursor:pointer;" title="Click to view COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1688,7 +1752,9 @@
                             </div>
 
                             {{-- Card 3: Expected Collection value --}}
-                            <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view COCO hot prospects">
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('coco', 'Channel Partner - COCO Model')"
+                                style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view COCO hot prospects">
                                 <div class="da-modal-metric-icon">
                                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
                                         <line x1="12" y1="1" x2="12" y2="23"/>
@@ -1703,9 +1769,11 @@
                             </div>
                         </div>
                     </div>
+                    @endif
                 </div>
 
-                {{-- ── Right 6 Columns: Active Branches Table & Comparison ── --}}
+        {{-- ── Right 6 Columns: Active Branches Table & Comparison — Only for Company Admin & CBO ── --}}
+                @if($canViewActiveBranches ?? true)
                 <div class="da-modal-col-right">
                     <div class="da-modal-section-card" style="height:100%; display:flex; flex-direction:column;">
                         <div class="da-modal-section-head">
@@ -1840,6 +1908,7 @@
                         </div>
                     </div>
                 </div>
+                @endif
             </div>
         </div>
     </div>
@@ -1866,9 +1935,11 @@
                     <input type="date" id="daDstDatePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:135px;" onchange="loadDaySalesTrackerData(this.value)">
                 </div>
                 <input type="text" id="daDstSearchInput" placeholder="Quick search..." class="form-control" style="font-size:12px; height:34px; padding:4px 10px; border-radius:8px; border:1px solid #cbd5e1; width:200px;" oninput="filterDaySalesTable(this.value)">
+                @if(($userRoleType ?? 'company_admin') === 'company_admin')
                 <button type="button" class="btn btn-sm" onclick="openAddCategoryModal()" style="background:#f0f9ff; color:#0284c7; border:1px solid #bae6fd; font-size:12px; height:34px; padding:0 12px; border-radius:8px; display:inline-flex; align-items:center; gap:5px; font-weight:700; cursor:pointer;" title="Add new category to list">
                     <span style="font-size:16px; line-height:1;">+</span> Category
                 </button>
+                @endif
                 <button type="button" class="da-modal-close" onclick="closeDaySalesTrackerModal()" title="Close (Esc)">
                     <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
                     <span>Close</span>
@@ -2106,6 +2177,12 @@ var COMPANY_ID = '{{ $companyId ?? "" }}';  // Company isolation — ensures nav
 // Avatar colors
 var AV_COLORS = ['#fe5f04','#7c3aed','#2563eb','#16a34a','#be123c','#0284c7','#b45309','#0f766e'];
 var avColor   = function(id) { return AV_COLORS[id % AV_COLORS.length]; };
+
+// Role-based configuration — passed from server
+var USER_ROLE_TYPE        = '{{ $userRoleType ?? "company_admin" }}'; // company_admin | cbo | branch_manager | tl | nst
+var CAN_VIEW_ACTIVE_BRANCHES = {{ ($canViewActiveBranches ?? true) ? 'true' : 'false' }};
+var USER_BRANCH_ID        = '{{ $userBranchId ?? "" }}';
+var USER_BRANCH_TYPE      = '{{ $userBranchType ?? "" }}'; // COCO | NON_COCO | etc.
 
 // State
 var state = { quick:'month', branch:'', user:'', stage:'', source:'', dateFrom:'', dateTo:'' };
@@ -2715,63 +2792,89 @@ window.openTotalProspectsModal = function() {
 
     var m = window.currentProspectsMetrics || {};
     var badgeEl = document.getElementById('daModalPeriodBadge');
-    var subEl = document.getElementById('daModalProspectSub');
+    var subEl   = document.getElementById('daModalProspectSub');
 
     if (badgeEl && m.monthName) badgeEl.textContent = m.monthName;
-    if (subEl) subEl.textContent = 'Default Branch (HO) • Excl. CP';
 
-    // 1. NST - HO (Without Channel Partner)
-    var nstHo = m.nstHo || {};
+    // ── Role-aware sub-label ──────────────────────────────────────────
+    if (subEl) {
+        if (USER_ROLE_TYPE === 'nst') {
+            subEl.textContent = 'Your Data';
+        } else if (USER_ROLE_TYPE === 'tl') {
+            subEl.textContent = 'Your Team Data';
+        } else if (USER_ROLE_TYPE === 'branch_manager' || USER_ROLE_TYPE === 'branch_admin') {
+            subEl.textContent = 'Your Branch Data';
+        } else {
+            subEl.textContent = 'Default Branch (HO) • Excl. CP';
+        }
+    }
+
+    // ── Populate section metric cards ─────────────────────────────────
+    // The API already scopes data to the user's visible branches & users via applyLeadVisibility().
+    // m.nstHo holds their Default/HO branch hot products.
+    // m.coco holds their COCO branch hot products.
+    // m.nonCoco holds their NON-COCO branch hot products.
+    var nstHo   = m.nstHo   || {};
+    var nonCoco = m.nonCoco || {};
+    var coco    = m.coco    || {};
+
+    // 1. NST - HO
     var countEl = document.getElementById('daModalProspectCount');
-    var dealEl = document.getElementById('daModalDealValue');
-    var expEl = document.getElementById('daModalExpectedCollection');
+    var dealEl  = document.getElementById('daModalDealValue');
+    var expEl   = document.getElementById('daModalExpectedCollection');
     if (countEl) countEl.textContent = nstHo.count !== undefined ? nstHo.count : 0;
-    if (dealEl) dealEl.textContent = fmt(nstHo.deal_value || 0);
-    if (expEl) expEl.textContent = fmt(nstHo.expected_value || 0);
+    if (dealEl)  dealEl.textContent  = fmt(nstHo.deal_value || 0);
+    if (expEl)   expEl.textContent   = fmt(nstHo.expected_value || 0);
 
     // 2. Channel Partner - NON COCO
-    var nonCoco = m.nonCoco || {};
     var nonCocoCountEl = document.getElementById('daModalNonCocoCount');
-    var nonCocoDealEl = document.getElementById('daModalNonCocoDealValue');
-    var nonCocoExpEl = document.getElementById('daModalNonCocoExpectedValue');
+    var nonCocoDealEl  = document.getElementById('daModalNonCocoDealValue');
+    var nonCocoExpEl   = document.getElementById('daModalNonCocoExpectedValue');
     if (nonCocoCountEl) nonCocoCountEl.textContent = nonCoco.count !== undefined ? nonCoco.count : 0;
-    if (nonCocoDealEl) nonCocoDealEl.textContent = fmt(nonCoco.deal_value || 0);
-    if (nonCocoExpEl) nonCocoExpEl.textContent = fmt(nonCoco.expected_value || 0);
+    if (nonCocoDealEl)  nonCocoDealEl.textContent  = fmt(nonCoco.deal_value || 0);
+    if (nonCocoExpEl)   nonCocoExpEl.textContent   = fmt(nonCoco.expected_value || 0);
 
     // 3. Channel Partner - COCO
-    var coco = m.coco || {};
     var cocoCountEl = document.getElementById('daModalCocoCount');
-    var cocoDealEl = document.getElementById('daModalCocoDealValue');
-    var cocoExpEl = document.getElementById('daModalCocoExpectedValue');
+    var cocoDealEl  = document.getElementById('daModalCocoDealValue');
+    var cocoExpEl   = document.getElementById('daModalCocoExpectedValue');
     if (cocoCountEl) cocoCountEl.textContent = coco.count !== undefined ? coco.count : 0;
-    if (cocoDealEl) cocoDealEl.textContent = fmt(coco.deal_value || 0);
-    if (cocoExpEl) cocoExpEl.textContent = fmt(coco.expected_value || 0);
+    if (cocoDealEl)  cocoDealEl.textContent  = fmt(coco.deal_value || 0);
+    if (cocoExpEl)   cocoExpEl.textContent   = fmt(coco.expected_value || 0);
 
-    // 4. Filter branches list
+    // ── Non-admin users (Branch Admin, Branch Manager, TL, Sales Executive) → show Key Metrics modal with their relevant card(s) ──
+    if (!CAN_VIEW_ACTIVE_BRANCHES) {
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        return;
+    }
+
+    // ── Company Admin / CBO → full modal with Active Branches table ───
     activeBranchesList = (m.activeBranches || []).filter(function(b) {
         return !b.is_default;
     });
 
-    var cocoCount = activeBranchesList.filter(function(b) {
-        return (b.branch_type || '').toUpperCase() === 'COCO';
-    }).length;
-    var nonCocoCount = activeBranchesList.filter(function(b) {
-        return (b.branch_type || '').toUpperCase() !== 'COCO';
-    }).length;
+    var cocoCount    = activeBranchesList.filter(function(b) { return (b.branch_type || '').toUpperCase() === 'COCO'; }).length;
+    var nonCocoCount = activeBranchesList.filter(function(b) { return (b.branch_type || '').toUpperCase() !== 'COCO'; }).length;
 
-    // Update tab badges
-    var allBadge = document.getElementById('daBranchTabAllBadge');
-    var cocoBadge = document.getElementById('daBranchTabCocoBadge');
+    var allBadge    = document.getElementById('daBranchTabAllBadge');
+    var cocoBadge   = document.getElementById('daBranchTabCocoBadge');
     var nonCocoBadge = document.getElementById('daBranchTabNonCocoBadge');
-    if (allBadge) allBadge.textContent = activeBranchesList.length;
-    if (cocoBadge) cocoBadge.textContent = cocoCount;
+    if (allBadge)     allBadge.textContent    = activeBranchesList.length;
+    if (cocoBadge)    cocoBadge.textContent   = cocoCount;
     if (nonCocoBadge) nonCocoBadge.textContent = nonCocoCount;
 
-    // Switch to current tab (default 'all')
     switchBranchTab(currentBranchTab || 'all');
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
+};
+
+window.closeTotalProspectsModal = function() {
+    var modal = document.getElementById('daTotalProspectsModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -2868,16 +2971,51 @@ window.renderDaySalesTrackerTable = function(items, categories) {
         return;
     }
 
+    // Only Company Admin can edit Category and Sale Type
+    var canEdit = (typeof USER_ROLE_TYPE !== 'undefined' && USER_ROLE_TYPE === 'company_admin');
+
     var totalCollection = 0;
     var html = items.map(function(item, idx) {
         totalCollection += parseFloat(item.current_month_collection || 0);
 
-        var catOptions = (categories || []).map(function(c) {
-            var selected = (item.category && item.category.trim().toLowerCase() === c.trim().toLowerCase()) ? 'selected' : '';
-            return '<option value="' + escapeHtml(c) + '" ' + selected + '>' + escapeHtml(c) + '</option>';
-        }).join('');
+        // ── Category cell ─────────────────────────────────────────
+        var catHtml;
+        if (canEdit) {
+            var catOptions = (categories || []).map(function(c) {
+                var selected = (item.category && item.category.trim().toLowerCase() === c.trim().toLowerCase()) ? 'selected' : '';
+                return '<option value="' + escapeHtml(c) + '" ' + selected + '>' + escapeHtml(c) + '</option>';
+            }).join('');
+            catHtml = '<div style="display:inline-flex; align-items:center; gap:5px;">' +
+                '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstCategory(' + item.id + ', this.value)">' +
+                    '<option value="">Select Category</option>' +
+                    catOptions +
+                '</select>' +
+                '<span id="daDstSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
+            '</div>';
+        } else {
+            var catLabel = item.category ? escapeHtml(item.category) : '—';
+            catHtml = '<span style="font-size:12px; font-weight:600; color:#334155;">' + catLabel + '</span>';
+        }
 
+        // ── Sale Type cell ────────────────────────────────────────
         var saleTypeVal = (item.sale_type || '').toUpperCase();
+        var saleTypeHtml;
+        if (canEdit) {
+            saleTypeHtml = '<div style="display:inline-flex; align-items:center; gap:5px;">' +
+                '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstSaleType(' + item.id + ', this.value)" style="min-width:130px;">' +
+                    '<option value="">Select Sale Type</option>' +
+                    '<option value="NST" ' + (saleTypeVal === 'NST' ? 'selected' : '') + '>NST</option>' +
+                    '<option value="CST" ' + (saleTypeVal === 'CST' ? 'selected' : '') + '>CST</option>' +
+                '</select>' +
+                '<span id="daDstSaleTypeSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
+            '</div>';
+        } else {
+            var stColor = saleTypeVal === 'NST' ? 'background:#ede9fe; color:#6d28d9; border-color:#ddd6fe;'
+                        : saleTypeVal === 'CST' ? 'background:#dcfce7; color:#15803d; border-color:#bbf7d0;'
+                        : 'background:#f1f5f9; color:#64748b; border-color:#e2e8f0;';
+            var stLabel = saleTypeVal || '—';
+            saleTypeHtml = '<span class="da-badge" style="font-size:11px; font-weight:700; ' + stColor + '">' + escapeHtml(stLabel) + '</span>';
+        }
 
         return '<tr style="border-bottom:1px solid #f1f5f9; transition:background 0.1s ease;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#ffffff\'">' +
             '<td style="padding:10px 14px; text-align:center; font-weight:700; color:#64748b; font-size:12px;">' + (idx + 1) + '</td>' +
@@ -2887,25 +3025,8 @@ window.renderDaySalesTrackerTable = function(items, categories) {
             '<td style="padding:10px 14px; font-size:12px; color:#475569;"><span class="da-badge" style="font-size:10px; font-weight:600; background:#f1f5f9; color:#475569; border-color:#e2e8f0;">' + escapeHtml(item.branch_type) + '</span></td>' +
             '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:500;">' + escapeHtml(item.team_leader) + '</td>' +
             '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:600;">' + escapeHtml(item.team_member) + '</td>' +
-            '<td style="padding:10px 14px;">' +
-                '<div style="display:inline-flex; align-items:center; gap:5px;">' +
-                    '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstCategory(' + item.id + ', this.value)">' +
-                        '<option value="">Select Category</option>' +
-                        catOptions +
-                    '</select>' +
-                    '<span id="daDstSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
-                '</div>' +
-            '</td>' +
-            '<td style="padding:10px 14px;">' +
-                '<div style="display:inline-flex; align-items:center; gap:5px;">' +
-                    '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstSaleType(' + item.id + ', this.value)" style="min-width:130px;">' +
-                        '<option value="">Select Sale Type</option>' +
-                        '<option value="NST" ' + (saleTypeVal === 'NST' ? 'selected' : '') + '>NST</option>' +
-                        '<option value="CST" ' + (saleTypeVal === 'CST' ? 'selected' : '') + '>CST</option>' +
-                    '</select>' +
-                    '<span id="daDstSaleTypeSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
-                '</div>' +
-            '</td>' +
+            '<td style="padding:10px 14px;">' + catHtml + '</td>' +
+            '<td style="padding:10px 14px;">' + saleTypeHtml + '</td>' +
             '<td style="padding:10px 14px; font-size:12px;">' +
                 '<a href="' + escapeHtml(item.lead_url) + '" target="_blank" style="color:#0284c7; font-weight:600; text-decoration:none;" title="Open Lead Details">' + escapeHtml(item.account_name) + '</a>' +
                 '<div style="font-size:11px; color:#64748b;">' + escapeHtml(item.product_name) + '</div>' +

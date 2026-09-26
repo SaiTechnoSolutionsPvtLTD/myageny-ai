@@ -34,16 +34,43 @@ class SalesDailyClosingController extends Controller
         $dateFrom = $request->filled('date_from') ? $request->input('date_from') : null;
         $dateTo = $request->filled('date_to') ? $request->input('date_to') : null;
 
-        $isAdminLike = $user->hasAdminLikeRole() || $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin();
-        $isTlLike = $user->hasTlLikeRole();
+        $isCompanyAdmin  = $user->isSuperAdmin() || $user->isCompanyAdminRole() || $user->isCbo();
+        $isBranchManager = !$isCompanyAdmin && $user->isBranchManager();
+        $isBranchAdmin   = !$isCompanyAdmin && !$isBranchManager && $user->isBranchAdmin();
+        $isTl            = !$isCompanyAdmin && !$isBranchManager && !$isBranchAdmin && $user->hasTlLikeRole();
+        $isExecutive     = !$isCompanyAdmin && !$isBranchManager && !$isBranchAdmin && !$isTl;
+
+        $isAdminLike = $isCompanyAdmin || $isBranchManager || $isBranchAdmin;
+        $isTlLike    = $isTl;
+
+        $visibleUserIds = $this->resolveVisibleUserIds($user);
 
         // Query visible users for filter dropdown
-        $assignableUsers = $this->visibility->visibleAssignableUsers();
+        if ($visibleUserIds !== null) {
+            $assignableUsers = User::withoutGlobalScope('branch')
+                ->whereIn('id', $visibleUserIds)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'branch_id']);
+        } else {
+            $assignableUsers = $this->visibility->visibleAssignableUsers($user);
+        }
         if ($assignableUsers->isEmpty()) {
             $assignableUsers = collect([$user]);
         }
 
-        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        // Branch filter dropdown
+        if ($isBranchAdmin || $isBranchManager) {
+            $userBranchIds = $user->getMyBranchIds();
+            $branches = Branch::whereIn('id', $userBranchIds)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
+            if ($branches->isEmpty() && $user->branch) {
+                $branches = collect([$user->branch]);
+            }
+        } elseif ($isCompanyAdmin) {
+            $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        } else {
+            $branches = $user->branch ? collect([$user->branch]) : collect();
+        }
 
         // Base query for SalesDailyClosing submissions
         $query = SalesDailyClosing::with([
@@ -53,18 +80,18 @@ class SalesDailyClosingController extends Controller
         ])->latest('closing_date')->latest('id');
 
         // Apply visibility
-        if (!$isAdminLike) {
-            if ($isTlLike) {
-                $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                $query->whereIn('user_id', $subordinateIds);
-            } else {
-                $query->where('user_id', $user->id);
-            }
+        if ($visibleUserIds !== null) {
+            $query->whereIn('user_id', $visibleUserIds);
         }
 
         // Apply filters
         if ($request->filled('user_id')) {
-            $query->where('user_id', (int) $request->input('user_id'));
+            $filterUserId = (int) $request->input('user_id');
+            if ($visibleUserIds === null || in_array($filterUserId, $visibleUserIds, true)) {
+                $query->where('user_id', $filterUserId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         if ($request->filled('branch_id')) {
@@ -101,9 +128,13 @@ class SalesDailyClosingController extends Controller
         // Calculate KPI summary for the selected date & user filter
         $targetUserId = $request->filled('user_id')
             ? (int) $request->input('user_id')
-            : ($isAdminLike || $isTlLike ? null : $user->id);
+            : ($isExecutive ? $user->id : null);
 
-        $kpiStats = $this->calculateCallStats($targetUserId, $selectedDate);
+        if ($targetUserId && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
+            $targetUserId = $user->id;
+        }
+
+        $kpiStats = $this->calculateCallStats($targetUserId, $selectedDate, $visibleUserIds);
 
         // Check if the current user has submitted today's closing
         $myTodayClosing = SalesDailyClosing::where('user_id', $user->id)
@@ -151,8 +182,10 @@ class SalesDailyClosingController extends Controller
         $targetUserId = (int) ($request->input('user_id') ?: $user->id);
         $closingDate = trim((string) $request->input('closing_date', now()->toDateString()));
 
+        $visibleUserIds = $this->resolveVisibleUserIds($user);
+
         // Check permission if viewing another user's stats
-        if ($targetUserId !== $user->id && !$user->hasAdminLikeRole() && !$user->hasTlLikeRole()) {
+        if ($targetUserId !== $user->id && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
             return response()->json(['success' => false, 'message' => 'Unauthorized access'], 403);
         }
 
@@ -162,7 +195,7 @@ class SalesDailyClosingController extends Controller
             $date = now()->toDateString();
         }
 
-        $stats = $this->calculateCallStats($targetUserId, $date);
+        $stats = $this->calculateCallStats($targetUserId, $date, $visibleUserIds);
 
         // Check if closing already exists for this user and date
         $existing = SalesDailyClosing::where('user_id', $targetUserId)
@@ -203,10 +236,13 @@ class SalesDailyClosingController extends Controller
         $date = trim((string) $request->input('date', now()->toDateString()));
         $targetUserId = $request->filled('user_id') ? (int) $request->input('user_id') : null;
 
-        $isAdminLike = $user->hasAdminLikeRole() || $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin();
-        $isTlLike = $user->hasTlLikeRole();
+        $visibleUserIds = $this->resolveVisibleUserIds($user);
 
-        if (!$isAdminLike && !$isTlLike) {
+        if ($targetUserId && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
+            $targetUserId = $user->id;
+        }
+
+        if ($visibleUserIds !== null && count($visibleUserIds) === 1 && in_array($user->id, $visibleUserIds, true)) {
             $targetUserId = $user->id;
         }
 
@@ -225,9 +261,8 @@ class SalesDailyClosingController extends Controller
 
         if ($targetUserId) {
             $query->where('user_id', $targetUserId);
-        } elseif ($isTlLike && !$isAdminLike) {
-            $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-            $query->whereIn('user_id', $subordinateIds);
+        } elseif ($visibleUserIds !== null) {
+            $query->whereIn('user_id', $visibleUserIds);
         }
 
         if ($request->filled('branch_id')) {
@@ -248,15 +283,14 @@ class SalesDailyClosingController extends Controller
                         ->from('lead_call_updates as prev')
                         ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
                         ->whereDate('prev.called_at', '<', $date);
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $isTlLike, $isAdminLike, $user) {
+                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
                         ->whereDate('called_at', $date);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
-                    } elseif ($isTlLike && !$isAdminLike) {
-                        $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                        $sub->whereIn('user_id', $subordinateIds);
+                    } elseif ($visibleUserIds !== null) {
+                        $sub->whereIn('user_id', $visibleUserIds);
                     }
                     $sub->groupBy('lead_id');
                 });
@@ -269,15 +303,14 @@ class SalesDailyClosingController extends Controller
                         ->from('lead_call_updates as prev')
                         ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
                         ->whereDate('prev.called_at', '<', $date);
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $isTlLike, $isAdminLike, $user) {
+                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
                         ->whereDate('called_at', $date);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
-                    } elseif ($isTlLike && !$isAdminLike) {
-                        $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                        $sub->whereIn('user_id', $subordinateIds);
+                    } elseif ($visibleUserIds !== null) {
+                        $sub->whereIn('user_id', $visibleUserIds);
                     }
                     $sub->groupBy('lead_id');
                 });
@@ -292,15 +325,14 @@ class SalesDailyClosingController extends Controller
                       ->orWhere('outcome', '6')
                       ->orWhere('outcome', 'not_interested')
                       ->orWhere('outcome', 'closed');
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $isTlLike, $isAdminLike, $user) {
+                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
                         ->whereDate('called_at', $date);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
-                    } elseif ($isTlLike && !$isAdminLike) {
-                        $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                        $sub->whereIn('user_id', $subordinateIds);
+                    } elseif ($visibleUserIds !== null) {
+                        $sub->whereIn('user_id', $visibleUserIds);
                     }
                     $sub->groupBy('lead_id');
                 });
@@ -308,15 +340,14 @@ class SalesDailyClosingController extends Controller
 
             case 'unique_calls':
                 $metricTitle = 'Unique Calls (Distinct Leads Contacted)';
-                $query->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $isTlLike, $isAdminLike, $user) {
+                $query->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
                         ->whereDate('called_at', $date);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
-                    } elseif ($isTlLike && !$isAdminLike) {
-                        $subordinateIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
-                        $sub->whereIn('user_id', $subordinateIds);
+                    } elseif ($visibleUserIds !== null) {
+                        $sub->whereIn('user_id', $visibleUserIds);
                     }
                     $sub->groupBy('lead_id');
                 });
@@ -388,15 +419,21 @@ class SalesDailyClosingController extends Controller
             'closing_notes.required'       => 'Please enter your day closing update notes.',
         ]);
 
-        $targetUserId = !empty($validated['user_id']) && ($currentUser->hasAdminLikeRole() || $currentUser->hasTlLikeRole())
+        $visibleUserIds = $this->resolveVisibleUserIds($currentUser);
+
+        $targetUserId = !empty($validated['user_id'])
             ? (int) $validated['user_id']
             : $currentUser->id;
+
+        if ($targetUserId !== $currentUser->id && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
+            $targetUserId = $currentUser->id;
+        }
 
         $targetUser = User::find($targetUserId) ?: $currentUser;
         $closingDate = Carbon::parse($validated['closing_date'])->toDateString();
 
         // Calculate verified call stats directly from system logs
-        $stats = $this->calculateCallStats($targetUserId, $closingDate);
+        $stats = $this->calculateCallStats($targetUserId, $closingDate, $visibleUserIds);
 
         // Process tomorrow plans or planned leave
         $isOnLeave = $request->boolean('is_on_leave_tomorrow');
@@ -473,9 +510,10 @@ class SalesDailyClosingController extends Controller
     public function update(Request $request, SalesDailyClosing $closing): RedirectResponse|JsonResponse
     {
         $currentUser = auth()->user();
+        $visibleUserIds = $this->resolveVisibleUserIds($currentUser);
 
         // Check authorization
-        if ($closing->user_id !== $currentUser->id && !$currentUser->hasAdminLikeRole() && !$currentUser->hasTlLikeRole()) {
+        if ($closing->user_id !== $currentUser->id && $visibleUserIds !== null && !in_array($closing->user_id, $visibleUserIds, true)) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
             }
@@ -494,7 +532,7 @@ class SalesDailyClosingController extends Controller
         ]);
 
         // Re-check live call stats
-        $stats = $this->calculateCallStats($closing->user_id, $closing->closing_date->toDateString());
+        $stats = $this->calculateCallStats($closing->user_id, $closing->closing_date->toDateString(), $visibleUserIds);
 
         // Process tomorrow plans or planned leave
         $isOnLeave = $request->boolean('is_on_leave_tomorrow');
@@ -544,7 +582,9 @@ class SalesDailyClosingController extends Controller
     public function updateStatus(Request $request, SalesDailyClosing $closing): JsonResponse|RedirectResponse
     {
         $currentUser = auth()->user();
-        if (!$currentUser->hasAdminLikeRole() && !$currentUser->hasTlLikeRole()) {
+        $visibleUserIds = $this->resolveVisibleUserIds($currentUser);
+
+        if ($closing->user_id !== $currentUser->id && $visibleUserIds !== null && !in_array($closing->user_id, $visibleUserIds, true)) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
             }
@@ -578,7 +618,9 @@ class SalesDailyClosingController extends Controller
     public function destroy(SalesDailyClosing $closing): RedirectResponse|JsonResponse
     {
         $currentUser = auth()->user();
-        if ($closing->user_id !== $currentUser->id && !$currentUser->hasAdminLikeRole()) {
+        $visibleUserIds = $this->resolveVisibleUserIds($currentUser);
+
+        if ($closing->user_id !== $currentUser->id && $visibleUserIds !== null && !in_array($closing->user_id, $visibleUserIds, true)) {
             abort(403);
         }
 
@@ -602,12 +644,14 @@ class SalesDailyClosingController extends Controller
      * 6. Converted / Won Leads count on that date
      * 7. Quotations Created count on that date
      */
-    private function calculateCallStats(?int $userId, string $date): array
+    private function calculateCallStats(?int $userId, string $date, ?array $allowedUserIds = null): array
     {
         // 1. Total Calls Made on that date
         $totalCallsQuery = LeadCallUpdate::whereDate('called_at', $date);
         if ($userId) {
             $totalCallsQuery->where('user_id', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $totalCallsQuery->whereIn('user_id', $allowedUserIds);
         }
         $totalCalls = (int) $totalCallsQuery->count();
 
@@ -615,6 +659,8 @@ class SalesDailyClosingController extends Controller
         $uniqueCallsQuery = LeadCallUpdate::whereDate('called_at', $date);
         if ($userId) {
             $uniqueCallsQuery->where('user_id', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $uniqueCallsQuery->whereIn('user_id', $allowedUserIds);
         }
         $uniqueCalls = (int) $uniqueCallsQuery->distinct('lead_id')->count('lead_id');
 
@@ -628,6 +674,8 @@ class SalesDailyClosingController extends Controller
             });
         if ($userId) {
             $newCallsQuery->where('user_id', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $newCallsQuery->whereIn('user_id', $allowedUserIds);
         }
         $newCalls = (int) $newCallsQuery->distinct('lead_id')->count('lead_id');
 
@@ -641,6 +689,8 @@ class SalesDailyClosingController extends Controller
             });
         if ($userId) {
             $followupCallsQuery->where('user_id', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $followupCallsQuery->whereIn('user_id', $allowedUserIds);
         }
         $followupCalls = (int) $followupCallsQuery->distinct('lead_id')->count('lead_id');
 
@@ -655,6 +705,8 @@ class SalesDailyClosingController extends Controller
             });
         if ($userId) {
             $onetimeCallsQuery->where('user_id', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $onetimeCallsQuery->whereIn('user_id', $allowedUserIds);
         }
         $onetimeCalls = (int) $onetimeCallsQuery->distinct('lead_id')->count('lead_id');
 
@@ -671,6 +723,8 @@ class SalesDailyClosingController extends Controller
 
         if ($userId) {
             $convertedQuery->where('assigned_to', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $convertedQuery->whereIn('assigned_to', $allowedUserIds);
         }
         $convertedCount = (int) $convertedQuery->count();
 
@@ -678,6 +732,8 @@ class SalesDailyClosingController extends Controller
         $quotationsQuery = Quotation::whereDate('created_at', $date);
         if ($userId) {
             $quotationsQuery->where('created_by', $userId);
+        } elseif ($allowedUserIds !== null) {
+            $quotationsQuery->whereIn('created_by', $allowedUserIds);
         }
         $quotationsCount = (int) $quotationsQuery->count();
 
@@ -690,6 +746,101 @@ class SalesDailyClosingController extends Controller
             'converted_count'  => $convertedCount,
             'quotations_count' => $quotationsCount,
         ];
+    }
+
+    /**
+     * Resolve visible user IDs based on exact role rules:
+     * - Company Admin / Super Admin / CBO: null (all company data)
+     * - Branch Admin: all users in their branches
+     * - Branch Manager: all users mapped under them (descendants) + self
+     * - Sales TL: all users mapped under them (descendants) + self
+     * - Sales Executive: only own data [self]
+     */
+    private function resolveVisibleUserIds(?User $user = null): ?array
+    {
+        $user ??= auth()->user();
+        if (!$user) {
+            return [];
+        }
+
+        // 1. Company-wide users (Super Admin, Company Admin, CBO)
+        if ($user->isSuperAdmin() || $user->isCompanyAdminRole() || $user->isCbo()) {
+            return null;
+        }
+
+        // 2. Branch Manager: Users in additional branches + users mapped under them in HO + self
+        if ($user->isBranchManager()) {
+            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = [1];
+            }
+
+            $allBranchIds = $user->getMyBranchIds();
+            $additionalBranchIds = array_values(array_filter($allBranchIds, fn($id) => !in_array((int)$id, $defaultBranchIds)));
+
+            $descendants = $this->visibility->descendantUserIds($user);
+            $hoDescendantIds = [];
+            if ($descendants->isNotEmpty()) {
+                $hoDescendantIds = User::withoutGlobalScope('branch')
+                    ->whereIn('id', $descendants)
+                    ->whereIn('branch_id', $defaultBranchIds)
+                    ->pluck('id')
+                    ->all();
+            }
+
+            return User::withoutGlobalScope('branch')
+                ->where('is_active', true)
+                ->where(function ($query) use ($additionalBranchIds, $hoDescendantIds, $user) {
+                    $query->where('id', $user->id);
+
+                    if (!empty($additionalBranchIds)) {
+                        $query->orWhereIn('branch_id', $additionalBranchIds)
+                              ->orWhereExists(function ($sub) use ($additionalBranchIds) {
+                                  $sub->select(DB::raw(1))
+                                      ->from('branch_user')
+                                      ->whereColumn('branch_user.user_id', 'users.id')
+                                      ->whereIn('branch_user.branch_id', $additionalBranchIds);
+                              });
+                    }
+
+                    if (!empty($hoDescendantIds)) {
+                        $query->orWhereIn('id', $hoDescendantIds);
+                    }
+                })
+                ->pluck('id')
+                ->push($user->id)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+
+        // 3. Branch Admin: Users in their branches
+        if ($user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            try {
+                return User::withoutGlobalScope('branch')
+                    ->where('is_active', true)
+                    ->when(!empty($branchIds), fn ($query) => $query->inBranches($branchIds))
+                    ->when(empty($branchIds) && $user->branch_id, fn ($query) => $query->inBranches([(int) $user->branch_id]))
+                    ->pluck('id')
+                    ->push($user->id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            } catch (\Throwable $e) {
+                return [$user->id];
+            }
+        }
+
+        // 4. Sales TL: Users mapped under them (descendants) + self
+        if ($user->hasTlLikeRole()) {
+            $descendants = $this->visibility->descendantUserIds($user);
+            return $descendants->push($user->id)->unique()->values()->all();
+        }
+
+        // 5. Sales Executive / Other: Only own data
+        return [$user->id];
     }
 
     /**
