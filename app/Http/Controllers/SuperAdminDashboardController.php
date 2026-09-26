@@ -17,11 +17,12 @@ use App\Models\LeadSource;
 use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\ProductCategory;
-
+use App\Models\ProductionInitiation;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -625,6 +626,7 @@ class SuperAdminDashboardController extends ApiController
         $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
+        $cstMetrics = $this->buildCstProspectMetrics($request);
 
         // ── Day Sales Tracker (Current Date Converted Products) ──
         $todayConvertedQuery = LeadProduct::query()
@@ -692,6 +694,9 @@ class SuperAdminDashboardController extends ApiController
                 'coco_prospects_count'       => $cpMetrics['coco']['count'],
                 'coco_deal_value'            => $cpMetrics['coco']['deal_value'],
                 'coco_expected_value'        => $cpMetrics['coco']['expected_value'],
+                'cst_prospects_count'        => $cstMetrics['count'],
+                'cst_deal_value'             => $cstMetrics['deal_value'],
+                'cst_expected_value'         => $cstMetrics['expected_value'],
             ],
 
             'forecasting' => [
@@ -704,6 +709,7 @@ class SuperAdminDashboardController extends ApiController
                 'nst_ho'                     => $cpMetrics['nst_ho'],
                 'non_coco'                   => $cpMetrics['non_coco'],
                 'coco'                       => $cpMetrics['coco'],
+                'cst'                        => $cstMetrics,
                 'active_branches'            => $this->buildActiveBranchesHotMetrics($request),
             ],
 
@@ -1745,6 +1751,7 @@ class SuperAdminDashboardController extends ApiController
         $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
+        $cstMetrics = $this->buildCstProspectMetrics($request);
 
         // ── Day Sales Tracker (Current Date Converted Products) ──
         $todayConvertedQuery = LeadProduct::query()
@@ -1811,6 +1818,9 @@ class SuperAdminDashboardController extends ApiController
                 'coco_prospects_count'       => $cpMetrics['coco']['count'],
                 'coco_deal_value'            => $cpMetrics['coco']['deal_value'],
                 'coco_expected_value'        => $cpMetrics['coco']['expected_value'],
+                'cst_prospects_count'        => $cstMetrics['count'],
+                'cst_deal_value'             => $cstMetrics['deal_value'],
+                'cst_expected_value'         => $cstMetrics['expected_value'],
             ],
 
             'forecasting' => [
@@ -1823,6 +1833,7 @@ class SuperAdminDashboardController extends ApiController
                 'nst_ho'                     => $cpMetrics['nst_ho'],
                 'non_coco'                   => $cpMetrics['non_coco'],
                 'coco'                       => $cpMetrics['coco'],
+                'cst'                        => $cstMetrics,
                 'active_branches'            => $this->buildActiveBranchesHotMetrics($request),
             ],
 
@@ -2248,6 +2259,216 @@ class SuperAdminDashboardController extends ApiController
     }
 
     /**
+     * Build CST prospect items combining:
+     * 1. CST dashboard current month renewals (count-wise / renewal products with end date in current month).
+     * 2. Development department projects moved to production with expected date in current month.
+     */
+    public function getCstProspectItems(?Request $request = null): Collection
+    {
+        $currentUser = auth('sanctum')->user() ?: ($request?->user() ?: auth()->user());
+        $cmStart = now()->startOfMonth();
+        $cmEnd   = now()->endOfMonth();
+
+        $items = collect();
+        $seenPiIds = [];
+        $seenLpIds = [];
+
+        $isCompanyAdminOrCbo = $currentUser && (
+            $currentUser->isSuperAdmin() ||
+            $currentUser->isSystemAdmin() ||
+            $currentUser->isCompanyAdminRole() ||
+            $currentUser->isCbo()
+        );
+
+        // 1. Fetch count-wise recurring initiations for renewals (matching CST dashboard)
+        $renewalPisQuery = ProductionInitiation::query()
+            ->with([
+                'lead' => function ($lq) {
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
+                },
+                'leadProduct',
+                'product',
+                'department',
+            ])
+            ->whereHas('product', function ($q) {
+                $q->where('count_wise_report', true)
+                  ->orWhere('is_this_renewal_product', true);
+            });
+
+        if (!$isCompanyAdminOrCbo) {
+            $renewalPisQuery->whereHas('lead', function ($lq) use ($currentUser, $request) {
+                $this->visibility->applyLeadVisibility($lq, $currentUser);
+                if ($request && $request->filled('user_id')) {
+                    $lq->where('assigned_to', $request->user_id);
+                }
+            });
+        } elseif ($request && $request->filled('user_id')) {
+            $renewalPisQuery->whereHas('lead', function ($lq) use ($request) {
+                $lq->where('assigned_to', $request->user_id);
+            });
+        }
+
+        $renewalPis = $renewalPisQuery->get();
+
+        foreach ($renewalPis as $pi) {
+            $rDateStr = null;
+            $formData = is_array($pi->custom_form_data)
+                ? $pi->custom_form_data
+                : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+
+            foreach ($formData as $field) {
+                if (!is_array($field)) continue;
+                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                $fieldVal = $field['value'] ?? '';
+                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+
+                if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date'], true)) {
+                    if (!empty($val)) {
+                        try {
+                            $rDateStr = Carbon::parse($val)->toDateString();
+                            break;
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+
+            if (!$rDateStr && $pi->project_delivery_date) {
+                $rDateStr = Carbon::parse($pi->project_delivery_date)->toDateString();
+            }
+
+            if ($rDateStr) {
+                $rDate = Carbon::parse($rDateStr);
+                if ($rDate->between($cmStart, $cmEnd)) {
+                    $lead = $pi->lead;
+                    $lp = $pi->leadProduct;
+                    $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+                    $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
+
+                    $seenPiIds[$pi->id] = true;
+                    if ($pi->lead_product_id) {
+                        $seenLpIds[$pi->lead_product_id] = true;
+                    }
+
+                    $assignedName = $lead?->customerSupportExecutive?->name
+                        ?: ($lead?->customerSupportTl?->name
+                            ?: ($lead?->assignedTo?->name ?: 'Unassigned'));
+
+                    $items->push([
+                        'pi_id'            => $pi->id,
+                        'lead_id'          => $pi->lead_id,
+                        'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
+                        'project_view_url' => url('/projects-details/' . $pi->id),
+                        'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
+                        'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
+                        'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
+                        'status'           => 'Renewal',
+                        'deal_value'       => $dealVal,
+                        'expected_value'   => $expVal,
+                        'closure_date'     => $rDate->format('d M Y'),
+                        'closure_date_raw' => $rDate->format('Y-m-d'),
+                        'assigned_to'      => $assignedName,
+                        'executive_name'   => $assignedName,
+                        'branch_name'      => $lead?->branch?->name ?: 'General',
+                        'source_type'      => 'renewal',
+                    ]);
+                }
+            }
+        }
+
+        // 2. Fetch Development Department projects moved to production with expected date in current month
+        $devPisQuery = ProductionInitiation::query()
+            ->with([
+                'lead' => function ($lq) {
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name']);
+                },
+                'leadProduct',
+                'product',
+                'department',
+            ])
+            ->where(function ($q) {
+                $q->where('department_id', 1)
+                  ->orWhereHas('department', function ($dq) {
+                      $dq->where('name', 'like', '%develop%');
+                  });
+            })
+            ->where(function ($q) use ($cmStart, $cmEnd) {
+                $q->whereBetween('expected_date', [$cmStart, $cmEnd])
+                  ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
+                      $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
+                  });
+            });
+
+        if (!$isCompanyAdminOrCbo) {
+            $devPisQuery->whereHas('lead', function ($lq) use ($currentUser, $request) {
+                $this->visibility->applyLeadVisibility($lq, $currentUser);
+                if ($request && $request->filled('user_id')) {
+                    $lq->where('assigned_to', $request->user_id);
+                }
+            });
+        } elseif ($request && $request->filled('user_id')) {
+            $devPisQuery->whereHas('lead', function ($lq) use ($request) {
+                $lq->where('assigned_to', $request->user_id);
+            });
+        }
+
+        $devPis = $devPisQuery->get();
+
+        foreach ($devPis as $pi) {
+            if (isset($seenPiIds[$pi->id]) || ($pi->lead_product_id && isset($seenLpIds[$pi->lead_product_id]))) {
+                continue;
+            }
+
+            $lead = $pi->lead;
+            $lp = $pi->leadProduct;
+            $expDate = $pi->expected_date ?? $lp?->closure_date;
+            if (!$expDate) continue;
+
+            $cExpDate = Carbon::parse($expDate);
+            if (!$cExpDate->between($cmStart, $cmEnd)) continue;
+
+            $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+            $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
+
+            $assignedName = $lead?->customerSupportExecutive?->name
+                ?: ($lead?->assignedTo?->name ?: 'Unassigned');
+
+            $items->push([
+                'pi_id'            => $pi->id,
+                'lead_id'          => $pi->lead_id,
+                'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
+                'project_view_url' => url('/projects-details/' . $pi->id),
+                'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
+                'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
+                'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Development Project')),
+                'status'           => $lp?->product_status ? ucfirst($lp->product_status) : ($pi->status ? ucfirst($pi->status) : 'Development Prospect'),
+                'deal_value'       => $dealVal,
+                'expected_value'   => $expVal,
+                'closure_date'     => $cExpDate->format('d M Y'),
+                'closure_date_raw' => $cExpDate->format('Y-m-d'),
+                'assigned_to'      => $assignedName,
+                'executive_name'   => $assignedName,
+                'branch_name'      => $lead?->branch?->name ?: 'General',
+                'source_type'      => 'development',
+            ]);
+        }
+
+        return $items;
+    }
+
+    public function buildCstProspectMetrics(?Request $request = null): array
+    {
+        $items = $this->getCstProspectItems($request);
+
+        return [
+            'count'          => $items->count(),
+            'deal_value'     => (float) $items->sum('deal_value'),
+            'expected_value' => (float) $items->sum('expected_value'),
+            'product_name'   => 'CST',
+        ];
+    }
+
+    /**
      * Get hot leads for a specific branch or card category in the current month by closure_date.
      */
     public function branchHotLeads(Request $request): JsonResponse
@@ -2262,6 +2483,31 @@ class SuperAdminDashboardController extends ApiController
 
         if (!$type && !$branchId) {
             return $this->error('Type or Branch ID is required.', 422);
+        }
+
+        if ($type === 'cst') {
+            $subtitle = 'Current Month Renewals & Development Prospects';
+
+            $items = $this->getCstProspectItems($request);
+            $rows = $items->values()->map(function ($item, $idx) {
+                $item['index'] = $idx + 1;
+                return $item;
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'branch' => [
+                        'id'          => 'cst',
+                        'name'        => 'CST',
+                        'subtitle'    => $subtitle,
+                        'branch_type' => 'CST',
+                    ],
+                    'leads'          => $rows,
+                    'total_deal'     => (float) $rows->sum('deal_value'),
+                    'total_expected' => (float) $rows->sum('expected_value'),
+                ],
+            ]);
         }
 
         $branch = null;

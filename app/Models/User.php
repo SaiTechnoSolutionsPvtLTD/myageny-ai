@@ -637,6 +637,41 @@ class User extends Authenticatable
         });
     }
 
+    public function isProjectCoordinator(): bool
+    {
+        if ($this->isDevelopmentProjectCoordinator()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+        if ($keys->intersect(['project_coordinator', 'project_coordination', 'pc', 'development_project_coordinator'])->isNotEmpty()) {
+            return true;
+        }
+
+        return $this->resolvedRoles(withDepartment: true)->contains(function ($role) {
+            $roleNameKey = \Illuminate\Support\Str::slug((string) $role->name, '_');
+            $displayNameKey = \Illuminate\Support\Str::slug((string) ($role->display_name ?? ''), '_');
+
+            return collect([$roleNameKey, $displayNameKey])->intersect([
+                'project_coordinator',
+                'project_coordination',
+                'pc',
+                'development_project_coordinator',
+            ])->isNotEmpty();
+        });
+    }
+
+    public function canAccessProjectProspect(): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin()) {
+            return true;
+        }
+
+        return $this->isCustomerSuccessUser()
+            || $this->isCbo()
+            || $this->isProjectCoordinator();
+    }
+
     public function isDesigningTl(): bool
     {
         if ($this->hasAdminLikeRole()) {

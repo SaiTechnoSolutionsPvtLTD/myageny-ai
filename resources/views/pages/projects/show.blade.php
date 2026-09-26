@@ -369,7 +369,23 @@
 
     $canSeeTestingTab = ($isDevDept || $isDevUser || $isTestingUser) && ! $isNonDevDept;
 
+    $canSeeProspectTab = $canSeeProspectTab ?? ($currentUser && (
+        $currentUser->canAccessProjectProspect() ||
+        $currentUser->isDevelopmentProjectCoordinator() ||
+        $currentUser->isProjectCoordinator() ||
+        $currentUser->isCustomerSuccessUser() ||
+        $currentUser->isCbo() ||
+        $currentUser->isSuperAdmin() ||
+        $currentUser->isCompanyAdmin()
+    ));
+
+    $prospectExpectedDate = $projectItem->expected_date ?? $projectItem->leadProduct?->closure_date;
+    $prospectExpectedValue = $projectItem->expected_value ?? $projectItem->leadProduct?->expected_value;
+
     if ($activeTab === 'testing' && ! $canSeeTestingTab) {
+        $activeTab = 'overview';
+    }
+    if ($activeTab === 'prospect' && ! $canSeeProspectTab) {
         $activeTab = 'overview';
     }
 @endphp
@@ -413,6 +429,11 @@
             @if($canSeeTestingTab)
             <button type="button" class="ps-tab-btn {{ $activeTab === 'testing' ? 'is-active' : '' }}" data-tab-target="testing">
                 <i class="bi bi-bug" style="margin-right:5px;"></i>Testing
+            </button>
+            @endif
+            @if($canSeeProspectTab)
+            <button type="button" class="ps-tab-btn {{ $activeTab === 'prospect' ? 'is-active' : '' }}" data-tab-target="prospect" id="prospect-tab-btn">
+                <i class="bi bi-graph-up-arrow" style="margin-right:5px; color:#fe5f04;"></i>Prospect
             </button>
             @endif
             @if($isContentCalendarDept)
@@ -1679,6 +1700,167 @@
                     @endif
                 </div>
             </section>
+        </section>
+        @endif
+
+        {{-- Prospect Panel Section --}}
+        @if($canSeeProspectTab)
+        <section class="ps-tab-panel {{ $activeTab === 'prospect' ? 'is-active' : '' }}" data-tab-panel="prospect">
+            <div class="ps-grid">
+                <div class="ps-stack" style="grid-column: 1 / -1;">
+                    <section class="ps-card" style="box-shadow: 0 4px 20px rgba(0,0,0,0.06); border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
+                        <div class="ps-card-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-bottom: 1.5px solid #edf2f7; padding: 20px 24px;">
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                                <div style="width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #fff7ed, #ffedd5); color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid #fed7aa; box-shadow: 0 2px 6px rgba(234, 88, 12, 0.15);">
+                                    📈
+                                </div>
+                                <div>
+                                    <div class="ps-card-title" style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0; letter-spacing: -0.02em;">
+                                        Project Prospect Tracking
+                                    </div>
+                                    <div class="ps-card-sub" style="font-size: 13px; color: #64748b; margin-top: 3px;">
+                                        Manage Expected Closure Date &amp; Expected Value (Authorized for CST Team, CBO &amp; Project Coordinator)
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 12px; font-weight: 700; color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px;">
+                                    <i class="bi bi-shield-check"></i> CST &amp; CBO Managed
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="ps-card-body" style="padding: 24px;">
+                            {{-- Metrics Highlights --}}
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 28px;">
+                                {{-- Card 1: Expected Date --}}
+                                <div style="background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%); border: 1.5px solid #dbeafe; border-radius: 14px; padding: 18px 20px; position: relative;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <span style="font-size: 11.5px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.05em;">Expected Closure Date</span>
+                                        <span style="width: 32px; height: 32px; border-radius: 8px; background: #dbeafe; color: #1e40af; display: flex; align-items: center; justify-content: center; font-size: 15px;">📅</span>
+                                    </div>
+                                    <div id="prospectCardExpectedDate" style="font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em;">
+                                        {{ $prospectExpectedDate ? \Illuminate\Support\Carbon::parse($prospectExpectedDate)->format('d M Y') : 'Not Set' }}
+                                    </div>
+                                    <div id="prospectCardExpectedDateSub" style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">
+                                        @if($prospectExpectedDate)
+                                            @php $cDate = \Illuminate\Support\Carbon::parse($prospectExpectedDate); @endphp
+                                            {{ $cDate->isPast() ? 'Overdue (' . $cDate->diffForHumans() . ')' : 'Target: ' . $cDate->diffForHumans() }}
+                                        @else
+                                            No date specified yet
+                                        @endif
+                                    </div>
+                                </div>
+
+                                {{-- Card 2: Expected Value --}}
+                                <div style="background: linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%); border: 1.5px solid #dcfce7; border-radius: 14px; padding: 18px 20px; position: relative;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <span style="font-size: 11.5px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.05em;">Expected Value</span>
+                                        <span style="width: 32px; height: 32px; border-radius: 8px; background: #dcfce7; color: #166534; display: flex; align-items: center; justify-content: center; font-size: 15px;">💰</span>
+                                    </div>
+                                    <div id="prospectCardExpectedValue" style="font-size: 20px; font-weight: 900; color: #15803d; letter-spacing: -0.02em;">
+                                        {{ $prospectExpectedValue !== null && $prospectExpectedValue !== '' ? '₹' . number_format((float) $prospectExpectedValue, 2) : 'Not Set' }}
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">
+                                        Forecasted Collection Value
+                                    </div>
+                                </div>
+
+                                {{-- Card 3: Product & Department Info --}}
+                                <div style="background: linear-gradient(135deg, #fdf4ff 0%, #f8fafc 100%); border: 1.5px solid #fae8ff; border-radius: 14px; padding: 18px 20px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <span style="font-size: 11.5px; font-weight: 800; color: #86198f; text-transform: uppercase; letter-spacing: 0.05em;">Product / Service</span>
+                                        <span style="width: 32px; height: 32px; border-radius: 8px; background: #fae8ff; color: #86198f; display: flex; align-items: center; justify-content: center; font-size: 15px;">📦</span>
+                                    </div>
+                                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $projectItem->product_name ?: ($projectItem->leadProduct?->product_name ?? '-') }}">
+                                        {{ $projectItem->product_name ?: ($projectItem->leadProduct?->product_name ?? '-') }}
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">
+                                        Department: {{ $projectItem->department?->name ?? 'Development' }}
+                                    </div>
+                                </div>
+
+                                {{-- Card 4: Client & Company Info --}}
+                                <div style="background: linear-gradient(135deg, #fff7ed 0%, #f8fafc 100%); border: 1.5px solid #ffedd5; border-radius: 14px; padding: 18px 20px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <span style="font-size: 11.5px; font-weight: 800; color: #c2410c; text-transform: uppercase; letter-spacing: 0.05em;">Client Details</span>
+                                        <span style="width: 32px; height: 32px; border-radius: 8px; background: #ffedd5; color: #c2410c; display: flex; align-items: center; justify-content: center; font-size: 15px;">👤</span>
+                                    </div>
+                                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $projectItem->client_name ?: ($projectItem->lead?->client_name ?? '-') }}">
+                                        {{ $projectItem->client_name ?: ($projectItem->lead?->client_name ?? '-') }}
+                                    </div>
+                                    <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">
+                                        {{ $projectItem->company_name ?: ($projectItem->lead?->company_name ?? '-') }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Update / Entry Form Section --}}
+                            <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                                <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;">
+                                    <span>✏️</span> Enter / Update Prospect Details
+                                </div>
+
+                                <form id="prospectUpdateForm" method="POST" action="{{ route('projects.prospect.update', $projectItem) }}" onsubmit="handleProspectSubmit(event, this)">
+                                    @csrf
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 22px;">
+                                        {{-- Expected Date Field --}}
+                                        <div>
+                                            <label for="prospect_expected_date" style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 8px;">
+                                                Expected Date <span style="font-size: 11px; font-weight: 500; color: #64748b;">(Target Closure / Renewal Date)</span>
+                                            </label>
+                                            <input type="date"
+                                                   id="prospect_expected_date"
+                                                   name="expected_date"
+                                                   value="{{ old('expected_date', $prospectExpectedDate ? \Illuminate\Support\Carbon::parse($prospectExpectedDate)->format('Y-m-d') : '') }}"
+                                                   style="width: 100%; height: 44px; padding: 8px 14px; border-radius: 10px; border: 1.5px solid #cbd5e1; font-size: 14px; font-weight: 600; color: #0f172a; outline: none; background: #f8fafc; transition: border-color 0.2s, box-shadow 0.2s;"
+                                                   onfocus="this.style.borderColor='#fe5f04'; this.style.boxShadow='0 0 0 3px rgba(254,95,4,0.15)';"
+                                                   onblur="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none';">
+                                            <div style="font-size: 11.5px; color: #64748b; margin-top: 5px;">
+                                                Set the forecasted milestone or project closure date.
+                                            </div>
+                                        </div>
+
+                                        {{-- Expected Value Field --}}
+                                        <div>
+                                            <label for="prospect_expected_value" style="display: block; font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 8px;">
+                                                Expected Value (₹) <span style="font-size: 11px; font-weight: 500; color: #64748b;">(Expected Collection / Deal Value)</span>
+                                            </label>
+                                            <div style="position: relative;">
+                                                <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 800; color: #64748b; font-size: 15px;">₹</span>
+                                                <input type="number"
+                                                       step="0.01"
+                                                       min="0"
+                                                       id="prospect_expected_value"
+                                                       name="expected_value"
+                                                       placeholder="e.g. 50000"
+                                                       value="{{ old('expected_value', $prospectExpectedValue !== null ? $prospectExpectedValue : '') }}"
+                                                       style="width: 100%; height: 44px; padding: 8px 14px 8px 32px; border-radius: 10px; border: 1.5px solid #cbd5e1; font-size: 14px; font-weight: 700; color: #0f172a; outline: none; background: #f8fafc; transition: border-color 0.2s, box-shadow 0.2s;"
+                                                       onfocus="this.style.borderColor='#fe5f04'; this.style.boxShadow='0 0 0 3px rgba(254,95,4,0.15)';"
+                                                       onblur="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none';">
+                                            </div>
+                                            <div style="font-size: 11.5px; color: #64748b; margin-top: 5px;">
+                                                Enter the expected collection or prospect valuation in INR.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 18px;">
+                                        <div id="prospectFeedbackMsg" style="display: none; font-size: 13px; font-weight: 700; align-items: center; gap: 6px;"></div>
+                                        <button type="submit"
+                                                id="prospectSubmitBtn"
+                                                class="ps-btn"
+                                                style="background: linear-gradient(135deg, #fe5f04, #ea580c); color: #ffffff; border: none; font-weight: 800; padding: 11px 26px; border-radius: 10px; box-shadow: 0 4px 14px rgba(254, 95, 4, 0.3); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; transition: transform 0.15s, box-shadow 0.15s;">
+                                            <i class="bi bi-check2-circle" style="font-size: 16px;"></i>
+                                            <span id="prospectSubmitBtnText">Save Prospect Details</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
         </section>
         @endif
 
@@ -3590,6 +3772,85 @@ function createTimelineItemHtml(item) {
             </div>
         </div>
     `;
+}
+
+function handleProspectSubmit(event, form) {
+    event.preventDefault();
+    const btn = document.getElementById('prospectSubmitBtn');
+    const btnText = document.getElementById('prospectSubmitBtnText');
+    const feedback = document.getElementById('prospectFeedbackMsg');
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Saving...';
+    if (feedback) feedback.style.display = 'none';
+
+    const formData = new FormData(form);
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
+        },
+        body: formData
+    })
+    .then(function (res) {
+        return res.json().then(function (data) {
+            return { status: res.status, data: data };
+        });
+    })
+    .then(function (result) {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Save Prospect Details';
+
+        const data = result.data;
+        if (result.status >= 200 && result.status < 300 && data.success) {
+            // Update Card 1: Expected Date
+            const cardDate = document.getElementById('prospectCardExpectedDate');
+            const cardDateSub = document.getElementById('prospectCardExpectedDateSub');
+            if (cardDate) {
+                cardDate.textContent = data.expected_date_formatted || 'Not Set';
+            }
+            if (cardDateSub) {
+                cardDateSub.textContent = data.expected_date ? 'Target updated' : 'No date specified yet';
+            }
+
+            // Update Card 2: Expected Value
+            const cardValue = document.getElementById('prospectCardExpectedValue');
+            if (cardValue) {
+                cardValue.textContent = data.expected_value_formatted || 'Not Set';
+            }
+
+            // Show success feedback
+            if (feedback) {
+                feedback.style.display = 'inline-flex';
+                feedback.style.color = '#15803d';
+                feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + (data.message || 'Prospect details updated successfully.');
+                setTimeout(function () {
+                    feedback.style.display = 'none';
+                }, 4000);
+            }
+
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('success', data.message || 'Prospect details updated successfully.');
+            }
+        } else {
+            const errorMsg = (data && data.message) ? data.message : 'Failed to update prospect details.';
+            if (feedback) {
+                feedback.style.display = 'inline-flex';
+                feedback.style.color = '#dc2626';
+                feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + errorMsg;
+            }
+            alert(errorMsg);
+        }
+    })
+    .catch(function (err) {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Save Prospect Details';
+        console.error('Prospect update error:', err);
+        form.submit();
+    });
 }
 </script>
 @endpush
