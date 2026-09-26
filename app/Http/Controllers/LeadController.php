@@ -72,11 +72,11 @@ class LeadController extends Controller
             $sourceInput = $request->lead_source;
 
             $sourceObj = is_numeric($sourceInput)
-                ? LeadSource::find($sourceInput)
-                : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
+                ? LeadSource::withoutGlobalScope('company')->find($sourceInput)
+                : LeadSource::withoutGlobalScope('company')->where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
 
             $sourceName = $sourceObj ? $sourceObj->name : $sourceInput;
-            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
+            $sameNameIds = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
             if (empty($sameNameIds) && is_numeric($sourceInput)) {
                 $sameNameIds = [(int) $sourceInput];
             }
@@ -231,10 +231,10 @@ class LeadController extends Controller
             ->when($request->filled('lead_source'), function($q) use ($request) {
                 $sourceInput = $request->lead_source;
                 $sourceObj = is_numeric($sourceInput)
-                    ? LeadSource::find($sourceInput)
-                    : LeadSource::where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
+                    ? LeadSource::withoutGlobalScope('company')->find($sourceInput)
+                    : LeadSource::withoutGlobalScope('company')->where('name', $sourceInput)->orWhere('id', $sourceInput)->first();
                 $sourceName = $sourceObj ? $sourceObj->name : $sourceInput;
-                $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
+                $sameNameIds = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [strtolower(trim($sourceName))])->pluck('id')->toArray();
                 if (empty($sameNameIds) && is_numeric($sourceInput)) {
                     $sameNameIds = [(int) $sourceInput];
                 }

@@ -4512,8 +4512,8 @@ window.navigateToUser = function(userId, statusVal) {
 /* ── Source Distribution ── */
 function renderSources(sd, payModes) {
     document.getElementById('daSourceTotal').textContent = sd.total + ' leads';
-    var emojiMap = { reference:'👥', ad_campaign:'📢', direct_visit:'🚶', invitation:'💌', cold_outreach:'📞', social_media:'📱', website:'🌐' };
-    var colorMap = { reference:'#2563eb', ad_campaign:'#dc2626', direct_visit:'#16a34a', invitation:'#7c3aed', cold_outreach:'#b45309', social_media:'#0284c7', website:'#059669' };
+    var emojiMap = { reference:'👥', ad_campaign:'📢', direct_visit:'🚶', invitation:'💌', cold_outreach:'📞', social_media:'📱', website:'🌐', unassigned:'❓' };
+    var colorMap = { reference:'#2563eb', ad_campaign:'#dc2626', direct_visit:'#16a34a', invitation:'#7c3aed', cold_outreach:'#b45309', social_media:'#0284c7', website:'#059669', unassigned:'#94a3b8' };
     var maxSrc   = Math.max.apply(null, sd.sources.map(function(s) { return s.count; })) || 1;
 
     var rows = sd.sources.map(function(s) {

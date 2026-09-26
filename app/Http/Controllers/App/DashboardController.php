@@ -10,6 +10,7 @@ use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
 use App\Models\LeadProductPayment;
 use App\Models\LeadReminder;
+use App\Models\LeadSource;
 use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\ProductCategory;
@@ -176,7 +177,7 @@ class DashboardController extends Controller
         // ── 3. Source distribution ─────────────────────────────────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        $uniqueSources = LeadSource::query()
+        $uniqueSources = LeadSource::withoutGlobalScope('company')
             ->orderBy('id')
             ->get(['id', 'name'])
             ->unique(fn($s) => strtolower(trim($s->name)))
@@ -184,7 +185,7 @@ class DashboardController extends Controller
 
         foreach ($uniqueSources as $src) {
             $sName = strtolower(trim($src->name));
-            $sameNameIds = LeadSource::whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+            $sameNameIds = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
 
             $count = (clone $base())
                 ->where(function ($q) use ($sameNameIds, $src) {
@@ -1190,14 +1191,22 @@ class DashboardController extends Controller
             $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
         }
 
-        // NST - HO Hot query: EXCLUDE Channel Partner products AND ONLY include company default branch
-        $nstHoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cpProductIds) {
-            if (!empty($cpProductIds)) {
-                $q->whereNotIn('product_id', $cpProductIds);
-            }
-            $q->where('product_name', 'not like', '%COCO%')
-              ->where('product_name', 'not like', '%Channel Partner%');
-        });
+        // NST - HO Hot query: EXCLUDE Channel Partner products ONLY for Company Admin / CBO (unfiltered).
+        // For Sales TL, Branch Admin, Branch Manager, Sales Executive (or when scoped to a user),
+        // NST - HO represents all of their Default Branch (HO) hot prospects, including Channel Partner.
+        $currentUser = $request?->user() ?: auth()->user();
+        $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo()) && !$request->filled('user_id');
+
+        $nstHoHotQuery = clone $currentMonthHotProductsQuery;
+        if ($isCompanyAdminOrCbo) {
+            $nstHoHotQuery->where(function ($q) use ($cpProductIds) {
+                if (!empty($cpProductIds)) {
+                    $q->whereNotIn('product_id', $cpProductIds);
+                }
+                $q->where('product_name', 'not like', '%COCO%')
+                  ->where('product_name', 'not like', '%Channel Partner%');
+            });
+        }
         if (!empty($defaultBranchIds)) {
             $nstHoHotQuery->whereHas('lead', function ($lq) use ($defaultBranchIds) {
                 $lq->whereIn('branch_id', $defaultBranchIds);
@@ -1333,7 +1342,10 @@ class DashboardController extends Controller
 
         if ($type === 'nst_ho') {
             $title = 'NST - HO';
-            $subtitle = 'Default Branch (HO) • Excl. Channel Partner';
+            $isCompanyAdminOrCbo = ($currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo())) && !$request->filled('user_id');
+            $subtitle = $isCompanyAdminOrCbo
+                ? 'Default Branch (HO) • Excl. Channel Partner'
+                : 'Default Branch (HO) • Hot Prospects';
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
             $catId = $channelPartnerCategory?->id;
@@ -1384,13 +1396,15 @@ class DashboardController extends Controller
                 $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
             }
 
-            $query->where(function ($q) use ($cpProductIds) {
-                if (!empty($cpProductIds)) {
-                    $q->whereNotIn('product_id', $cpProductIds);
-                }
-                $q->where('product_name', 'not like', '%COCO%')
-                  ->where('product_name', 'not like', '%Channel Partner%');
-            });
+            if ($isCompanyAdminOrCbo) {
+                $query->where(function ($q) use ($cpProductIds) {
+                    if (!empty($cpProductIds)) {
+                        $q->whereNotIn('product_id', $cpProductIds);
+                    }
+                    $q->where('product_name', 'not like', '%COCO%')
+                      ->where('product_name', 'not like', '%Channel Partner%');
+                });
+            }
 
             if (!empty($defaultBranchIds)) {
                 $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
