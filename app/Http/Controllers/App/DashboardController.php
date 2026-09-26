@@ -659,6 +659,77 @@ class DashboardController extends Controller
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
 
+        // ── Section Visibility Rules for Total Prospects & Key Metrics ──
+        $authUser = $request->user();
+        $isCompanyAdmin = $authUser ? ($authUser->isSuperAdmin() || $authUser->isCompanyAdminRole()) : false;
+        $isCbo          = $authUser ? $authUser->isCbo() : false;
+        $isBranchManager = $authUser ? ($authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo) : false;
+        $isBranchAdmin   = $authUser ? ($authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager) : false;
+        $isTl            = $authUser ? ($authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin) : false;
+
+        $userBranchIds = $authUser ? $authUser->getMyBranchIds() : [];
+        $defaultBranchId = \App\Models\Branch::where('is_default', true)->value('id') ?? 1;
+
+        if ($isCompanyAdmin || $isCbo) {
+            $hasDefaultBranch = true;
+            $hasCocoBranch    = true;
+            $hasNonCocoBranch = true;
+        } elseif ($isBranchManager && $authUser) {
+            $additionalBranchIds = array_values(array_filter($userBranchIds, fn($id) => (int)$id !== (int)$defaultBranchId));
+            $additionalBranches = !empty($additionalBranchIds) ? \App\Models\Branch::whereIn('id', $additionalBranchIds)->get() : collect();
+
+            $hasCocoBranch    = $additionalBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $additionalBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+
+            $descendants = $this->visibility->descendantUserIds($authUser);
+            $hasHoMappedUsers = false;
+            if ($descendants->isNotEmpty()) {
+                $hasHoMappedUsers = User::withoutGlobalScope('branch')
+                    ->whereIn('id', $descendants)
+                    ->where('branch_id', $defaultBranchId)
+                    ->exists();
+            }
+            $hasOwnHoLeads = Lead::where('branch_id', $defaultBranchId)->where('assigned_to', $authUser->id)->exists();
+            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
+        } elseif ($isBranchAdmin && $authUser) {
+            $branchIds = $userBranchIds;
+            if (empty($branchIds) && $authUser->branch_id) {
+                $branchIds = [(int) $authUser->branch_id];
+            }
+            $adminBranches = !empty($branchIds) ? \App\Models\Branch::whereIn('id', $branchIds)->get() : collect();
+
+            $hasDefaultBranch = $adminBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $adminBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $adminBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+        } elseif ($isTl && $authUser) {
+            $teamUserIds = $this->visibility->descendantUserIds($authUser)->push($authUser->id)->unique();
+            $teamBranchIds = User::withoutGlobalScope('branch')
+                ->whereIn('id', $teamUserIds)
+                ->pluck('branch_id')
+                ->filter()
+                ->unique()
+                ->all();
+            if (empty($teamBranchIds) && $authUser->branch_id) {
+                $teamBranchIds = [(int) $authUser->branch_id];
+            }
+            $tlBranches = !empty($teamBranchIds) ? \App\Models\Branch::whereIn('id', $teamBranchIds)->get() : collect();
+
+            $hasDefaultBranch = $tlBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $tlBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $tlBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+        } elseif ($authUser) {
+            $execBranch = $authUser->branch;
+            $hasDefaultBranch = (bool) ($execBranch?->is_default || (int)$authUser->branch_id === (int)$defaultBranchId);
+            $hasCocoBranch    = strtoupper(trim((string) ($execBranch?->branch_type ?? ''))) === 'COCO';
+            $hasNonCocoBranch = in_array(strtoupper(trim((string) ($execBranch?->branch_type ?? ''))), ['NON COCO', 'NON_COCO', 'NON-COCO']);
+        } else {
+            $hasDefaultBranch = true;
+            $hasCocoBranch    = false;
+            $hasNonCocoBranch = false;
+        }
+
+        $canViewActiveBranches = $isCompanyAdmin || $isCbo;
+
         // ── Build response ────────────────────────────────────────
         return response()->json([
             'success' => true,
@@ -708,10 +779,18 @@ class DashboardController extends Controller
                     'deal_value'                => $currentMonthHotProductsValue,
                     'expected_collection_value' => $currentMonthExpectedCollection,
                     'month_name'                => now()->format('F Y'),
+                    'show_nst_ho'               => (bool) $hasDefaultBranch,
+                    'show_coco'                 => (bool) $hasCocoBranch,
+                    'show_non_coco'             => (bool) $hasNonCocoBranch,
+                    'show_active_branches'      => (bool) $canViewActiveBranches,
+                    'has_default_branch'        => (bool) $hasDefaultBranch,
+                    'has_coco_branch'           => (bool) $hasCocoBranch,
+                    'has_non_coco_branch'       => (bool) $hasNonCocoBranch,
+                    'can_view_active_branches'  => (bool) $canViewActiveBranches,
                     'nst_ho'                    => $cpMetrics['nst_ho'],
                     'non_coco'                  => $cpMetrics['non_coco'],
                     'coco'                      => $cpMetrics['coco'],
-                    'active_branches'           => $this->buildActiveBranchesHotMetrics($request),
+                    'active_branches'           => $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [],
                 ],
 
                 'financials' => [

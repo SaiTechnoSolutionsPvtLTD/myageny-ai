@@ -579,6 +579,20 @@ class AttendanceApiController extends Controller
 
         $accessibleAttendees = $this->accessibleAttendees($actingBranchIds, $departmentIdFilter);
 
+        $requestedBranchId = $request->input('branch_id');
+        if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
+            $targetBranchId = (int) $requestedBranchId;
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn(array $att) => (int) ($att['branch_id'] ?? 0) === $targetBranchId)
+                ->values();
+        }
+
+        if ($departmentIdFilter && $departmentIdFilter > 0) {
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn(array $att) => (int) ($att['department_id'] ?? 0) === $departmentIdFilter)
+                ->values();
+        }
+
         if ($accessibleAttendees->isEmpty()) {
             $user = auth()->user();
             return response()->json([
@@ -821,14 +835,30 @@ class AttendanceApiController extends Controller
      * Manual Check-In / Checkout / Mark Leave forms). HR/Admin only — mirrors
      * AttendanceController::create()'s abort_unless() guard.
      */
-    public function attendees(): JsonResponse
+    public function attendees(Request $request): JsonResponse
     {
         abort_unless($this->canManageAttendance(), 403);
+
+        $actingBranchIds    = $this->resolveActingBranchIds($request);
+        $departmentIdFilter = null;
+        if ($request->filled('department_id') && $request->input('department_id') !== 'all') {
+            $departmentIdFilter = (int) $request->input('department_id');
+        }
+
+        $accessibleAttendees = $this->accessibleAttendees($actingBranchIds, $departmentIdFilter);
+
+        $requestedBranchId = $request->input('branch_id');
+        if (filled($requestedBranchId) && $requestedBranchId !== 'all') {
+            $targetBranchId = (int) $requestedBranchId;
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(fn(array $att) => (int) ($att['branch_id'] ?? 0) === $targetBranchId)
+                ->values();
+        }
 
         return response()->json([
             'status'  => true,
             'message' => 'Attendees fetched successfully.',
-            'data'    => $this->accessibleAttendees()->values(),
+            'data'    => $accessibleAttendees->values(),
         ]);
     }
 

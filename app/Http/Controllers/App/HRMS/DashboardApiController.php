@@ -1095,11 +1095,18 @@ class DashboardApiController extends Controller
     {
         $employees = $this->employeeQueryForDashboard($branchId)
             ->whereNotNull('name')
-            ->get(['id']);
+            ->with(['portalUser.branch'])
+            ->get(['id', 'employee_id', 'portal_user_id']);
 
         $interns = $this->internQueryForDashboard($branchId)
             ->whereNotNull('name')
-            ->get(['id']);
+            ->with(['portalUser.branch'])
+            ->get(['id', 'intern_id', 'portal_user_id']);
+
+        if ($branchId && $branchId > 0) {
+            $employees = $employees->filter(fn(EmployeeOnboarding $e) => (int) ($e->branch?->id ?? $e->portalUser?->branch_id ?? 0) === (int) $branchId)->values();
+            $interns   = $interns->filter(fn(InternJoiningForm $i) => (int) ($i->branch?->id ?? $i->portalUser?->branch_id ?? 0) === (int) $branchId)->values();
+        }
 
         $employeeIds = $employees->pluck('id');
         $internIds   = $interns->pluck('id');

@@ -214,6 +214,8 @@ class DaySalesTrackerApiController extends Controller
                 'name' => $u->name,
             ])->values()->all();
 
+            $canEdit = $this->canUserEditDaySalesTracker($user);
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -222,6 +224,8 @@ class DaySalesTrackerApiController extends Controller
                     'total_count' => $totalCount,
                     'total_collection' => $totalCollection,
                     'total_value' => $totalValue,
+                    'can_edit' => $canEdit,
+                    'can_manage_categories' => $canEdit,
                     'items' => $items,
                     'categories' => $categories->pluck('name')->values()->all(),
                     'categories_list' => $categories->map(fn($c) => [
@@ -442,10 +446,29 @@ class DaySalesTrackerApiController extends Controller
     }
 
     /**
+     * Check if user has permission to add, edit, or modify Day Sales Tracker records.
+     * Only Company Admin / CBO / Super Admin role is allowed.
+     */
+    protected function canUserEditDaySalesTracker(?User $user): bool
+    {
+        if (!$user) return false;
+        return (bool) ($user->isSuperAdmin() || $user->isCompanyAdminRole() || $user->isCbo());
+    }
+
+    /**
      * Mobile API: Add Day Sales Category.
      */
     public function addCategory(Request $request): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        if (!$this->canUserEditDaySalesTracker($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only Company Admin can add, edit, or modify Day Sales Tracker data.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:day_sales_tracker_categories,name'],
         ]);
@@ -469,6 +492,15 @@ class DaySalesTrackerApiController extends Controller
      */
     public function updateCategoryName(Request $request, int $id): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        if (!$this->canUserEditDaySalesTracker($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only Company Admin can add, edit, or modify Day Sales Tracker data.',
+            ], 403);
+        }
+
         $cat = DaySalesTrackerCategory::findOrFail($id);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:day_sales_tracker_categories,name,' . $id],
@@ -491,6 +523,15 @@ class DaySalesTrackerApiController extends Controller
      */
     public function deleteCategory(Request $request, int $id): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        if (!$this->canUserEditDaySalesTracker($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only Company Admin can add, edit, or modify Day Sales Tracker data.',
+            ], 403);
+        }
+
         $cat = DaySalesTrackerCategory::findOrFail($id);
         $cat->delete();
 
@@ -505,13 +546,20 @@ class DaySalesTrackerApiController extends Controller
      */
     public function updateCategory(Request $request): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        if (!$this->canUserEditDaySalesTracker($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only Company Admin can add, edit, or modify Day Sales Tracker data.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'lead_product_id' => ['required', 'integer', 'exists:lead_products,id'],
             'category' => ['nullable', 'string'],
         ]);
 
-        /** @var User|null $user */
-        $user = $request->user() ?: auth()->user();
         $lp = LeadProduct::with('lead')->findOrFail($validated['lead_product_id']);
 
         if ($user && $lp->lead && !$this->visibility->canAccessLead($lp->lead, $user)) {
@@ -536,13 +584,20 @@ class DaySalesTrackerApiController extends Controller
      */
     public function updateSaleType(Request $request): JsonResponse
     {
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        if (!$this->canUserEditDaySalesTracker($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only Company Admin can add, edit, or modify Day Sales Tracker data.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'lead_product_id' => ['required', 'integer', 'exists:lead_products,id'],
             'sale_type' => ['required', 'string'],
         ]);
 
-        /** @var User|null $user */
-        $user = $request->user() ?: auth()->user();
         $lp = LeadProduct::with('lead')->findOrFail($validated['lead_product_id']);
 
         if ($user && $lp->lead && !$this->visibility->canAccessLead($lp->lead, $user)) {
