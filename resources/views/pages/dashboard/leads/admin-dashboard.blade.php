@@ -1770,6 +1770,77 @@
                         </div>
                     </div>
                     @endif
+
+                    {{-- ─────────────────────────────────────────────────────
+                         Section Card 4: CST
+                         Visible to: All dashboard viewers with CST access
+                    ───────────────────────────────────────────────────── --}}
+                    @if($canViewCst ?? true)
+                    <div class="da-modal-section-card">
+                        <div class="da-modal-section-head">
+                            <div class="da-modal-section-heading">
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#0d9488" stroke-width="2.2">
+                                    <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                </svg>
+                                <span>CST</span>
+                            </div>
+                            <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(13,148,136,0.08); color:#0d9488; border-color:rgba(13,148,136,0.2);">
+                                Renewals &amp; Development
+                            </span>
+                        </div>
+
+                        <div class="da-modal-kpi-grid">
+                            {{-- Card 1: Total Prospect count --}}
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('cst', 'CST')"
+                                style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;" title="Click to view CST hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 2c1.5 2 2 3.5 2 5.5 0 2-1.5 3.5-3.5 3.5S7 9.5 7 7.5c0-2 .5-3.5 2-5.5 0 0-5 3.5-5 9a8 8 0 0 0 16 0c0-5.5-5-9-5-9z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCstCount">0</div>
+                                    <div class="da-modal-metric-lbl">Total Prospect count</div>
+                                    <div class="da-modal-metric-sub">Renewals &amp; Development</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 2: Deal Value --}}
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('cst', 'CST')"
+                                style="background:linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #2dd4bf 100%); cursor:pointer;" title="Click to view CST hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCstDealValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Deal Value</div>
+                                    <div class="da-modal-metric-sub">Total Deal value of CST</div>
+                                </div>
+                            </div>
+
+                            {{-- Card 3: Expected Collection value --}}
+                            <div class="da-modal-metric-card"
+                                onclick="openBranchHotLeadsModal('cst', 'CST')"
+                                style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;" title="Click to view CST hot prospects">
+                                <div class="da-modal-metric-icon">
+                                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">
+                                        <line x1="12" y1="1" x2="12" y2="23"/>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                    </svg>
+                                </div>
+                                <div class="da-modal-metric-content">
+                                    <div class="da-modal-metric-val" id="daModalCstExpectedValue">₹0.00</div>
+                                    <div class="da-modal-metric-lbl">Expected Value</div>
+                                    <div class="da-modal-metric-sub">Expected closure value</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                 </div>
 
         {{-- ── Right 6 Columns: Active Branches Table & Comparison — Only for Company Admin & CBO ── --}}
@@ -2738,6 +2809,13 @@ function renderForecasting(d) {
         product_name: 'Channel Partner COCO Model'
     };
 
+    var cst = fc.cst || {
+        count: k.cst_prospects_count || 0,
+        deal_value: k.cst_deal_value || 0,
+        expected_value: k.cst_expected_value || 0,
+        product_name: 'CST'
+    };
+
     var nstHo = fc.nst_ho || {
         count: k.nst_ho_prospects_count !== undefined ? k.nst_ho_prospects_count : hotCount,
         deal_value: k.nst_ho_deal_value !== undefined ? k.nst_ho_deal_value : hotValue,
@@ -2755,6 +2833,7 @@ function renderForecasting(d) {
         nstHo: nstHo,
         nonCoco: nonCoco,
         coco: coco,
+        cst: cst,
         activeBranches: activeBranches
     };
 
@@ -2814,9 +2893,11 @@ window.openTotalProspectsModal = function() {
     // m.nstHo holds their Default/HO branch hot products.
     // m.coco holds their COCO branch hot products.
     // m.nonCoco holds their NON-COCO branch hot products.
+    // m.cst holds CST & Development hot prospects.
     var nstHo   = m.nstHo   || {};
     var nonCoco = m.nonCoco || {};
     var coco    = m.coco    || {};
+    var cst     = m.cst     || {};
 
     // 1. NST - HO
     var countEl = document.getElementById('daModalProspectCount');
@@ -2841,6 +2922,14 @@ window.openTotalProspectsModal = function() {
     if (cocoCountEl) cocoCountEl.textContent = coco.count !== undefined ? coco.count : 0;
     if (cocoDealEl)  cocoDealEl.textContent  = fmt(coco.deal_value || 0);
     if (cocoExpEl)   cocoExpEl.textContent   = fmt(coco.expected_value || 0);
+
+    // 4. CST
+    var cstCountEl = document.getElementById('daModalCstCount');
+    var cstDealEl  = document.getElementById('daModalCstDealValue');
+    var cstExpEl   = document.getElementById('daModalCstExpectedValue');
+    if (cstCountEl) cstCountEl.textContent = cst.count !== undefined ? cst.count : 0;
+    if (cstDealEl)  cstDealEl.textContent  = fmt(cst.deal_value || 0);
+    if (cstExpEl)   cstExpEl.textContent   = fmt(cst.expected_value || 0);
 
     // ── Non-admin users (Branch Admin, Branch Manager, TL, Sales Executive) → show Key Metrics modal with their relevant card(s) ──
     if (!CAN_VIEW_ACTIVE_BRANCHES) {
@@ -3719,16 +3808,27 @@ function renderFullDetailsTable(leads) {
 
         var custCol = l.lead_view_url
             ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
-            : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>';
+            : (l.project_view_url
+                ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Project details">' + (l.customer_name || '-') + ' ↗</a>'
+                : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>');
+
+        var prodCol = l.project_view_url
+            ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:600; color:#1e40af; text-decoration:none;" title="View Project details">' + (l.product_name || '-') + ' ↗</a>'
+            : (l.product_name || '-');
+
+        var statusIcon = (l.source_type === 'renewal' || l.status === 'Renewal') ? '🔄 ' : ((l.source_type === 'development') ? '💻 ' : '🔥 ');
+        var statusBg = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#f0fdf4' : ((l.source_type === 'development') ? '#eff6ff' : '#fef2f2');
+        var statusColor = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#16a34a' : ((l.source_type === 'development') ? '#2563eb' : '#dc2626');
+        var statusBorder = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#bbf7d0' : ((l.source_type === 'development') ? '#bfdbfe' : '#fecaca');
 
         rowsHtml += '<tr>' +
             '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
             '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
             '<td>' + custCol + '</td>' +
-            '<td style="font-weight:600; color:#334155;">' + (l.product_name || '-') + '</td>' +
+            '<td style="font-weight:600; color:#334155;">' + prodCol + '</td>' +
             '<td style="text-align:center;">' +
-                '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca;">' +
-                    '🔥 ' + (l.status || 'Hot') +
+                '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:' + statusBg + '; color:' + statusColor + '; border:1px solid ' + statusBorder + ';">' +
+                    statusIcon + (l.status || 'Hot') +
                 '</span>' +
             '</td>' +
             '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +

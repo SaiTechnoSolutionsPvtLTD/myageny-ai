@@ -58,6 +58,8 @@ class ProductionInitiation extends Model
         'content_calendar_remarks',
         'lead_budget_amount',
         'budget_amount_type',
+        'expected_date',
+        'expected_value',
     ];
 
     protected $casts = [
@@ -76,6 +78,8 @@ class ProductionInitiation extends Model
         'project_allocated_employee_user_ids' => 'array',
         'content_calendar_approved' => 'boolean',
         'lead_budget_amount' => 'float',
+        'expected_date' => 'date',
+        'expected_value' => 'decimal:2',
     ];
 
     protected static function booted(): void

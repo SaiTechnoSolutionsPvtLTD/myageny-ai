@@ -383,6 +383,8 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.content-calendar.approve');
         Route::get('/projects-details/{productionInitiation}/content-calendar-data', [ProjectController::class, 'fetchContentCalendarData'])
             ->name('projects.content-calendar-data');
+        Route::post('/projects-details/{productionInitiation}/prospect', [ProjectController::class, 'updateProspect'])
+            ->name('projects.prospect.update');
     });
 
     Route::prefix('authentications')->name('auth.')->group(function () {

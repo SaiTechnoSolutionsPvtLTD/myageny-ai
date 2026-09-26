@@ -2181,7 +2181,7 @@ class ProjectController extends Controller
 
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
         $productionInitiation = $this->decorateProjectForUser($productionInitiation, $user);
-        $productionInitiation->load(['projectUpdates.createdBy:id,name']);
+        $productionInitiation->load(['projectUpdates.createdBy:id,name', 'leadProduct', 'lead', 'department']);
 
         $projectUpdatesQuery = $productionInitiation->projectUpdates()
             ->with('createdBy:id,name');
@@ -2283,6 +2283,7 @@ class ProjectController extends Controller
             'bugs' => $bugs,
             'canAddBug' => $canAddBug,
             'customerCampaigns' => $customerCampaigns,
+            'canSeeProspectTab' => $user && ($user->canAccessProjectProspect() || $this->hasProjectCoordinatorRole($user)),
         ]);
     }
 
@@ -3351,6 +3352,61 @@ class ProjectController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Server error: ' . $e->getMessage()], 500);
         }
+    }
+
+    public function updateProspect(Request $request, ProductionInitiation $productionInitiation)
+    {
+        $user = auth()->user();
+        $canManageProspect = $user && (
+            $user->canAccessProjectProspect() ||
+            $this->hasProjectCoordinatorRole($user)
+        );
+
+        if (! $canManageProspect) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only CST team, CBO, and Project Coordinator can update prospect details.'
+                ], 403);
+            }
+
+            return redirect()->back()->with('error', 'Unauthorized. Only CST team, CBO, and Project Coordinator can update prospect details.');
+        }
+
+        $validated = $request->validate([
+            'expected_date'  => ['nullable', 'date'],
+            'expected_value' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $expectedDate = !empty($validated['expected_date']) ? Carbon::parse($validated['expected_date'])->toDateString() : null;
+        $expectedValue = isset($validated['expected_value']) && $validated['expected_value'] !== '' && $validated['expected_value'] !== null ? (float) $validated['expected_value'] : null;
+
+        $productionInitiation->update([
+            'expected_date'  => $expectedDate,
+            'expected_value' => $expectedValue,
+        ]);
+
+        if ($productionInitiation->leadProduct) {
+            $productionInitiation->leadProduct->update([
+                'closure_date'   => $expectedDate,
+                'expected_value' => $expectedValue,
+            ]);
+        }
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Prospect details updated successfully.',
+                'expected_date' => $expectedDate,
+                'expected_date_formatted' => $expectedDate ? Carbon::parse($expectedDate)->format('d M Y') : 'Not set',
+                'expected_value' => $expectedValue,
+                'expected_value_formatted' => $expectedValue !== null ? '₹' . number_format($expectedValue, 2) : 'Not set',
+            ]);
+        }
+
+        return redirect()
+            ->route('projects.show', ['productionInitiation' => $productionInitiation, 'tab' => 'prospect'])
+            ->with('success', 'Prospect details updated successfully.');
     }
 
     /**
@@ -4596,8 +4652,13 @@ class ProjectController extends Controller
     {
         $productionInitiation->loadMissing($this->projectRelations());
 
-        if ($user->isDevelopmentProjectCoordinator()) {
+        if ($user->hasAdminLikeRole() || $user->isCbo() || $user->isCustomerSuccessUser()) {
+            return;
+        }
+
+        if ($user->isDevelopmentProjectCoordinator() || $this->hasProjectCoordinatorRole($user)) {
             abort_unless($this->isDevelopmentProject($productionInitiation), 403, 'Development Project Coordinator can only view Development Department projects.');
+            return;
         }
 
         if ($user->isDesigningTl() || ($user->belongsToDesigningDepartment() && $user->hasTlLikeRole())) {
