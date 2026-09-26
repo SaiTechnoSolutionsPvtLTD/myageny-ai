@@ -713,15 +713,40 @@ Route::middleware('auth:sanctum')->prefix('mobile/reports/crm')->name('mobile.re
 
 /*
 |--------------------------------------------------------------------------
-| Mobile Day Closing Routes
+| Mobile Sales & CST Day Closing Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware('auth:sanctum')->prefix('mobile/day-closing')->name('mobile.day-closing.')->middleware('can:leads.view')->group(function () {
-    Route::get('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'index'])->name('index');
-    Route::get('/stats', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallStats'])->name('stats');
-    Route::get('/call-details', [\App\Http\Controllers\SalesDailyClosingController::class, 'getCallDetails'])->name('call-details');
-    Route::post('/', [\App\Http\Controllers\SalesDailyClosingController::class, 'store'])->name('store');
-    Route::patch('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'update'])->name('update');
-    Route::patch('/{closing}/status', [\App\Http\Controllers\SalesDailyClosingController::class, 'updateStatus'])->name('update-status');
-    Route::delete('/{closing}', [\App\Http\Controllers\SalesDailyClosingController::class, 'destroy'])->name('destroy');
+Route::middleware('auth:sanctum')->prefix('mobile/day-closing')->name('mobile.day-closing.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'index'])->name('index');
+    Route::get('/stats', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'getStats'])->name('stats');
+    Route::get('/call-details', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'getCallDetails'])->name('call-details');
+    Route::post('/', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'store'])->name('store');
+    Route::put('/{closing}', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'update'])->name('update');
+    Route::patch('/{closing}', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'update'])->name('update-put');
+    Route::patch('/{closing}/status', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'updateStatus'])->name('update-status');
+    Route::delete('/{closing}', [\App\Http\Controllers\App\SalesDayClosingApiController::class, 'destroy'])->name('destroy');
+});
+
+Route::middleware('auth:sanctum')->prefix('mobile/cst-day-closing')->name('mobile.cst-day-closing.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'index'])->name('index');
+    Route::post('/', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'store'])->name('store');
+    Route::put('/{closing}', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'update'])->name('update');
+    Route::patch('/{closing}', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'update'])->name('update-put');
+    Route::patch('/{closing}/status', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'updateStatus'])->name('update-status');
+    Route::delete('/{closing}', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'destroy'])->name('destroy');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Mobile Day Sales Tracker Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->prefix('mobile/day-sales-tracker')->name('mobile.day-sales-tracker.')->group(function () {
+    Route::get('/data', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'data'])->name('data');
+    Route::get('/categories', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'categories'])->name('categories');
+    Route::post('/categories', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'addCategory'])->name('add-category');
+    Route::post('/categories/{id}/update', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateCategoryName'])->name('update-category-name');
+    Route::post('/categories/{id}/delete', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'deleteCategory'])->name('delete-category');
+    Route::post('/update-category', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateCategory'])->name('update-category');
+    Route::post('/update-sale-type', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateSaleType'])->name('update-sale-type');
 });

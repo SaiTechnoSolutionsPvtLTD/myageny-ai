@@ -848,9 +848,9 @@ class OdRequestApiController extends Controller
             'status'             => $r->status,
             'current_step'       => $r->current_step,
             'branch_id'          => $r->branch_id,
-            'submitted_at'       => $r->submitted_at?->format('Y-m-d H:i:s'),
-            'approved_at'        => $r->approved_at?->format('Y-m-d H:i:s'),
-            'rejected_at'        => $r->rejected_at?->format('Y-m-d H:i:s'),
+            'submitted_at'       => $r->submitted_at ? ($r->submitted_at instanceof Carbon ? $r->submitted_at->format('Y-m-d H:i:s') : (string) $r->submitted_at) : null,
+            'approved_at'        => $r->approved_at ? ($r->approved_at instanceof Carbon ? $r->approved_at->format('Y-m-d H:i:s') : (string) $r->approved_at) : null,
+            'rejected_at'        => $r->rejected_at ? ($r->rejected_at instanceof Carbon ? $r->rejected_at->format('Y-m-d H:i:s') : (string) $r->rejected_at) : null,
         ];
 
         if ($withApprovals && $r->relationLoaded('approvals')) {
@@ -873,7 +873,7 @@ class OdRequestApiController extends Controller
             'approver_email'   => $a->approver?->email,
             'actioned_by'      => $a->actioned_by,
             'actioned_by_name' => $a->actionedBy?->name,
-            'actioned_at'      => $a->actioned_at?->format('Y-m-d H:i:s'),
+            'actioned_at'      => $a->actioned_at ? ($a->actioned_at instanceof Carbon ? $a->actioned_at->format('Y-m-d H:i:s') : (string) $a->actioned_at) : null,
             'remarks'          => $a->remarks ?? '',
         ];
     }
@@ -881,6 +881,18 @@ class OdRequestApiController extends Controller
     private function mapPendingApproval(OdApproval $a): array
     {
         $r = $a->odRequest;
+        if (!$r) {
+            return [
+                'id'            => $a->id,
+                'step_key'      => $a->step_key,
+                'step_name'     => $a->step_name,
+                'step_order'    => $a->step_order,
+                'employee_name' => 'Unknown',
+                'employee_code' => '',
+                'submitted_at'  => null,
+                'od_request'    => null,
+            ];
+        }
         return [
             'id'            => $a->id,
             'step_key'      => $a->step_key,
@@ -888,7 +900,7 @@ class OdRequestApiController extends Controller
             'step_order'    => $a->step_order,
             'employee_name' => $r->user?->name ?? $r->employee?->name ?? 'Unknown',
             'employee_code' => $r->employee?->employee_id ?? '',
-            'submitted_at'  => $r->submitted_at?->format('Y-m-d H:i:s'),
+            'submitted_at'  => $r->submitted_at ? ($r->submitted_at instanceof Carbon ? $r->submitted_at->format('Y-m-d H:i:s') : (string) $r->submitted_at) : null,
             'od_request'    => $this->mapOdRequest($r),
         ];
     }
@@ -900,7 +912,7 @@ class OdRequestApiController extends Controller
             'id'            => $a->id,
             'step_name'     => $a->step_name,
             'status'        => $a->status,
-            'actioned_at'   => $a->actioned_at?->format('Y-m-d H:i:s'),
+            'actioned_at'   => $a->actioned_at ? ($a->actioned_at instanceof Carbon ? $a->actioned_at->format('Y-m-d H:i:s') : (string) $a->actioned_at) : null,
             'remarks'       => $a->remarks ?? '',
             'employee_name' => $r?->user?->name ?? 'Unknown',
             'od_request'    => $r ? $this->mapOdRequest($r) : null,

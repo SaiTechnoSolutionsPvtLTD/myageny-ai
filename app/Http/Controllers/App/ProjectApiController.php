@@ -3468,6 +3468,7 @@ class ProjectApiController extends Controller
             'data' => [
                 'selected_dashboard' => 'design',
                 'can_view_projects_dashboard_switcher' => (bool) $user->canViewProjectsDashboardSwitcher(),
+                'available_dashboards' => $user->canViewProjectsDashboardSwitcher() ? ['development', 'dm', 'design', 'testing'] : [],
                 'stats' => $stats,
                 'design_projects' => $designProjects->map(fn($p) => ['id' => $p->id, 'product_name' => $p->product_name])->values(),
                 'today_planned_tasks' => $todayPlannedTasks,
@@ -3542,6 +3543,7 @@ class ProjectApiController extends Controller
             'data' => [
                 'selected_dashboard' => 'testing',
                 'can_view_projects_dashboard_switcher' => (bool) $user->canViewProjectsDashboardSwitcher(),
+                'available_dashboards' => $user->canViewProjectsDashboardSwitcher() ? ['development', 'dm', 'design', 'testing'] : [],
                 'active_status' => $activeStatus,
                 'stats' => [
                     'open' => $openCount,
