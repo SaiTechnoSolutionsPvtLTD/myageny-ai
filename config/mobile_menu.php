@@ -25,6 +25,7 @@ return [
             ['key' => 'day_closing',    'label' => 'Day Closing',    'section' => 'CRM', 'order' => 58, 'permission' => 'leads.view'],
             ['key' => 'price_requests', 'label' => 'Price Requests', 'section' => 'CRM', 'order' => 60, 'permission' => 'price_requests.menuview', 'require_method' => 'allowsPriceRequests'],
             ['key' => 'cst_allocation', 'label' => 'CST Allocation', 'section' => 'CRM', 'order' => 65, 'permission' => 'cst_allocation.menuview'],
+            ['key' => 'cst_day_closing', 'label' => 'CST Day Closing', 'section' => 'CRM', 'order' => 66, 'permission' => 'cst_allocation.menuview'],
             ['key' => 'reports',        'label' => 'Reports',        'section' => 'CRM', 'order' => 70, 'permission' => 'reports.menuview'],
             ['key' => 'ovp_module',            'label' => 'OVP Module',            'section' => 'OVP & PRODUCTION', 'order' => 80, 'permission' => 'ovp_module.menuview'],
             ['key' => 'production_approvals',  'label' => 'Production Approvals',  'section' => 'OVP & PRODUCTION', 'order' => 90, 'permission' => 'production_approval_module.menuview'],
@@ -40,6 +41,7 @@ return [
         'items' => [
             ['key' => 'cst.dashboard', 'label' => 'Dashboard', 'section' => 'CST', 'order' => 10],
             ['key' => 'cst_allocation', 'label' => 'CST Allocation', 'section' => 'CST', 'order' => 20, 'permission' => 'cst_allocation.menuview'],
+            ['key' => 'cst_day_closing', 'label' => 'CST Day Closing', 'section' => 'CST', 'order' => 25, 'permission' => 'cst_allocation.menuview'],
             ['key' => 'cst.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 30],
         ],
     ],

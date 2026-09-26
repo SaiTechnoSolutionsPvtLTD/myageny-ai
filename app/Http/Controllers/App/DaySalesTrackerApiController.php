@@ -5,6 +5,8 @@ namespace App\Http\Controllers\App;
 use App\Http\Controllers\Controller;
 use App\Models\DaySalesTrackerCategory;
 use App\Models\LeadProduct;
+use App\Models\RoleMapping;
+use App\Models\User;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -17,16 +19,26 @@ class DaySalesTrackerApiController extends Controller
     ) {}
 
     /**
-     * Mobile API: Day Sales Tracker converted products list & metrics.
+     * Mobile API: Day Sales Tracker converted products list & metrics with strict server-side role-based filtering.
      */
     public function data(Request $request): JsonResponse
     {
         try {
+            /** @var User|null $user */
             $user = $request->user() ?: auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated user.',
+                ], 401);
+            }
+
             $date = $request->input('date', now()->toDateString());
+            $dateFrom = $request->input('date_from');
+            $dateTo = $request->input('date_to');
             $parsedDate = Carbon::parse($date);
 
-            $convertedProducts = LeadProduct::query()
+            $query = LeadProduct::query()
                 ->with([
                     'lead.branch',
                     'lead.assignedTo.roles.department',
@@ -41,20 +53,29 @@ class DaySalesTrackerApiController extends Controller
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                       ->orWhere('lead_status_id', 5);
-                })
-                ->where(function ($q) use ($date) {
+                });
+
+            // Date filtering: Supports date range (date_from / date_to) or single date
+            if ($dateFrom && $dateTo) {
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    $q->whereBetween('converted_at', [$dateFrom, $dateTo])
+                      ->orWhere(function ($sub) use ($dateFrom, $dateTo) {
+                          $sub->whereNull('converted_at')->whereBetween('created_at', [$dateFrom, $dateTo]);
+                      });
+                });
+            } else {
+                $query->where(function ($q) use ($date) {
                     $q->whereDate('converted_at', $date)
                       ->orWhere(function ($sub) use ($date) {
                           $sub->whereNull('converted_at')->whereDate('created_at', $date);
                       });
-                })
-                ->whereHas('lead', function ($lq) use ($user) {
-                    if ($user) {
-                        $this->visibility->applyLeadVisibility($lq, $user);
-                    }
-                })
-                ->orderByDesc('id')
-                ->get();
+                });
+            }
+
+            // Apply Strict Server-Side Role-Based Scope & Security Constraints
+            $this->applyRoleBasedDataVisibility($query, $user, $request);
+
+            $convertedProducts = $query->orderByDesc('id')->get();
 
             $items = [];
             foreach ($convertedProducts as $idx => $lp) {
@@ -92,7 +113,7 @@ class DaySalesTrackerApiController extends Controller
                         || $roleKeys->intersect(['branch_manager', 'bm'])->isNotEmpty()
                         || $rawRoleNames->contains(fn($r) => str_contains($r, 'branch_manager'));
 
-                    $isTl = $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead'])->isNotEmpty()
+                    $isTl = $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead', 'teamlead'])->isNotEmpty()
                         || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader'));
 
                     $isSm = $roleKeys->intersect(['sales_manager'])->isNotEmpty()
@@ -156,9 +177,11 @@ class DaySalesTrackerApiController extends Controller
                     'mon' => $mon,
                     'date' => $dateFormatted,
                     'branch' => $branch,
+                    'branch_id' => $lead?->branch_id,
                     'branch_type' => $branchType,
                     'team_leader' => $teamLeaderName,
                     'team_member' => $memberName,
+                    'team_member_id' => $assignedUser?->id,
                     'client_name' => $clientName,
                     'account_name' => $clientName,
                     'department' => $department,
@@ -180,6 +203,17 @@ class DaySalesTrackerApiController extends Controller
             $totalCollection = (float) array_sum(array_column($items, 'month_collected'));
             $totalValue = (float) array_sum(array_column($items, 'product_price'));
 
+            // Options available to logged-in user for client-side filter pickers
+            $visibleBranches = $this->visibility->visibleBranches($user)->map(fn($b) => [
+                'id' => $b->id,
+                'name' => $b->name,
+            ])->values()->all();
+
+            $visibleUsers = $this->visibility->visibleAssignableUsers($user)->map(fn($u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+            ])->values()->all();
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -194,6 +228,8 @@ class DaySalesTrackerApiController extends Controller
                         'id' => $c->id,
                         'name' => $c->name,
                     ])->values()->all(),
+                    'visible_branches' => $visibleBranches,
+                    'visible_users' => $visibleUsers,
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -201,6 +237,192 @@ class DaySalesTrackerApiController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch Day Sales Tracker data: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Enforce strict role-based data visibility & security checks on LeadProduct query.
+     */
+    protected function applyRoleBasedDataVisibility($query, User $user, Request $request): void
+    {
+        // 1. Enforce company ID scoping
+        $companyId = $user->company_id;
+        if ($companyId) {
+            $query->whereHas('lead', function ($lq) use ($companyId) {
+                $lq->where('company_id', $companyId);
+            });
+        }
+
+        // 2. Identify Role Classification
+        $isCompanyWide = $this->visibility->isCompanyWideUser($user)
+            || $user->isCompanyAdminRole()
+            || $user->isCbo()
+            || $user->isSuperAdmin()
+            || $user->isSystemAdmin();
+
+        $isBranchAdmin = !$isCompanyWide && $user->isBranchAdmin();
+        $isBranchManager = !$isCompanyWide && !$isBranchAdmin && $user->isBranchManager();
+
+        $roleKeys = collect($user->roleKeys()->all());
+        $rawRoleNames = $user->roles->pluck('name')->map(fn($n) => strtolower($n));
+        $isTl = !$isCompanyWide && !$isBranchAdmin && !$isBranchManager && (
+            $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead', 'teamlead'])->isNotEmpty()
+            || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader') || str_contains($r, 'team_lead'))
+            || $this->visibility->accessLevelFor($user) === RoleMapping::ACCESS_TL
+            || $this->visibility->accessLevelFor($user) === RoleMapping::ACCESS_TEAM
+        );
+
+        $reqBranchId = $request->input('branch_id');
+        $reqUserId = $request->input('user_id');
+        $reqCategory = $request->input('category');
+        $reqSaleType = $request->input('sale_type');
+        $reqSearch = $request->input('search');
+
+        // 3. Apply Server-Side Query Scoping By Role
+        if ($isCompanyWide) {
+            // Company Admin / CBO: Display overall sales data across all branches
+            $query->whereHas('lead', function ($lq) use ($reqBranchId, $reqUserId) {
+                if (!empty($reqBranchId)) {
+                    $lq->where('branch_id', $reqBranchId);
+                }
+                if (!empty($reqUserId)) {
+                    $lq->where('assigned_to', $reqUserId);
+                }
+            });
+        } elseif ($isBranchAdmin) {
+            // Branch Admin: Display data belonging to THEIR ASSIGNED BRANCHES ONLY
+            $myBranchIds = array_map('intval', $user->getMyBranchIds());
+            if (empty($myBranchIds) && $user->branch_id) {
+                $myBranchIds = [(int) $user->branch_id];
+            }
+
+            // Security check: If branch_id param requested, validate against user's assigned branches
+            if (!empty($reqBranchId) && in_array((int)$reqBranchId, $myBranchIds, true)) {
+                $allowedBranchIds = [(int)$reqBranchId];
+            } else {
+                $allowedBranchIds = $myBranchIds;
+            }
+
+            $visibleUserIds = $this->visibility->visibleUserIds($user);
+
+            $query->whereHas('lead', function ($lq) use ($allowedBranchIds, $reqUserId, $visibleUserIds) {
+                if (!empty($allowedBranchIds)) {
+                    $lq->whereIn('branch_id', $allowedBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+
+                if (!empty($reqUserId)) {
+                    if ($visibleUserIds === null || in_array((int)$reqUserId, array_map('intval', $visibleUserIds), true)) {
+                        $lq->where('assigned_to', $reqUserId);
+                    } else {
+                        $lq->whereRaw('1 = 0');
+                    }
+                }
+            });
+        } elseif ($isBranchManager) {
+            // Branch Manager Updated Rule:
+            // 1. Main Branch ($mainBranchId): Logged-in Branch Manager's OWN LEADS ONLY ($user->id).
+            //    (Branch managers do not have team members in the main branch - excludes all other main branch employees).
+            // 2. Additional Assigned Branches ($additionalBranchIds): Leads belonging to assigned additional branches.
+            // 3. Unassigned Branches: Excluded completely.
+
+            $mainBranchId = $user->branch_id ? (int) $user->branch_id : null;
+            $allBranchIds = array_map('intval', $user->getMyBranchIds());
+            if (empty($allBranchIds) && $mainBranchId) {
+                $allBranchIds = [$mainBranchId];
+            }
+
+            $additionalBranchIds = array_values(array_diff($allBranchIds, array_filter([$mainBranchId])));
+
+            // Security check: If request branch_id parameter is passed, validate against allowed branches
+            if (!empty($reqBranchId) && in_array((int)$reqBranchId, $allBranchIds, true)) {
+                $targetBranchId = (int) $reqBranchId;
+                if ($targetBranchId === $mainBranchId) {
+                    $effectiveMainBranchId = $mainBranchId;
+                    $effectiveAdditionalBranchIds = [];
+                } else {
+                    $effectiveMainBranchId = null;
+                    $effectiveAdditionalBranchIds = [$targetBranchId];
+                }
+            } else {
+                $effectiveMainBranchId = $mainBranchId;
+                $effectiveAdditionalBranchIds = $additionalBranchIds;
+            }
+
+            $query->whereHas('lead', function ($lq) use ($user, $effectiveMainBranchId, $effectiveAdditionalBranchIds, $reqUserId) {
+                $lq->where(function ($sub) use ($user, $effectiveMainBranchId, $effectiveAdditionalBranchIds) {
+                    // Main Branch Condition: Must belong to main branch AND be assigned to the logged-in Branch Manager ONLY
+                    if ($effectiveMainBranchId) {
+                        $sub->where(function ($mainSub) use ($user, $effectiveMainBranchId) {
+                            $mainSub->where('branch_id', $effectiveMainBranchId)
+                                    ->where('assigned_to', $user->id);
+                        });
+                    }
+
+                    // Additional Assigned Branches Condition: Leads belonging to assigned additional branches
+                    if (!empty($effectiveAdditionalBranchIds)) {
+                        if ($effectiveMainBranchId) {
+                            $sub->orWhereIn('branch_id', $effectiveAdditionalBranchIds);
+                        } else {
+                            $sub->whereIn('branch_id', $effectiveAdditionalBranchIds);
+                        }
+                    }
+                });
+
+                // Optional user filter validation
+                if (!empty($reqUserId)) {
+                    $lq->where('assigned_to', $reqUserId);
+                }
+            });
+        } elseif ($isTl) {
+            // TL (Team Lead): Display own data + data belonging to their team members
+            $teamUserIds = $this->visibility->descendantUserIds($user)->push($user->id)->map(fn($id) => (int)$id)->unique()->values()->all();
+
+            if (!empty($reqUserId) && in_array((int)$reqUserId, $teamUserIds, true)) {
+                $allowedUserIds = [(int)$reqUserId];
+            } else {
+                $allowedUserIds = $teamUserIds;
+            }
+
+            $query->whereHas('lead', function ($lq) use ($allowedUserIds, $reqBranchId) {
+                $lq->whereIn('assigned_to', $allowedUserIds);
+                if (!empty($reqBranchId)) {
+                    $lq->where('branch_id', $reqBranchId);
+                }
+            });
+        } else {
+            // Other Roles / Executive: Display ONLY THEIR OWN DATA
+            $query->whereHas('lead', function ($lq) use ($user) {
+                $lq->where('assigned_to', $user->id);
+            });
+        }
+
+        // Apply additional category, sale_type, and search filters securely
+        if (!empty($reqCategory)) {
+            $query->where(function ($q) use ($reqCategory) {
+                $q->where('day_sales_category', $reqCategory)
+                  ->orWhereHas('daySalesCategory', fn($catQ) => $catQ->where('name', $reqCategory));
+            });
+        }
+
+        if (!empty($reqSaleType)) {
+            $query->where('sale_type', $reqSaleType);
+        }
+
+        if (!empty($reqSearch)) {
+            $searchTerm = '%' . trim($reqSearch) . '%';
+            $query->where(function ($sq) use ($searchTerm) {
+                $sq->where('product_name', 'like', $searchTerm)
+                  ->orWhere('day_sales_category', 'like', $searchTerm)
+                  ->orWhere('sale_type', 'like', $searchTerm)
+                  ->orWhereHas('lead', function ($lq) use ($searchTerm) {
+                      $lq->where('company_name', 'like', $searchTerm)
+                        ->orWhere('contact_name', 'like', $searchTerm)
+                        ->orWhereHas('assignedTo', fn($uq) => $uq->where('name', 'like', $searchTerm))
+                        ->orWhereHas('branch', fn($bq) => $bq->where('name', 'like', $searchTerm));
+                  });
+            });
         }
     }
 
@@ -288,7 +510,17 @@ class DaySalesTrackerApiController extends Controller
             'category' => ['nullable', 'string'],
         ]);
 
-        $lp = LeadProduct::findOrFail($validated['lead_product_id']);
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        $lp = LeadProduct::with('lead')->findOrFail($validated['lead_product_id']);
+
+        if ($user && $lp->lead && !$this->visibility->canAccessLead($lp->lead, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: You do not have permission to modify this record.',
+            ], 403);
+        }
+
         $lp->update(['day_sales_category' => $validated['category'] ?? null]);
 
         return response()->json([
@@ -309,7 +541,17 @@ class DaySalesTrackerApiController extends Controller
             'sale_type' => ['required', 'string'],
         ]);
 
-        $lp = LeadProduct::findOrFail($validated['lead_product_id']);
+        /** @var User|null $user */
+        $user = $request->user() ?: auth()->user();
+        $lp = LeadProduct::with('lead')->findOrFail($validated['lead_product_id']);
+
+        if ($user && $lp->lead && !$this->visibility->canAccessLead($lp->lead, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: You do not have permission to modify this record.',
+            ], 403);
+        }
+
         $lp->update(['sale_type' => $validated['sale_type']]);
 
         return response()->json([

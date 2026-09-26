@@ -705,6 +705,7 @@ class OdRequestApiController extends Controller
             'is_company_admin' => $isCompanyAdmin,
             'is_hr'            => $isHr,
             'is_branch_admin'  => $isBranchAdmin,
+            'is_admin_or_hr'   => $isAdminOrHr,
             'is_tl_or_manager' => $isTlOrManager,
             'has_team_members' => $hasTeamMembers,
             'descendant_ids'   => $descendantIds->all(),
