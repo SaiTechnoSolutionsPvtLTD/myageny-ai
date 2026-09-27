@@ -1937,7 +1937,7 @@ class SuperAdminDashboardController extends ApiController
                 'product_statuses' => LeadProduct::PRODUCT_STATUSES,
                 'payment_modes'    => LeadProduct::PAYMENT_MODES,
                 'users' => $this->visibility->visibleAssignableUsers($request->user())
-                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name, 'branch_id' => $u->branch_id])
                     ->values(),
             ],
 

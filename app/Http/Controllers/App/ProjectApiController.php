@@ -86,8 +86,39 @@ class ProjectApiController extends Controller
             return $this->designingDashboard($request);
         }
 
-        $projects = $this->visibleProjectsQuery($user)
-            ->get()
+        $isDm = in_array($selectedDashboard, ['dm', 'digital_marketing'], true);
+        $projectsQuery = $this->visibleProjectsQuery($user);
+
+        if ($isDm) {
+            $dmDeptIds = Department::where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+            })->pluck('id')->toArray();
+
+            $projectsQuery->where(function ($q) use ($dmDeptIds) {
+                if (!empty($dmDeptIds)) {
+                    $q->whereIn('department_id', $dmDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                                                            ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']));
+            });
+        } else {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $projectsQuery->where(function ($q) use ($devDeptIds) {
+                if (!empty($devDeptIds)) {
+                    $q->whereIn('department_id', $devDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
+                  ->orWhere(function ($sq) {
+                      $sq->whereNull('department_id')
+                         ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+                  });
+            });
+        }
+
+        $projects = $projectsQuery->get()
             ->map(function (ProductionInitiation $project) use ($user) {
                 $project = $this->decorateProjectForUser($project, $user);
                 $receivedAmount = (float) ($project->leadProduct?->payments?->sum('amount')
@@ -104,32 +135,6 @@ class ProjectApiController extends Controller
                 return $project;
             })
             ->values();
-
-        $isDm = in_array($selectedDashboard, ['dm', 'digital_marketing'], true);
-        if ($isDm) {
-            $dmDeptIds = Department::where(function ($q) {
-                $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
-                  ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
-            })->pluck('id')->toArray();
-
-            $projects = $projects->filter(function ($project) use ($dmDeptIds) {
-                if ($project->department_id && in_array((int) $project->department_id, $dmDeptIds, true)) {
-                    return true;
-                }
-                $deptName = strtolower((string) ($project->department?->name ?? ''));
-                return str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm');
-            })->values();
-        } else {
-            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
-
-            $projects = $projects->filter(function ($project) use ($devDeptIds) {
-                if ($project->department_id && in_array((int) $project->department_id, $devDeptIds, true)) {
-                    return true;
-                }
-                return $this->isDevelopmentProject($project);
-            })->values();
-        }
 
         $products = Product::query()->orderBy('product_name')->get(['id', 'product_name'])
             ->map(fn($p) => ['id' => $p->id, 'name' => $p->product_name])->values();
@@ -360,7 +365,13 @@ class ProjectApiController extends Controller
                 'quick_dates'                  => $quickDates,
                 'project_options'              => $projects->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)
                     ->values()
-                    ->map(fn($p) => $this->serializeProjectSummary($p)),
+                    ->map(fn($p) => [
+                        'id'           => $p->id,
+                        'product_name' => (string) ($p->product_name ?: 'Project'),
+                        'company_name' => (string) ($p->company_name ?: ($p->lead?->company_name ?: 'No Company')),
+                        'client_name'  => (string) ($p->client_name ?: ($p->lead?->contact_name ?: '—')),
+                        'lead_id'      => $p->lead_id ? (string) $p->lead_id : '',
+                    ])->all(),
                 'team_member_options'          => $this->dashboardTeamMembers($user, $projects),
                 'current_month_delivery'       => $currentMonthDelivery->map(fn($p) => $this->serializeProjectSummary($p))->values(),
                 'recent_projects'              => $filteredProjects->take(10)->map(fn($p) => $this->serializeProjectSummary($p))->values(),
@@ -2048,7 +2059,7 @@ class ProjectApiController extends Controller
         return [
             'id'                          => $p->id,
             'product_name'                => $p->product_name,
-            'company_name'                => $p->company_name,
+            'company_name'                => (string) ($p->company_name ?: ($p->lead?->company_name ?: ($p->client_name ?: 'No Company'))),
             'department'                  => $p->department?->name,
             'project_allocation_status'   => $p->project_allocation_status,
             'project_execution_status'    => $p->project_execution_status,
@@ -2066,12 +2077,15 @@ class ProjectApiController extends Controller
             'project_allocated_tl_user_ids'   => Arr::wrap($p->project_allocated_tl_user_ids),
             'project_allocated_employee_user_ids' => Arr::wrap($p->project_allocated_employee_user_ids),
             'allocated_person_label'      => $p->allocated_person_label ?? null,
-            'client_name'                 => $p->lead?->contact_name,
+            'client_name'                 => (string) ($p->client_name ?: ($p->lead?->contact_name ?: ($p->lead?->client_name ?: '—'))),
+            'mobile'                      => $p->lead?->mobile_number,
             'total_working_days'          => $p->total_working_days,
             'production_approval_status'  => $p->production_approval_status,
             'initiated_by'                => $p->initiatedBy?->name,
             'approved_by'                 => $p->productionApprovalReviewedBy?->name,
-            'approved_on'                 => $p->production_approval_reviewed_at,
+            'approved_on'                 => $p->production_approval_reviewed_at
+                ? Carbon::parse($p->production_approval_reviewed_at)->format('d M Y')
+                : ($p->created_at ? $p->created_at->format('d M Y') : '—'),
             // TL-scoped decoration
             'current_team_status'         => $p->current_team_status ?? null,
             'current_team_allocated_at'   => $p->current_team_allocated_at instanceof Carbon
@@ -5181,14 +5195,24 @@ class ProjectApiController extends Controller
             ];
         })->sortByDesc('raw_end_date')->values();
 
+        $renewalsPage = max(1, (int) $request->query('renewals_page', 1));
+        $renewalsPerPage = max(1, (int) $request->query('renewals_per_page', 5));
+        $expiredPage = max(1, (int) $request->query('expired_page', 1));
+        $expiredPerPage = max(1, (int) $request->query('expired_per_page', 5));
+
+        $totalRenewals = $renewalItems->count();
+        $totalExpired = $expiredItems->count();
+
         return [
-            'renewal_campaigns' => $renewalItems->all(),
-            'expired_campaigns' => $expiredItems->all(),
+            'renewal_campaigns' => $renewalItems->slice(($renewalsPage - 1) * $renewalsPerPage, $renewalsPerPage)->values()->all(),
+            'expired_campaigns' => $expiredItems->slice(($expiredPage - 1) * $expiredPerPage, $expiredPerPage)->values()->all(),
+            'renewal_has_more' => ($renewalsPage * $renewalsPerPage) < $totalRenewals,
+            'expired_has_more' => ($expiredPage * $expiredPerPage) < $totalExpired,
             'summary' => [
-                'total_renewals' => $renewalItems->count(),
+                'total_renewals' => $totalRenewals,
                 'due_renewals' => $renewalItems->where('is_renewed', false)->count(),
                 'completed_renewals' => $renewalItems->where('is_renewed', true)->count(),
-                'total_expired' => $expiredItems->count(),
+                'total_expired' => $totalExpired,
                 'unrenewed_expired' => $expiredItems->where('is_renewed', false)->count(),
             ],
             'current_month_label' => Carbon::today()->format('F Y'),
@@ -5228,19 +5252,30 @@ class ProjectApiController extends Controller
             });
         }
 
-        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
-            $project = $this->decorateProjectForUser($project, $user);
-            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
-            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
-            $project->received_amount = $received;
-            $project->balance_amount = max(0, $project->project_value - $received);
-            $project->project_delivery_date = $this->projectDeliveryDate($project);
-            return $project;
-        });
+        $totalCount = (clone $query)->count();
+
+        $page = max(1, (int) $request->query('seo_page', 1));
+        $perPage = max(1, (int) $request->query('seo_per_page', 5));
+
+        $pagedProjects = $query->latest('id')
+            ->forPage($page, $perPage)
+            ->get()
+            ->map(function (ProductionInitiation $project) use ($user) {
+                $project = $this->decorateProjectForUser($project, $user);
+                $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+                $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+                $project->received_amount = $received;
+                $project->balance_amount = max(0, $project->project_value - $received);
+                $project->project_delivery_date = $this->projectDeliveryDate($project);
+                return $project;
+            });
 
         return [
-            'count' => $allProjects->count(),
-            'items' => $allProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+            'count' => $totalCount,
+            'items' => $pagedProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+            'page' => $page,
+            'per_page' => $perPage,
+            'has_more' => ($page * $perPage) < $totalCount,
         ];
     }
 
@@ -5312,19 +5347,114 @@ class ProjectApiController extends Controller
             });
         }
 
-        $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
-            $project = $this->decorateProjectForUser($project, $user);
-            $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
-            $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
-            $project->received_amount = $received;
-            $project->balance_amount = max(0, $project->project_value - $received);
-            $project->project_delivery_date = $this->projectDeliveryDate($project);
-            return $project;
-        });
+        $totalCount = (clone $query)->count();
+
+        $page = max(1, (int) $request->query('wc_page', 1));
+        $perPage = max(1, (int) $request->query('wc_per_page', 5));
+
+        $pagedProjects = $query->latest('id')
+            ->forPage($page, $perPage)
+            ->get()
+            ->map(function (ProductionInitiation $project) use ($user) {
+                $project = $this->decorateProjectForUser($project, $user);
+                $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+                $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+                $project->received_amount = $received;
+                $project->balance_amount = max(0, $project->project_value - $received);
+                $project->project_delivery_date = $this->projectDeliveryDate($project);
+                return $project;
+            });
 
         return [
-            'count' => $allProjects->count(),
-            'items' => $allProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+            'count' => $totalCount,
+            'items' => $pagedProjects->map(fn($p) => $this->serializeProjectSummary($p))->values()->all(),
+            'page' => $page,
+            'per_page' => $perPage,
+            'has_more' => ($page * $perPage) < $totalCount,
         ];
+    }
+
+    public function dashboardSection(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $section = trim((string) $request->query('section', ''));
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = max(1, (int) $request->query('per_page', 5));
+        $search = trim((string) $request->query('search', ''));
+        $dashboardFilters = ['search' => $search];
+
+        switch ($section) {
+            case 'welcome_calls':
+            case 'pending_welcome_calls':
+                $departmentType = trim((string) $request->query('department_type', 'dm'));
+                $request->merge(['wc_page' => $page, 'wc_per_page' => $perPage]);
+                $data = $this->getPendingWelcomeCallProjectsData($user, $departmentType, $dashboardFilters, $request);
+                return response()->json([
+                    'status' => true,
+                    'section' => 'welcome_calls',
+                    'data' => [
+                        'items' => $data['items'],
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $data['count'],
+                        'has_more' => $data['has_more'],
+                    ],
+                ]);
+
+            case 'technical_seo':
+            case 'active_technical_seo':
+                $request->merge(['seo_page' => $page, 'seo_per_page' => $perPage]);
+                $data = $this->getActiveTechnicalSeoProjectsData($user, $dashboardFilters, $request);
+                return response()->json([
+                    'status' => true,
+                    'section' => 'technical_seo',
+                    'data' => [
+                        'items' => $data['items'],
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $data['count'],
+                        'has_more' => $data['has_more'],
+                    ],
+                ]);
+
+            case 'campaign_renewals':
+            case 'renewals':
+                $request->merge(['renewals_page' => $page, 'renewals_per_page' => $perPage]);
+                $data = $this->getDmCampaignsData($user, $dashboardFilters, $request);
+                return response()->json([
+                    'status' => true,
+                    'section' => 'campaign_renewals',
+                    'data' => [
+                        'items' => $data['renewal_campaigns'],
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $data['summary']['total_renewals'] ?? count($data['renewal_campaigns']),
+                        'has_more' => $data['renewal_has_more'] ?? false,
+                    ],
+                ]);
+
+            case 'campaign_expired':
+            case 'expired':
+                $request->merge(['expired_page' => $page, 'expired_per_page' => $perPage]);
+                $data = $this->getDmCampaignsData($user, $dashboardFilters, $request);
+                return response()->json([
+                    'status' => true,
+                    'section' => 'campaign_expired',
+                    'data' => [
+                        'items' => $data['expired_campaigns'],
+                        'current_page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $data['summary']['total_expired'] ?? count($data['expired_campaigns']),
+                        'has_more' => $data['expired_has_more'] ?? false,
+                    ],
+                ]);
+
+            default:
+                return response()->json(['message' => 'Unknown dashboard section.'], 400);
+        }
     }
 }

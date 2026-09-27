@@ -37,6 +37,7 @@ use App\Http\Controllers\App\HRMS\FaceRegistrationApiController;
 use App\Http\Controllers\App\HRMS\TimesheetLopApiController;
 use App\Http\Controllers\App\HRMS\AnnouncementApiController;
 use App\Http\Controllers\App\HRMS\HouseKeepingApiController;
+use App\Http\Controllers\App\HRMS\PayrollApiController;
 use App\Http\Controllers\App\OvpModuleApiController;
 use App\Http\Controllers\App\ProductionApprovalApiController;
 use App\Http\Controllers\App\ProductionInitiationApiController;
@@ -388,6 +389,17 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             Route::put('works/{id}', [HouseKeepingApiController::class, 'updateWork'])->name('works.update');
             Route::delete('works/{id}', [HouseKeepingApiController::class, 'destroyWork'])->name('works.destroy');
         });
+
+        // ── Payroll (HRMS) ────────────────────────────────────────────────────
+        Route::prefix('payroll')->name('payroll.')->group(function () {
+            Route::get('/', [PayrollApiController::class, 'index'])->name('index');
+            Route::get('create-data', [PayrollApiController::class, 'createData'])->name('create-data');
+            Route::get('preview-rows', [PayrollApiController::class, 'previewRows'])->name('preview-rows');
+            Route::post('/', [PayrollApiController::class, 'store'])->name('store');
+            Route::get('{payroll}', [PayrollApiController::class, 'show'])->name('show');
+            Route::get('{payroll}/payslip/{item}', [PayrollApiController::class, 'payslip'])->name('payslip');
+            Route::get('{payroll}/payslip/{item}/pdf', [PayrollApiController::class, 'payslipPdf'])->name('payslip-pdf');
+        });
     });
 
     // ── Face Attendance (new self-service module, separate from the
@@ -460,6 +472,8 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         // ── Static / literal segments FIRST ─────────────────────────────────
         Route::get('dashboard', [ProjectApiController::class, 'dashboard'])
             ->name('dashboard');
+        Route::get('dashboard/section', [ProjectApiController::class, 'dashboardSection'])
+            ->name('dashboard.section');
 
         Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
             ->name('timesheets.index');
@@ -597,6 +611,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
 
     Route::get('/customer-success/data', [CustomerSuccessDashboardApiController::class, 'data']);
     Route::get('/customer-success/filters', [CustomerSuccessDashboardApiController::class, 'filters']);
+    Route::get('/customer-success/section', [CustomerSuccessDashboardApiController::class, 'section']);
 
     // ── Expense Reimbursements — mirrors web's ExpenseRequestController exactly ──
     Route::get('/expense-requests', [ExpenseRequestApiController::class, 'index']);

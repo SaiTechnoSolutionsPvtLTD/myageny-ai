@@ -234,6 +234,14 @@ return [
             // Spatie permission (see App\Models\Permission's permission map),
             // so this needed no new migration, unlike od_request.menuview.
             [
+                'key' => 'hrms.payroll',
+                'label' => 'Payroll',
+                'section' => 'HRMS',
+                'order' => 97,
+                'permission' => 'payroll.menuview',
+                'forbid_method' => 'isHrmsAttendanceOnlyUser',
+            ],
+            [
                 'key' => 'hrms.recruitment',
                 'label' => 'Recruitment',
                 'section' => 'HRMS',
