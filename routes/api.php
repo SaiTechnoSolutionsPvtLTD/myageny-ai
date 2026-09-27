@@ -74,6 +74,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/day-sales-tracker/categories/{id}/delete', [\App\Http\Controllers\DaySalesTrackerController::class, 'deleteCategory']);
     Route::post('/day-sales-tracker/update-category', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateCategory']);
     Route::post('/day-sales-tracker/update-sale-type', [\App\Http\Controllers\DaySalesTrackerController::class, 'updateSaleType']);
+    Route::get('/day-sales-tracker/report', [\App\Http\Controllers\DaySalesTrackerController::class, 'report']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
