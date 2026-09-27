@@ -148,6 +148,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('day-sales-tracker.update-sale-type');
     Route::get('/api/day-sales-tracker/report', [\App\Http\Controllers\DaySalesTrackerController::class, 'report'])
         ->name('day-sales-tracker.report');
+    Route::get('/api/day-sales-tracker/trend-analysis', [\App\Http\Controllers\DaySalesTrackerController::class, 'trendAnalysis'])
+        ->name('day-sales-tracker.trend-analysis');
 
     // Default redirect by role
     Route::get('/dashboard', function () {

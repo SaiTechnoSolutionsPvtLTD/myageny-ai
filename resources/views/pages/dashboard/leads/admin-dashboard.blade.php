@@ -2310,6 +2310,84 @@
     </div>
 </div>
 
+{{-- ── Trend Analysis Modal (Quarterly & YoY Branch Collection) ── --}}
+<div class="da-modal-overlay" id="daTrendAnalysisModal" style="display:none; z-index:100002; align-items:center; justify-content:center; background:rgba(15,23,42,0.6);" onclick="if(event.target === this) closeTrendAnalysisModal()">
+    <div style="background:#ffffff; border-radius:14px; width:980px; max-width:96%; padding:22px 24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); animation:daModalPop 0.18s ease-out; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-flex; width:34px; height:34px; border-radius:8px; background:#f3e8ff; color:#7e22ce; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">📈</span>
+                <div>
+                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Branch Wise Trend Analysis</h5>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;">Quarterly payment collection breakdown by branch &amp; Year-on-Year trend</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Year:</label>
+                    <select id="daTrendYearPicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:110px;" onchange="loadTrendAnalysisData()">
+                    </select>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Mode:</label>
+                    <select id="daTrendModePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:170px;" onchange="loadTrendAnalysisData()">
+                        <option value="financial" selected>Financial Year (Apr-Mar)</option>
+                        <option value="calendar">Calendar Year (Jan-Dec)</option>
+                    </select>
+                </div>
+                <button type="button" class="da-modal-close" onclick="closeTrendAnalysisModal()" title="Close">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:16px;">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Total Collection</div>
+                <div style="font-size:17px; font-weight:800; color:#0f172a;" id="daTrendTotalVal">₹0.00</div>
+            </div>
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">YoY Growth</div>
+                <div style="font-size:17px; font-weight:800; color:#166534;" id="daTrendYoyVal">0%</div>
+            </div>
+            <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#0369a1; text-transform:uppercase;">Best Quarter</div>
+                <div style="font-size:17px; font-weight:800; color:#075985;" id="daTrendBestQ">Q1</div>
+            </div>
+            <div style="background:#fdf4ff; border:1px solid #f5d0fe; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#a21caf; text-transform:uppercase;">Top Branch</div>
+                <div style="font-size:15px; font-weight:800; color:#86198f; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="daTrendTopBranch">—</div>
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="da-modal-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:1;">
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:40px;">#</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Branch Name</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ1">Q1</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ2">Q2</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ3">Q3</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ4">Q4</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; background:#f1f5f9;">Total Collection</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;">YoY Growth</th>
+                    </tr>
+                </thead>
+                <tbody id="daTrendTableBody">
+                    <tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;">Loading trend analysis...</td></tr>
+                </tbody>
+                <tfoot id="daTrendTableFoot" style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0;">
+                </tfoot>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid #f1f5f9;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeTrendAnalysisModal()" style="font-size:12px; border-radius:7px; font-weight:600; padding:6px 16px;">Close</button>
+        </div>
+    </div>
+</div>
+
 {{-- ── Branch Hot Leads Detail Modal (Stacked on top of Key Metrics) ── --}}
 <div class="da-submodal-overlay" id="daBranchHotLeadsModal" onclick="if(event.target === this) closeBranchHotLeadsModal()">
     <div class="da-submodal-container" role="dialog" aria-modal="true" aria-labelledby="daBranchModalTitle">
@@ -3117,7 +3195,16 @@ function renderForecasting(d) {
         '<div class="da-kpi-lbl">Day Sales Tracker</div>' +
         '<div class="da-kpi-sub">' + daySalesSub + '</div></div>';
 
-    gridEl.innerHTML = cardHtml + daySalesCardHtml;
+    var trendAnalysisCardHtml = '<div class="da-kpi" onclick="openTrendAnalysisModal()" style="background:linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);cursor:pointer;" title="Click to view Quarterly Trend Analysis">' +
+        '<div class="da-kpi-icon">' +
+        '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
+        '<path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="#ffffff"/>' +
+        '</svg></div>' +
+        '<div class="da-kpi-val">Trend Analysis</div>' +
+        '<div class="da-kpi-lbl">Quarterly &amp; YoY Trend</div>' +
+        '<div class="da-kpi-sub">Branch-wise Q1, Q2, Q3, Q4 collection</div></div>';
+
+    gridEl.innerHTML = cardHtml + daySalesCardHtml + trendAnalysisCardHtml;
 }
 
 window.openTotalProspectsModal = function() {
@@ -3982,6 +4069,129 @@ function renderCategoryDetailsTable(items) {
         '</tr>';
     }
 }
+
+/* ── Trend Analysis Modal JS ── */
+window.openTrendAnalysisModal = function() {
+    var modal = document.getElementById('daTrendAnalysisModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    var currentYear = new Date().getFullYear();
+    var yearPicker = document.getElementById('daTrendYearPicker');
+    if (yearPicker && yearPicker.options.length === 0) {
+        var yearsHtml = '';
+        for (var y = currentYear; y >= currentYear - 4; y--) {
+            yearsHtml += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+        }
+        yearPicker.innerHTML = yearsHtml;
+    }
+
+    loadTrendAnalysisData();
+};
+
+window.closeTrendAnalysisModal = function() {
+    var modal = document.getElementById('daTrendAnalysisModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+};
+
+window.loadTrendAnalysisData = function() {
+    var tbody = document.getElementById('daTrendTableBody');
+    var tfoot = document.getElementById('daTrendTableFoot');
+    var yearPicker = document.getElementById('daTrendYearPicker');
+    var modePicker = document.getElementById('daTrendModePicker');
+
+    var selectedYear = yearPicker ? yearPicker.value : new Date().getFullYear();
+    var selectedMode = modePicker ? modePicker.value : 'financial';
+
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading quarterly trend analysis...</span></div></td></tr>';
+    }
+    if (tfoot) tfoot.innerHTML = '';
+
+    var url = '{{ url("/api/day-sales-tracker/trend-analysis") }}?year=' + encodeURIComponent(selectedYear) + '&mode=' + encodeURIComponent(selectedMode);
+
+    var headers = { 'Accept': 'application/json' };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(res) {
+            if (!res.success) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">' + (res.message || 'Failed to load trend analysis.') + '</td></tr>';
+                return;
+            }
+
+            var data = res.data || {};
+            var branches = data.branches || [];
+            var totals = data.totals || {};
+            var qLabels = data.quarter_labels || {};
+
+            if (qLabels.q1) document.getElementById('daThQ1').textContent = qLabels.q1;
+            if (qLabels.q2) document.getElementById('daThQ2').textContent = qLabels.q2;
+            if (qLabels.q3) document.getElementById('daThQ3').textContent = qLabels.q3;
+            if (qLabels.q4) document.getElementById('daThQ4').textContent = qLabels.q4;
+
+            var totalValEl = document.getElementById('daTrendTotalVal');
+            var yoyValEl = document.getElementById('daTrendYoyVal');
+            var bestQEl = document.getElementById('daTrendBestQ');
+            var topBranchEl = document.getElementById('daTrendTopBranch');
+
+            if (totalValEl) totalValEl.textContent = fmt(totals.total || 0);
+            if (yoyValEl) {
+                var yoy = totals.yoy_growth || 0;
+                yoyValEl.textContent = (yoy > 0 ? '+' : '') + yoy + '%';
+                yoyValEl.style.color = yoy >= 0 ? '#166534' : '#b91c1c';
+            }
+            if (bestQEl) bestQEl.textContent = totals.best_quarter || 'Q1';
+            if (topBranchEl) topBranchEl.textContent = totals.top_branch || 'N/A';
+
+            if (branches.length === 0) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;">No trend data available.</td></tr>';
+                return;
+            }
+
+            var rowsHtml = '';
+            branches.forEach(function(b, idx) {
+                var growth = b.yoy_growth || 0;
+                var growthColor = growth >= 0 ? '#16a34a' : '#dc2626';
+                var growthSign = growth > 0 ? '+' : '';
+
+                rowsHtml += '<tr>' +
+                    '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (idx + 1) + '</td>' +
+                    '<td style="font-weight:700; color:#1e293b;">' + b.branch_name + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q1) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q2) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q3) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q4) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#0f172a; background:#f8fafc;">' + fmt(b.total) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:' + growthColor + ';">' + growthSign + growth + '%</td>' +
+                '</tr>';
+            });
+
+            if (tbody) tbody.innerHTML = rowsHtml;
+
+            if (tfoot) {
+                var overallYoySign = totals.yoy_growth > 0 ? '+' : '';
+                var overallYoyColor = totals.yoy_growth >= 0 ? '#16a34a' : '#dc2626';
+                tfoot.innerHTML = '<tr>' +
+                    '<td colspan="2">Total (' + branches.length + ' Branches)</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q1 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q2 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q3 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q4 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#0284c7; background:#f1f5f9;">' + fmt(totals.total || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:' + overallYoyColor + ';">' + overallYoySign + (totals.yoy_growth || 0) + '%</td>' +
+                '</tr>';
+            }
+        })
+        .catch(function(err) {
+            console.error('[Trend Analysis Error]', err);
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">Error loading trend analysis: ' + (err.message || 'Server error') + '</td></tr>';
+        });
+};
 
 /* ═══════════════════════════════════════════════════════
    ACTIVE BRANCHES TABS & COMPARISON LOGIC

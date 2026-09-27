@@ -585,4 +585,234 @@ class DaySalesTrackerController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get Branch-wise Quarterly Collection Trend Analysis and YoY Growth.
+     */
+    public function trendAnalysis(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user() ?: auth()->user();
+            $year = (int) $request->input('year', now()->year);
+            $mode = $request->input('mode', 'financial');
+
+            $prevYear = $year - 1;
+
+            $quarters = $this->getQuartersForYear($year, $mode);
+            $prevQuarters = $this->getQuartersForYear($prevYear, $mode);
+
+            $companyId = $user?->company_id;
+            $branches = \App\Models\Branch::query()
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name', 'branch_type', 'is_default']);
+
+            $branchDataMap = [];
+
+            foreach ($branches as $b) {
+                $bName = $b->name ?: 'Branch #' . $b->id;
+                $branchDataMap[$b->id] = [
+                    'branch_id'       => $b->id,
+                    'branch_name'     => $bName,
+                    'branch_type'     => $b->branch_type ?: ($b->is_default ? 'HO' : 'Branch'),
+                    'q1'              => 0.0,
+                    'q2'              => 0.0,
+                    'q3'              => 0.0,
+                    'q4'              => 0.0,
+                    'total'           => 0.0,
+                    'prev_year_total' => 0.0,
+                    'yoy_growth'      => 0.0,
+                ];
+            }
+
+            $cstBranchId = 'cst';
+            $branchDataMap[$cstBranchId] = [
+                'branch_id'       => 'cst',
+                'branch_name'     => 'CST (Renewals & Dev)',
+                'branch_type'     => 'CST',
+                'q1'              => 0.0,
+                'q2'              => 0.0,
+                'q3'              => 0.0,
+                'q4'              => 0.0,
+                'total'           => 0.0,
+                'prev_year_total' => 0.0,
+                'yoy_growth'      => 0.0,
+            ];
+
+            $allStart = $prevQuarters['q1']['start'];
+            $allEnd   = $quarters['q4']['end'];
+
+            $payments = \App\Models\LeadProductPayment::query()
+                ->with(['lead.branch'])
+                ->whereBetween('payment_date', [$allStart, $allEnd])
+                ->whereHas('lead', function ($lq) use ($user) {
+                    if ($user) {
+                        $this->visibility->applyLeadVisibility($lq, $user);
+                    }
+                })
+                ->get();
+
+            foreach ($payments as $p) {
+                $pDate = Carbon::parse($p->payment_date);
+                $pAmt = (float) $p->amount;
+                $bId = $p->lead?->branch_id ?: ($branches->firstWhere('is_default', true)?->id ?? $branches->first()?->id);
+
+                if ($p->lead && ($p->lead->category === 'cst' || str_contains(strtolower($p->lead->category ?? ''), 'cst'))) {
+                    $targetBranchKey = $cstBranchId;
+                } elseif (isset($branchDataMap[$bId])) {
+                    $targetBranchKey = $bId;
+                } else {
+                    $targetBranchKey = $branches->first()?->id ?? $cstBranchId;
+                }
+
+                foreach (['q1', 'q2', 'q3', 'q4'] as $qKey) {
+                    if ($pDate->between($quarters[$qKey]['start'], $quarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey][$qKey] += $pAmt;
+                        $branchDataMap[$targetBranchKey]['total'] += $pAmt;
+                        break;
+                    }
+                    if ($pDate->between($prevQuarters[$qKey]['start'], $prevQuarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey]['prev_year_total'] += $pAmt;
+                        break;
+                    }
+                }
+            }
+
+            $convertedProducts = LeadProduct::query()
+                ->with(['lead.branch', 'payments'])
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                      ->orWhere('lead_status_id', 5);
+                })
+                ->where(function ($q) use ($allStart, $allEnd) {
+                    $q->whereBetween('converted_at', [$allStart, $allEnd])
+                      ->orWhere(function ($sub) use ($allStart, $allEnd) {
+                          $sub->whereNull('converted_at')->whereBetween('created_at', [$allStart, $allEnd]);
+                      });
+                })
+                ->whereHas('lead', function ($lq) use ($user) {
+                    if ($user) {
+                        $this->visibility->applyLeadVisibility($lq, $user);
+                    }
+                })
+                ->get();
+
+            foreach ($convertedProducts as $lp) {
+                if ($lp->payments->count() > 0) {
+                    continue;
+                }
+
+                $convDate = Carbon::parse($lp->converted_at ?: $lp->created_at);
+                $pAmt = (float) ($lp->amount_paid ?: $lp->total_price);
+                if ($pAmt <= 0) continue;
+
+                $lead = $lp->lead;
+                $bId = $lead?->branch_id ?: ($branches->firstWhere('is_default', true)?->id ?? $branches->first()?->id);
+
+                if ($lead && ($lead->category === 'cst' || str_contains(strtolower($lead->category ?? ''), 'cst'))) {
+                    $targetBranchKey = $cstBranchId;
+                } elseif (isset($branchDataMap[$bId])) {
+                    $targetBranchKey = $bId;
+                } else {
+                    $targetBranchKey = $branches->first()?->id ?? $cstBranchId;
+                }
+
+                foreach (['q1', 'q2', 'q3', 'q4'] as $qKey) {
+                    if ($convDate->between($quarters[$qKey]['start'], $quarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey][$qKey] += $pAmt;
+                        $branchDataMap[$targetBranchKey]['total'] += $pAmt;
+                        break;
+                    }
+                    if ($convDate->between($prevQuarters[$qKey]['start'], $prevQuarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey]['prev_year_total'] += $pAmt;
+                        break;
+                    }
+                }
+            }
+
+            $branchList = [];
+            foreach ($branchDataMap as $bKey => &$bRow) {
+                $prev = $bRow['prev_year_total'];
+                $curr = $bRow['total'];
+                $bRow['yoy_growth'] = $prev > 0 ? round((($curr - $prev) / $prev) * 100, 1) : ($curr > 0 ? 100.0 : 0.0);
+                $branchList[] = $bRow;
+            }
+
+            usort($branchList, fn($a, $b) => $b['total'] <=> $a['total']);
+
+            $q1Total = collect($branchList)->sum('q1');
+            $q2Total = collect($branchList)->sum('q2');
+            $q3Total = collect($branchList)->sum('q3');
+            $q4Total = collect($branchList)->sum('q4');
+            $grandTotal = collect($branchList)->sum('total');
+            $grandPrevTotal = collect($branchList)->sum('prev_year_total');
+            $overallYoy = $grandPrevTotal > 0 ? round((($grandTotal - $grandPrevTotal) / $grandPrevTotal) * 100, 1) : ($grandTotal > 0 ? 100.0 : 0.0);
+
+            $qTotals = ['Q1' => $q1Total, 'Q2' => $q2Total, 'Q3' => $q3Total, 'Q4' => $q4Total];
+            arsort($qTotals);
+            $bestQuarterKey = array_key_first($qTotals) ?: 'Q1';
+
+            $topBranchName = !empty($branchList) && $branchList[0]['total'] > 0 ? $branchList[0]['branch_name'] : 'N/A';
+
+            $yearsList = [];
+            $currentYear = now()->year;
+            for ($y = $currentYear; $y >= $currentYear - 4; $y--) {
+                $yearsList[] = $y;
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'year'             => $year,
+                    'prev_year'        => $prevYear,
+                    'mode'             => $mode,
+                    'years_list'       => $yearsList,
+                    'quarter_labels'   => [
+                        'q1' => $quarters['q1']['label'],
+                        'q2' => $quarters['q2']['label'],
+                        'q3' => $quarters['q3']['label'],
+                        'q4' => $quarters['q4']['label'],
+                    ],
+                    'branches'         => $branchList,
+                    'totals'           => [
+                        'q1'              => round($q1Total, 2),
+                        'q2'              => round($q2Total, 2),
+                        'q3'              => round($q3Total, 2),
+                        'q4'              => round($q4Total, 2),
+                        'total'           => round($grandTotal, 2),
+                        'prev_year_total' => round($grandPrevTotal, 2),
+                        'yoy_growth'      => $overallYoy,
+                        'best_quarter'    => $bestQuarterKey,
+                        'top_branch'      => $topBranchName,
+                    ]
+                ]
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to calculate trend analysis.',
+                'error'   => config('app.debug') ? $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    private function getQuartersForYear(int $year, string $mode): array
+    {
+        if ($mode === 'calendar') {
+            return [
+                'q1' => ['start' => Carbon::create($year, 1, 1)->startOfDay(),  'end' => Carbon::create($year, 3, 31)->endOfDay(), 'label' => 'Q1 (Jan - Mar)'],
+                'q2' => ['start' => Carbon::create($year, 4, 1)->startOfDay(),  'end' => Carbon::create($year, 6, 30)->endOfDay(), 'label' => 'Q2 (Apr - Jun)'],
+                'q3' => ['start' => Carbon::create($year, 7, 1)->startOfDay(),  'end' => Carbon::create($year, 9, 30)->endOfDay(), 'label' => 'Q3 (Jul - Sep)'],
+                'q4' => ['start' => Carbon::create($year, 10, 1)->startOfDay(), 'end' => Carbon::create($year, 12, 31)->endOfDay(), 'label' => 'Q4 (Oct - Dec)'],
+            ];
+        }
+
+        return [
+            'q1' => ['start' => Carbon::create($year, 4, 1)->startOfDay(),  'end' => Carbon::create($year, 6, 30)->endOfDay(), 'label' => 'Q1 (Apr - Jun)'],
+            'q2' => ['start' => Carbon::create($year, 7, 1)->startOfDay(),  'end' => Carbon::create($year, 9, 30)->endOfDay(), 'label' => 'Q2 (Jul - Sep)'],
+            'q3' => ['start' => Carbon::create($year, 10, 1)->startOfDay(), 'end' => Carbon::create($year, 12, 31)->endOfDay(), 'label' => 'Q3 (Oct - Dec)'],
+            'q4' => ['start' => Carbon::create($year + 1, 1, 1)->startOfDay(), 'end' => Carbon::create($year + 1, 3, 31)->endOfDay(), 'label' => 'Q4 (Jan - Mar)'],
+        ];
+    }
 }
