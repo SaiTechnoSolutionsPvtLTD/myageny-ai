@@ -1527,6 +1527,7 @@
                     <span>Key Metrics</span>
                 </div>
                 <span class="da-badge" id="daModalPeriodBadge" style="background:#fee2e2; color:#b91c1c; border-color:#fecaca; font-weight:700;">Current Month</span>
+                <span class="da-badge" id="daModalTotalBadge" style="background:#f1f5f9; color:#0f172a; border-color:#cbd5e1; font-weight:800; font-size:12px;">Total Prospects: <span id="daModalTotalProspectsCount">0</span></span>
             </div>
             <button type="button" class="da-modal-close" onclick="closeTotalProspectsModal()" title="Close (Esc)">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -2775,23 +2776,36 @@ function renderForecasting(d) {
     var k = (d && d.kpis) || {};
     var fc = (d && d.forecasting) || {};
 
+    var cst = fc.cst || {
+        count: k.cst_prospects_count || 0,
+        deal_value: k.cst_deal_value || 0,
+        expected_value: k.cst_expected_value || 0,
+        product_name: 'CST'
+    };
+
+    var cstCount = Number(cst.count || 0);
+    var cstDealVal = Number(cst.deal_value || 0);
+    var cstExpVal = Number(cst.expected_value || 0);
+
     var hotCount = fc.total_prospects !== undefined
         ? fc.total_prospects
         : (fc.hot_products_count !== undefined
-            ? fc.hot_products_count
-            : (k.current_month_hot_products_count !== undefined
-                ? k.current_month_hot_products_count
-                : (k.total_prospects !== undefined ? k.total_prospects : 0)));
+            ? (Number(fc.hot_products_count) + cstCount)
+            : (k.total_prospects !== undefined
+                ? k.total_prospects
+                : ((k.current_month_hot_products_count !== undefined ? Number(k.current_month_hot_products_count) : 0) + cstCount)));
 
     var hotValue = fc.deal_value !== undefined
         ? fc.deal_value
         : (fc.hot_products_value !== undefined
-            ? fc.hot_products_value
-            : (k.current_month_hot_products_value || 0));
+            ? (Number(fc.hot_products_value) + cstDealVal)
+            : (k.current_month_hot_products_value !== undefined
+                ? (Number(k.current_month_hot_products_value) + cstDealVal)
+                : 0));
 
     var expectedCollection = fc.expected_collection_value !== undefined
         ? fc.expected_collection_value
-        : (k.current_month_expected_collection || 0);
+        : ((k.current_month_expected_collection || 0) + cstExpVal);
 
     var monthName = fc.month_name || 'Current Month';
 
@@ -2807,13 +2821,6 @@ function renderForecasting(d) {
         deal_value: k.coco_deal_value || 0,
         expected_value: k.coco_expected_value || 0,
         product_name: 'Channel Partner COCO Model'
-    };
-
-    var cst = fc.cst || {
-        count: k.cst_prospects_count || 0,
-        deal_value: k.cst_deal_value || 0,
-        expected_value: k.cst_expected_value || 0,
-        product_name: 'CST'
     };
 
     var nstHo = fc.nst_ho || {
@@ -2837,7 +2844,7 @@ function renderForecasting(d) {
         activeBranches: activeBranches
     };
 
-    var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • Hot products') : 'Current month Hot products';
+    var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • NST & CST Prospects') : 'Current month NST & CST prospects';
 
     var cardHtml = '<div class="da-kpi" onclick="openTotalProspectsModal()" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%);cursor:pointer;" title="Click to view Key Metrics">' +
         '<div class="da-kpi-icon">' +
@@ -2930,6 +2937,16 @@ window.openTotalProspectsModal = function() {
     if (cstCountEl) cstCountEl.textContent = cst.count !== undefined ? cst.count : 0;
     if (cstDealEl)  cstDealEl.textContent  = fmt(cst.deal_value || 0);
     if (cstExpEl)   cstExpEl.textContent   = fmt(cst.expected_value || 0);
+
+    // Total Prospects badge in header
+    var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
+    if (totalBadgeEl) {
+        var totalModalSum = (nstHo.count !== undefined ? Number(nstHo.count) : 0)
+            + (nonCoco.count !== undefined ? Number(nonCoco.count) : 0)
+            + (coco.count !== undefined ? Number(coco.count) : 0)
+            + (cst.count !== undefined ? Number(cst.count) : 0);
+        totalBadgeEl.textContent = totalModalSum;
+    }
 
     // ── Non-admin users (Branch Admin, Branch Manager, TL, Sales Executive) → show Key Metrics modal with their relevant card(s) ──
     if (!CAN_VIEW_ACTIVE_BRANCHES) {
