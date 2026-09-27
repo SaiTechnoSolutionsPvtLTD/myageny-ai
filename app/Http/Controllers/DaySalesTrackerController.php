@@ -593,6 +593,13 @@ class DaySalesTrackerController extends Controller
     {
         try {
             $user = $request->user() ?: auth()->user();
+            if ($user && !$user->isSuperAdmin() && !$user->isSystemAdmin() && !$user->isCompanyAdminRole()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access. Trend analysis is restricted to Company Admin.',
+                ], 403);
+            }
+
             $year = (int) $request->input('year', now()->year);
             $mode = $request->input('mode', 'financial');
 

@@ -521,6 +521,13 @@ class ProjectController extends Controller
                 $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
                 $project->received_amount = $receivedAmount;
                 $project->balance_amount = max(0, $project->project_value - $project->received_amount);
+
+                $expVal = (float) ($project->expected_value ?? $project->leadProduct?->expected_value ?? 0);
+                $expDate = $project->expected_date ?? $project->leadProduct?->closure_date;
+
+                $project->expected_value = $expVal > 0 ? $expVal : 0;
+                $project->expected_date = !empty($expDate) ? $expDate : null;
+
                 $project->allocated_employee_count = collect(Arr::wrap($project->project_allocated_employee_user_ids))
                     ->filter()
                     ->count();
@@ -692,11 +699,35 @@ class ProjectController extends Controller
         ];
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
+
+        $df = $this->parseFilterDate($dashboardFilters['date_from']);
+        $dt = $this->parseFilterDate($dashboardFilters['date_to']);
+
+        $expectedProjects = $filteredProjects->filter(function ($p) use ($df, $dt) {
+            if (empty($p->expected_date) || (float)($p->expected_value ?? 0) <= 0) {
+                return false;
+            }
+            if ($df && $dt) {
+                try {
+                    $eDate = Carbon::parse($p->expected_date);
+                    if (!$eDate->between($df, $dt)) {
+                        return false;
+                    }
+                } catch (\Throwable $e) {
+                    return false;
+                }
+            }
+            return true;
+        })->values();
+
+        $expectedValueSum = $expectedProjects->sum('expected_value');
+
         $stats = [
             'allocated_projects' => $filteredProjects->count(),
-            'project_value' => round($filteredProjects->sum('project_value'), 2),
-            'received_amount' => round($filteredProjects->sum('received_amount'), 2),
-            'balance_amount' => round($filteredProjects->sum('balance_amount'), 2),
+            'project_value'      => round($filteredProjects->sum('project_value'), 2),
+            'received_amount'   => round($filteredProjects->sum('received_amount'), 2),
+            'balance_amount'    => round($filteredProjects->sum('balance_amount'), 2),
+            'expected_value'    => round($expectedValueSum, 2),
         ];
 
         // Count unallocated projects for project_coordinator and tl users
@@ -819,6 +850,8 @@ class ProjectController extends Controller
             'employees' => $employees,
             'selectedDashboard' => $selectedDashboard,
             'stats' => $stats,
+            'filteredProjects' => $filteredProjects,
+            'expectedProjects' => $expectedProjects,
             'pendingWelcomeCallCount' => $pendingWelcomeCallData['count'],
             'pendingWelcomeCallProjects' => $pendingWelcomeCallData['paginated'],
             'allocationPendingCount' => $allocationPendingProjects,

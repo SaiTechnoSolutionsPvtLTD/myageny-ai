@@ -1044,15 +1044,15 @@
                         </div>
                         <div class="pjd-stat-sub">Payments already received for these projects.</div>
                     </div>
-                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #7c2d12 0%, #f97316 100%);">
+                    <div class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #059669 0%, #10b981 100%); cursor: pointer;" onclick="openPjdExpectedValueModal()" title="Click to view Expected Collection details">
                         <div class="pjd-stat-header">
-                            <span class="pjd-stat-label">Balance Amount</span>
-                            <span class="pjd-stat-icon"><i class="bi bi-hourglass-split"></i></span>
+                            <span class="pjd-stat-label">Expected Value</span>
+                            <span class="pjd-stat-icon"><i class="bi bi-calendar-check-fill"></i></span>
                         </div>
                         <div class="pjd-stat-value">
-                            <span>{{ $currency($stats['balance_amount']) }}</span>
+                            <span>{{ $currency($stats['expected_value'] ?? 0) }}</span>
                         </div>
-                        <div class="pjd-stat-sub">Outstanding amount still pending collection.</div>
+                        <div class="pjd-stat-sub">Expected collection based on expected date. <i class="bi bi-box-arrow-up-right ms-1"></i></div>
                     </div>
 
                     {{-- 5. Pending Welcome Calls --}}
@@ -1615,6 +1615,143 @@
                     </div>
                 </div>
             @endif
+
+            {{-- Expected Value Details Modal --}}
+            <div id="pjdExpectedValueModalOverlay" class="pjd-update-modal-overlay" onclick="closePjdExpectedValueModal()"></div>
+            <div id="pjdExpectedValueModal" class="pjd-update-modal" style="width: min(1100px, calc(100vw - 32px));">
+                <div class="pjd-update-modal-head" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-bottom: 1px solid #a7f3d0;">
+                    <div>
+                        <div class="pjd-card-title" style="color: #065f46; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-calendar-check-fill" style="color: #10b981;"></i>
+                            Development Projects - Expected Collection Details
+                        </div>
+                        <div class="pjd-card-sub" style="color: #047857;">
+                            Filtered expected collections based on expected closure date
+                            @if(($dashboardFilters['quick_date'] ?? '') && $dashboardFilters['quick_date'] !== 'all')
+                                <span class="badge bg-success ms-2" style="font-size: 11px;">Filter: {{ ucfirst(str_replace('_', ' ', $dashboardFilters['quick_date'])) }}</span>
+                            @endif
+                        </div>
+                    </div>
+                    <button type="button" class="pjd-update-modal-close" onclick="closePjdExpectedValueModal()" aria-label="Close modal" style="border-color: #a7f3d0;">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="pjd-update-modal-body" style="padding: 20px;">
+                    {{-- Stat Summary Cards inside Modal --}}
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px;">
+                            <div style="font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase;">Expected Projects</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #0f172a;" id="modalExpectedProjectsCount">
+                                {{ number_format(($expectedProjects ?? collect())->count()) }}
+                            </div>
+                        </div>
+                        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 14px 16px;">
+                            <div style="font-size: 12px; color: #047857; font-weight: 600; text-transform: uppercase;">Expected Value</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #059669;" id="modalExpectedTotalVal">
+                                {{ $currency($stats['expected_value'] ?? 0) }}
+                            </div>
+                        </div>
+                        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px 16px;">
+                            <div style="font-size: 12px; color: #15803d; font-weight: 600; text-transform: uppercase;">Total Project Value</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #16a34a;">
+                                {{ $currency(($expectedProjects ?? collect())->sum('project_value')) }}
+                            </div>
+                        </div>
+                        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px;">
+                            <div style="font-size: 12px; color: #1d4ed8; font-weight: 600; text-transform: uppercase;">Received Amount</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #2563eb;">
+                                {{ $currency(($expectedProjects ?? collect())->sum('received_amount')) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Search & Filter Controls --}}
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <div style="position: relative; flex: 1; min-width: 250px;">
+                            <input type="text" id="pjdExpectedSearchInput" class="pjd-input" placeholder="Search by company, client or product..." onkeyup="filterPjdExpectedTable()" style="padding-left: 36px;">
+                            <i class="bi bi-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8;"></i>
+                        </div>
+                        <div style="font-size: 13px; color: #64748b;">
+                            Showing <strong id="pjdExpectedShowingCount">{{ count($expectedProjects ?? []) }}</strong> expected collection projects
+                        </div>
+                    </div>
+
+                    {{-- Projects Table --}}
+                    <div class="pjd-table-wrap" style="max-height: 480px; overflow-y: auto;">
+                        <table class="pjd-table" id="pjdExpectedTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Company / Client Name</th>
+                                    <th>Product Name</th>
+                                    <th>Expected Date</th>
+                                    <th style="text-align: right;">Project Value</th>
+                                    <th style="text-align: right;">Received Amount</th>
+                                    <th style="text-align: right;">Expected Value</th>
+                                    <th>Execution Status</th>
+                                    <th style="text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse(($expectedProjects ?? []) as $index => $project)
+                                    @php
+                                        $compName = $project->company_name ?: ($project->lead?->company_name ?: ($project->client_name ?: ($project->lead?->client_name ?: 'N/A')));
+                                        $expDateFormatted = $project->expected_date ? \Illuminate\Support\Carbon::parse($project->expected_date)->format('d M Y') : '—';
+                                        $statusClass = match(strtolower((string) $project->project_execution_status)) {
+                                            'delivered' => 'bg-success text-white',
+                                            'ontrack' => 'bg-primary text-white',
+                                            'hold' => 'bg-warning text-dark',
+                                            default => 'bg-secondary text-white',
+                                        };
+                                    @endphp
+                                    <tr class="pjd-expected-row" data-search-text="{{ strtolower($compName . ' ' . $project->product_name . ' ' . ($project->project_execution_status ?? '')) }}">
+                                        <td>{{ $loop->iteration }}</td>
+                                        <td>
+                                            <div style="font-weight: 600; color: #1e293b;">{{ $compName }}</div>
+                                            @if($project->lead_id)
+                                                <span style="font-size: 11px; color: #64748b;">Lead #{{ $project->lead_id }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border" style="font-size: 12px; font-weight: 500;">
+                                                {{ $project->product_name ?: 'N/A' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight: 500; color: #0f766e;">
+                                                <i class="bi bi-calendar3 me-1"></i>{{ $expDateFormatted }}
+                                            </span>
+                                        </td>
+                                        <td style="text-align: right; font-weight: 500;">{{ $currency($project->project_value) }}</td>
+                                        <td style="text-align: right; font-weight: 500; color: #16a34a;">{{ $currency($project->received_amount) }}</td>
+                                        <td style="text-align: right; font-weight: 700; color: #059669;">{{ $currency($project->expected_value) }}</td>
+                                        <td>
+                                            <span class="badge {{ $statusClass }}" style="font-size: 11px; text-transform: capitalize;">
+                                                {{ str_replace('_', ' ', $project->project_execution_status ?: 'Open') }}
+                                            </span>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <a href="{{ route('projects.show', $project) }}" class="pjd-btn pjd-btn-sm" target="_blank" title="View details">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr id="pjdExpectedEmptyRow">
+                                        <td colspan="9" class="pjd-empty">No development projects found for expected value collection.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div style="padding: 16px 22px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="font-size: 13px; color: #64748b;">
+                        <i class="bi bi-info-circle me-1"></i> Data automatically reflects current dashboard filters.
+                    </div>
+                    <button type="button" class="pjd-btn" onclick="closePjdExpectedValueModal()">Close</button>
+                </div>
+            </div>
         </div>
     </div>
 @endif
@@ -2213,3 +2350,56 @@
     </script>
     @endpush
 @endif
+
+@push('scripts')
+<script>
+function openPjdExpectedValueModal() {
+    const modal = document.getElementById('pjdExpectedValueModal');
+    const overlay = document.getElementById('pjdExpectedValueModalOverlay');
+    if (modal && overlay) {
+        modal.classList.add('is-open');
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closePjdExpectedValueModal() {
+    const modal = document.getElementById('pjdExpectedValueModal');
+    const overlay = document.getElementById('pjdExpectedValueModalOverlay');
+    if (modal && overlay) {
+        modal.classList.remove('is-open');
+        overlay.classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+}
+
+function filterPjdExpectedTable() {
+    const input = document.getElementById('pjdExpectedSearchInput');
+    const filter = input ? input.value.toLowerCase().trim() : '';
+    const rows = document.querySelectorAll('.pjd-expected-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const searchText = row.getAttribute('data-search-text') || '';
+        if (!filter || searchText.includes(filter)) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    const showingCount = document.getElementById('pjdExpectedShowingCount');
+    if (showingCount) {
+        showingCount.textContent = visibleCount;
+    }
+}
+
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        closePjdExpectedValueModal();
+    }
+});
+</script>
+@endpush
+
