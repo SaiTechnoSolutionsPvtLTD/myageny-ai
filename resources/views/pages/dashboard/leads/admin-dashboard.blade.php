@@ -209,7 +209,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    align-items: stretch;
+    align-items: start;
 }
 @media (max-width: 1100px) {
     .da-modal-split-grid {
@@ -232,6 +232,7 @@
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
     flex-shrink: 0;
+    height: auto;
 }
 .da-modal-section-head {
     padding: 12px 18px;
@@ -1863,7 +1864,7 @@
         {{-- ── Right 6 Columns: Active Branches Table & Comparison — Only for Company Admin & CBO ── --}}
                 @if($canViewActiveBranches ?? true)
                 <div class="da-modal-col-right">
-                    <div class="da-modal-section-card" style="height:100%; display:flex; flex-direction:column;">
+                    <div class="da-modal-section-card" style="display:flex; flex-direction:column;">
                         <div class="da-modal-section-head">
                             <div class="da-modal-section-heading">
                                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="var(--da-orange)" stroke-width="2.2">
@@ -3195,14 +3196,16 @@ function renderForecasting(d) {
         '<div class="da-kpi-lbl">Day Sales Tracker</div>' +
         '<div class="da-kpi-sub">' + daySalesSub + '</div></div>';
 
-    var trendAnalysisCardHtml = '<div class="da-kpi" onclick="openTrendAnalysisModal()" style="background:linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);cursor:pointer;" title="Click to view Quarterly Trend Analysis">' +
+    var isCompanyAdmin = (typeof USER_ROLE_TYPE !== 'undefined' && USER_ROLE_TYPE === 'company_admin');
+
+    var trendAnalysisCardHtml = isCompanyAdmin ? ('<div class="da-kpi" onclick="openTrendAnalysisModal()" style="background:linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);cursor:pointer;" title="Click to view Quarterly Trend Analysis">' +
         '<div class="da-kpi-icon">' +
         '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
         '<path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="#ffffff"/>' +
         '</svg></div>' +
         '<div class="da-kpi-val">Trend Analysis</div>' +
         '<div class="da-kpi-lbl">Quarterly &amp; YoY Trend</div>' +
-        '<div class="da-kpi-sub">Branch-wise Q1, Q2, Q3, Q4 collection</div></div>';
+        '<div class="da-kpi-sub">Branch-wise Q1, Q2, Q3, Q4 collection</div></div>') : '';
 
     gridEl.innerHTML = cardHtml + daySalesCardHtml + trendAnalysisCardHtml;
 }
@@ -4072,6 +4075,9 @@ function renderCategoryDetailsTable(items) {
 
 /* ── Trend Analysis Modal JS ── */
 window.openTrendAnalysisModal = function() {
+    if (typeof USER_ROLE_TYPE !== 'undefined' && USER_ROLE_TYPE !== 'company_admin') {
+        return;
+    }
     var modal = document.getElementById('daTrendAnalysisModal');
     if (!modal) return;
     modal.style.display = 'flex';
