@@ -625,9 +625,17 @@ class SuperAdminDashboardController extends ApiController
         $currentMonthHotProductsCount = (clone $currentMonthHotProductsQuery)->count();
         $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
         $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
+        $vis = $this->resolveForecastingVisibility($request->user());
+        $hasDefaultBranch      = $vis['hasDefaultBranch'];
+        $hasCocoBranch         = $vis['hasCocoBranch'];
+        $hasNonCocoBranch      = $vis['hasNonCocoBranch'];
+        $canViewCst            = $vis['canViewCst'];
+        $canViewActiveBranches = $vis['canViewActiveBranches'];
+        $userRoleType          = $vis['userRoleType'];
+
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
         $cstMetrics = $this->buildCstProspectMetrics($request);
-        $activeBranchesMetrics = $this->buildActiveBranchesHotMetrics($request);
+        $activeBranchesMetrics = $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [];
 
         $totalProspectsCount = (int) collect($activeBranchesMetrics)->sum('prospect_count');
         $totalProspectsDealValue = (float) collect($activeBranchesMetrics)->sum('deal_value');
@@ -711,11 +719,22 @@ class SuperAdminDashboardController extends ApiController
                 'deal_value'                 => $totalProspectsDealValue,
                 'expected_collection_value'  => $totalProspectsExpectedCollection,
                 'month_name'                 => now()->format('F Y'),
-                'nst_ho'                     => $cpMetrics['nst_ho'],
-                'non_coco'                   => $cpMetrics['non_coco'],
-                'coco'                       => $cpMetrics['coco'],
-                'cst'                        => $cstMetrics,
-                'active_branches'            => $activeBranchesMetrics,
+                'user_role_type'             => $userRoleType,
+                'show_nst_ho'                => (bool) $hasDefaultBranch,
+                'show_coco'                  => (bool) $hasCocoBranch,
+                'show_non_coco'              => (bool) $hasNonCocoBranch,
+                'show_cst'                   => (bool) $canViewCst,
+                'show_active_branches'       => (bool) $canViewActiveBranches,
+                'has_default_branch'         => (bool) $hasDefaultBranch,
+                'has_coco_branch'            => (bool) $hasCocoBranch,
+                'has_non_coco_branch'        => (bool) $hasNonCocoBranch,
+                'can_view_active_branches'   => (bool) $canViewActiveBranches,
+                'can_view_cst'               => (bool) $canViewCst,
+                'nst_ho'                     => $hasDefaultBranch ? $cpMetrics['nst_ho'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'heading' => 'NST - HO'],
+                'non_coco'                   => $hasNonCocoBranch ? $cpMetrics['non_coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner NON COCO Model'],
+                'coco'                       => $hasCocoBranch ? $cpMetrics['coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner COCO Model'],
+                'cst'                        => $canViewCst ? $cstMetrics : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'CST'],
+                'active_branches'            => $canViewActiveBranches ? $activeBranchesMetrics : [],
             ],
 
             'financials' => [
@@ -1758,18 +1777,50 @@ class SuperAdminDashboardController extends ApiController
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
         $cstMetrics = $this->buildCstProspectMetrics($request);
 
-        $totalProspectsCount = (int) ($cpMetrics['nst_ho']['count'] ?? 0)
-            + (int) ($cpMetrics['non_coco']['count'] ?? 0)
-            + (int) ($cpMetrics['coco']['count'] ?? 0)
-            + (int) ($cstMetrics['count'] ?? 0);
-        $totalProspectsDealValue = (float) ($cpMetrics['nst_ho']['deal_value'] ?? 0)
-            + (float) ($cpMetrics['non_coco']['deal_value'] ?? 0)
-            + (float) ($cpMetrics['coco']['deal_value'] ?? 0)
-            + (float) ($cstMetrics['deal_value'] ?? 0);
-        $totalProspectsExpectedCollection = (float) ($cpMetrics['nst_ho']['expected_value'] ?? 0)
-            + (float) ($cpMetrics['non_coco']['expected_value'] ?? 0)
-            + (float) ($cpMetrics['coco']['expected_value'] ?? 0)
-            + (float) ($cstMetrics['expected_value'] ?? 0);
+        $vis = $this->resolveForecastingVisibility($request->user());
+        $hasDefaultBranch      = $vis['hasDefaultBranch'];
+        $hasCocoBranch         = $vis['hasCocoBranch'];
+        $hasNonCocoBranch      = $vis['hasNonCocoBranch'];
+        $canViewCst            = $vis['canViewCst'];
+        $canViewActiveBranches = $vis['canViewActiveBranches'];
+        $userRoleType          = $vis['userRoleType'];
+
+        $activeBranchesMetrics = $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [];
+
+        $userTotalProspects = 0;
+        $userTotalDealValue = 0.0;
+        $userTotalExpectedCollection = 0.0;
+
+        if ($hasDefaultBranch) {
+            $userTotalProspects += (int) ($cpMetrics['nst_ho']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['nst_ho']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['nst_ho']['expected_value'] ?? 0);
+        }
+        if ($hasNonCocoBranch) {
+            $userTotalProspects += (int) ($cpMetrics['non_coco']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['non_coco']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['non_coco']['expected_value'] ?? 0);
+        }
+        if ($hasCocoBranch) {
+            $userTotalProspects += (int) ($cpMetrics['coco']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['coco']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['coco']['expected_value'] ?? 0);
+        }
+        if ($canViewCst) {
+            $userTotalProspects += (int) ($cstMetrics['count'] ?? 0);
+            $userTotalDealValue += (float) ($cstMetrics['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
+        }
+
+        $totalProspectsCount = $canViewActiveBranches
+            ? (int) collect($activeBranchesMetrics)->sum('prospect_count')
+            : $userTotalProspects;
+        $totalProspectsDealValue = $canViewActiveBranches
+            ? (float) collect($activeBranchesMetrics)->sum('deal_value')
+            : $userTotalDealValue;
+        $totalProspectsExpectedCollection = $canViewActiveBranches
+            ? (float) collect($activeBranchesMetrics)->sum('expected_value')
+            : $userTotalExpectedCollection;
 
         // ── Day Sales Tracker (Current Date Converted Products) ──
         $todayConvertedQuery = LeadProduct::query()
@@ -1848,11 +1899,22 @@ class SuperAdminDashboardController extends ApiController
                 'deal_value'                 => $totalProspectsDealValue,
                 'expected_collection_value'  => $totalProspectsExpectedCollection,
                 'month_name'                 => now()->format('F Y'),
-                'nst_ho'                     => $cpMetrics['nst_ho'],
-                'non_coco'                   => $cpMetrics['non_coco'],
-                'coco'                       => $cpMetrics['coco'],
-                'cst'                        => $cstMetrics,
-                'active_branches'            => $this->buildActiveBranchesHotMetrics($request),
+                'user_role_type'             => $userRoleType,
+                'show_nst_ho'                => (bool) $hasDefaultBranch,
+                'show_coco'                  => (bool) $hasCocoBranch,
+                'show_non_coco'              => (bool) $hasNonCocoBranch,
+                'show_cst'                   => (bool) $canViewCst,
+                'show_active_branches'       => (bool) $canViewActiveBranches,
+                'has_default_branch'         => (bool) $hasDefaultBranch,
+                'has_coco_branch'            => (bool) $hasCocoBranch,
+                'has_non_coco_branch'        => (bool) $hasNonCocoBranch,
+                'can_view_active_branches'   => (bool) $canViewActiveBranches,
+                'can_view_cst'               => (bool) $canViewCst,
+                'nst_ho'                     => $hasDefaultBranch ? $cpMetrics['nst_ho'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'heading' => 'NST - HO'],
+                'non_coco'                   => $hasNonCocoBranch ? $cpMetrics['non_coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner NON COCO Model'],
+                'coco'                       => $hasCocoBranch ? $cpMetrics['coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner COCO Model'],
+                'cst'                        => $canViewCst ? $cstMetrics : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'CST'],
+                'active_branches'            => $canViewActiveBranches ? $activeBranchesMetrics : [],
             ],
 
             'trends' => [
@@ -2230,6 +2292,152 @@ class SuperAdminDashboardController extends ApiController
     }
 
     /**
+     * Resolve forecasting section visibility flags and user role type matching web dashboard logic.
+     */
+    public function resolveForecastingVisibility(?User $authUser): array
+    {
+        if (!$authUser) {
+            return [
+                'hasDefaultBranch'      => false,
+                'hasCocoBranch'         => false,
+                'hasNonCocoBranch'      => false,
+                'canViewCst'            => false,
+                'canViewActiveBranches' => false,
+                'userRoleType'          => 'nst',
+            ];
+        }
+
+        $isCompanyAdmin = $authUser->isSuperAdmin() 
+            || $authUser->isSystemAdmin() 
+            || $authUser->isCompanyAdminRole()
+            || $authUser->isCompanyAdmin();
+        $isCbo          = $authUser->isCbo();
+
+        if (!$isCompanyAdmin && method_exists($authUser, 'roleKeys')) {
+            $keys = collect($authUser->roleKeys()->all());
+            $isCompanyAdmin = $keys->contains('company_admin') || $keys->contains('super_admin') || $keys->contains('admin');
+        }
+        if (!$isCbo && method_exists($authUser, 'roleKeys')) {
+            $keys = collect($authUser->roleKeys()->all());
+            $isCbo = $keys->intersect(['cbo', 'chief_business_officer', 'cheif_business_officer'])->isNotEmpty();
+        }
+        if (!$isCompanyAdmin && method_exists($authUser, 'hasAnyRole')) {
+            try {
+                $isCompanyAdmin = $authUser->hasAnyRole(['company_admin', 'super_admin', 'admin', 'Super Admin', 'Company Admin']);
+            } catch (\Throwable $e) {}
+        }
+        if (!$isCbo && method_exists($authUser, 'hasAnyRole')) {
+            try {
+                $isCbo = $authUser->hasAnyRole(['cbo', 'CBO', 'chief_business_officer', 'cheif_business_officer']);
+            } catch (\Throwable $e) {}
+        }
+
+        $isBranchManager = $authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo;
+        $isBranchAdmin   = $authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager;
+        $isTl            = $authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin;
+
+        $userBranchIds = method_exists($authUser, 'getMyBranchIds') ? $authUser->getMyBranchIds() : [];
+        $defaultBranchId = Branch::where('is_default', true)->value('id') ?? 1;
+
+        if ($isCompanyAdmin || $isCbo) {
+            $hasDefaultBranch = true;
+            $hasCocoBranch    = true;
+            $hasNonCocoBranch = true;
+            $canViewCst       = true;
+            $canViewActiveBranches = true;
+        } elseif ($isBranchManager) {
+            // Branch Manager:
+            // 1. Additional branches (non-default) check for COCO / NON COCO
+            $additionalBranchIds = array_values(array_filter($userBranchIds, fn($id) => (int)$id !== (int)$defaultBranchId));
+            $additionalBranches = !empty($additionalBranchIds) ? Branch::whereIn('id', $additionalBranchIds)->get() : collect();
+
+            $hasCocoBranch    = $additionalBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $additionalBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+
+            // 2. HO: show if BM has users mapped under them in HO OR has leads assigned to themselves in HO
+            $descendants = $this->visibility->descendantUserIds($authUser);
+            $hasHoMappedUsers = false;
+            if ($descendants->isNotEmpty()) {
+                $hasHoMappedUsers = User::withoutGlobalScope('branch')
+                    ->whereIn('id', $descendants)
+                    ->where('branch_id', $defaultBranchId)
+                    ->exists();
+            }
+
+            $hasOwnHoLeads = Lead::where('branch_id', $defaultBranchId)
+                ->where('assigned_to', $authUser->id)
+                ->exists();
+
+            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } elseif ($isBranchAdmin) {
+            // Branch Admin: check their branch(es)
+            $branchIds = $userBranchIds;
+            if (empty($branchIds) && $authUser->branch_id) {
+                $branchIds = [(int) $authUser->branch_id];
+            }
+            $adminBranches = !empty($branchIds) ? Branch::whereIn('id', $branchIds)->get() : collect();
+
+            $hasDefaultBranch = $adminBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $adminBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $adminBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } elseif ($isTl) {
+            // Sales TL: check TL and team mapped members' branches
+            $teamUserIds = $this->visibility->descendantUserIds($authUser)->push($authUser->id)->unique();
+            $teamBranchIds = User::withoutGlobalScope('branch')
+                ->whereIn('id', $teamUserIds)
+                ->pluck('branch_id')
+                ->filter()
+                ->unique()
+                ->all();
+            if (empty($teamBranchIds) && $authUser->branch_id) {
+                $teamBranchIds = [(int) $authUser->branch_id];
+            }
+            $tlBranches = !empty($teamBranchIds) ? Branch::whereIn('id', $teamBranchIds)->get() : collect();
+
+            $hasDefaultBranch = $tlBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $tlBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $tlBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } else {
+            // Sales Executive (NST): check executive's branch
+            $execBranch = $authUser->branch;
+            $hasDefaultBranch = (bool) ($execBranch?->is_default || (int)$authUser->branch_id === (int)$defaultBranchId);
+            $hasCocoBranch    = strtoupper(trim((string) ($execBranch?->branch_type ?? ''))) === 'COCO';
+            $hasNonCocoBranch = in_array(strtoupper(trim((string) ($execBranch?->branch_type ?? ''))), ['NON COCO', 'NON_COCO', 'NON-COCO']);
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        }
+
+        if ($isCompanyAdmin) {
+            $userRoleType = 'company_admin';
+        } elseif ($isCbo) {
+            $userRoleType = 'cbo';
+        } elseif ($isBranchManager) {
+            $userRoleType = 'branch_manager';
+        } elseif ($isBranchAdmin) {
+            $userRoleType = 'branch_admin';
+        } elseif ($isTl) {
+            $userRoleType = 'tl';
+        } else {
+            $userRoleType = 'nst';
+        }
+
+        return [
+            'hasDefaultBranch'      => (bool) $hasDefaultBranch,
+            'hasCocoBranch'         => (bool) $hasCocoBranch,
+            'hasNonCocoBranch'      => (bool) $hasNonCocoBranch,
+            'canViewCst'            => (bool) $canViewCst,
+            'canViewActiveBranches' => (bool) $canViewActiveBranches,
+            'userRoleType'          => $userRoleType,
+        ];
+    }
+
+    /**
      * Build active branches current month hot prospect metrics for the Total Prospects modal.
      * Includes HO (Default Branch) and combines both NST + CST prospects branch-wise.
      */
@@ -2536,6 +2744,43 @@ class SuperAdminDashboardController extends ApiController
 
         if (!$type && !$branchId) {
             return $this->error('Type or Branch ID is required.', 422);
+        }
+
+        $vis = $this->resolveForecastingVisibility($currentUser);
+        $hasDefaultBranch      = $vis['hasDefaultBranch'];
+        $hasCocoBranch         = $vis['hasCocoBranch'];
+        $hasNonCocoBranch      = $vis['hasNonCocoBranch'];
+        $canViewCst            = $vis['canViewCst'];
+        $canViewActiveBranches = $vis['canViewActiveBranches'];
+        $userRoleType          = $vis['userRoleType'];
+        $isCompanyAdminOrCbo   = in_array($userRoleType, ['company_admin', 'cbo'], true);
+
+        // Security: Block unauthorized user_id parameter tampering
+        if ($request->filled('user_id')) {
+            $requestedUserId = (int) $request->user_id;
+            if (!$isCompanyAdminOrCbo) {
+                $allowedUserIds = $this->visibility->visibleUserIds($currentUser);
+                if ($allowedUserIds !== null && !$allowedUserIds->contains($requestedUserId)) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized user filter.'], 403);
+                }
+            }
+        }
+
+        // Security: Validate section authorization
+        if ($type === 'nst_ho' && !$hasDefaultBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: NST - HO.'], 403);
+        }
+        if ($type === 'non_coco' && !$hasNonCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Channel Partner NON COCO.'], 403);
+        }
+        if ($type === 'coco' && !$hasCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Channel Partner COCO.'], 403);
+        }
+        if ($type === 'all' && !$canViewActiveBranches) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Active Branches.'], 403);
+        }
+        if ($type === 'cst' && !$canViewCst) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
         }
 
         if ($type === 'all') {

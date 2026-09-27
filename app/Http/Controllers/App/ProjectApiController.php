@@ -286,11 +286,29 @@ class ProjectApiController extends Controller
 
         $filteredProjects = $this->filterDashboardProjects($projects, $dashboardFilters, $user);
 
+        // ── Expected Value stat (mirrors web ProjectController lines 706-730) ──
+        $parsedFrom = $this->parseFilterDate($dashboardFilters['date_from'] ?? '');
+        $parsedTo   = $this->parseFilterDate($dashboardFilters['date_to'] ?? '');
+        $expectedProjects = $filteredProjects->filter(function ($p) use ($parsedFrom, $parsedTo) {
+            if (empty($p->expected_date) || (float) ($p->expected_value ?? 0) <= 0) {
+                return false;
+            }
+            if ($parsedFrom && $parsedTo) {
+                $eDate = Carbon::parse($p->expected_date);
+                if (! $eDate->between($parsedFrom, $parsedTo)) {
+                    return false;
+                }
+            }
+            return true;
+        })->values();
+
         $stats = [
-            'allocated_projects' => $filteredProjects->count(),
-            'project_value'      => round($filteredProjects->sum('project_value'), 2),
-            'received_amount'    => round($filteredProjects->sum('received_amount'), 2),
-            'balance_amount'     => round($filteredProjects->sum('balance_amount'), 2),
+            'allocated_projects'     => $filteredProjects->count(),
+            'project_value'          => round($filteredProjects->sum('project_value'), 2),
+            'received_amount'        => round($filteredProjects->sum('received_amount'), 2),
+            'balance_amount'         => round($filteredProjects->sum('balance_amount'), 2),
+            'expected_value'         => round($expectedProjects->sum('expected_value'), 2),
+            'expected_projects_count' => $expectedProjects->count(),
         ];
 
         $currentMonthDelivery = $this->currentMonthDeliveryProjects($filteredProjects, $dashboardFilters);
@@ -390,6 +408,8 @@ class ProjectApiController extends Controller
                 'pending_welcome_call_count'   => $pendingWelcomeCallData['count'] ?? 0,
                 'pending_welcome_call_projects' => $pendingWelcomeCallData['items'] ?? [],
                 'employee_timesheet_tasks'     => $employeeTimesheetTasks,
+                'expected_projects'            => $expectedProjects->map(fn($p) => $this->serializeProjectSummary($p))->values(),
+                'quick_update_projects'        => $quickUpdateProjects->map(fn($p) => $this->serializeProjectSummary($p))->values(),
             ],
         ]);
     }
@@ -991,6 +1011,42 @@ class ProjectApiController extends Controller
                 ->all();
         }
 
+        // ── Prospect tab visibility & data (mirrors web show.blade.php 372-391) ──
+        $canSeeProspectTab = $user && (
+            $user->canAccessProjectProspect() ||
+            $this->hasProjectCoordinatorRole($user)
+        );
+        $prospectExpectedDate      = $productionInitiation->expected_date;
+        $prospectExpectedValue     = $productionInitiation->expected_value !== null
+            ? (float) $productionInitiation->expected_value
+            : null;
+        $prospectExpectedDateFormatted  = $prospectExpectedDate
+            ? Carbon::parse($prospectExpectedDate)->format('d M Y')
+            : null;
+        $prospectExpectedValueFormatted = $prospectExpectedValue !== null
+            ? '₹' . number_format($prospectExpectedValue, 2)
+            : null;
+        // Product / Service & Client Details for the tab
+        $prospectProductName   = $productionInitiation->product_name ?? null;
+        $prospectDepartment    = optional($productionInitiation->department)->name ?? null;
+        $prospectClientName    = $productionInitiation->client_name
+            ?? optional($productionInitiation->lead)->contact_name
+            ?? null;
+        $prospectCompanyName   = $productionInitiation->company_name
+            ?? optional($productionInitiation->lead)->company_name
+            ?? null;
+        // Relative time for expected closure date
+        $prospectRelativeTime = null;
+        if ($prospectExpectedDate) {
+            $ed = Carbon::parse($prospectExpectedDate)->startOfDay();
+            $today = Carbon::today();
+            if ($ed->lt($today)) {
+                $prospectRelativeTime = 'Overdue by ' . $ed->diffForHumans($today, true);
+            } else {
+                $prospectRelativeTime = 'Target: ' . $ed->diffForHumans($today, true) . ' remaining';
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -1025,7 +1081,72 @@ class ProjectApiController extends Controller
                     $user->isSuperAdmin() ||
                     $user->isCompanyAdmin()
                 ),
+                // ── Prospect tab ──────────────────────────────────────────────
+                'can_see_prospect_tab'            => $canSeeProspectTab,
+                'prospect_expected_date'          => $prospectExpectedDate,
+                'prospect_expected_date_formatted' => $prospectExpectedDateFormatted,
+                'prospect_expected_date_relative' => $prospectRelativeTime,
+                'prospect_expected_value'         => $prospectExpectedValue,
+                'prospect_expected_value_formatted' => $prospectExpectedValueFormatted,
+                'prospect_product_name'           => $prospectProductName,
+                'prospect_department'             => $prospectDepartment,
+                'prospect_client_name'            => $prospectClientName,
+                'prospect_company_name'           => $prospectCompanyName,
             ],
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  POST /mobile/projects/{id}/prospect   (update prospect details)
+    // ─────────────────────────────────────────────────────────────────────────
+    public function updateProspect(Request $request, ProductionInitiation $productionInitiation): JsonResponse
+    {
+        $user = auth()->user();
+        $canManageProspect = $user && (
+            $user->canAccessProjectProspect() ||
+            $this->hasProjectCoordinatorRole($user)
+        );
+
+        if (! $canManageProspect) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only CST team, CBO, and Project Coordinator can update prospect details.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'expected_date'  => ['nullable', 'date'],
+            'expected_value' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $expectedDate  = ! empty($validated['expected_date'])
+            ? Carbon::parse($validated['expected_date'])->toDateString()
+            : null;
+        $expectedValue = isset($validated['expected_value'])
+            && $validated['expected_value'] !== ''
+            && $validated['expected_value'] !== null
+            ? (float) $validated['expected_value']
+            : null;
+
+        $productionInitiation->update([
+            'expected_date'  => $expectedDate,
+            'expected_value' => $expectedValue,
+        ]);
+
+        if ($productionInitiation->leadProduct) {
+            $productionInitiation->leadProduct->update([
+                'closure_date'   => $expectedDate,
+                'expected_value' => $expectedValue,
+            ]);
+        }
+
+        return response()->json([
+            'success'                   => true,
+            'message'                   => 'Prospect details updated successfully.',
+            'expected_date'             => $expectedDate,
+            'expected_date_formatted'   => $expectedDate ? Carbon::parse($expectedDate)->format('d M Y') : null,
+            'expected_value'            => $expectedValue,
+            'expected_value_formatted'  => $expectedValue !== null ? '₹' . number_format($expectedValue, 2) : null,
         ]);
     }
 

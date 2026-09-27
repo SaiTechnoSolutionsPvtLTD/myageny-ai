@@ -579,6 +579,8 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
         // ── {productionInitiation} wildcard LAST ────────────────────────────
         Route::get('/{productionInitiation}', [ProjectApiController::class, 'show'])
             ->name('show');
+        Route::post('/{productionInitiation}/prospect', [ProjectApiController::class, 'updateProspect'])
+            ->name('mobile.projects.prospect.update');
         Route::post('/{productionInitiation}/allocate', [ProjectApiController::class, 'allocate'])
             ->name('allocate');
         Route::post('/{productionInitiation}/employee-allocate', [ProjectApiController::class, 'allocateEmployees'])
@@ -767,4 +769,6 @@ Route::middleware('auth:sanctum')->prefix('mobile/day-sales-tracker')->name('mob
     Route::post('/categories/{id}/delete', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'deleteCategory'])->name('delete-category');
     Route::post('/update-category', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateCategory'])->name('update-category');
     Route::post('/update-sale-type', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateSaleType'])->name('update-sale-type');
+    Route::get('/report', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'report'])->name('report');
+    Route::get('/trend-analysis', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'trendAnalysis'])->name('trend-analysis');
 });

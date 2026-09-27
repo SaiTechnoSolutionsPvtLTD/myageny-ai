@@ -83,14 +83,20 @@ class DaySalesTrackerApiController extends Controller
                 $convDate = $lp->converted_at ?: $lp->created_at;
                 $carbonDate = $convDate ? Carbon::parse($convDate) : $parsedDate;
 
+                // 1. Mon
                 $mon = $carbonDate->format('M');
-                $dateFormatted = $carbonDate->format('d-m-Y');
-                $branch = $lead?->branch?->name ?: 'Main Branch';
 
+                // 2. Date
+                $dateFormatted = $carbonDate->format('d-m-Y');
+
+                // 3. Branch
+                $branch = $lead?->branch?->name ?: 'Coimbatore (HO)';
+
+                // 4. Branch Type
                 $branchType = $lead?->branch?->branch_type;
                 if (empty($branchType)) {
                     $branchName = strtolower($lead?->branch?->name ?? '');
-                    if (str_contains($branchName, 'non') || str_contains($branchName, 'non coco')) {
+                    if (str_contains($branchName, 'non') || str_contains($branchName, 'non coco') || str_contains($branchName, 'non-coco')) {
                         $branchType = 'NON COCO';
                     } elseif (str_contains($branchName, 'coco')) {
                         $branchType = 'COCO';
@@ -101,9 +107,11 @@ class DaySalesTrackerApiController extends Controller
                     }
                 }
 
+                // 5 & 6. Team Leader & Team Member name
                 $assignedUser = $lead?->assignedTo;
                 $memberName = $assignedUser?->name ?: 'Unassigned';
 
+                // Check if assigned user is Branch Manager, TL, Sales Manager, or CBO
                 $isSelfLeader = false;
                 if ($assignedUser) {
                     $roleKeys = collect($assignedUser->roleKeys()->all());
@@ -114,94 +122,113 @@ class DaySalesTrackerApiController extends Controller
                         || $rawRoleNames->contains(fn($r) => str_contains($r, 'branch_manager'));
 
                     $isTl = $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead', 'teamlead'])->isNotEmpty()
-                        || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader'));
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader') || str_contains($r, 'team_lead'));
 
                     $isSm = $roleKeys->intersect(['sales_manager'])->isNotEmpty()
                         || $rawRoleNames->contains(fn($r) => str_contains($r, 'sales_manager'));
 
                     $isCbo = $assignedUser->isCbo()
-                        || $roleKeys->intersect(['cbo', 'chief_business_officer'])->isNotEmpty()
-                        || $rawRoleNames->contains(fn($r) => str_contains($r, 'cbo'));
+                        || $roleKeys->intersect(['cbo', 'chief_business_officer', 'cheif_business_officer'])->isNotEmpty()
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, 'chief_business_officer') || str_contains($r, 'cbo'));
 
                     $designation = strtolower($assignedUser->employeeOnboarding?->designation ?? ($assignedUser->designation ?? ''));
-                    $hasLeaderDesignation = $designation !== '' && (
-                        str_contains($designation, 'branch manager')
-                        || str_contains($designation, 'sales manager')
-                        || str_contains($designation, 'cbo')
-                        || str_contains($designation, 'team leader')
-                    );
+                    $hasLeaderDesignation = false;
+                    if ($designation !== '') {
+                        $hasLeaderDesignation = str_contains($designation, 'branch manager')
+                            || str_contains($designation, 'sales manager')
+                            || str_contains($designation, 'cbo')
+                            || str_contains($designation, 'chief business officer')
+                            || str_contains($designation, 'team leader')
+                            || str_contains($designation, 'team lead')
+                            || str_contains($designation, 'sales tl')
+                            || preg_match('/\b(tl|bm)\b/', $designation);
+                    }
 
-                    $isSelfLeader = $isBm || $isTl || $isSm || $isCbo || $hasLeaderDesignation;
+                    if ($isBm || $isTl || $isSm || $isCbo || $hasLeaderDesignation) {
+                        $isSelfLeader = true;
+                    }
                 }
 
-                if ($isSelfLeader && $assignedUser) {
-                    $teamLeaderName = $assignedUser->name;
+                if ($isSelfLeader) {
+                    $tlName = $memberName;
+                    $teamMemberDisplay = $memberName;
                 } else {
-                    $mappedManager = $assignedUser?->mappedManagers?->first();
-                    if ($mappedManager) {
-                        $teamLeaderName = $mappedManager->name;
-                    } elseif ($lead?->customerSupportTl) {
-                        $teamLeaderName = $lead->customerSupportTl->name;
+                    $manager = $assignedUser?->mappedManagers?->first();
+                    $tlName = $manager?->name ?: ($lead?->customerSupportTl?->name ?: null);
+
+                    $deptName = $assignedUser?->employeeOnboarding?->department?->name
+                        ?: ($assignedUser?->roles?->first()?->department?->name ?: 'Sales');
+
+                    if (empty($tlName)) {
+                        $teamMemberDisplay = $memberName !== 'Unassigned' ? "{$memberName} ({$deptName})" : $deptName;
                     } else {
-                        $teamLeaderName = 'Direct';
+                        $teamMemberDisplay = $memberName;
                     }
                 }
 
-                $clientName = $lead?->company_name ?: ($lead?->contact_name ?: 'Unnamed Client');
+                // 7. Category
+                $category = $lp->day_sales_category ?: ($lp->daySalesCategory?->name ?: '');
 
-                $department = 'Sales';
-                if ($assignedUser) {
-                    $dept = $assignedUser->roles->first()?->department?->name
-                        ?: ($assignedUser->employeeOnboarding?->department?->name ?: null);
-                    if ($dept) {
-                        $department = $dept;
-                    }
+                // 8. Account name (Company Name - Customer name)
+                $compName = trim((string)($lead?->company_name ?? ''));
+                $contactName = trim((string)($lead?->contact_name ?? ''));
+                if ($compName && $contactName && $compName !== $contactName) {
+                    $accountName = "{$compName} - {$contactName}";
+                } else {
+                    $accountName = $compName ?: ($contactName ?: 'N/A');
                 }
 
-                $productName = $lp->product_name ?: 'N/A';
-                $productPrice = (float) ($lp->deal_price ?: 0);
-
-                $monthlyCollected = (float) $lp->payments->sum('amount');
-                $totalPaidAllTime = (float) ($lp->total_paid ?? $lp->payments()->sum('amount'));
-
+                // 9. Current Month Collection (Received amount)
+                $monthPayments = (float) $lp->payments->sum('amount');
+                $receivedAmount = $monthPayments > 0 ? $monthPayments : (float) ($lp->amount_paid ?: 0);
+                $productPrice = (float) ($lp->total_price ?: ($lp->deal_price ?: 0));
+                $totalPaidAllTime = (float) ($lp->total_paid ?? ($monthPayments > 0 ? $monthPayments : ($lp->amount_paid ?: 0)));
                 $balancePending = max(0, $productPrice - $totalPaidAllTime);
 
-                $catName = $lp->day_sales_category ?: ($lp->daySalesCategory?->name ?: '');
+                $productName = $lp->product_name ?: 'Product';
                 $saleType = $lp->sale_type ?: 'NEW SALE';
+                $deptName = $assignedUser?->employeeOnboarding?->department?->name
+                    ?: ($assignedUser?->roles?->first()?->department?->name ?: 'Sales');
 
                 $items[] = [
-                    's_no' => $idx + 1,
-                    'id' => $lp->id,
-                    'lead_product_id' => $lp->id,
-                    'lead_id' => $lp->lead_id,
-                    'mon' => $mon,
-                    'date' => $dateFormatted,
-                    'branch' => $branch,
-                    'branch_id' => $lead?->branch_id,
-                    'branch_type' => $branchType,
-                    'team_leader' => $teamLeaderName,
-                    'team_member' => $memberName,
-                    'team_member_id' => $assignedUser?->id,
-                    'client_name' => $clientName,
-                    'account_name' => $clientName,
-                    'department' => $department,
-                    'product' => $productName,
-                    'product_name' => $productName,
-                    'product_price' => $productPrice,
-                    'total_price' => $productPrice,
-                    'month_collected' => $monthlyCollected,
-                    'current_month_collection' => $monthlyCollected,
-                    'balance_pending' => $balancePending,
-                    'category' => $catName,
-                    'sale_type' => $saleType,
-                    'lead_url' => url("/leads/{$lp->lead_id}"),
+                    's_no'                     => $idx + 1,
+                    'id'                       => $lp->id,
+                    'lead_product_id'          => $lp->id,
+                    'lead_id'                  => $lp->lead_id,
+                    'mon'                      => $mon,
+                    'date'                     => $dateFormatted,
+                    'branch'                   => $branch,
+                    'branch_id'                => $lead?->branch_id,
+                    'branch_type'              => $branchType,
+                    'team_leader'              => $tlName ?: '—',
+                    'team_member'              => $teamMemberDisplay,
+                    'team_member_id'           => $assignedUser?->id,
+                    'client_name'              => $accountName,
+                    'account_name'             => $accountName,
+                    'department'               => $deptName,
+                    'product'                  => $productName,
+                    'product_name'             => $productName,
+                    'product_price'            => $productPrice,
+                    'total_price'              => $productPrice,
+                    'month_collected'          => $receivedAmount,
+                    'current_month_collection' => $receivedAmount,
+                    'balance_pending'          => $balancePending,
+                    'category'                 => $category,
+                    'sale_type'                => $saleType,
+                    'lead_url'                 => url("/leads/{$lp->lead_id}"),
                 ];
             }
 
-            $categories = DaySalesTrackerCategory::orderBy('name')->get();
+            $companyId = $user?->company_id;
+            $categoriesRecords = DaySalesTrackerCategory::query()
+                ->when($companyId, fn($q) => $q->where(fn($sub) => $sub->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get(['id', 'name']);
+
+            $categories = $categoriesRecords->pluck('name')->unique()->values()->all();
             $totalCount = count($items);
-            $totalCollection = (float) array_sum(array_column($items, 'month_collected'));
-            $totalValue = (float) array_sum(array_column($items, 'product_price'));
+            $totalCollection = round(collect($items)->sum('current_month_collection'), 2);
+            $totalValue = round(collect($items)->sum('total_price'), 2);
 
             // Options available to logged-in user for client-side filter pickers
             $visibleBranches = $this->visibility->visibleBranches($user)->map(fn($b) => [
@@ -227,11 +254,9 @@ class DaySalesTrackerApiController extends Controller
                     'can_edit' => $canEdit,
                     'can_manage_categories' => $canEdit,
                     'items' => $items,
-                    'categories' => $categories->pluck('name')->values()->all(),
-                    'categories_list' => $categories->map(fn($c) => [
-                        'id' => $c->id,
-                        'name' => $c->name,
-                    ])->values()->all(),
+                    'categories' => $categories,
+                    'categories_list' => $categoriesRecords,
+                    'sale_types' => ['NST', 'CST'],
                     'visible_branches' => $visibleBranches,
                     'visible_users' => $visibleUsers,
                 ],
@@ -245,177 +270,42 @@ class DaySalesTrackerApiController extends Controller
     }
 
     /**
-     * Enforce strict role-based data visibility & security checks on LeadProduct query.
+     * Enforce strict role-based data visibility & security checks on LeadProduct query matching Web DaySalesTracker.
      */
     protected function applyRoleBasedDataVisibility($query, User $user, Request $request): void
     {
-        // 1. Enforce company ID scoping
-        $companyId = $user->company_id;
-        if ($companyId) {
-            $query->whereHas('lead', function ($lq) use ($companyId) {
-                $lq->where('company_id', $companyId);
-            });
-        }
-
-        // 2. Identify Role Classification
-        $isCompanyWide = $this->visibility->isCompanyWideUser($user)
-            || $user->isCompanyAdminRole()
-            || $user->isCbo()
-            || $user->isSuperAdmin()
-            || $user->isSystemAdmin();
-
-        $isBranchAdmin = !$isCompanyWide && $user->isBranchAdmin();
-        $isBranchManager = !$isCompanyWide && !$isBranchAdmin && $user->isBranchManager();
-
-        $roleKeys = collect($user->roleKeys()->all());
-        $rawRoleNames = $user->roles->pluck('name')->map(fn($n) => strtolower($n));
-        $isTl = !$isCompanyWide && !$isBranchAdmin && !$isBranchManager && (
-            $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead', 'teamlead'])->isNotEmpty()
-            || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader') || str_contains($r, 'team_lead'))
-            || $this->visibility->accessLevelFor($user) === RoleMapping::ACCESS_TL
-            || $this->visibility->accessLevelFor($user) === RoleMapping::ACCESS_TEAM
-        );
-
-        $reqBranchId = $request->input('branch_id');
-        $reqUserId = $request->input('user_id');
-        $reqCategory = $request->input('category');
-        $reqSaleType = $request->input('sale_type');
-        $reqSearch = $request->input('search');
-
-        // 3. Apply Server-Side Query Scoping By Role
-        if ($isCompanyWide) {
-            // Company Admin / CBO: Display overall sales data across all branches
-            $query->whereHas('lead', function ($lq) use ($reqBranchId, $reqUserId) {
-                if (!empty($reqBranchId)) {
-                    $lq->where('branch_id', $reqBranchId);
-                }
-                if (!empty($reqUserId)) {
-                    $lq->where('assigned_to', $reqUserId);
-                }
-            });
-        } elseif ($isBranchAdmin) {
-            // Branch Admin: Display data belonging to THEIR ASSIGNED BRANCHES ONLY
-            $myBranchIds = array_map('intval', $user->getMyBranchIds());
-            if (empty($myBranchIds) && $user->branch_id) {
-                $myBranchIds = [(int) $user->branch_id];
+        // 1. Enforce Web standard lead visibility
+        $query->whereHas('lead', function ($lq) use ($user, $request) {
+            if ($user) {
+                $this->visibility->applyLeadVisibility($lq, $user);
             }
 
-            // Security check: If branch_id param requested, validate against user's assigned branches
-            if (!empty($reqBranchId) && in_array((int)$reqBranchId, $myBranchIds, true)) {
-                $allowedBranchIds = [(int)$reqBranchId];
-            } else {
-                $allowedBranchIds = $myBranchIds;
+            // Optional client filter: branch_id
+            if ($request->filled('branch_id')) {
+                $lq->where('branch_id', $request->input('branch_id'));
             }
 
-            $visibleUserIds = $this->visibility->visibleUserIds($user);
-
-            $query->whereHas('lead', function ($lq) use ($allowedBranchIds, $reqUserId, $visibleUserIds) {
-                if (!empty($allowedBranchIds)) {
-                    $lq->whereIn('branch_id', $allowedBranchIds);
-                } else {
-                    $lq->whereRaw('1 = 0');
-                }
-
-                if (!empty($reqUserId)) {
-                    if ($visibleUserIds === null || in_array((int)$reqUserId, array_map('intval', $visibleUserIds), true)) {
-                        $lq->where('assigned_to', $reqUserId);
-                    } else {
-                        $lq->whereRaw('1 = 0');
-                    }
-                }
-            });
-        } elseif ($isBranchManager) {
-            // Branch Manager Updated Rule:
-            // 1. Main Branch ($mainBranchId): Logged-in Branch Manager's OWN LEADS ONLY ($user->id).
-            //    (Branch managers do not have team members in the main branch - excludes all other main branch employees).
-            // 2. Additional Assigned Branches ($additionalBranchIds): Leads belonging to assigned additional branches.
-            // 3. Unassigned Branches: Excluded completely.
-
-            $mainBranchId = $user->branch_id ? (int) $user->branch_id : null;
-            $allBranchIds = array_map('intval', $user->getMyBranchIds());
-            if (empty($allBranchIds) && $mainBranchId) {
-                $allBranchIds = [$mainBranchId];
+            // Optional client filter: user_id
+            if ($request->filled('user_id')) {
+                $lq->where('assigned_to', $request->input('user_id'));
             }
+        });
 
-            $additionalBranchIds = array_values(array_diff($allBranchIds, array_filter([$mainBranchId])));
-
-            // Security check: If request branch_id parameter is passed, validate against allowed branches
-            if (!empty($reqBranchId) && in_array((int)$reqBranchId, $allBranchIds, true)) {
-                $targetBranchId = (int) $reqBranchId;
-                if ($targetBranchId === $mainBranchId) {
-                    $effectiveMainBranchId = $mainBranchId;
-                    $effectiveAdditionalBranchIds = [];
-                } else {
-                    $effectiveMainBranchId = null;
-                    $effectiveAdditionalBranchIds = [$targetBranchId];
-                }
-            } else {
-                $effectiveMainBranchId = $mainBranchId;
-                $effectiveAdditionalBranchIds = $additionalBranchIds;
-            }
-
-            $query->whereHas('lead', function ($lq) use ($user, $effectiveMainBranchId, $effectiveAdditionalBranchIds, $reqUserId) {
-                $lq->where(function ($sub) use ($user, $effectiveMainBranchId, $effectiveAdditionalBranchIds) {
-                    // Main Branch Condition: Must belong to main branch AND be assigned to the logged-in Branch Manager ONLY
-                    if ($effectiveMainBranchId) {
-                        $sub->where(function ($mainSub) use ($user, $effectiveMainBranchId) {
-                            $mainSub->where('branch_id', $effectiveMainBranchId)
-                                    ->where('assigned_to', $user->id);
-                        });
-                    }
-
-                    // Additional Assigned Branches Condition: Leads belonging to assigned additional branches
-                    if (!empty($effectiveAdditionalBranchIds)) {
-                        if ($effectiveMainBranchId) {
-                            $sub->orWhereIn('branch_id', $effectiveAdditionalBranchIds);
-                        } else {
-                            $sub->whereIn('branch_id', $effectiveAdditionalBranchIds);
-                        }
-                    }
-                });
-
-                // Optional user filter validation
-                if (!empty($reqUserId)) {
-                    $lq->where('assigned_to', $reqUserId);
-                }
-            });
-        } elseif ($isTl) {
-            // TL (Team Lead): Display own data + data belonging to their team members
-            $teamUserIds = $this->visibility->descendantUserIds($user)->push($user->id)->map(fn($id) => (int)$id)->unique()->values()->all();
-
-            if (!empty($reqUserId) && in_array((int)$reqUserId, $teamUserIds, true)) {
-                $allowedUserIds = [(int)$reqUserId];
-            } else {
-                $allowedUserIds = $teamUserIds;
-            }
-
-            $query->whereHas('lead', function ($lq) use ($allowedUserIds, $reqBranchId) {
-                $lq->whereIn('assigned_to', $allowedUserIds);
-                if (!empty($reqBranchId)) {
-                    $lq->where('branch_id', $reqBranchId);
-                }
-            });
-        } else {
-            // Other Roles / Executive: Display ONLY THEIR OWN DATA
-            $query->whereHas('lead', function ($lq) use ($user) {
-                $lq->where('assigned_to', $user->id);
-            });
-        }
-
-        // Apply additional category, sale_type, and search filters securely
-        if (!empty($reqCategory)) {
+        // 2. Apply additional category, sale_type, and search filters securely
+        if ($request->filled('category')) {
+            $reqCategory = $request->input('category');
             $query->where(function ($q) use ($reqCategory) {
                 $q->where('day_sales_category', $reqCategory)
                   ->orWhereHas('daySalesCategory', fn($catQ) => $catQ->where('name', $reqCategory));
             });
         }
 
-        if (!empty($reqSaleType)) {
-            $query->where('sale_type', $reqSaleType);
+        if ($request->filled('sale_type')) {
+            $query->where('sale_type', $request->input('sale_type'));
         }
 
-        if (!empty($reqSearch)) {
-            $searchTerm = '%' . trim($reqSearch) . '%';
+        if ($request->filled('search')) {
+            $searchTerm = '%' . trim($request->input('search')) . '%';
             $query->where(function ($sq) use ($searchTerm) {
                 $sq->where('product_name', 'like', $searchTerm)
                   ->orWhere('day_sales_category', 'like', $searchTerm)
@@ -595,7 +485,7 @@ class DaySalesTrackerApiController extends Controller
 
         $validated = $request->validate([
             'lead_product_id' => ['required', 'integer', 'exists:lead_products,id'],
-            'sale_type' => ['required', 'string'],
+            'sale_type' => ['nullable', 'string', 'max:50'],
         ]);
 
         $lp = LeadProduct::with('lead')->findOrFail($validated['lead_product_id']);
@@ -615,5 +505,448 @@ class DaySalesTrackerApiController extends Controller
             'lead_product_id' => $lp->id,
             'sale_type' => $lp->sale_type,
         ]);
+    }
+
+    /**
+     * Mobile API: Get Category-wise Day Sales Pivot Report for a selected month (defaults to current month).
+     */
+    public function report(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user() ?: auth()->user();
+            $monthInput = $request->input('month', now()->format('Y-m'));
+
+            try {
+                $carbonMonth = Carbon::parse($monthInput . '-01');
+            } catch (\Throwable $e) {
+                $carbonMonth = now();
+            }
+
+            $monthStart = $carbonMonth->copy()->startOfMonth();
+            $monthEnd   = $carbonMonth->copy()->endOfMonth();
+
+            $convertedProducts = LeadProduct::query()
+                ->with([
+                    'lead.branch',
+                    'lead.assignedTo.roles.department',
+                    'lead.assignedTo.employeeOnboarding.department',
+                    'lead.assignedTo.mappedManagers',
+                    'lead.customerSupportTl',
+                    'payments' => function ($q) use ($carbonMonth) {
+                        $q->whereMonth('payment_date', $carbonMonth->month)
+                          ->whereYear('payment_date', $carbonMonth->year);
+                    }
+                ])
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                      ->orWhere('lead_status_id', 5);
+                })
+                ->where(function ($q) use ($monthStart, $monthEnd) {
+                    $q->whereBetween('converted_at', [$monthStart, $monthEnd])
+                      ->orWhere(function ($sub) use ($monthStart, $monthEnd) {
+                          $sub->whereNull('converted_at')->whereBetween('created_at', [$monthStart, $monthEnd]);
+                      });
+                })
+                ->whereHas('lead', function ($lq) use ($user) {
+                    if ($user) {
+                        $this->visibility->applyLeadVisibility($lq, $user);
+                    }
+                })
+                ->get();
+
+            $categoriesMap = [];
+            foreach ($convertedProducts as $lp) {
+                $catName = trim((string) ($lp->day_sales_category ?: 'Unassigned'));
+                if (!isset($categoriesMap[$catName])) {
+                    $categoriesMap[$catName] = [
+                        'category'         => $catName,
+                        'count'            => 0,
+                        'total_value'      => 0.0,
+                        'total_collection' => 0.0,
+                        'items'            => [],
+                    ];
+                }
+
+                $lead = $lp->lead;
+                $convDate = $lp->converted_at ?: $lp->created_at;
+                $carbonDate = $convDate ? Carbon::parse($convDate) : $carbonMonth;
+
+                $mon = $carbonDate->format('M');
+                $dateFormatted = $carbonDate->format('d-m-Y');
+                $branch = $lead?->branch?->name ?: 'Coimbatore (HO)';
+
+                $branchType = $lead?->branch?->branch_type;
+                if (empty($branchType)) {
+                    $branchName = strtolower($lead?->branch?->name ?? '');
+                    if (str_contains($branchName, 'non') || str_contains($branchName, 'non coco') || str_contains($branchName, 'non-coco')) {
+                        $branchType = 'NON COCO';
+                    } elseif (str_contains($branchName, 'coco')) {
+                        $branchType = 'COCO';
+                    } elseif (str_contains($branchName, 'ho') || ($lead?->branch?->is_default ?? false)) {
+                        $branchType = 'HO';
+                    } else {
+                        $branchType = 'Branch';
+                    }
+                }
+
+                $assignedUser = $lead?->assignedTo;
+                $memberName = $assignedUser?->name ?: 'Unassigned';
+
+                $isSelfLeader = false;
+                if ($assignedUser) {
+                    $roleKeys = collect($assignedUser->roleKeys()->all());
+                    $rawRoleNames = $assignedUser->roles->pluck('name')->map(fn($n) => strtolower($n));
+
+                    $isBm = $assignedUser->isBranchManager()
+                        || $roleKeys->intersect(['branch_manager', 'bm'])->isNotEmpty()
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, 'branch_manager'));
+
+                    $isTl = $roleKeys->intersect(['sales_tl', 'tl', 'team_leader', 'team_lead', 'teamlead'])->isNotEmpty()
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, '_tl') || str_contains($r, 'team_leader') || str_contains($r, 'team_lead'));
+
+                    $isSm = $roleKeys->intersect(['sales_manager'])->isNotEmpty()
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, 'sales_manager'));
+
+                    $isCbo = $assignedUser->isCbo()
+                        || $roleKeys->intersect(['cbo', 'chief_business_officer', 'cheif_business_officer'])->isNotEmpty()
+                        || $rawRoleNames->contains(fn($r) => str_contains($r, 'chief_business_officer') || str_contains($r, 'cbo'));
+
+                    $designation = strtolower($assignedUser->employeeOnboarding?->designation ?? ($assignedUser->designation ?? ''));
+                    $hasLeaderDesignation = false;
+                    if ($designation !== '') {
+                        $hasLeaderDesignation = str_contains($designation, 'branch manager')
+                            || str_contains($designation, 'sales manager')
+                            || str_contains($designation, 'cbo')
+                            || str_contains($designation, 'chief business officer')
+                            || str_contains($designation, 'team leader')
+                            || str_contains($designation, 'team lead')
+                            || str_contains($designation, 'sales tl')
+                            || preg_match('/\b(tl|bm)\b/', $designation);
+                    }
+
+                    if ($isBm || $isTl || $isSm || $isCbo || $hasLeaderDesignation) {
+                        $isSelfLeader = true;
+                    }
+                }
+
+                if ($isSelfLeader) {
+                    $tlName = $memberName;
+                    $teamMemberDisplay = $memberName;
+                } else {
+                    $manager = $assignedUser?->mappedManagers?->first();
+                    $tlName = $manager?->name ?: ($lead?->customerSupportTl?->name ?: null);
+
+                    $deptName = $assignedUser?->employeeOnboarding?->department?->name
+                        ?: ($assignedUser?->roles?->first()?->department?->name ?: 'Sales');
+
+                    if (empty($tlName)) {
+                        $teamMemberDisplay = $memberName !== 'Unassigned' ? "{$memberName} ({$deptName})" : $deptName;
+                    } else {
+                        $teamMemberDisplay = $memberName;
+                    }
+                }
+
+                $compName = trim((string)($lead?->company_name ?? ''));
+                $contactName = trim((string)($lead?->contact_name ?? ''));
+                if ($compName && $contactName && $compName !== $contactName) {
+                    $accountName = "{$compName} - {$contactName}";
+                } else {
+                    $accountName = $compName ?: ($contactName ?: 'N/A');
+                }
+
+                $monthPayments = (float) $lp->payments->sum('amount');
+                $receivedAmount = $monthPayments > 0 ? $monthPayments : (float) ($lp->amount_paid ?: 0);
+
+                $categoriesMap[$catName]['count'] += 1;
+                $categoriesMap[$catName]['total_value'] += (float) $lp->total_price;
+                $categoriesMap[$catName]['total_collection'] += $receivedAmount;
+
+                $categoriesMap[$catName]['items'][] = [
+                    'id'                       => $lp->id,
+                    'lead_id'                  => $lp->lead_id,
+                    'product_name'             => $lp->product_name ?: 'Product',
+                    'mon'                      => $mon,
+                    'date'                     => $dateFormatted,
+                    'branch'                   => $branch,
+                    'branch_type'              => $branchType,
+                    'team_leader'              => $tlName ?: '—',
+                    'team_member'              => $teamMemberDisplay,
+                    'category'                 => $catName,
+                    'sale_type'                => $lp->sale_type ?: '',
+                    'account_name'             => $accountName,
+                    'current_month_collection' => $receivedAmount,
+                    'total_price'              => (float) $lp->total_price,
+                    'lead_url'                 => url('/leads/' . $lp->lead_id),
+                ];
+            }
+
+            $reportItems = collect(array_values($categoriesMap))->sortByDesc('total_collection')->values()->all();
+
+            $monthsList = [];
+            for ($i = 0; $i < 12; $i++) {
+                $m = now()->subMonths($i);
+                $monthsList[] = [
+                    'value' => $m->format('Y-m'),
+                    'label' => $m->format('F Y'),
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'month'            => $carbonMonth->format('Y-m'),
+                    'formatted_month'  => $carbonMonth->format('F Y'),
+                    'months_list'      => $monthsList,
+                    'items'            => $reportItems,
+                    'total_categories' => count($reportItems),
+                    'total_count'      => collect($reportItems)->sum('count'),
+                    'total_collection' => round(collect($reportItems)->sum('total_collection'), 2),
+                    'total_value'      => round(collect($reportItems)->sum('total_value'), 2),
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load Day Sales report.',
+                'error'   => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Mobile API: Get Branch-wise Quarterly Collection Trend Analysis and YoY Growth.
+     */
+    public function trendAnalysis(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user() ?: auth()->user();
+            if ($user && !$user->isSuperAdmin() && !$user->isSystemAdmin() && !$user->isCompanyAdminRole() && !$user->isCbo()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access. Trend analysis is restricted to Company Admin.',
+                ], 403);
+            }
+
+            $year = (int) $request->input('year', now()->year);
+            $mode = $request->input('mode', 'financial');
+
+            $prevYear = $year - 1;
+
+            $quarters = $this->getQuartersForYear($year, $mode);
+            $prevQuarters = $this->getQuartersForYear($prevYear, $mode);
+
+            $companyId = $user?->company_id;
+            $branches = \App\Models\Branch::query()
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->orderBy('name')
+                ->get(['id', 'name', 'branch_type', 'is_default']);
+
+            $branchDataMap = [];
+
+            foreach ($branches as $b) {
+                $bName = $b->name ?: 'Branch #' . $b->id;
+                $branchDataMap[$b->id] = [
+                    'branch_id'       => $b->id,
+                    'branch_name'     => $bName,
+                    'branch_type'     => $b->branch_type ?: ($b->is_default ? 'HO' : 'Branch'),
+                    'q1'              => 0.0,
+                    'q2'              => 0.0,
+                    'q3'              => 0.0,
+                    'q4'              => 0.0,
+                    'total'           => 0.0,
+                    'prev_year_total' => 0.0,
+                    'yoy_growth'      => 0.0,
+                ];
+            }
+
+            $cstBranchId = 'cst';
+            $branchDataMap[$cstBranchId] = [
+                'branch_id'       => 'cst',
+                'branch_name'     => 'CST (Renewals & Dev)',
+                'branch_type'     => 'CST',
+                'q1'              => 0.0,
+                'q2'              => 0.0,
+                'q3'              => 0.0,
+                'q4'              => 0.0,
+                'total'           => 0.0,
+                'prev_year_total' => 0.0,
+                'yoy_growth'      => 0.0,
+            ];
+
+            $allStart = $prevQuarters['q1']['start'];
+            $allEnd   = $quarters['q4']['end'];
+
+            $payments = \App\Models\LeadProductPayment::query()
+                ->with(['lead.branch'])
+                ->whereBetween('payment_date', [$allStart, $allEnd])
+                ->whereHas('lead', function ($lq) use ($user) {
+                    if ($user) {
+                        $this->visibility->applyLeadVisibility($lq, $user);
+                    }
+                })
+                ->get();
+
+            foreach ($payments as $p) {
+                $pDate = Carbon::parse($p->payment_date);
+                $pAmt = (float) $p->amount;
+                $bId = $p->lead?->branch_id ?: ($branches->firstWhere('is_default', true)?->id ?? $branches->first()?->id);
+
+                if ($p->lead && ($p->lead->category === 'cst' || str_contains(strtolower($p->lead->category ?? ''), 'cst'))) {
+                    $targetBranchKey = $cstBranchId;
+                } elseif (isset($branchDataMap[$bId])) {
+                    $targetBranchKey = $bId;
+                } else {
+                    $targetBranchKey = $branches->first()?->id ?? $cstBranchId;
+                }
+
+                foreach (['q1', 'q2', 'q3', 'q4'] as $qKey) {
+                    if ($pDate->between($quarters[$qKey]['start'], $quarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey][$qKey] += $pAmt;
+                        $branchDataMap[$targetBranchKey]['total'] += $pAmt;
+                        break;
+                    }
+                    if ($pDate->between($prevQuarters[$qKey]['start'], $prevQuarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey]['prev_year_total'] += $pAmt;
+                        break;
+                    }
+                }
+            }
+
+            $convertedProducts = LeadProduct::query()
+                ->with(['lead.branch', 'payments'])
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                      ->orWhere('lead_status_id', 5);
+                })
+                ->where(function ($q) use ($allStart, $allEnd) {
+                    $q->whereBetween('converted_at', [$allStart, $allEnd])
+                      ->orWhere(function ($sub) use ($allStart, $allEnd) {
+                          $sub->whereNull('converted_at')->whereBetween('created_at', [$allStart, $allEnd]);
+                      });
+                })
+                ->whereHas('lead', function ($lq) use ($user) {
+                    if ($user) {
+                        $this->visibility->applyLeadVisibility($lq, $user);
+                    }
+                })
+                ->get();
+
+            foreach ($convertedProducts as $lp) {
+                if ($lp->payments->count() > 0) {
+                    continue;
+                }
+
+                $convDate = Carbon::parse($lp->converted_at ?: $lp->created_at);
+                $pAmt = (float) ($lp->amount_paid ?: $lp->total_price);
+                if ($pAmt <= 0) continue;
+
+                $lead = $lp->lead;
+                $bId = $lead?->branch_id ?: ($branches->firstWhere('is_default', true)?->id ?? $branches->first()?->id);
+
+                if ($lead && ($lead->category === 'cst' || str_contains(strtolower($lead->category ?? ''), 'cst'))) {
+                    $targetBranchKey = $cstBranchId;
+                } elseif (isset($branchDataMap[$bId])) {
+                    $targetBranchKey = $bId;
+                } else {
+                    $targetBranchKey = $branches->first()?->id ?? $cstBranchId;
+                }
+
+                foreach (['q1', 'q2', 'q3', 'q4'] as $qKey) {
+                    if ($convDate->between($quarters[$qKey]['start'], $quarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey][$qKey] += $pAmt;
+                        $branchDataMap[$targetBranchKey]['total'] += $pAmt;
+                        break;
+                    }
+                    if ($convDate->between($prevQuarters[$qKey]['start'], $prevQuarters[$qKey]['end'])) {
+                        $branchDataMap[$targetBranchKey]['prev_year_total'] += $pAmt;
+                        break;
+                    }
+                }
+            }
+
+            $branchList = [];
+            foreach ($branchDataMap as $bKey => &$bRow) {
+                $prev = $bRow['prev_year_total'];
+                $curr = $bRow['total'];
+                $bRow['yoy_growth'] = $prev > 0 ? round((($curr - $prev) / $prev) * 100, 1) : ($curr > 0 ? 100.0 : 0.0);
+                $branchList[] = $bRow;
+            }
+
+            usort($branchList, fn($a, $b) => $b['total'] <=> $a['total']);
+
+            $q1Total = collect($branchList)->sum('q1');
+            $q2Total = collect($branchList)->sum('q2');
+            $q3Total = collect($branchList)->sum('q3');
+            $q4Total = collect($branchList)->sum('q4');
+            $grandTotal = collect($branchList)->sum('total');
+            $grandPrevTotal = collect($branchList)->sum('prev_year_total');
+            $overallYoy = $grandPrevTotal > 0 ? round((($grandTotal - $grandPrevTotal) / $grandPrevTotal) * 100, 1) : ($grandTotal > 0 ? 100.0 : 0.0);
+
+            $qTotals = ['Q1' => $q1Total, 'Q2' => $q2Total, 'Q3' => $q3Total, 'Q4' => $q4Total];
+            arsort($qTotals);
+            $bestQuarterKey = array_key_first($qTotals) ?: 'Q1';
+
+            $topBranchName = !empty($branchList) && $branchList[0]['total'] > 0 ? $branchList[0]['branch_name'] : 'N/A';
+
+            $yearsList = [];
+            $currentYear = now()->year;
+            for ($y = $currentYear; $y >= $currentYear - 4; $y--) {
+                $yearsList[] = $y;
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'year'             => $year,
+                    'prev_year'        => $prevYear,
+                    'mode'             => $mode,
+                    'years_list'       => $yearsList,
+                    'quarter_labels'   => [
+                        'q1' => $quarters['q1']['label'],
+                        'q2' => $quarters['q2']['label'],
+                        'q3' => $quarters['q3']['label'],
+                        'q4' => $quarters['q4']['label'],
+                    ],
+                    'branches'         => $branchList,
+                    'totals'           => [
+                        'q1'              => round($q1Total, 2),
+                        'q2'              => round($q2Total, 2),
+                        'q3'              => round($q3Total, 2),
+                        'q4'              => round($q4Total, 2),
+                        'total'           => round($grandTotal, 2),
+                        'prev_year_total' => round($grandPrevTotal, 2),
+                        'yoy_growth'      => $overallYoy,
+                        'best_quarter'    => $bestQuarterKey,
+                        'top_branch'      => $topBranchName,
+                    ]
+                ]
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to calculate trend analysis.',
+                'error'   => config('app.debug') ? $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine() : null,
+            ], 500);
+        }
+    }
+
+    private function getQuartersForYear(int $year, string $mode): array
+    {
+        if ($mode === 'calendar') {
+            return [
+                'q1' => ['start' => Carbon::create($year, 1, 1)->startOfDay(),  'end' => Carbon::create($year, 3, 31)->endOfDay(), 'label' => 'Q1 (Jan - Mar)'],
+                'q2' => ['start' => Carbon::create($year, 4, 1)->startOfDay(),  'end' => Carbon::create($year, 6, 30)->endOfDay(), 'label' => 'Q2 (Apr - Jun)'],
+                'q3' => ['start' => Carbon::create($year, 7, 1)->startOfDay(),  'end' => Carbon::create($year, 9, 30)->endOfDay(), 'label' => 'Q3 (Jul - Sep)'],
+                'q4' => ['start' => Carbon::create($year, 10, 1)->startOfDay(), 'end' => Carbon::create($year, 12, 31)->endOfDay(), 'label' => 'Q4 (Oct - Dec)'],
+            ];
+        }
+
+        return [
+            'q1' => ['start' => Carbon::create($year, 4, 1)->startOfDay(),  'end' => Carbon::create($year, 6, 30)->endOfDay(), 'label' => 'Q1 (Apr - Jun)'],
+            'q2' => ['start' => Carbon::create($year, 7, 1)->startOfDay(),  'end' => Carbon::create($year, 9, 30)->endOfDay(), 'label' => 'Q2 (Jul - Sep)'],
+            'q3' => ['start' => Carbon::create($year, 10, 1)->startOfDay(), 'end' => Carbon::create($year, 12, 31)->endOfDay(), 'label' => 'Q3 (Oct - Dec)'],
+            'q4' => ['start' => Carbon::create($year + 1, 1, 1)->startOfDay(), 'end' => Carbon::create($year + 1, 3, 31)->endOfDay(), 'label' => 'Q4 (Jan - Mar)'],
+        ];
     }
 }

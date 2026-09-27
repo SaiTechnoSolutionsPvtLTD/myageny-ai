@@ -1275,8 +1275,31 @@ class DashboardController extends Controller
             ];
         }
 
-        $isCompanyAdmin = $authUser->isSuperAdmin() || $authUser->isSystemAdmin() || $authUser->isCompanyAdminRole();
+        $isCompanyAdmin = $authUser->isSuperAdmin() 
+            || $authUser->isSystemAdmin() 
+            || $authUser->isCompanyAdminRole()
+            || $authUser->isCompanyAdmin();
         $isCbo          = $authUser->isCbo();
+
+        if (!$isCompanyAdmin && method_exists($authUser, 'roleKeys')) {
+            $keys = collect($authUser->roleKeys()->all());
+            $isCompanyAdmin = $keys->contains('company_admin') || $keys->contains('super_admin') || $keys->contains('admin');
+        }
+        if (!$isCbo && method_exists($authUser, 'roleKeys')) {
+            $keys = collect($authUser->roleKeys()->all());
+            $isCbo = $keys->intersect(['cbo', 'chief_business_officer', 'cheif_business_officer'])->isNotEmpty();
+        }
+        if (!$isCompanyAdmin && method_exists($authUser, 'hasAnyRole')) {
+            try {
+                $isCompanyAdmin = $authUser->hasAnyRole(['company_admin', 'super_admin', 'admin', 'Super Admin', 'Company Admin']);
+            } catch (\Throwable $e) {}
+        }
+        if (!$isCbo && method_exists($authUser, 'hasAnyRole')) {
+            try {
+                $isCbo = $authUser->hasAnyRole(['cbo', 'CBO', 'chief_business_officer', 'cheif_business_officer']);
+            } catch (\Throwable $e) {}
+        }
+
         $isBranchManager = $authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo;
         $isBranchAdmin   = $authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager;
         $isTl            = $authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin;
@@ -1388,18 +1411,21 @@ class DashboardController extends Controller
     private function buildActiveBranchesHotMetrics(Request $request): array
     {
         $user = $request->user();
+        $companyId = $user ? ($this->visibility->companyIdFor($user) ?? ($user->company_id ?: 1)) : 1;
         $visibleBranchIds = $user ? $this->visibility->visibleBranchIds($user) : collect();
-        $companyId = $user ? $this->visibility->companyIdFor($user) : null;
 
         $branches = Branch::where('is_active', true)
-            ->where(function ($query) {
+            ->where(function ($query) use ($companyId) {
                 $query->where('is_default', false)
-                    ->orWhereNull('is_default');
+                    ->orWhereNull('is_default')
+                    ->orWhere(function ($dq) use ($companyId) {
+                        $dq->where('is_default', true)->where('company_id', $companyId);
+                    });
             })
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
             ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
             ->when($request->filled('branch_id'), fn($query) => $query->where('id', $request->branch_id))
-            ->orderBy('name')
+            ->orderByRaw('is_default DESC, name ASC')
             ->get();
 
         $branchIds = $branches->pluck('id')->toArray();
@@ -1407,6 +1433,7 @@ class DashboardController extends Controller
             return [];
         }
 
+        // 1. NST Hot Products
         $hotProductsGrouped = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
@@ -1417,15 +1444,27 @@ class DashboardController extends Controller
             ->select(
                 'leads.branch_id',
                 DB::raw('COUNT(lead_products.id) as prospect_count'),
-                DB::raw('COALESCE(SUM(lead_products.total_price), 0) as deal_value'),
+                DB::raw('COALESCE(SUM(CASE WHEN lead_products.total_price > 0 THEN lead_products.total_price ELSE lead_products.expected_value END), 0) as deal_value'),
                 DB::raw('COALESCE(SUM(lead_products.expected_value), 0) as expected_value')
             )
             ->groupBy('leads.branch_id')
             ->get()
             ->keyBy('branch_id');
 
-        return $branches->map(function ($branch) use ($hotProductsGrouped) {
+        // 2. CST Prospects (Renewals & Development)
+        $cstItems = $this->getCstProspectItems($request);
+        $cstGrouped = $cstItems->groupBy('branch_id');
+
+        return $branches->map(function ($branch) use ($hotProductsGrouped, $cstGrouped) {
             $stats = $hotProductsGrouped->get($branch->id);
+            $nstCount = $stats ? (int) $stats->prospect_count : 0;
+            $nstDeal  = $stats ? (float) $stats->deal_value : 0.0;
+            $nstExp   = $stats ? (float) $stats->expected_value : 0.0;
+
+            $branchCst = $cstGrouped->get($branch->id, collect());
+            $cstCount = $branchCst->count();
+            $cstDeal  = (float) $branchCst->sum('deal_value');
+            $cstExp   = (float) $branchCst->sum('expected_value');
 
             return [
                 'id'             => $branch->id,
@@ -1433,9 +1472,15 @@ class DashboardController extends Controller
                 'code'           => $branch->code,
                 'is_default'     => (bool) $branch->is_default,
                 'branch_type'    => $branch->branch_type,
-                'prospect_count' => $stats ? (int) $stats->prospect_count : 0,
-                'deal_value'     => $stats ? (float) $stats->deal_value : 0.0,
-                'expected_value' => $stats ? (float) $stats->expected_value : 0.0,
+                'prospect_count' => $nstCount + $cstCount,
+                'deal_value'     => $nstDeal + $cstDeal,
+                'expected_value' => $nstExp + $cstExp,
+                'nst_count'      => $nstCount,
+                'cst_count'      => $cstCount,
+                'nst_deal'       => $nstDeal,
+                'cst_deal'       => $cstDeal,
+                'nst_exp'        => $nstExp,
+                'cst_exp'        => $cstExp,
             ];
         })->values()->toArray();
     }
@@ -1726,8 +1771,132 @@ class DashboardController extends Controller
         if ($type === 'coco' && !$hasCocoBranch) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: Channel Partner COCO.'], 403);
         }
+        if ($type === 'all' && !$canViewActiveBranches) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Active Branches.'], 403);
+        }
         if ($type === 'cst' && !$canViewCst) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
+        }
+
+        if ($type === 'all') {
+            $title = 'All Active Branches Brief Report';
+            $subtitle = 'Current month closure hot prospects & branch performance summary';
+            $branchType = 'ALL';
+
+            $query = LeadProduct::query()
+                ->with([
+                    'lead' => function ($lq) {
+                        $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                    },
+                    'product:id,product_name',
+                    'leadStatus:id,name'
+                ])
+                ->whereRaw('LOWER(product_status) = ?', ['hot'])
+                ->whereMonth('closure_date', now()->month)
+                ->whereYear('closure_date', now()->year);
+
+            $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
+                $this->visibility->applyLeadVisibility($lq, $currentUser);
+                if ($request->filled('user_id')) {
+                    $lq->where('assigned_to', $request->user_id);
+                }
+            });
+
+            $hotProducts = $query->orderByDesc('closure_date')->get();
+
+            $rows = $hotProducts->map(function ($item, $idx) {
+                $lead = $item->lead;
+                return [
+                    'index'            => $idx + 1,
+                    'lead_id'          => $lead?->id,
+                    'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
+                    'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
+                    'customer_name'    => $lead?->contact_name ?: '-',
+                    'product_name'     => $item->product_name ?: ($item->product?->product_name ?: '-'),
+                    'status'           => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
+                    'deal_value'       => (float) $item->total_price,
+                    'expected_value'   => (float) ($item->expected_value ?? 0),
+                    'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
+                    'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
+                    'executive_name'   => $lead?->assignedTo?->name ?: '-',
+                    'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
+                ];
+            });
+
+            $cstItems = $this->getCstProspectItems($request);
+            foreach ($cstItems as $cItem) {
+                $rows->push([
+                    'index'            => $rows->count() + 1,
+                    'lead_id'          => $cItem['lead_id'],
+                    'lead_view_url'    => $cItem['lead_view_url'],
+                    'project_view_url' => $cItem['project_view_url'] ?? null,
+                    'company_name'     => $cItem['company_name'],
+                    'customer_name'    => $cItem['customer_name'],
+                    'product_name'     => $cItem['product_name'],
+                    'status'           => $cItem['status'] ?? 'Renewal',
+                    'deal_value'       => (float) $cItem['deal_value'],
+                    'expected_value'   => (float) $cItem['expected_value'],
+                    'closure_date'     => $cItem['closure_date'],
+                    'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
+                    'branch_name'      => $cItem['branch_name'] ?? 'CST',
+                ]);
+            }
+
+            $rows = $rows->values()->map(function ($r, $i) {
+                $r['index'] = $i + 1;
+                return $r;
+            });
+
+            // Search filter
+            if ($request->filled('search')) {
+                $s = strtolower(trim((string)$request->search));
+                $rows = $rows->filter(function ($r) use ($s) {
+                    return str_contains(strtolower($r['company_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['customer_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['executive_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['branch_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['status'] ?? ''), $s);
+                })->values();
+            }
+
+            $totalCount = $rows->count();
+            $totalDeal = (float) $rows->sum('deal_value');
+            $totalExpected = (float) $rows->sum('expected_value');
+
+            // Pagination support
+            $page = max(1, (int) $request->input('page', 1));
+            $perPage = (int) $request->input('per_page', 0);
+            if ($perPage > 0) {
+                $paginatedRows = $rows->forPage($page, $perPage)->values();
+                $hasMore = ($page * $perPage) < $totalCount;
+            } else {
+                $paginatedRows = $rows;
+                $hasMore = false;
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'All active branches brief report fetched.',
+                'data'    => [
+                    'branch' => [
+                        'id'          => null,
+                        'code'        => 'all',
+                        'name'        => $title,
+                        'subtitle'    => $subtitle,
+                        'branch_type' => $branchType,
+                    ],
+                    'period'         => now()->format('F Y'),
+                    'total_count'    => $totalCount,
+                    'total_deal'     => $totalDeal,
+                    'total_expected' => $totalExpected,
+                    'page'           => $page,
+                    'per_page'       => $perPage,
+                    'has_more'       => $hasMore,
+                    'leads'          => $paginatedRows,
+                ],
+            ]);
         }
 
         if ($type === 'cst') {
@@ -1771,7 +1940,8 @@ class DashboardController extends Controller
                 'message' => 'Branch hot leads fetched.',
                 'data'    => [
                     'branch' => [
-                        'id'          => 'cst',
+                        'id'          => null,
+                        'code'        => 'cst',
                         'name'        => 'CST',
                         'subtitle'    => $subtitle,
                         'branch_type' => 'CST',
@@ -1998,6 +2168,7 @@ class DashboardController extends Controller
             return [
                 'index'          => $idx + 1,
                 'lead_id'        => $lead?->id,
+                'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
                 'company_name'   => $lead?->company_name ?: ($lead?->business_name ?: '-'),
                 'customer_name'  => $lead?->contact_name ?: '-',
                 'product_name'   => $item->product_name ?: ($item->product?->product_name ?: '-'),
@@ -2007,6 +2178,7 @@ class DashboardController extends Controller
                 'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                 'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
                 'executive_name' => $lead?->assignedTo?->name ?: '-',
+                'branch_name'    => $lead?->branch?->name ?: ($branch?->name ?: 'Coimbatore (HO)'),
             ];
         });
 
@@ -2018,6 +2190,7 @@ class DashboardController extends Controller
                     || str_contains(strtolower($r['customer_name'] ?? ''), $s)
                     || str_contains(strtolower($r['product_name'] ?? ''), $s)
                     || str_contains(strtolower($r['executive_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['branch_name'] ?? ''), $s)
                     || str_contains(strtolower($r['status'] ?? ''), $s);
             })->values();
         }
