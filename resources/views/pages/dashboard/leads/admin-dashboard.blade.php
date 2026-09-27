@@ -3108,32 +3108,6 @@ function renderForecasting(d) {
     var activeBranchesDealSum = activeBranches.reduce(function(sum, b) { return sum + (parseFloat(b.deal_value) || 0); }, 0);
     var activeBranchesExpSum = activeBranches.reduce(function(sum, b) { return sum + (parseFloat(b.expected_value) || 0); }, 0);
 
-    var hotCount = activeBranchesSum > 0
-        ? activeBranchesSum
-        : (fc.total_prospects !== undefined
-            ? fc.total_prospects
-            : (fc.hot_products_count !== undefined
-                ? (Number(fc.hot_products_count) + cstCount)
-                : (k.total_prospects !== undefined
-                    ? k.total_prospects
-                    : ((k.current_month_hot_products_count !== undefined ? Number(k.current_month_hot_products_count) : 0) + cstCount))));
-
-    var hotValue = activeBranchesDealSum > 0
-        ? activeBranchesDealSum
-        : (fc.deal_value !== undefined
-            ? fc.deal_value
-            : (fc.hot_products_value !== undefined
-                ? (Number(fc.hot_products_value) + cstDealVal)
-                : (k.current_month_hot_products_value !== undefined
-                    ? (Number(k.current_month_hot_products_value) + cstDealVal)
-                    : 0)));
-
-    var expectedCollection = activeBranchesExpSum > 0
-        ? activeBranchesExpSum
-        : (fc.expected_collection_value !== undefined
-            ? fc.expected_collection_value
-            : ((k.current_month_expected_collection || 0) + cstExpVal));
-
     var monthName = fc.month_name || 'Current Month';
 
     var nonCoco = fc.non_coco || {
@@ -3151,10 +3125,69 @@ function renderForecasting(d) {
     };
 
     var nstHo = fc.nst_ho || {
-        count: k.nst_ho_prospects_count !== undefined ? k.nst_ho_prospects_count : hotCount,
-        deal_value: k.nst_ho_deal_value !== undefined ? k.nst_ho_deal_value : hotValue,
-        expected_value: k.nst_ho_expected_value !== undefined ? k.nst_ho_expected_value : expectedCollection
+        count: k.nst_ho_prospects_count !== undefined ? k.nst_ho_prospects_count : 0,
+        deal_value: k.nst_ho_deal_value !== undefined ? k.nst_ho_deal_value : 0,
+        expected_value: k.nst_ho_expected_value !== undefined ? k.nst_ho_expected_value : 0
     };
+
+    var nstHoCount   = Number(nstHo.count || 0);
+    var nonCocoCount = Number(nonCoco.count || 0);
+    var cocoCount    = Number(coco.count || 0);
+    var cstCount     = Number(cst.count || 0);
+
+    var nstHoDeal    = Number(nstHo.deal_value || 0);
+    var nonCocoDeal  = Number(nonCoco.deal_value || 0);
+    var cocoDeal     = Number(coco.deal_value || 0);
+    var cstDeal      = Number(cst.deal_value || 0);
+
+    var nstHoExp     = Number(nstHo.expected_value || 0);
+    var nonCocoExp   = Number(nonCoco.expected_value || 0);
+    var cocoExp      = Number(coco.expected_value || 0);
+    var cstExp       = Number(cst.expected_value || 0);
+
+    var modalSectionsCountSum = 0;
+    var modalSectionsDealSum  = 0;
+    var modalSectionsExpSum   = 0;
+
+    var showDefault = (fc.show_nst_ho !== undefined ? fc.show_nst_ho : (fc.has_default_branch !== undefined ? fc.has_default_branch : true));
+    var showNonCoco = (fc.show_non_coco !== undefined ? fc.show_non_coco : (fc.has_non_coco_branch !== undefined ? fc.has_non_coco_branch : false));
+    var showCoco    = (fc.show_coco !== undefined ? fc.show_coco : (fc.has_coco_branch !== undefined ? fc.has_coco_branch : false));
+    var showCst     = (fc.show_cst !== undefined ? fc.show_cst : (fc.can_view_cst !== undefined ? fc.can_view_cst : true));
+
+    if (showDefault) {
+        modalSectionsCountSum += nstHoCount;
+        modalSectionsDealSum  += nstHoDeal;
+        modalSectionsExpSum   += nstHoExp;
+    }
+    if (showNonCoco) {
+        modalSectionsCountSum += nonCocoCount;
+        modalSectionsDealSum  += nonCocoDeal;
+        modalSectionsExpSum   += nonCocoExp;
+    }
+    if (showCoco) {
+        modalSectionsCountSum += cocoCount;
+        modalSectionsDealSum  += cocoDeal;
+        modalSectionsExpSum   += cocoExp;
+    }
+    if (showCst) {
+        modalSectionsCountSum += cstCount;
+        modalSectionsDealSum  += cstDeal;
+        modalSectionsExpSum   += cstExp;
+    }
+
+    var isCompanyAdminOrCboUser = (USER_ROLE_TYPE === 'company_admin' || USER_ROLE_TYPE === 'cbo' || fc.can_view_active_branches || fc.show_active_branches);
+
+    var hotCount = isCompanyAdminOrCboUser
+        ? (activeBranchesSum > 0 ? activeBranchesSum : (fc.total_prospects !== undefined ? Number(fc.total_prospects) : modalSectionsCountSum))
+        : modalSectionsCountSum;
+
+    var hotValue = isCompanyAdminOrCboUser
+        ? (activeBranchesDealSum > 0 ? activeBranchesDealSum : (fc.deal_value !== undefined ? Number(fc.deal_value) : modalSectionsDealSum))
+        : modalSectionsDealSum;
+
+    var expectedCollection = isCompanyAdminOrCboUser
+        ? (activeBranchesExpSum > 0 ? activeBranchesExpSum : (fc.expected_collection_value !== undefined ? Number(fc.expected_collection_value) : modalSectionsExpSum))
+        : modalSectionsExpSum;
 
     var activeBranches = fc.active_branches || [];
 
@@ -3276,12 +3309,19 @@ window.openTotalProspectsModal = function() {
     if (cstDealEl)  cstDealEl.textContent  = fmt(cst.deal_value || 0);
     if (cstExpEl)   cstExpEl.textContent   = fmt(cst.expected_value || 0);
 
+    // Calculate exact sum of visible section cards for non-admin modal header badge
+    var nstHoVal   = Number(nstHo.count || 0);
+    var nonCocoVal = Number(nonCoco.count || 0);
+    var cocoVal    = Number(coco.count || 0);
+    var cstVal     = Number(cst.count || 0);
+    var visibleCardsSum = nstHoVal + nonCocoVal + cocoVal + cstVal;
+
     // Total Prospects badge in header
     var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
     if (totalBadgeEl) {
-        var totalModalSum = (window.currentProspectsMetrics && window.currentProspectsMetrics.count !== undefined)
-            ? window.currentProspectsMetrics.count
-            : activeBranchesList.reduce(function(sum, b) { return sum + (parseInt(b.prospect_count) || 0); }, 0);
+        var totalModalSum = CAN_VIEW_ACTIVE_BRANCHES
+            ? (m.count !== undefined && m.count > 0 ? m.count : (visibleCardsSum > 0 ? visibleCardsSum : 0))
+            : (visibleCardsSum > 0 ? visibleCardsSum : (m.count !== undefined ? m.count : 0));
         totalBadgeEl.textContent = totalModalSum;
     }
 
