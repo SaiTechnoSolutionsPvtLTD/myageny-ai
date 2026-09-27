@@ -513,6 +513,128 @@ class CustomerSuccessDashboardApiController extends Controller
                 }
             }
 
+            // Development Ongoing Projects
+            $devOngoingProjects = ProductionInitiation::query()
+                ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+                ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+                ->leftJoin('departments', 'departments.id', '=', 'production_initiations.department_id')
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->select([
+                    'production_initiations.id',
+                    'production_initiations.lead_id',
+                    'production_initiations.product_name',
+                    'production_initiations.project_delivery_date',
+                    'production_initiations.project_execution_status',
+                    'production_initiations.project_allocated_employee_user_ids',
+                    'production_initiations.project_allocated_tl_user_ids',
+                    'production_initiations.client_name',
+                    'production_initiations.company_name as pi_company_name',
+                    'lead_products.total_price',
+                    'lead_products.amount_paid',
+                    'lead_products.payment_status',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'leads.mobile_number',
+                    'leads.branch_id',
+                    'branches.name as branch_name',
+                    'departments.name as department_name'
+                ])
+                ->where($applySupportScope)
+                ->whereRaw('LOWER(departments.name) LIKE ?', ['%development%'])
+                ->where(function ($q) {
+                    $q->whereNotIn('production_initiations.project_execution_status', ['delivered', 'lost'])
+                      ->orWhereNull('production_initiations.project_execution_status');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('production_initiations.production_approval_status')
+                      ->orWhere('production_initiations.production_approval_status', '!=', 'rejected');
+                })
+                ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->orderByDesc('production_initiations.id')
+                ->get();
+
+            $devUserIds = [];
+            foreach ($devOngoingProjects as $dp) {
+                $employeeIds = is_array($dp->project_allocated_employee_user_ids)
+                    ? $dp->project_allocated_employee_user_ids
+                    : json_decode($dp->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+                $tlIds = is_array($dp->project_allocated_tl_user_ids)
+                    ? $dp->project_allocated_tl_user_ids
+                    : json_decode($dp->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+                foreach ($employeeIds as $eid) { if ($eid) $devUserIds[] = (int) $eid; }
+                foreach ($tlIds as $tid) { if ($tid) $devUserIds[] = (int) $tid; }
+            }
+            $devUserIds = array_unique($devUserIds);
+            $devUserMap = !empty($devUserIds)
+                ? User::whereIn('id', $devUserIds)->pluck('name', 'id')
+                : collect();
+
+            $devOngoingItems = [];
+            $devOngoingTotalValue = 0;
+            $devOngoingTotalReceived = 0;
+            $devOngoingTotalPending = 0;
+            $devOngoingOntrackCount = 0;
+            $devOngoingHoldCount = 0;
+
+            foreach ($devOngoingProjects as $dp) {
+                $employeeIds = is_array($dp->project_allocated_employee_user_ids)
+                    ? $dp->project_allocated_employee_user_ids
+                    : json_decode($dp->project_allocated_employee_user_ids ?? '[]', true) ?? [];
+                $tlIds = is_array($dp->project_allocated_tl_user_ids)
+                    ? $dp->project_allocated_tl_user_ids
+                    : json_decode($dp->project_allocated_tl_user_ids ?? '[]', true) ?? [];
+
+                $allocatedNames = [];
+                foreach ($employeeIds as $eid) {
+                    if (isset($devUserMap[$eid])) $allocatedNames[] = $devUserMap[$eid];
+                }
+                if (empty($allocatedNames)) {
+                    foreach ($tlIds as $tid) {
+                        if (isset($devUserMap[$tid])) $allocatedNames[] = $devUserMap[$tid];
+                    }
+                }
+                $allocatedPersonLabel = !empty($allocatedNames) ? implode(', ', $allocatedNames) : 'Unassigned';
+
+                $price = (float) $dp->total_price;
+                $paid  = (float) $dp->amount_paid;
+                $pending = max(0, $price - $paid);
+
+                $devOngoingTotalValue += $price;
+                $devOngoingTotalReceived += $paid;
+                $devOngoingTotalPending += $pending;
+
+                $rawStatus = strtolower(trim((string) ($dp->project_execution_status ?: 'ontrack')));
+                if ($rawStatus === 'ontrack') $devOngoingOntrackCount++;
+                elseif ($rawStatus === 'hold') $devOngoingHoldCount++;
+
+                $compName = $dp->company_name ?: ($dp->pi_company_name ?: ($dp->contact_name ?: ($dp->client_name ?: 'N/A')));
+                $contactName = $dp->contact_name ?: ($dp->client_name ?: '');
+
+                $devOngoingItems[] = [
+                    'id'                     => $dp->id,
+                    'lead_id'                => $dp->lead_id,
+                    'product_name'           => $dp->product_name ?: 'Development Project',
+                    'company_name'           => $compName,
+                    'contact_name'           => $contactName,
+                    'mobile_number'          => $dp->mobile_number ?: '—',
+                    'branch_name'            => $dp->branch_name ?: 'General',
+                    'department_name'        => $dp->department_name ?: 'Development',
+                    'project_delivery_date'  => $dp->project_delivery_date ? Carbon::parse($dp->project_delivery_date)->format('d M Y') : '—',
+                    'raw_delivery_date'      => $dp->project_delivery_date ? Carbon::parse($dp->project_delivery_date)->toDateString() : '',
+                    'allocated_person'       => $allocatedPersonLabel,
+                    'execution_status'       => $rawStatus,
+                    'execution_status_label' => ucfirst($rawStatus),
+                    'total_value'            => $price,
+                    'received_amount'        => $paid,
+                    'pending_amount'         => $pending,
+                    'payment_status'         => $dp->payment_status ?: ($paid >= $price ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid')),
+                    'project_url'            => url('/projects-details/' . $dp->id),
+                    'lead_url'               => $dp->lead_id ? url('/leads/' . $dp->lead_id) : '#',
+                ];
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -545,6 +667,15 @@ class CustomerSuccessDashboardApiController extends Controller
                     'delivery_projects' => $deliveryProjectsData,
                     'delivery_title' => $deliverySectionTitle,
                     'delivery_badge' => $deliverySectionBadge,
+                    'development_ongoing' => [
+                        'count'         => count($devOngoingItems),
+                        'value'         => round($devOngoingTotalValue, 2),
+                        'received'      => round($devOngoingTotalReceived, 2),
+                        'pending'       => round($devOngoingTotalPending, 2),
+                        'ontrack_count' => $devOngoingOntrackCount,
+                        'hold_count'    => $devOngoingHoldCount,
+                        'items'         => $devOngoingItems,
+                    ],
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -624,6 +755,15 @@ class CustomerSuccessDashboardApiController extends Controller
             'delivery_projects' => [],
             'delivery_title' => 'Delivery Planned Projects',
             'delivery_badge' => 'Planned',
+            'development_ongoing' => [
+                'count'         => 0,
+                'value'         => 0,
+                'received'      => 0,
+                'pending'       => 0,
+                'ontrack_count' => 0,
+                'hold_count'    => 0,
+                'items'         => [],
+            ],
         ];
     }
 }

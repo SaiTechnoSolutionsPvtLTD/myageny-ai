@@ -674,7 +674,7 @@
 
         {{-- Summary Cards Grid --}}
         <div class="cards-grid" id="cardsGrid">
-            @for($i = 0; $i < 9; $i++)
+            @for($i = 0; $i < 14; $i++)
             <div class="cs-skel-card">
                 <div class="cs-skel" style="height:38px;width:38px;border-radius:12px;margin-bottom:12px"></div>
                 <div class="cs-skel" style="height:26px;width:60%;margin-bottom:8px"></div>
@@ -1229,6 +1229,107 @@
         </div>
     </div>
 </div>
+
+{{-- Development Ongoing Projects Modal Popup --}}
+<div id="devOngoingModal" class="rn-modal-overlay" style="display:none;" onclick="if(event.target === this) closeDevOngoingModal()">
+    <div class="rn-modal-card" style="max-width:1250px;">
+        <!-- Header -->
+        <div class="rn-modal-header">
+            <div class="rn-header-left">
+                <div class="rn-title-row">
+                    <span class="rn-period-icon" style="color:#0284c7;background:#f0f9ff;border-color:#bae6fd;">💻</span>
+                    <div>
+                        <h3 class="rn-modal-title">Development Ongoing Projects</h3>
+                        <div class="rn-modal-subtitle">Active ongoing client projects under Development Department</div>
+                    </div>
+                </div>
+                <!-- Stat Badges -->
+                <div class="rn-header-stats">
+                    <div class="rn-stat-chip rn-stat-total">
+                        <span style="font-weight:600;color:#64748b;">Ongoing Projects:</span>
+                        <strong id="devOngoingStatCount">0</strong>
+                    </div>
+                    <div class="rn-stat-chip" style="background:#f0f9ff;border-color:#bae6fd;">
+                        <span style="font-weight:600;color:#0369a1;">Total Value:</span>
+                        <strong id="devOngoingStatValue" style="color:#0284c7;">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-collected">
+                        <span style="font-weight:600;color:#047857;">Received:</span>
+                        <strong id="devOngoingStatPaid">₹0</strong>
+                    </div>
+                    <div class="rn-stat-chip rn-stat-pending">
+                        <span style="font-weight:600;color:#e11d48;">Pending:</span>
+                        <strong id="devOngoingStatPending">₹0</strong>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="rn-modal-close" onclick="closeDevOngoingModal()" title="Close (Esc)">&times;</button>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="rn-modal-toolbar">
+            <div class="rn-search-box">
+                <span class="rn-search-icon">🔍</span>
+                <input type="text" id="devOngoingSearchInput" class="rn-search-input" placeholder="Search project, company, client, mobile, branch, allocated person..." oninput="onDevOngoingModalSearch(this.value)">
+                <button type="button" id="devOngoingSearchClear" class="rn-search-clear" onclick="clearDevOngoingSearch()" style="display:none;">&times;</button>
+            </div>
+            <div class="rn-filter-group">
+                <select id="devOngoingStatusFilter" class="rn-status-select" onchange="onDevOngoingFilterChange()">
+                    <option value="all">All Execution Statuses</option>
+                    <option value="ontrack">Ontrack</option>
+                    <option value="in progress">In Progress</option>
+                    <option value="hold">Hold</option>
+                    <option value="waiting for content">Waiting for Content</option>
+                </select>
+                <select id="devOngoingPaymentFilter" class="rn-status-select" onchange="onDevOngoingFilterChange()">
+                    <option value="all">All Payment Statuses</option>
+                    <option value="paid">Fully Paid</option>
+                    <option value="partial">Partial Payment</option>
+                    <option value="unpaid">Unpaid</option>
+                </select>
+                <button type="button" class="rn-export-btn" onclick="exportDevOngoingToCsv()" title="Export current ongoing projects to CSV">
+                    <span>📥 Export CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="rn-modal-body">
+            <div class="rn-table-wrap">
+                <table class="rn-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;text-align:center;">#</th>
+                            <th style="min-width:180px;">Project / Product</th>
+                            <th style="min-width:180px;">Account / Company</th>
+                            <th style="min-width:150px;">Contact &amp; Mobile</th>
+                            <th style="min-width:110px;text-align:center;">Delivery Date</th>
+                            <th style="min-width:140px;">Allocated Person</th>
+                            <th style="min-width:120px;text-align:center;">Execution Status</th>
+                            <th style="min-width:110px;text-align:right;">Project Value</th>
+                            <th style="min-width:110px;text-align:right;">Received</th>
+                            <th style="min-width:110px;text-align:right;">Pending</th>
+                            <th style="min-width:90px;text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devOngoingTableBody">
+                        <tr><td colspan="11" style="text-align:center;color:var(--cs-muted);padding:30px;">Loading ongoing development projects...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="rn-modal-footer">
+            <div class="rn-footer-info" id="devOngoingFooterInfo">
+                Showing 0 of 0 projects
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <button type="button" class="lpd-btn lpd-btn-ghost" onclick="closeDevOngoingModal()" style="padding:7px 18px;font-size:12px;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -1539,6 +1640,12 @@ function renderDashboard(data) {
             <div class="sc-value">${data.pending_welcome_calls?.count ?? 0}</div>
             <div class="sc-label">Pending Welcome Calls</div>
             <div class="sc-sub">Approved accounts (All Departments)</div>
+        </div>
+        <div class="summary-card sc-blue" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;" onclick="openDevOngoingModal()" title="Click to view Development Ongoing Projects in modal popup">
+            <div class="sc-icon">💻</div>
+            <div class="sc-value">${data.development_ongoing?.count ?? 0}</div>
+            <div class="sc-label">Development Ongoing Projects</div>
+            <div class="sc-sub">${fmt(data.development_ongoing?.value ?? 0)} total &bull; Click to view ↗</div>
         </div>
         <div class="summary-card sc-amber" style="background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%) !important;" onclick="switchSmmTab('current_month', true)" title="Click to view SMM Sheet Current Month Expiring Details">
             <div class="sc-icon">📱</div>
@@ -3280,12 +3387,271 @@ function exportPaymentsToCsv() {
     URL.revokeObjectURL(url);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   DEVELOPMENT ONGOING PROJECTS MODAL
+══════════════════════════════════════════════════════════════════════════ */
+let rawDevOngoingModalItems = [];
+let filteredDevOngoingItems = [];
+
+function openDevOngoingModal() {
+    if (!dashboardDataRaw) {
+        alert('Please wait for dashboard data to load.');
+        return;
+    }
+
+    const modal = document.getElementById('devOngoingModal');
+    const dataset = dashboardDataRaw.development_ongoing || { count: 0, value: 0, items: [] };
+    rawDevOngoingModalItems = Array.isArray(dataset.items) ? dataset.items : [];
+
+    // Reset toolbar filters
+    const searchInput = document.getElementById('devOngoingSearchInput');
+    if (searchInput) searchInput.value = '';
+    const statusSelect = document.getElementById('devOngoingStatusFilter');
+    if (statusSelect) statusSelect.value = 'all';
+    const paySelect = document.getElementById('devOngoingPaymentFilter');
+    if (paySelect) paySelect.value = 'all';
+    const clearBtn = document.getElementById('devOngoingSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    // Summary stats
+    let totalVal = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    rawDevOngoingModalItems.forEach(item => {
+        totalVal += Number(item.total_value || 0);
+        totalPaid += Number(item.received_amount || 0);
+        totalPending += Number(item.pending_amount || 0);
+    });
+
+    const cntEl = document.getElementById('devOngoingStatCount');
+    const valEl = document.getElementById('devOngoingStatValue');
+    const paidEl = document.getElementById('devOngoingStatPaid');
+    const pendEl = document.getElementById('devOngoingStatPending');
+
+    if (cntEl) cntEl.textContent = num(rawDevOngoingModalItems.length);
+    if (valEl) valEl.textContent = fmt(totalVal);
+    if (paidEl) paidEl.textContent = fmt(totalPaid);
+    if (pendEl) pendEl.textContent = fmt(totalPending);
+
+    filterAndRenderDevOngoingModal();
+
+    if (modal) modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDevOngoingModal() {
+    const modal = document.getElementById('devOngoingModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function onDevOngoingModalSearch(val) {
+    const clearBtn = document.getElementById('devOngoingSearchClear');
+    if (clearBtn) clearBtn.style.display = val.trim() ? 'block' : 'none';
+    filterAndRenderDevOngoingModal();
+}
+
+function clearDevOngoingSearch() {
+    const searchInput = document.getElementById('devOngoingSearchInput');
+    if (searchInput) searchInput.value = '';
+    const clearBtn = document.getElementById('devOngoingSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    filterAndRenderDevOngoingModal();
+    if (searchInput) searchInput.focus();
+}
+
+function onDevOngoingFilterChange() {
+    filterAndRenderDevOngoingModal();
+}
+
+function filterAndRenderDevOngoingModal() {
+    const searchVal = (document.getElementById('devOngoingSearchInput')?.value || '').trim().toLowerCase();
+    const statusVal = (document.getElementById('devOngoingStatusFilter')?.value || 'all').toLowerCase();
+    const payVal = document.getElementById('devOngoingPaymentFilter')?.value || 'all';
+
+    filteredDevOngoingItems = rawDevOngoingModalItems.filter(item => {
+        const itemStatus = (item.execution_status || '').toLowerCase();
+        if (statusVal !== 'all') {
+            if (statusVal === 'in progress') {
+                if (!itemStatus.includes('progress')) return false;
+            } else if (statusVal === 'waiting for content') {
+                if (!itemStatus.includes('waiting') && !itemStatus.includes('content')) return false;
+            } else if (itemStatus !== statusVal) {
+                return false;
+            }
+        }
+
+        const paid = Number(item.received_amount || 0);
+        const val = Number(item.total_value || 0);
+        const pending = Number(item.pending_amount || 0);
+
+        if (payVal === 'paid') {
+            if (pending > 0 || (val > 0 && paid < val)) return false;
+        } else if (payVal === 'unpaid') {
+            if (paid > 0) return false;
+        } else if (payVal === 'partial') {
+            if (paid <= 0 || pending <= 0) return false;
+        }
+
+        if (searchVal) {
+            const product = (item.product_name || '').toLowerCase();
+            const company = (item.company_name || '').toLowerCase();
+            const contact = (item.contact_name || '').toLowerCase();
+            const mobile = (item.mobile_number || '').toLowerCase();
+            const branch = (item.branch_name || '').toLowerCase();
+            const alloc = (item.allocated_person || '').toLowerCase();
+
+            return product.includes(searchVal) ||
+                   company.includes(searchVal) ||
+                   contact.includes(searchVal) ||
+                   mobile.includes(searchVal) ||
+                   branch.includes(searchVal) ||
+                   alloc.includes(searchVal);
+        }
+
+        return true;
+    });
+
+    renderDevOngoingTableRows(filteredDevOngoingItems);
+}
+
+function renderDevOngoingTableRows(items) {
+    const tb = document.getElementById('devOngoingTableBody');
+    const footerInfo = document.getElementById('devOngoingFooterInfo');
+    if (!tb) return;
+
+    if (items.length === 0) {
+        tb.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align:center;padding:40px 20px;color:var(--cs-muted);">
+                    <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+                    <div style="font-weight:700;font-size:14px;color:#334155;">No ongoing development projects found</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">Try adjusting your search query or status filter.</div>
+                </td>
+            </tr>
+        `;
+        if (footerInfo) footerInfo.innerHTML = `Showing <strong>0</strong> of <strong>${rawDevOngoingModalItems.length}</strong> projects`;
+        return;
+    }
+
+    let runningValue = 0;
+    let runningPending = 0;
+
+    tb.innerHTML = items.map((row, idx) => {
+        runningValue += Number(row.total_value || 0);
+        runningPending += Number(row.pending_amount || 0);
+
+        let statusBadge = '';
+        const st = (row.execution_status || '').toLowerCase();
+        if (st === 'ontrack') {
+            statusBadge = '<span class="cs-badge" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0;font-weight:700;">🟢 Ontrack</span>';
+        } else if (st === 'hold') {
+            statusBadge = '<span class="cs-badge" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;">🟡 Hold</span>';
+        } else if (st.includes('waiting') || st.includes('content')) {
+            statusBadge = '<span class="cs-badge" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca;font-weight:700;">⏳ Waiting Content</span>';
+        } else if (st.includes('progress')) {
+            statusBadge = '<span class="cs-badge" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;">🔵 In Progress</span>';
+        } else {
+            statusBadge = `<span class="cs-badge" style="background:#f1f5f9;color:#475569;border-color:#cbd5e1;font-weight:700;">${row.execution_status_label || row.execution_status}</span>`;
+        }
+
+        const branchPill = row.branch_name ? `<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px;">${row.branch_name}</span>` : '';
+
+        let contactHtml = '—';
+        if (row.contact_name || row.mobile_number) {
+            const cName = row.contact_name ? `<div style="font-weight:600;color:#1e293b;">${row.contact_name}</div>` : '';
+            const cPhone = row.mobile_number && row.mobile_number !== '—'
+                ? `<div style="font-size:11px;color:#64748b;margin-top:2px;"><a href="tel:${row.mobile_number}" style="color:#64748b;text-decoration:none;">📞 ${row.mobile_number}</a></div>`
+                : '';
+            contactHtml = cName + cPhone;
+        }
+
+        const companyHtml = row.lead_url && row.lead_url !== '#'
+            ? `<a href="${row.lead_url}" target="_blank" style="color:#0284c7;font-weight:700;text-decoration:none;">${row.company_name}</a>`
+            : `<strong style="color:#1e293b;">${row.company_name}</strong>`;
+
+        return `
+            <tr>
+                <td style="text-align:center;color:#94a3b8;font-size:12px;font-weight:600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:700;color:#0f172a;font-size:13px;">${row.product_name}</div>
+                    <div style="font-size:11px;color:#64748b;margin-top:2px;">PI #${row.id} &bull; ${row.department_name}</div>
+                </td>
+                <td>
+                    ${companyHtml}
+                    ${branchPill}
+                </td>
+                <td>${contactHtml}</td>
+                <td style="text-align:center;font-size:12px;color:#334155;font-weight:500;">
+                    ${row.project_delivery_date || '—'}
+                </td>
+                <td>
+                    <span style="display:inline-block;padding:3px 8px;border-radius:6px;background:#f8fafc;border:1px solid #e2e8f0;font-size:12px;color:#334155;font-weight:600;">
+                        👤 ${row.allocated_person || 'Unassigned'}
+                    </span>
+                </td>
+                <td style="text-align:center;">${statusBadge}</td>
+                <td style="text-align:right;font-weight:800;color:#0f172a;font-size:13px;">${fmt(row.total_value)}</td>
+                <td style="text-align:right;font-weight:700;color:#059669;font-size:13px;">${fmt(row.received_amount)}</td>
+                <td style="text-align:right;font-weight:800;color:#e11d48;font-size:13px;">${fmt(row.pending_amount)}</td>
+                <td style="text-align:center;">
+                    <a href="${row.project_url}" target="_blank" class="lpd-btn lpd-btn-ghost" style="padding:4px 10px;font-size:11px;text-decoration:none;border-color:#0284c7;color:#0284c7;" title="Open Project Details">
+                        View ↗
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (footerInfo) {
+        footerInfo.innerHTML = `Showing <strong>${items.length}</strong> of <strong>${rawDevOngoingModalItems.length}</strong> projects &bull; Total Value: <strong>${fmt(runningValue)}</strong> &bull; Total Pending: <strong style="color:#e11d48;">${fmt(runningPending)}</strong>`;
+    }
+}
+
+function exportDevOngoingToCsv() {
+    if (!filteredDevOngoingItems || filteredDevOngoingItems.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+    const headers = ['#', 'PI ID', 'Project / Product', 'Company / Account', 'Contact Name', 'Mobile Number', 'Branch', 'Delivery Date', 'Allocated Person', 'Execution Status', 'Total Value', 'Amount Received', 'Pending Amount'];
+    const escapeCsv = val => {
+        if (val === null || val === undefined) return '""';
+        return `"${String(val).replace(/"/g, '""')}"`;
+    };
+    const rows = filteredDevOngoingItems.map((item, index) => [
+        index + 1,
+        item.id,
+        escapeCsv(item.product_name),
+        escapeCsv(item.company_name),
+        escapeCsv(item.contact_name),
+        escapeCsv(item.mobile_number),
+        escapeCsv(item.branch_name),
+        escapeCsv(item.project_delivery_date),
+        escapeCsv(item.allocated_person),
+        escapeCsv(item.execution_status_label || item.execution_status),
+        item.total_value || 0,
+        item.received_amount || 0,
+        item.pending_amount || 0
+    ].join(','));
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Development_Ongoing_Projects_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 // Close modals when pressing Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeRenewalModal();
         closeUpsellModal();
         closePaymentsModal();
+        closeDevOngoingModal();
     }
 });
 </script>
