@@ -563,7 +563,13 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
 }
-@media (max-width: 640px) {
+.da-compare-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+@media (max-width: 900px) {
     .da-compare-grid {
         grid-template-columns: 1fr;
     }
@@ -575,6 +581,10 @@
     flex-direction: column;
     gap: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.da-compare-card.ho {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1.5px solid #a5b4fc;
 }
 .da-compare-card.coco {
     background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
@@ -596,6 +606,7 @@
     align-items: center;
     gap: 6px;
 }
+.da-compare-card.ho .da-compare-card-title { color: #4338ca; }
 .da-compare-card.coco .da-compare-card-title { color: #6b21a8; }
 .da-compare-card.non-coco .da-compare-card-title { color: #0369a1; }
 .da-compare-stat-row {
@@ -631,6 +642,11 @@
     border: none;
     transition: all 0.15s ease;
 }
+.da-compare-card.ho .da-compare-btn {
+    background: #4f46e5;
+    color: #ffffff;
+}
+.da-compare-card.ho .da-compare-btn:hover { background: #4338ca; }
 .da-compare-card.coco .da-compare-btn {
     background: #7e22ce;
     color: #ffffff;
@@ -1855,14 +1871,24 @@
                                 </svg>
                                 <span>Active Branches</span>
                             </div>
-                            <span class="da-badge" id="daModalBranchBadge" style="font-size:10px; font-weight:700; background:rgba(254,95,4,0.08); color:var(--da-orange); border-color:rgba(254,95,4,0.2);">Current Month Hot Prospects</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="da-badge" id="daModalBranchBadge" style="font-size:10px; font-weight:700; background:rgba(254,95,4,0.08); color:var(--da-orange); border-color:rgba(254,95,4,0.2);">Current Month Hot Prospects</span>
+                                <button type="button" class="btn btn-sm" onclick="openBranchHotLeadsModal('all', 'All Active Branches Brief Report')" style="font-size:11px; font-weight:700; border-radius:7px; padding:4px 10px; background:linear-gradient(135deg, #0284c7, #2563eb); border:none; color:#fff; display:inline-flex; align-items:center; gap:5px; cursor:pointer;" title="View Brief Pivot Report">
+                                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    <span>Brief Report</span>
+                                </button>
+                            </div>
                         </div>
 
-                        {{-- ── 4 Tabs: All Branches, COCO Branches, NON COC Branches, COCO & NON COC Compare ── --}}
+                        {{-- ── 5 Tabs: All Branches, HO (Head Office), COCO Branches, NON COC Branches, Comparison ── --}}
                         <div class="da-branch-tabs-bar">
                             <button type="button" class="da-branch-tab-btn active" id="daBranchTabAll" onclick="switchBranchTab('all')">
                                 <span>All Branches</span>
                                 <span class="da-branch-tab-badge" id="daBranchTabAllBadge">0</span>
+                            </button>
+                            <button type="button" class="da-branch-tab-btn" id="daBranchTabHo" onclick="switchBranchTab('ho')">
+                                <span>HO (Head Office)</span>
+                                <span class="da-branch-tab-badge" id="daBranchTabHoBadge">0</span>
                             </button>
                             <button type="button" class="da-branch-tab-btn" id="daBranchTabCoco" onclick="switchBranchTab('coco')">
                                 <span>COCO Branches</span>
@@ -1874,7 +1900,7 @@
                             </button>
                             <button type="button" class="da-branch-tab-btn" id="daBranchTabCompare" onclick="switchBranchTab('compare')">
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                <span>COCO &amp; NON COC Compare</span>
+                                <span>HO, COCO &amp; NON COC Compare</span>
                             </button>
                         </div>
 
@@ -1897,9 +1923,43 @@
                             </table>
                         </div>
 
-                        {{-- ── COCO & NON COC Compare View Container ── --}}
+                        {{-- ── HO, COCO & NON COC Compare View Container ── --}}
                         <div class="da-compare-container" id="daModalBranchCompareWrap" style="display:none;">
                             <div class="da-compare-grid">
+                                {{-- HO Card --}}
+                                <div class="da-compare-card ho">
+                                    <div class="da-compare-card-head">
+                                        <span class="da-compare-card-title">
+                                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#4f46e5;"></span>
+                                            Head Office (HO)
+                                        </span>
+                                        <span class="da-badge" id="daCompareHoCountBadge" style="font-size:10px; font-weight:800; background:#e0e7ff; color:#4338ca; border-color:#c7d2fe;">0 Branches</span>
+                                    </div>
+                                    <div class="da-compare-stat-row">
+                                        <div>
+                                            <div class="da-compare-stat-label">Prospects</div>
+                                            <div class="da-compare-stat-val" id="daCompareHoProspects">0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Deal Value</div>
+                                            <div class="da-compare-stat-val" id="daCompareHoDeal">₹0</div>
+                                        </div>
+                                        <div>
+                                            <div class="da-compare-stat-label">Expected Value</div>
+                                            <div class="da-compare-stat-val" style="color:#059669;" id="daCompareHoExpected">₹0</div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1; font-size:11px; display:flex; justify-content:space-between; color:#475569;">
+                                        <span>NST: <strong style="color:#4f46e5;" id="daCompareHoNstBreakdown">0 P (₹0)</strong></span>
+                                        <span>CST: <strong style="color:#0d9488;" id="daCompareHoCstBreakdown">0 P (₹0)</strong></span>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                        <button type="button" class="da-compare-btn" id="daCompareHoBtn" onclick="openHoCompareLeadsModal()">
+                                            <span>View HO Prospects ↗</span>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {{-- COCO Card --}}
                                 <div class="da-compare-card coco">
                                     <div class="da-compare-card-head">
@@ -1923,7 +1983,11 @@
                                             <div class="da-compare-stat-val" style="color:#059669;" id="daCompareCocoExpected">₹0</div>
                                         </div>
                                     </div>
-                                    <div style="display:flex; justify-content:flex-end;">
+                                    <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1; font-size:11px; display:flex; justify-content:space-between; color:#475569;">
+                                        <span>NST: <strong style="color:#7e22ce;" id="daCompareCocoNstBreakdown">0 P (₹0)</strong></span>
+                                        <span>CST: <strong style="color:#0d9488;" id="daCompareCocoCstBreakdown">0 P (₹0)</strong></span>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
                                         <button type="button" class="da-compare-btn" onclick="openBranchHotLeadsModal('coco', 'COCO Branches')">
                                             <span>View All COCO Prospects ↗</span>
                                         </button>
@@ -1953,7 +2017,11 @@
                                             <div class="da-compare-stat-val" style="color:#059669;" id="daCompareNonCocoExpected">₹0</div>
                                         </div>
                                     </div>
-                                    <div style="display:flex; justify-content:flex-end;">
+                                    <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1; font-size:11px; display:flex; justify-content:space-between; color:#475569;">
+                                        <span>NST: <strong style="color:#0284c7;" id="daCompareNonCocoNstBreakdown">0 P (₹0)</strong></span>
+                                        <span>CST: <strong style="color:#0d9488;" id="daCompareNonCocoCstBreakdown">0 P (₹0)</strong></span>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
                                         <button type="button" class="da-compare-btn" onclick="openBranchHotLeadsModal('non_coco', 'NON COC Branches')">
                                             <span>View All NON COC Prospects ↗</span>
                                         </button>
@@ -1967,6 +2035,7 @@
                                     <thead>
                                         <tr>
                                             <th>Key Metric Comparison</th>
+                                            <th style="text-align:right; color:#4f46e5;">HO</th>
                                             <th style="text-align:right; color:#7e22ce;">COCO</th>
                                             <th style="text-align:right; color:#0284c7;">NON COC</th>
                                             <th style="text-align:right;">Total / Overall</th>
@@ -2010,6 +2079,9 @@
                 @if(($userRoleType ?? 'company_admin') === 'company_admin')
                 <button type="button" class="btn btn-sm" onclick="openAddCategoryModal()" style="background:#f0f9ff; color:#0284c7; border:1px solid #bae6fd; font-size:12px; height:34px; padding:0 12px; border-radius:8px; display:inline-flex; align-items:center; gap:5px; font-weight:700; cursor:pointer;" title="Add new category to list">
                     <span style="font-size:16px; line-height:1;">+</span> Category
+                </button>
+                <button type="button" class="btn btn-sm" onclick="openDaySalesPivotReportModal()" style="background:#fdf4ff; color:#a21caf; border:1px solid #f5d0fe; font-size:12px; height:34px; padding:0 12px; border-radius:8px; display:inline-flex; align-items:center; gap:5px; font-weight:700; cursor:pointer;" title="Generate Category Pivot Report">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate Report
                 </button>
                 @endif
                 <button type="button" class="da-modal-close" onclick="closeDaySalesTrackerModal()" title="Close (Esc)">
@@ -2104,6 +2176,218 @@
     </div>
 </div>
 
+{{-- ── Day Sales Tracker Category Pivot Report Modal ── --}}
+<div class="da-modal-overlay" id="daDaySalesPivotReportModal" style="display:none; z-index:100002; align-items:center; justify-content:center; background:rgba(15,23,42,0.6);" onclick="if(event.target === this) closeDaySalesPivotReportModal()">
+    <div style="background:#ffffff; border-radius:14px; width:800px; max-width:95%; padding:22px 24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); animation:daModalPop 0.18s ease-out; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-flex; width:34px; height:34px; border-radius:8px; background:#fdf4ff; color:#a21caf; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">📊</span>
+                <div>
+                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Category Wise Day Sales Report</h5>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;">Converted products category pivot count &amp; collection summary</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Month:</label>
+                    <select id="daDstReportMonthPicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:150px;" onchange="loadDaySalesPivotReportData(this.value)">
+                    </select>
+                </div>
+                <button type="button" class="da-modal-close" onclick="closeDaySalesPivotReportModal()" title="Close">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px;">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Categories</div>
+                <div style="font-size:18px; font-weight:800; color:#0f172a;" id="daDstReportCatCount">0</div>
+            </div>
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">Total Converted Sales</div>
+                <div style="font-size:18px; font-weight:800; color:#166534;" id="daDstReportSalesCount">0</div>
+            </div>
+            <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#b45309; text-transform:uppercase;">Total Collection</div>
+                <div style="font-size:18px; font-weight:800; color:#92400e;" id="daDstReportCollectionVal">₹0.00</div>
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="da-modal-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:1;">
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:45px;">#</th>
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Category Name</th>
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:120px;">Count</th>
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:180px;">Collection Value</th>
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:180px;">Total Deal Value</th>
+                    </tr>
+                </thead>
+                <tbody id="daDstReportTableBody">
+                    <tr><td colspan="5" style="text-align:center; padding:32px; color:#94a3b8;">Loading report...</td></tr>
+                </tbody>
+                <tfoot id="daDstReportTableFoot" style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0;">
+                </tfoot>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid #f1f5f9;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeDaySalesPivotReportModal()" style="font-size:12px; border-radius:7px; font-weight:600; padding:6px 16px;">Close</button>
+        </div>
+    </div>
+</div>
+
+{{-- ── Day Sales Category Converted Details Submodal (Stacked on Pivot Report) ── --}}
+<div class="da-modal-overlay" id="daDaySalesCategoryDetailsModal" style="display:none; z-index:100005; align-items:center; justify-content:center; background:rgba(15,23,42,0.65);" onclick="if(event.target === this) closeDaySalesCategoryDetailsModal()">
+    <div style="background:#ffffff; border-radius:14px; width:1000px; max-width:96%; padding:22px 24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.3); animation:daModalPop 0.18s ease-out; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-flex; width:34px; height:34px; border-radius:8px; background:#eff6ff; color:#2563eb; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">📋</span>
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;" id="daCategoryDetailsTitle">Category Prospects</h5>
+                        <span class="da-badge" id="daCategoryDetailsMonthBadge" style="font-size:11px; font-weight:700; background:#f0fdf4; color:#15803d; border-color:#bbf7d0;">September 2026</span>
+                    </div>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;" id="daCategoryDetailsSub">Detailed list of converted product prospects</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button type="button" class="da-modal-close" onclick="closeDaySalesCategoryDetailsModal()" title="Back to Category Report">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:6px 12px; font-size:12px; font-weight:700; color:#334155;">
+                    Sales Count: <span id="daCategoryDetailsCount" style="color:#0284c7; font-weight:800;">0</span>
+                </div>
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:6px 12px; font-size:12px; font-weight:700; color:#15803d;">
+                    Collection Value: <span id="daCategoryDetailsCollection" style="color:#166534; font-weight:800;">₹0.00</span>
+                </div>
+                <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:8px; padding:6px 12px; font-size:12px; font-weight:700; color:#b45309;">
+                    Total Deal Value: <span id="daCategoryDetailsValue" style="color:#92400e; font-weight:800;">₹0.00</span>
+                </div>
+            </div>
+            <div style="position:relative; min-width:240px;">
+                <input type="text" id="daCategoryDetailsSearch" placeholder="Search account, product, exec..." oninput="filterCategoryDetailsTable(this.value)" class="form-control" style="font-size:12px; height:34px; padding:4px 10px; border-radius:8px; border:1px solid #cbd5e1;" />
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="da-modal-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:1;">
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:40px;">#</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:90px;">Date</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Account Name</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Product</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Branch</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Team Leader</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Executive</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:90px;">Sale Type</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:120px;">Collection (₹)</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:120px;">Total Price (₹)</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:80px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="daCategoryDetailsTableBody">
+                    <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No records found.</td></tr>
+                </tbody>
+                <tfoot id="daCategoryDetailsTableFoot" style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0;">
+                </tfoot>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid #f1f5f9;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeDaySalesCategoryDetailsModal()" style="font-size:12px; border-radius:7px; font-weight:600; padding:6px 16px;">Back to Report</button>
+        </div>
+    </div>
+</div>
+
+{{-- ── Trend Analysis Modal (Quarterly & YoY Branch Collection) ── --}}
+<div class="da-modal-overlay" id="daTrendAnalysisModal" style="display:none; z-index:100002; align-items:center; justify-content:center; background:rgba(15,23,42,0.6);" onclick="if(event.target === this) closeTrendAnalysisModal()">
+    <div style="background:#ffffff; border-radius:14px; width:980px; max-width:96%; padding:22px 24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); animation:daModalPop 0.18s ease-out; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-flex; width:34px; height:34px; border-radius:8px; background:#f3e8ff; color:#7e22ce; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">📈</span>
+                <div>
+                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Branch Wise Trend Analysis</h5>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;">Quarterly payment collection breakdown by branch &amp; Year-on-Year trend</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Year:</label>
+                    <select id="daTrendYearPicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:110px;" onchange="loadTrendAnalysisData()">
+                    </select>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Mode:</label>
+                    <select id="daTrendModePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:170px;" onchange="loadTrendAnalysisData()">
+                        <option value="financial" selected>Financial Year (Apr-Mar)</option>
+                        <option value="calendar">Calendar Year (Jan-Dec)</option>
+                    </select>
+                </div>
+                <button type="button" class="da-modal-close" onclick="closeTrendAnalysisModal()" title="Close">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:16px;">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Total Collection</div>
+                <div style="font-size:17px; font-weight:800; color:#0f172a;" id="daTrendTotalVal">₹0.00</div>
+            </div>
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">YoY Growth</div>
+                <div style="font-size:17px; font-weight:800; color:#166534;" id="daTrendYoyVal">0%</div>
+            </div>
+            <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#0369a1; text-transform:uppercase;">Best Quarter</div>
+                <div style="font-size:17px; font-weight:800; color:#075985;" id="daTrendBestQ">Q1</div>
+            </div>
+            <div style="background:#fdf4ff; border:1px solid #f5d0fe; border-radius:10px; padding:12px; text-align:center;">
+                <div style="font-size:11px; font-weight:700; color:#a21caf; text-transform:uppercase;">Top Branch</div>
+                <div style="font-size:15px; font-weight:800; color:#86198f; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="daTrendTopBranch">—</div>
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="da-modal-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; position:sticky; top:0; z-index:1;">
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:40px;">#</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Branch Name</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ1">Q1</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ2">Q2</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ3">Q3</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;" id="daThQ4">Q4</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; background:#f1f5f9;">Total Collection</th>
+                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right;">YoY Growth</th>
+                    </tr>
+                </thead>
+                <tbody id="daTrendTableBody">
+                    <tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;">Loading trend analysis...</td></tr>
+                </tbody>
+                <tfoot id="daTrendTableFoot" style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0;">
+                </tfoot>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid #f1f5f9;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeTrendAnalysisModal()" style="font-size:12px; border-radius:7px; font-weight:600; padding:6px 16px;">Close</button>
+        </div>
+    </div>
+</div>
+
 {{-- ── Branch Hot Leads Detail Modal (Stacked on top of Key Metrics) ── --}}
 <div class="da-submodal-overlay" id="daBranchHotLeadsModal" onclick="if(event.target === this) closeBranchHotLeadsModal()">
     <div class="da-submodal-container" role="dialog" aria-modal="true" aria-labelledby="daBranchModalTitle">
@@ -2138,6 +2422,11 @@
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
                     <span>Full Details</span>
                     <span class="da-branch-tab-badge" id="daSubmodalCountFull">0</span>
+                </button>
+                <button type="button" class="da-submodal-tab-btn" id="daSubmodalTabBranch" onclick="switchPivotTab('branch')">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                    <span>Branch Wise Pivot</span>
+                    <span class="da-branch-tab-badge" id="daSubmodalCountBranch">0</span>
                 </button>
                 <button type="button" class="da-submodal-tab-btn" id="daSubmodalTabProduct" onclick="switchPivotTab('product')">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
@@ -2180,6 +2469,32 @@
                         </tr>
                     </tbody>
                     <tfoot id="daBranchHotLeadsFoot">
+                    </tfoot>
+                </table>
+            </div>
+
+            {{-- 2. Branch Wise Pivot View --}}
+            <div class="da-submodal-table-wrap" id="daSubmodalWrapBranch" style="display:none;">
+                <table class="da-submodal-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">#</th>
+                            <th>Branch Name</th>
+                            <th style="text-align: center;">Prospects Count</th>
+                            <th style="text-align: right;">Total Deal Value</th>
+                            <th style="text-align: right;">Expected Collection Value</th>
+                            <th style="text-align: right;">Avg Deal Value</th>
+                            <th style="text-align: center;">Filter</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daBranchPivotBody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 36px; color: #94a3b8;">
+                                No branch data found.
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot id="daBranchPivotFoot">
                     </tfoot>
                 </table>
             </div>
@@ -2787,25 +3102,36 @@ function renderForecasting(d) {
     var cstDealVal = Number(cst.deal_value || 0);
     var cstExpVal = Number(cst.expected_value || 0);
 
-    var hotCount = fc.total_prospects !== undefined
-        ? fc.total_prospects
-        : (fc.hot_products_count !== undefined
-            ? (Number(fc.hot_products_count) + cstCount)
-            : (k.total_prospects !== undefined
-                ? k.total_prospects
-                : ((k.current_month_hot_products_count !== undefined ? Number(k.current_month_hot_products_count) : 0) + cstCount)));
+    var activeBranches = fc.active_branches || [];
+    var activeBranchesSum = activeBranches.reduce(function(sum, b) { return sum + (parseInt(b.prospect_count) || 0); }, 0);
+    var activeBranchesDealSum = activeBranches.reduce(function(sum, b) { return sum + (parseFloat(b.deal_value) || 0); }, 0);
+    var activeBranchesExpSum = activeBranches.reduce(function(sum, b) { return sum + (parseFloat(b.expected_value) || 0); }, 0);
 
-    var hotValue = fc.deal_value !== undefined
-        ? fc.deal_value
-        : (fc.hot_products_value !== undefined
-            ? (Number(fc.hot_products_value) + cstDealVal)
-            : (k.current_month_hot_products_value !== undefined
-                ? (Number(k.current_month_hot_products_value) + cstDealVal)
-                : 0));
+    var hotCount = activeBranchesSum > 0
+        ? activeBranchesSum
+        : (fc.total_prospects !== undefined
+            ? fc.total_prospects
+            : (fc.hot_products_count !== undefined
+                ? (Number(fc.hot_products_count) + cstCount)
+                : (k.total_prospects !== undefined
+                    ? k.total_prospects
+                    : ((k.current_month_hot_products_count !== undefined ? Number(k.current_month_hot_products_count) : 0) + cstCount))));
 
-    var expectedCollection = fc.expected_collection_value !== undefined
-        ? fc.expected_collection_value
-        : ((k.current_month_expected_collection || 0) + cstExpVal);
+    var hotValue = activeBranchesDealSum > 0
+        ? activeBranchesDealSum
+        : (fc.deal_value !== undefined
+            ? fc.deal_value
+            : (fc.hot_products_value !== undefined
+                ? (Number(fc.hot_products_value) + cstDealVal)
+                : (k.current_month_hot_products_value !== undefined
+                    ? (Number(k.current_month_hot_products_value) + cstDealVal)
+                    : 0)));
+
+    var expectedCollection = activeBranchesExpSum > 0
+        ? activeBranchesExpSum
+        : (fc.expected_collection_value !== undefined
+            ? fc.expected_collection_value
+            : ((k.current_month_expected_collection || 0) + cstExpVal));
 
     var monthName = fc.month_name || 'Current Month';
 
@@ -2869,7 +3195,16 @@ function renderForecasting(d) {
         '<div class="da-kpi-lbl">Day Sales Tracker</div>' +
         '<div class="da-kpi-sub">' + daySalesSub + '</div></div>';
 
-    gridEl.innerHTML = cardHtml + daySalesCardHtml;
+    var trendAnalysisCardHtml = '<div class="da-kpi" onclick="openTrendAnalysisModal()" style="background:linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);cursor:pointer;" title="Click to view Quarterly Trend Analysis">' +
+        '<div class="da-kpi-icon">' +
+        '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2">' +
+        '<path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/><circle cx="12" cy="12" r="2.5" fill="#ffffff"/>' +
+        '</svg></div>' +
+        '<div class="da-kpi-val">Trend Analysis</div>' +
+        '<div class="da-kpi-lbl">Quarterly &amp; YoY Trend</div>' +
+        '<div class="da-kpi-sub">Branch-wise Q1, Q2, Q3, Q4 collection</div></div>';
+
+    gridEl.innerHTML = cardHtml + daySalesCardHtml + trendAnalysisCardHtml;
 }
 
 window.openTotalProspectsModal = function() {
@@ -2941,10 +3276,9 @@ window.openTotalProspectsModal = function() {
     // Total Prospects badge in header
     var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
     if (totalBadgeEl) {
-        var totalModalSum = (nstHo.count !== undefined ? Number(nstHo.count) : 0)
-            + (nonCoco.count !== undefined ? Number(nonCoco.count) : 0)
-            + (coco.count !== undefined ? Number(coco.count) : 0)
-            + (cst.count !== undefined ? Number(cst.count) : 0);
+        var totalModalSum = (window.currentProspectsMetrics && window.currentProspectsMetrics.count !== undefined)
+            ? window.currentProspectsMetrics.count
+            : activeBranchesList.reduce(function(sum, b) { return sum + (parseInt(b.prospect_count) || 0); }, 0);
         totalBadgeEl.textContent = totalModalSum;
     }
 
@@ -2956,17 +3290,18 @@ window.openTotalProspectsModal = function() {
     }
 
     // ── Company Admin / CBO → full modal with Active Branches table ───
-    activeBranchesList = (m.activeBranches || []).filter(function(b) {
-        return !b.is_default;
-    });
+    activeBranchesList = m.activeBranches || [];
 
-    var cocoCount    = activeBranchesList.filter(function(b) { return (b.branch_type || '').toUpperCase() === 'COCO'; }).length;
-    var nonCocoCount = activeBranchesList.filter(function(b) { return (b.branch_type || '').toUpperCase() !== 'COCO'; }).length;
+    var hoCount      = activeBranchesList.filter(function(b) { return b.is_default; }).length;
+    var cocoCount    = activeBranchesList.filter(function(b) { return !b.is_default && (b.branch_type || '').toUpperCase() === 'COCO'; }).length;
+    var nonCocoCount = activeBranchesList.filter(function(b) { return !b.is_default && (b.branch_type || '').toUpperCase() !== 'COCO'; }).length;
 
-    var allBadge    = document.getElementById('daBranchTabAllBadge');
-    var cocoBadge   = document.getElementById('daBranchTabCocoBadge');
+    var allBadge     = document.getElementById('daBranchTabAllBadge');
+    var hoBadge      = document.getElementById('daBranchTabHoBadge');
+    var cocoBadge    = document.getElementById('daBranchTabCocoBadge');
     var nonCocoBadge = document.getElementById('daBranchTabNonCocoBadge');
     if (allBadge)     allBadge.textContent    = activeBranchesList.length;
+    if (hoBadge)      hoBadge.textContent     = hoCount;
     if (cocoBadge)    cocoBadge.textContent   = cocoCount;
     if (nonCocoBadge) nonCocoBadge.textContent = nonCocoCount;
 
@@ -3537,6 +3872,327 @@ window.deleteDstCat = function(id, name) {
     });
 };
 
+/* ── Day Sales Pivot Report Modal JS ── */
+window.openDaySalesPivotReportModal = function() {
+    var modal = document.getElementById('daDaySalesPivotReportModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    var currentMonthStr = new Date().toISOString().slice(0, 7);
+    loadDaySalesPivotReportData(currentMonthStr);
+};
+
+window.closeDaySalesPivotReportModal = function() {
+    var modal = document.getElementById('daDaySalesPivotReportModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+};
+
+window.loadDaySalesPivotReportData = function(selectedMonth) {
+    var tbody = document.getElementById('daDstReportTableBody');
+    var tfoot = document.getElementById('daDstReportTableFoot');
+    var monthPicker = document.getElementById('daDstReportMonthPicker');
+
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading report data...</span></div></td></tr>';
+    }
+    if (tfoot) tfoot.innerHTML = '';
+
+    var url = '{{ url("/api/day-sales-tracker/report") }}';
+    if (selectedMonth) {
+        url += '?month=' + encodeURIComponent(selectedMonth);
+    }
+
+    var headers = { 'Accept': 'application/json' };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(res) {
+            if (!res.success) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#ef4444;">' + (res.message || 'Failed to load report.') + '</td></tr>';
+                return;
+            }
+
+            var data = res.data || {};
+            var items = data.items || [];
+            var monthsList = data.months_list || [];
+
+            window.dstReportCategoriesData = items;
+            window.dstReportMonthLabel = data.formatted_month || 'Selected Month';
+
+            if (monthPicker && monthsList.length > 0) {
+                monthPicker.innerHTML = monthsList.map(function(m) {
+                    return '<option value="' + m.value + '"' + (m.value === data.month ? ' selected' : '') + '>' + m.label + '</option>';
+                }).join('');
+            }
+
+            var catCountEl = document.getElementById('daDstReportCatCount');
+            var salesCountEl = document.getElementById('daDstReportSalesCount');
+            var collectionValEl = document.getElementById('daDstReportCollectionVal');
+
+            if (catCountEl) catCountEl.textContent = data.total_categories || 0;
+            if (salesCountEl) salesCountEl.textContent = data.total_count || 0;
+            if (collectionValEl) collectionValEl.textContent = fmt(data.total_collection || 0);
+
+            if (items.length === 0) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#94a3b8;">No converted sales found for ' + (data.formatted_month || 'selected month') + '.</td></tr>';
+                return;
+            }
+
+            var rowsHtml = '';
+            items.forEach(function(item, idx) {
+                rowsHtml += '<tr onclick="openDaySalesCategoryDetailsModal(' + idx + ')" style="cursor:pointer;" title="Click to view detailed prospects for ' + (item.category || 'Unassigned') + '">' +
+                    '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (idx + 1) + '</td>' +
+                    '<td style="font-weight:700; color:#0284c7;">' +
+                        '<div style="display:flex; align-items:center; justify-content:space-between;">' +
+                            '<span>' + (item.category || 'Unassigned') + '</span>' +
+                            '<span style="font-size:10px; font-weight:600; color:#0284c7; background:#e0f2fe; padding:2px 7px; border-radius:4px;">Details →</span>' +
+                        '</div>' +
+                    '</td>' +
+                    '<td style="text-align:center;"><span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#dcfce7; color:#15803d;">' + item.count + '</span></td>' +
+                    '<td style="text-align:right; font-weight:800; color:#92400e;">' + fmt(item.total_collection) + '</td>' +
+                    '<td style="text-align:right; font-weight:700; color:#475569;">' + fmt(item.total_value) + '</td>' +
+                '</tr>';
+            });
+
+            if (tbody) tbody.innerHTML = rowsHtml;
+
+            if (tfoot) {
+                tfoot.innerHTML = '<tr>' +
+                    '<td colspan="2">Total (' + data.total_categories + ' Categories)</td>' +
+                    '<td style="text-align:center; font-weight:800;">' + (data.total_count || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#92400e;">' + fmt(data.total_collection || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(data.total_value || 0) + '</td>' +
+                '</tr>';
+            }
+        })
+        .catch(function(err) {
+            console.error('[Day Sales Report Error]', err);
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#ef4444;">Error loading report: ' + (err.message || 'Server error') + '</td></tr>';
+        });
+};
+
+/* ── Day Sales Category Details Submodal JS ── */
+var _currentCatDetailsItems = [];
+
+window.openDaySalesCategoryDetailsModal = function(catIndex) {
+    if (!window.dstReportCategoriesData || !window.dstReportCategoriesData[catIndex]) return;
+    var catData = window.dstReportCategoriesData[catIndex];
+    var modal = document.getElementById('daDaySalesCategoryDetailsModal');
+    if (!modal) return;
+
+    var titleEl = document.getElementById('daCategoryDetailsTitle');
+    var monthBadgeEl = document.getElementById('daCategoryDetailsMonthBadge');
+    var countEl = document.getElementById('daCategoryDetailsCount');
+    var collectionEl = document.getElementById('daCategoryDetailsCollection');
+    var valueEl = document.getElementById('daCategoryDetailsValue');
+    var searchInput = document.getElementById('daCategoryDetailsSearch');
+
+    if (titleEl) titleEl.textContent = (catData.category || 'Unassigned') + ' - Prospect Details';
+    if (monthBadgeEl) monthBadgeEl.textContent = window.dstReportMonthLabel || 'Selected Month';
+    if (countEl) countEl.textContent = catData.count || 0;
+    if (collectionEl) collectionEl.textContent = fmt(catData.total_collection || 0);
+    if (valueEl) valueEl.textContent = fmt(catData.total_value || 0);
+    if (searchInput) searchInput.value = '';
+
+    _currentCatDetailsItems = catData.items || [];
+    renderCategoryDetailsTable(_currentCatDetailsItems);
+
+    modal.style.display = 'flex';
+};
+
+window.closeDaySalesCategoryDetailsModal = function() {
+    var modal = document.getElementById('daDaySalesCategoryDetailsModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+};
+
+window.filterCategoryDetailsTable = function(q) {
+    q = (q || '').trim().toLowerCase();
+    if (!q) {
+        renderCategoryDetailsTable(_currentCatDetailsItems);
+        return;
+    }
+    var filtered = _currentCatDetailsItems.filter(function(item) {
+        return (item.account_name || '').toLowerCase().includes(q)
+            || (item.product_name || '').toLowerCase().includes(q)
+            || (item.branch || '').toLowerCase().includes(q)
+            || (item.team_leader || '').toLowerCase().includes(q)
+            || (item.team_member || '').toLowerCase().includes(q)
+            || (item.sale_type || '').toLowerCase().includes(q)
+            || (item.date || '').toLowerCase().includes(q);
+    });
+    renderCategoryDetailsTable(filtered);
+};
+
+function renderCategoryDetailsTable(items) {
+    var tbody = document.getElementById('daCategoryDetailsTableBody');
+    var tfoot = document.getElementById('daCategoryDetailsTableFoot');
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No prospects found.</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var totalColl = 0;
+    var totalVal = 0;
+    var html = items.map(function(item, idx) {
+        totalColl += (item.current_month_collection || 0);
+        totalVal += (item.total_price || 0);
+        return '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (idx + 1) + '</td>' +
+            '<td style="white-space:nowrap; color:#475569;">' + (item.date || '—') + '</td>' +
+            '<td style="font-weight:700; color:#1e293b;">' + (item.account_name || 'N/A') + '</td>' +
+            '<td><span class="da-pill" style="background:#e0f2fe; color:#0369a1; font-weight:700;">' + (item.product_name || 'Product') + '</span></td>' +
+            '<td style="color:#475569;">' + (item.branch || '—') + '</td>' +
+            '<td style="color:#475569;">' + (item.team_leader || '—') + '</td>' +
+            '<td style="color:#475569;">' + (item.team_member || '—') + '</td>' +
+            '<td><span class="da-pill" style="background:#f1f5f9; color:#475569;">' + (item.sale_type || '—') + '</span></td>' +
+            '<td style="text-align:right; font-weight:800; color:#166534;">' + fmt(item.current_month_collection) + '</td>' +
+            '<td style="text-align:right; font-weight:700; color:#0f172a;">' + fmt(item.total_price) + '</td>' +
+            '<td style="text-align:center;"><a href="' + (item.lead_url || '#') + '" target="_blank" class="btn btn-xs btn-outline-primary" style="font-size:11px; padding:2px 8px; border-radius:6px;">View →</a></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="8">Total (' + items.length + ' Prospects)</td>' +
+            '<td style="text-align:right; font-weight:800; color:#166534;">' + fmt(totalColl) + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(totalVal) + '</td>' +
+            '<td></td>' +
+        '</tr>';
+    }
+}
+
+/* ── Trend Analysis Modal JS ── */
+window.openTrendAnalysisModal = function() {
+    var modal = document.getElementById('daTrendAnalysisModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    var currentYear = new Date().getFullYear();
+    var yearPicker = document.getElementById('daTrendYearPicker');
+    if (yearPicker && yearPicker.options.length === 0) {
+        var yearsHtml = '';
+        for (var y = currentYear; y >= currentYear - 4; y--) {
+            yearsHtml += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+        }
+        yearPicker.innerHTML = yearsHtml;
+    }
+
+    loadTrendAnalysisData();
+};
+
+window.closeTrendAnalysisModal = function() {
+    var modal = document.getElementById('daTrendAnalysisModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+};
+
+window.loadTrendAnalysisData = function() {
+    var tbody = document.getElementById('daTrendTableBody');
+    var tfoot = document.getElementById('daTrendTableFoot');
+    var yearPicker = document.getElementById('daTrendYearPicker');
+    var modePicker = document.getElementById('daTrendModePicker');
+
+    var selectedYear = yearPicker ? yearPicker.value : new Date().getFullYear();
+    var selectedMode = modePicker ? modePicker.value : 'financial';
+
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading quarterly trend analysis...</span></div></td></tr>';
+    }
+    if (tfoot) tfoot.innerHTML = '';
+
+    var url = '{{ url("/api/day-sales-tracker/trend-analysis") }}?year=' + encodeURIComponent(selectedYear) + '&mode=' + encodeURIComponent(selectedMode);
+
+    var headers = { 'Accept': 'application/json' };
+    if (typeof API_TOKEN !== 'undefined' && API_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + API_TOKEN;
+    }
+
+    fetch(url, { headers: headers, credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(res) {
+            if (!res.success) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">' + (res.message || 'Failed to load trend analysis.') + '</td></tr>';
+                return;
+            }
+
+            var data = res.data || {};
+            var branches = data.branches || [];
+            var totals = data.totals || {};
+            var qLabels = data.quarter_labels || {};
+
+            if (qLabels.q1) document.getElementById('daThQ1').textContent = qLabels.q1;
+            if (qLabels.q2) document.getElementById('daThQ2').textContent = qLabels.q2;
+            if (qLabels.q3) document.getElementById('daThQ3').textContent = qLabels.q3;
+            if (qLabels.q4) document.getElementById('daThQ4').textContent = qLabels.q4;
+
+            var totalValEl = document.getElementById('daTrendTotalVal');
+            var yoyValEl = document.getElementById('daTrendYoyVal');
+            var bestQEl = document.getElementById('daTrendBestQ');
+            var topBranchEl = document.getElementById('daTrendTopBranch');
+
+            if (totalValEl) totalValEl.textContent = fmt(totals.total || 0);
+            if (yoyValEl) {
+                var yoy = totals.yoy_growth || 0;
+                yoyValEl.textContent = (yoy > 0 ? '+' : '') + yoy + '%';
+                yoyValEl.style.color = yoy >= 0 ? '#166534' : '#b91c1c';
+            }
+            if (bestQEl) bestQEl.textContent = totals.best_quarter || 'Q1';
+            if (topBranchEl) topBranchEl.textContent = totals.top_branch || 'N/A';
+
+            if (branches.length === 0) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;">No trend data available.</td></tr>';
+                return;
+            }
+
+            var rowsHtml = '';
+            branches.forEach(function(b, idx) {
+                var growth = b.yoy_growth || 0;
+                var growthColor = growth >= 0 ? '#16a34a' : '#dc2626';
+                var growthSign = growth > 0 ? '+' : '';
+
+                rowsHtml += '<tr>' +
+                    '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (idx + 1) + '</td>' +
+                    '<td style="font-weight:700; color:#1e293b;">' + b.branch_name + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q1) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q2) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q3) + '</td>' +
+                    '<td style="text-align:right; color:#334155;">' + fmt(b.q4) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#0f172a; background:#f8fafc;">' + fmt(b.total) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:' + growthColor + ';">' + growthSign + growth + '%</td>' +
+                '</tr>';
+            });
+
+            if (tbody) tbody.innerHTML = rowsHtml;
+
+            if (tfoot) {
+                var overallYoySign = totals.yoy_growth > 0 ? '+' : '';
+                var overallYoyColor = totals.yoy_growth >= 0 ? '#16a34a' : '#dc2626';
+                tfoot.innerHTML = '<tr>' +
+                    '<td colspan="2">Total (' + branches.length + ' Branches)</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q1 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q2 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q3 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800;">' + fmt(totals.q4 || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:#0284c7; background:#f1f5f9;">' + fmt(totals.total || 0) + '</td>' +
+                    '<td style="text-align:right; font-weight:800; color:' + overallYoyColor + ';">' + overallYoySign + (totals.yoy_growth || 0) + '%</td>' +
+                '</tr>';
+            }
+        })
+        .catch(function(err) {
+            console.error('[Trend Analysis Error]', err);
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">Error loading trend analysis: ' + (err.message || 'Server error') + '</td></tr>';
+        });
+};
+
 /* ═══════════════════════════════════════════════════════
    ACTIVE BRANCHES TABS & COMPARISON LOGIC
 ═══════════════════════════════════════════════════════ */
@@ -3545,8 +4201,15 @@ var activeBranchesList = [];
 
 window.switchBranchTab = function(tab) {
     currentBranchTab = tab;
-    ['all', 'coco', 'non_coco', 'compare'].forEach(function(t) {
-        var btn = document.getElementById(t === 'all' ? 'daBranchTabAll' : (t === 'coco' ? 'daBranchTabCoco' : (t === 'non_coco' ? 'daBranchTabNonCoco' : 'daBranchTabCompare')));
+    var tabMap = {
+        'all': 'daBranchTabAll',
+        'ho': 'daBranchTabHo',
+        'coco': 'daBranchTabCoco',
+        'non_coco': 'daBranchTabNonCoco',
+        'compare': 'daBranchTabCompare'
+    };
+    Object.keys(tabMap).forEach(function(t) {
+        var btn = document.getElementById(tabMap[t]);
         if (btn) {
             if (t === tab) btn.classList.add('active');
             else btn.classList.remove('active');
@@ -3573,18 +4236,23 @@ function renderActiveBranchesTable(filterType) {
     if (!tbody) return;
 
     var filtered = activeBranchesList;
-    if (filterType === 'coco') {
+    if (filterType === 'ho') {
         filtered = activeBranchesList.filter(function(b) {
-            return (b.branch_type || '').toUpperCase() === 'COCO';
+            return b.is_default;
+        });
+    } else if (filterType === 'coco') {
+        filtered = activeBranchesList.filter(function(b) {
+            return !b.is_default && (b.branch_type || '').toUpperCase() === 'COCO';
         });
     } else if (filterType === 'non_coco') {
         filtered = activeBranchesList.filter(function(b) {
-            return (b.branch_type || '').toUpperCase() !== 'COCO';
+            return !b.is_default && (b.branch_type || '').toUpperCase() !== 'COCO';
         });
     }
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + (filterType === 'coco' ? 'COCO' : (filterType === 'non_coco' ? 'NON COC' : 'selected category')) + '.</td></tr>';
+        var catLabel = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO' : (filterType === 'non_coco' ? 'NON COC' : 'selected category'));
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + catLabel + '.</td></tr>';
         if (tfoot) tfoot.innerHTML = '';
         return;
     }
@@ -3616,6 +4284,11 @@ function renderActiveBranchesTable(filterType) {
         var safeName = (b.name ? b.name.replace(/'/g, "\\'") : '');
         var clickAction = 'openBranchHotLeadsModal(' + b.id + ', \'' + safeName + '\')';
 
+        var cstBreakdown = '';
+        if (b.cst_count > 0) {
+            cstBreakdown = '<div style="font-size:10px; color:#64748b; margin-top:2px;" title="NST: ' + (b.nst_count || 0) + ' | CST: ' + b.cst_count + '">NST: ' + (b.nst_count || 0) + ' • CST: ' + b.cst_count + '</div>';
+        }
+
         rowsHtml += '<tr onclick="' + clickAction + '" style="cursor:pointer;" title="Click to view hot prospects for ' + (b.name || '') + '">' +
             '<td>' +
                 '<div style="font-weight:700; color:var(--da-text); display:flex; align-items:center; flex-wrap:gap; gap:4px;">' +
@@ -3628,6 +4301,7 @@ function renderActiveBranchesTable(filterType) {
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
                     pCount +
                 '</span>' +
+                cstBreakdown +
             '</td>' +
             '<td style="text-align:right; font-weight:700; color:' + (dVal > 0 ? 'var(--da-text)' : '#94a3b8') + ';">' +
                 fmt(dVal) +
@@ -3641,7 +4315,7 @@ function renderActiveBranchesTable(filterType) {
     tbody.innerHTML = rowsHtml;
 
     if (tfoot) {
-        var label = filterType === 'coco' ? 'COCO Branches' : (filterType === 'non_coco' ? 'NON COC Branches' : 'All Branches');
+        var label = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO Branches' : (filterType === 'non_coco' ? 'NON COC Branches' : 'All Branches'));
         tfoot.innerHTML = '<tr>' +
             '<td>Total (' + filtered.length + ' ' + label + ')</td>' +
             '<td style="text-align:center; font-weight:800;">' + totalProspectsSum + '</td>' +
@@ -3651,87 +4325,169 @@ function renderActiveBranchesTable(filterType) {
     }
 }
 
+window.openHoCompareLeadsModal = function() {
+    var hoBranch = activeBranchesList.find(function(b) { return b.is_default; });
+    if (hoBranch) {
+        openBranchHotLeadsModal(hoBranch.id, hoBranch.name || 'Head Office (HO)');
+    } else {
+        openBranchHotLeadsModal('nst_ho', 'Head Office (HO)');
+    }
+};
+
 function renderBranchComparison() {
+    var hoList = activeBranchesList.filter(function(b) {
+        return b.is_default;
+    });
     var cocoList = activeBranchesList.filter(function(b) {
-        return (b.branch_type || '').toUpperCase() === 'COCO';
+        return !b.is_default && (b.branch_type || '').toUpperCase() === 'COCO';
     });
     var nonCocoList = activeBranchesList.filter(function(b) {
-        return (b.branch_type || '').toUpperCase() !== 'COCO';
+        return !b.is_default && (b.branch_type || '').toUpperCase() !== 'COCO';
     });
 
-    var cocoP = 0, cocoD = 0, cocoE = 0;
+    var hoP = 0, hoD = 0, hoE = 0, hoNstP = 0, hoNstD = 0, hoNstE = 0, hoCstP = 0, hoCstD = 0, hoCstE = 0;
+    hoList.forEach(function(b) {
+        hoP += parseInt(b.prospect_count) || 0;
+        hoD += parseFloat(b.deal_value) || 0;
+        hoE += parseFloat(b.expected_value) || 0;
+        hoNstP += parseInt(b.nst_count) || 0;
+        hoNstD += parseFloat(b.nst_deal) || 0;
+        hoNstE += parseFloat(b.nst_exp) || 0;
+        hoCstP += parseInt(b.cst_count) || 0;
+        hoCstD += parseFloat(b.cst_deal) || 0;
+        hoCstE += parseFloat(b.cst_exp) || 0;
+    });
+
+    var cocoP = 0, cocoD = 0, cocoE = 0, cocoNstP = 0, cocoNstD = 0, cocoNstE = 0, cocoCstP = 0, cocoCstD = 0, cocoCstE = 0;
     cocoList.forEach(function(b) {
         cocoP += parseInt(b.prospect_count) || 0;
         cocoD += parseFloat(b.deal_value) || 0;
         cocoE += parseFloat(b.expected_value) || 0;
+        cocoNstP += parseInt(b.nst_count) || 0;
+        cocoNstD += parseFloat(b.nst_deal) || 0;
+        cocoNstE += parseFloat(b.nst_exp) || 0;
+        cocoCstP += parseInt(b.cst_count) || 0;
+        cocoCstD += parseFloat(b.cst_deal) || 0;
+        cocoCstE += parseFloat(b.cst_exp) || 0;
     });
 
-    var nonCocoP = 0, nonCocoD = 0, nonCocoE = 0;
+    var nonCocoP = 0, nonCocoD = 0, nonCocoE = 0, nonCocoNstP = 0, nonCocoNstD = 0, nonCocoNstE = 0, nonCocoCstP = 0, nonCocoCstD = 0, nonCocoCstE = 0;
     nonCocoList.forEach(function(b) {
         nonCocoP += parseInt(b.prospect_count) || 0;
         nonCocoD += parseFloat(b.deal_value) || 0;
         nonCocoE += parseFloat(b.expected_value) || 0;
+        nonCocoNstP += parseInt(b.nst_count) || 0;
+        nonCocoNstD += parseFloat(b.nst_deal) || 0;
+        nonCocoNstE += parseFloat(b.nst_exp) || 0;
+        nonCocoCstP += parseInt(b.cst_count) || 0;
+        nonCocoCstD += parseFloat(b.cst_deal) || 0;
+        nonCocoCstE += parseFloat(b.cst_exp) || 0;
     });
 
-    // Update top cards
+    // Update HO top card
+    var hoBadge = document.getElementById('daCompareHoCountBadge');
+    var hoPEl   = document.getElementById('daCompareHoProspects');
+    var hoDEl   = document.getElementById('daCompareHoDeal');
+    var hoEEl   = document.getElementById('daCompareHoExpected');
+    var hoNstBk = document.getElementById('daCompareHoNstBreakdown');
+    var hoCstBk = document.getElementById('daCompareHoCstBreakdown');
+
+    if (hoBadge) hoBadge.textContent = hoList.length + ' ' + (hoList.length === 1 ? 'Branch' : 'Branches');
+    if (hoPEl)   hoPEl.textContent   = hoP;
+    if (hoDEl)   hoDEl.textContent   = fmt(hoD);
+    if (hoEEl)   hoEEl.textContent   = fmt(hoE);
+    if (hoNstBk) hoNstBk.textContent = hoNstP + ' P (' + fmt(hoNstD) + ')';
+    if (hoCstBk) hoCstBk.textContent = hoCstP + ' P (' + fmt(hoCstD) + ')';
+
+    // Update COCO top card
     var cBadge = document.getElementById('daCompareCocoCountBadge');
-    var cP = document.getElementById('daCompareCocoProspects');
-    var cD = document.getElementById('daCompareCocoDeal');
-    var cE = document.getElementById('daCompareCocoExpected');
+    var cP     = document.getElementById('daCompareCocoProspects');
+    var cD     = document.getElementById('daCompareCocoDeal');
+    var cE     = document.getElementById('daCompareCocoExpected');
+    var cNstBk = document.getElementById('daCompareCocoNstBreakdown');
+    var cCstBk = document.getElementById('daCompareCocoCstBreakdown');
 
-    if (cBadge) cBadge.textContent = cocoList.length + ' Branches';
-    if (cP) cP.textContent = cocoP;
-    if (cD) cD.textContent = fmt(cocoD);
-    if (cE) cE.textContent = fmt(cocoE);
+    if (cBadge) cBadge.textContent = cocoList.length + ' ' + (cocoList.length === 1 ? 'Branch' : 'Branches');
+    if (cP)     cP.textContent     = cocoP;
+    if (cD)     cD.textContent     = fmt(cocoD);
+    if (cE)     cE.textContent     = fmt(cocoE);
+    if (cNstBk) cNstBk.textContent = cocoNstP + ' P (' + fmt(cocoNstD) + ')';
+    if (cCstBk) cCstBk.textContent = cocoCstP + ' P (' + fmt(cocoCstD) + ')';
 
+    // Update NON COCO top card
     var ncBadge = document.getElementById('daCompareNonCocoCountBadge');
-    var ncP = document.getElementById('daCompareNonCocoProspects');
-    var ncD = document.getElementById('daCompareNonCocoDeal');
-    var ncE = document.getElementById('daCompareNonCocoExpected');
+    var ncP     = document.getElementById('daCompareNonCocoProspects');
+    var ncD     = document.getElementById('daCompareNonCocoDeal');
+    var ncE     = document.getElementById('daCompareNonCocoExpected');
+    var ncNstBk = document.getElementById('daCompareNonCocoNstBreakdown');
+    var ncCstBk = document.getElementById('daCompareNonCocoCstBreakdown');
 
-    if (ncBadge) ncBadge.textContent = nonCocoList.length + ' Branches';
-    if (ncP) ncP.textContent = nonCocoP;
-    if (ncD) ncD.textContent = fmt(nonCocoD);
-    if (ncE) ncE.textContent = fmt(nonCocoE);
+    if (ncBadge) ncBadge.textContent = nonCocoList.length + ' ' + (nonCocoList.length === 1 ? 'Branch' : 'Branches');
+    if (ncP)     ncP.textContent     = nonCocoP;
+    if (ncD)     ncD.textContent     = fmt(nonCocoD);
+    if (ncE)     ncE.textContent     = fmt(nonCocoE);
+    if (ncNstBk) ncNstBk.textContent = nonCocoNstP + ' P (' + fmt(nonCocoNstD) + ')';
+    if (ncCstBk) ncCstBk.textContent = nonCocoCstP + ' P (' + fmt(nonCocoCstD) + ')';
 
     // Update table
     var compareBody = document.getElementById('daCompareTableBody');
     if (!compareBody) return;
 
-    var totalBranches = cocoList.length + nonCocoList.length;
-    var totalP = cocoP + nonCocoP;
-    var totalD = cocoD + nonCocoD;
-    var totalE = cocoE + nonCocoE;
+    var totalBranches = hoList.length + cocoList.length + nonCocoList.length;
+    var totalP = hoP + cocoP + nonCocoP;
+    var totalD = hoD + cocoD + nonCocoD;
+    var totalE = hoE + cocoE + nonCocoE;
+    var totalNstP = hoNstP + cocoNstP + nonCocoNstP;
+    var totalNstD = hoNstD + cocoNstD + nonCocoNstD;
+    var totalNstE = hoNstE + cocoNstE + nonCocoNstE;
+    var totalCstP = hoCstP + cocoCstP + nonCocoCstP;
+    var totalCstD = hoCstD + cocoCstD + nonCocoCstD;
+    var totalCstE = hoCstE + cocoCstE + nonCocoCstE;
 
+    var hoAvgDeal = hoList.length > 0 ? (hoD / hoList.length) : 0;
     var cocoAvgDeal = cocoList.length > 0 ? (cocoD / cocoList.length) : 0;
     var nonCocoAvgDeal = nonCocoList.length > 0 ? (nonCocoD / nonCocoList.length) : 0;
     var overallAvgDeal = totalBranches > 0 ? (totalD / totalBranches) : 0;
 
+    var hoAvgP = hoList.length > 0 ? (hoP / hoList.length).toFixed(1) : '0';
     var cocoAvgP = cocoList.length > 0 ? (cocoP / cocoList.length).toFixed(1) : '0';
     var nonCocoAvgP = nonCocoList.length > 0 ? (nonCocoP / nonCocoList.length).toFixed(1) : '0';
     var overallAvgP = totalBranches > 0 ? (totalP / totalBranches).toFixed(1) : '0';
 
+    var hoShare = totalD > 0 ? ((hoD / totalD) * 100).toFixed(1) + '%' : '0%';
     var cocoShare = totalD > 0 ? ((cocoD / totalD) * 100).toFixed(1) + '%' : '0%';
     var nonCocoShare = totalD > 0 ? ((nonCocoD / totalD) * 100).toFixed(1) + '%' : '0%';
 
     var rows = [
-        { metric: 'Active Branches Count', coco: cocoList.length, nonCoco: nonCocoList.length, total: totalBranches, isBold: true },
-        { metric: 'Hot Prospects Count', coco: cocoP, nonCoco: nonCocoP, total: totalP, isBold: true },
-        { metric: 'Total Deal Value', coco: fmt(cocoD), nonCoco: fmt(nonCocoD), total: fmt(totalD), isBold: true },
-        { metric: 'Expected Collection Value', coco: fmt(cocoE), nonCoco: fmt(nonCocoE), total: fmt(totalE), isGreen: true },
-        { metric: 'Avg Deal Value per Branch', coco: fmt(cocoAvgDeal), nonCoco: fmt(nonCocoAvgDeal), total: fmt(overallAvgDeal) },
-        { metric: 'Avg Prospects per Branch', coco: cocoAvgP, nonCoco: nonCocoAvgP, total: overallAvgP },
-        { metric: '% Contribution to Deal Value', coco: cocoShare, nonCoco: nonCocoShare, total: '100%' }
+        { metric: 'Active Branches Count', ho: hoList.length, coco: cocoList.length, nonCoco: nonCocoList.length, total: totalBranches, isBold: true },
+        
+        { metric: 'Hot Prospects Count (Total)', ho: hoP, coco: cocoP, nonCoco: nonCocoP, total: totalP, isBold: true },
+        { metric: '↳ NST Hot Prospects', ho: hoNstP, coco: cocoNstP, nonCoco: nonCocoNstP, total: totalNstP, isSub: true, subColor: '#4f46e5' },
+        { metric: '↳ CST Prospects (Renewal & Dev)', ho: hoCstP, coco: cocoCstP, nonCoco: nonCocoCstP, total: totalCstP, isSub: true, subColor: '#0d9488' },
+        
+        { metric: 'Total Deal Value', ho: fmt(hoD), coco: fmt(cocoD), nonCoco: fmt(nonCocoD), total: fmt(totalD), isBold: true },
+        { metric: '↳ NST Deal Value', ho: fmt(hoNstD), coco: fmt(cocoNstD), nonCoco: fmt(nonCocoNstD), total: fmt(totalNstD), isSub: true, subColor: '#4f46e5' },
+        { metric: '↳ CST Deal Value', ho: fmt(hoCstD), coco: fmt(cocoCstD), nonCoco: fmt(nonCocoCstD), total: fmt(totalCstD), isSub: true, subColor: '#0d9488' },
+        
+        { metric: 'Expected Collection Value', ho: fmt(hoE), coco: fmt(cocoE), nonCoco: fmt(nonCocoE), total: fmt(totalE), isGreen: true },
+        { metric: '↳ NST Expected Collection', ho: fmt(hoNstE), coco: fmt(cocoNstE), nonCoco: fmt(nonCocoNstE), total: fmt(totalNstE), isSub: true, subColor: '#4f46e5' },
+        { metric: '↳ CST Expected Collection', ho: fmt(hoCstE), coco: fmt(cocoCstE), nonCoco: fmt(nonCocoCstE), total: fmt(totalCstE), isSub: true, subColor: '#0d9488' },
+        
+        { metric: 'Avg Deal Value per Branch', ho: fmt(hoAvgDeal), coco: fmt(cocoAvgDeal), nonCoco: fmt(nonCocoAvgDeal), total: fmt(overallAvgDeal) },
+        { metric: 'Avg Prospects per Branch', ho: hoAvgP, coco: cocoAvgP, nonCoco: nonCocoAvgP, total: overallAvgP },
+        { metric: '% Contribution to Deal Value', ho: hoShare, coco: cocoShare, nonCoco: nonCocoShare, total: '100%' }
     ];
 
     compareBody.innerHTML = rows.map(function(r) {
-        var style = r.isBold ? 'font-weight:700;' : '';
-        var colorCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:700; color:#7e22ce;' : '');
-        var colorNonCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:700; color:#0284c7;' : '');
-        var colorTotal = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isBold ? 'font-weight:800;' : 'font-weight:600;');
+        var indentStyle = r.isSub ? 'padding-left: 24px; font-size:12px; font-weight:600; color:#475569;' : (r.isBold ? 'font-weight:700; color:#1e293b;' : 'color:#334155;');
+        var colorHo = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isSub ? 'color:' + r.subColor + '; font-weight:600;' : (r.isBold ? 'font-weight:700; color:#4f46e5;' : ''));
+        var colorCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isSub ? 'color:' + r.subColor + '; font-weight:600;' : (r.isBold ? 'font-weight:700; color:#7e22ce;' : ''));
+        var colorNonCoco = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isSub ? 'color:' + r.subColor + '; font-weight:600;' : (r.isBold ? 'font-weight:700; color:#0284c7;' : ''));
+        var colorTotal = r.isGreen ? 'color:#059669; font-weight:800;' : (r.isSub ? 'color:' + r.subColor + '; font-weight:700;' : (r.isBold ? 'font-weight:800;' : 'font-weight:600;'));
 
-        return '<tr>' +
-            '<td style="' + style + ' color:#334155;">' + r.metric + '</td>' +
+        return '<tr style="' + (r.isSub ? 'background:rgba(248,250,252,0.7);' : '') + '">' +
+            '<td style="' + indentStyle + '">' + r.metric + '</td>' +
+            '<td style="text-align:right; ' + colorHo + '">' + r.ho + '</td>' +
             '<td style="text-align:right; ' + colorCoco + '">' + r.coco + '</td>' +
             '<td style="text-align:right; ' + colorNonCoco + '">' + r.nonCoco + '</td>' +
             '<td style="text-align:right; ' + colorTotal + '">' + r.total + '</td>' +
@@ -3748,9 +4504,11 @@ var currentSubmodalSearch = '';
 
 window.switchPivotTab = function(tab) {
     currentSubmodalTab = tab;
-    ['full', 'product', 'executive'].forEach(function(t) {
-        var btn = document.getElementById(t === 'full' ? 'daSubmodalTabFull' : (t === 'product' ? 'daSubmodalTabProduct' : 'daSubmodalTabExecutive'));
-        var wrap = document.getElementById(t === 'full' ? 'daSubmodalWrapFull' : (t === 'product' ? 'daSubmodalWrapProduct' : 'daSubmodalWrapExecutive'));
+    ['full', 'branch', 'product', 'executive'].forEach(function(t) {
+        var btnId = t === 'full' ? 'daSubmodalTabFull' : (t === 'branch' ? 'daSubmodalTabBranch' : (t === 'product' ? 'daSubmodalTabProduct' : 'daSubmodalTabExecutive'));
+        var wrapId = t === 'full' ? 'daSubmodalWrapFull' : (t === 'branch' ? 'daSubmodalWrapBranch' : (t === 'product' ? 'daSubmodalWrapProduct' : 'daSubmodalWrapExecutive'));
+        var btn = document.getElementById(btnId);
+        var wrap = document.getElementById(wrapId);
         if (btn) {
             if (t === tab) btn.classList.add('active');
             else btn.classList.remove('active');
@@ -3786,17 +4544,121 @@ function filterSubmodalViews() {
     // 1. Filtered Leads for Full Details
     var filteredLeads = currentLoadedLeads.filter(function(l) {
         if (!q) return true;
-        var text = ((l.company_name || '') + ' ' + (l.customer_name || '') + ' ' + (l.product_name || '') + ' ' + (l.executive_name || '') + ' ' + (l.status || '')).toLowerCase();
+        var text = ((l.company_name || '') + ' ' + (l.customer_name || '') + ' ' + (l.product_name || '') + ' ' + (l.executive_name || '') + ' ' + (l.branch_name || '') + ' ' + (l.status || '')).toLowerCase();
         return text.indexOf(q) !== -1;
     });
 
     renderFullDetailsTable(filteredLeads);
 
-    // 2. Product Wise Pivot
+    // 2. Branch Wise Pivot
+    renderBranchPivotTable(currentLoadedLeads, q);
+
+    // 3. Product Wise Pivot
     renderProductPivotTable(currentLoadedLeads, q);
 
-    // 3. Executive Wise Pivot
+    // 4. Executive Wise Pivot
     renderExecutivePivotTable(currentLoadedLeads, q);
+}
+
+function renderBranchPivotTable(allLeads, searchQ) {
+    var tbody = document.getElementById('daBranchPivotBody');
+    var tfoot = document.getElementById('daBranchPivotFoot');
+    var countBadge = document.getElementById('daSubmodalCountBranch');
+
+    // Aggregate by branch
+    var branchMap = {};
+    var totalOverallDeal = 0;
+
+    allLeads.forEach(function(l) {
+        var bName = (l.branch_name || 'Coimbatore (HO)').trim();
+        var dVal = parseFloat(l.deal_value) || 0;
+        var eVal = parseFloat(l.expected_value) || 0;
+        totalOverallDeal += dVal;
+
+        if (!branchMap[bName]) {
+            branchMap[bName] = {
+                name: bName,
+                count: 0,
+                deal_value: 0,
+                expected_value: 0
+            };
+        }
+        branchMap[bName].count += 1;
+        branchMap[bName].deal_value += dVal;
+        branchMap[bName].expected_value += eVal;
+    });
+
+    var branchList = Object.keys(branchMap).map(function(k) {
+        return branchMap[k];
+    });
+
+    // Sort descending by deal value
+    branchList.sort(function(a, b) {
+        return b.deal_value - a.deal_value;
+    });
+
+    if (countBadge) countBadge.textContent = branchList.length;
+
+    var filteredBranches = branchList.filter(function(b) {
+        if (!searchQ) return true;
+        return b.name.toLowerCase().indexOf(searchQ) !== -1;
+    });
+
+    if (!tbody) return;
+
+    if (filteredBranches.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching branches found.' : 'No active branches found.') + '</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var sumCount = 0;
+    var sumDeal = 0;
+    var sumExp = 0;
+
+    filteredBranches.forEach(function(b, i) {
+        sumCount += b.count;
+        sumDeal += b.deal_value;
+        sumExp += b.expected_value;
+
+        var avgVal = b.count > 0 ? (b.deal_value / b.count) : 0;
+        var safeBranchName = b.name.replace(/'/g, "\\'");
+
+        rowsHtml += '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:700; color:var(--da-text);">' +
+                '<span onclick="filterFullByItem(\'' + safeBranchName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeBranchName + '">' +
+                    b.name +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#e0f2fe; color:#0369a1;">' +
+                    b.count +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(b.deal_value) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(b.expected_value) + '</td>' +
+            '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
+            '<td style="text-align:center;">' +
+                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeBranchName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads ↗' +
+                '</button>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="2" style="font-weight:800;">Total (' + filteredBranches.length + ' Branches)</td>' +
+            '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+            '<td colspan="2"></td>' +
+        '</tr>';
+    }
 }
 
 function renderFullDetailsTable(leads) {
@@ -4921,12 +5783,6 @@ function renderRecentLeads(leads) {
     } else {
         console.error('❌ dashboardLoad not found');
     }
-
-    setInterval(function () {
-        if (typeof dashboardLoad === 'function') {
-            dashboardLoad();
-        }
-    }, 5 * 60 * 1000);
 
 
 
