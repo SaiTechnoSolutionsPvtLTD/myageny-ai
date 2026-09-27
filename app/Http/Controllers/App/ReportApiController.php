@@ -1287,6 +1287,26 @@ class ReportApiController extends Controller
 
     public function branchComparisonApi(Request $request): JsonResponse
     {
+        $authUser = $request->user();
+        $isCompanyAdmin = $authUser ? (
+            $authUser->isSuperAdmin() ||
+            $authUser->isSystemAdmin() ||
+            $authUser->isCompanyAdminRole() ||
+            $authUser->isCompanyAdmin() ||
+            (bool)$authUser->is_company_admin ||
+            $authUser->hasAdminLikeRole() ||
+            $authUser->canViewProjectsDashboardSwitcher() ||
+            ($authUser->role && str_contains(strtolower((string)$authUser->role), 'company_admin')) ||
+            ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'company admin'))
+        ) : false;
+        $isCbo = $authUser ? ($authUser->isCbo() || ($authUser->role && str_contains(strtolower((string)$authUser->role), 'cbo')) || ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'cbo'))) : false;
+        if (! ($isCompanyAdmin || $isCbo)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'You do not have permission to view the Branch Wise Comparison Report.',
+            ], 403);
+        }
+
         try {
             $request->validate([
                 'period_type' => ['nullable', 'in:custom,month,quarter,year'],

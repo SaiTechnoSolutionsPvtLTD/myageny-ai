@@ -31,4 +31,13 @@ class AppMenuController extends Controller
             'data'   => $this->menuService->accessibleModules($request->user()),
         ]);
     }
+
+    /** GET /mobile/hrms/pending-counts — feeds real-time badge counts on mobile navigation menu */
+    public function hrmsPendingCounts(Request $request): JsonResponse
+    {
+        return response()->json([
+            'status' => true,
+            'counts' => MenuService::getHrmsPendingCounts($request->user()),
+        ]);
+    }
 }

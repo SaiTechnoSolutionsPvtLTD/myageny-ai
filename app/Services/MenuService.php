@@ -206,12 +206,12 @@ class MenuService
             'ovp_module'                   => $this->ovpBadgeCount($user),
             'production_approvals'         => $this->productionApprovalBadgeCount($user),
             'notifications'                => $this->notificationBadgeCount($user),
-            'hrms.outside_office_approval' => $this->outsideOfficePendingBadgeCount(),
+            'hrms.outside_office_approval' => self::getOutsideOfficePendingCount($user),
             'reminders_tasks'              => $this->remindersTasksOverdueBadgeCount($user),
-            'hrms.leave'                   => $this->leaveBadgeCount($user),
-            'hrms.permission'              => $this->permissionBadgeCount($user),
-            'hrms.od_request'              => $this->odBadgeCount($user),
-            'hrms.expense_request'         => $this->expenseBadgeCount($user),
+            'hrms.leave'                   => self::getLeavePendingCount($user),
+            'hrms.permission'              => self::getPermissionPendingCount($user),
+            'hrms.od_request'              => self::getOdPendingCount($user),
+            'hrms.expense_request'         => self::getExpensePendingCount($user),
             'price_requests'               => $this->priceRequestBadgeCount($user),
             default                        => null,
         };
@@ -219,57 +219,169 @@ class MenuService
         return ($count !== null && $count > 0) ? $count : null;
     }
 
-    private function leaveBadgeCount(User $user): int
+    public static function getHrmsPendingCounts(User $user): array
     {
-        if (class_exists(\App\Models\LeaveApproval::class)) {
-            return \App\Models\LeaveApproval::where('status', 'pending')
-                ->whereHas('leaveRequest', fn ($q) => $q->where('status', 'pending'))
-                ->where(function ($q) use ($user) {
-                    $q->where('approver_id', $user->id);
-                    if ($user->hasAdminLikeRole()) {
-                        $q->orWhereNull('approver_id');
-                    }
-                })->count();
-        }
-        return 0;
+        return [
+            'leave_request'           => self::getLeavePendingCount($user),
+            'permission_request'      => self::getPermissionPendingCount($user),
+            'od_request'              => self::getOdPendingCount($user),
+            'expense_request'         => self::getExpensePendingCount($user),
+            'outside_office_approval' => self::getOutsideOfficePendingCount($user),
+        ];
     }
 
-    private function permissionBadgeCount(User $user): int
+    public static function getLeavePendingCount(User $user): int
     {
-        if (class_exists(\App\Models\PermissionApproval::class)) {
-            return \App\Models\PermissionApproval::where('status', 'pending')
-                ->whereHas('permissionRequest', fn ($q) => $q->where('status', 'pending'))
-                ->where(function ($q) use ($user) {
-                    $q->where('approver_id', $user->id);
-                    if ($user->hasAdminLikeRole()) {
-                        $q->orWhereNull('approver_id');
-                    }
-                })->count();
+        if (! class_exists(\App\Models\LeaveApproval::class)) {
+            return 0;
         }
-        return 0;
+
+        return \App\Models\LeaveApproval::where('status', \App\Models\LeaveApproval::STATUS_PENDING)
+            ->whereHas('leaveRequest', function ($q) use ($user) {
+                $q->where('status', \App\Models\LeaveRequest::STATUS_PENDING)
+                  ->where('user_id', '!=', $user->id);
+            })
+            ->where(function ($q) use ($user) {
+                $q->where('approver_user_id', $user->id);
+                if ($user->isSystemAdmin()) {
+                    $q->orWhereRaw('1 = 1');
+                }
+            })
+            ->whereHas('leaveRequest', function ($q) {
+                $q->whereColumn('leave_requests.current_step', 'leave_approvals.step_key');
+            })
+            ->count();
     }
 
-    private function odBadgeCount(User $user): int
+    public static function getPermissionPendingCount(User $user): int
     {
-        if (class_exists(\App\Models\OdApproval::class)) {
-            return \App\Models\OdApproval::where('status', 'pending')
-                ->whereHas('odRequest', fn ($q) => $q->where('status', 'pending'))
-                ->where(function ($q) use ($user) {
-                    $q->where('approver_id', $user->id);
-                    if ($user->hasAdminLikeRole()) {
-                        $q->orWhereNull('approver_id');
-                    }
-                })->count();
+        if (! class_exists(\App\Models\PermissionApproval::class)) {
+            return 0;
         }
-        return 0;
+
+        return \App\Models\PermissionApproval::where('status', \App\Models\PermissionApproval::STATUS_PENDING)
+            ->whereHas('permissionRequest', function ($q) use ($user) {
+                $q->where('status', \App\Models\PermissionRequest::STATUS_PENDING)
+                  ->where('user_id', '!=', $user->id);
+            })
+            ->where(function ($q) use ($user) {
+                $q->where('approver_user_id', $user->id);
+                if ($user->isSystemAdmin()) {
+                    $q->orWhereRaw('1 = 1');
+                }
+            })
+            ->whereHas('permissionRequest', function ($q) {
+                $q->whereColumn('permission_requests.current_step', 'permission_approvals.step_key');
+            })
+            ->count();
     }
 
-    private function expenseBadgeCount(User $user): int
+    public static function getOdPendingCount(User $user): int
     {
-        if (class_exists(\App\Models\ExpenseRequest::class)) {
-            return \App\Models\ExpenseRequest::where('status', 'pending')->count();
+        if (! class_exists(\App\Models\OdApproval::class)) {
+            return 0;
         }
-        return 0;
+
+        return \App\Models\OdApproval::where('status', \App\Models\OdApproval::STATUS_PENDING)
+            ->whereHas('odRequest', function ($q) use ($user) {
+                $q->where('status', \App\Models\OdRequest::STATUS_PENDING)
+                  ->where('user_id', '!=', $user->id);
+            })
+            ->where(function ($q) use ($user) {
+                $q->where('approver_user_id', $user->id);
+                if ($user->isSystemAdmin()) {
+                    $q->orWhereRaw('1 = 1');
+                }
+            })
+            ->whereHas('odRequest', function ($q) {
+                $q->whereColumn('od_requests.current_step', 'od_approvals.step_key');
+            })
+            ->count();
+    }
+
+    public static function getExpensePendingCount(User $user): int
+    {
+        if (! class_exists(\App\Models\ExpenseRequest::class)) {
+            return 0;
+        }
+
+        $companyId = $user->company_id;
+
+        $userRoleIds = \Illuminate\Support\Facades\DB::table('model_has_roles')
+            ->where('model_type', User::class)
+            ->where('model_id', $user->id)
+            ->pluck('role_id')
+            ->toArray();
+
+        if (empty($userRoleIds) && $user->relationLoaded('roles')) {
+            $userRoleIds = $user->roles->pluck('id')->toArray();
+        }
+
+        $userRoleNames = \App\Models\Role::withoutGlobalScopes()
+            ->whereIn('id', $userRoleIds)
+            ->pluck('name')
+            ->map(fn($n) => preg_replace('/^company_\d+__/', '', $n))
+            ->toArray();
+
+        $matchingRoleIds = \App\Models\Role::withoutGlobalScopes()
+            ->where(function($q) use ($userRoleIds, $userRoleNames) {
+                $q->whereIn('id', $userRoleIds);
+                foreach ($userRoleNames as $rn) {
+                    $q->orWhere('name', 'like', "%{$rn}%");
+                }
+            })
+            ->pluck('id')
+            ->toArray();
+
+        return \App\Models\ExpenseRequest::where('status', 'pending')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->where(function ($q) use ($user, $matchingRoleIds) {
+                $q->where('approver_id', $user->id)
+                  ->orWhereIn('current_approver_role_id', $matchingRoleIds);
+            })
+            ->count();
+    }
+
+    public static function getOutsideOfficePendingCount(User $user): int
+    {
+        if (! class_exists(\App\Models\OutsideOfficeAttendanceRequest::class)) {
+            return 0;
+        }
+
+        $canManage = $user->isSystemAdmin()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isCompanyAdmin()
+            || $user->isBranchAdmin()
+            || $user->isBranchManager();
+
+        if (! $canManage) {
+            return 0;
+        }
+
+        $isCompanyAdmin = $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->hasRole('company_admin');
+
+        $actingBranchId = $isCompanyAdmin ? null : $user->branch_id;
+
+        $query = \App\Models\OutsideOfficeAttendanceRequest::where('status', \App\Models\OutsideOfficeAttendanceRequest::STATUS_PENDING);
+
+        if ($actingBranchId) {
+            $branch = \App\Models\Branch::find($actingBranchId);
+            $branchCode = $branch?->code;
+            $query->where(function ($sub) use ($actingBranchId, $branchCode) {
+                $sub->whereHas('employee.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId))
+                    ->orWhereHas('intern.portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
+                if ($branchCode && $branchCode !== 'STS') {
+                    $sub->orWhereHas('employee', fn ($eq) => $eq->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%'))
+                        ->orWhereHas('intern', fn ($iq) => $iq->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%'));
+                }
+            });
+        }
+
+        return $query->count();
     }
 
     private function priceRequestBadgeCount(User $user): int

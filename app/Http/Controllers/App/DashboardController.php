@@ -463,16 +463,32 @@ class DashboardController extends Controller
             ]);
 
         // ── 8. Branch-wise performance ────────────────────────────
-        $branchPerformanceQuery = Branch::where('is_active', true)
-            ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId));
+        $authUser = $request->user();
+        $isCompanyAdmin = $authUser ? (
+            $authUser->isSuperAdmin() ||
+            $authUser->isSystemAdmin() ||
+            $authUser->isCompanyAdminRole() ||
+            $authUser->isCompanyAdmin() ||
+            (bool)$authUser->is_company_admin ||
+            $authUser->hasAdminLikeRole() ||
+            $authUser->canViewProjectsDashboardSwitcher() ||
+            ($authUser->role && str_contains(strtolower((string)$authUser->role), 'company_admin')) ||
+            ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'company admin'))
+        ) : false;
+        $isCbo = $authUser ? ($authUser->isCbo() || ($authUser->role && str_contains(strtolower((string)$authUser->role), 'cbo')) || ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'cbo'))) : false;
+        $canViewBranchPerformance = $isCompanyAdmin || $isCbo;
 
-        if (! $this->visibility->isCompanyWideUser($request->user())) {
-            $branchPerformanceQuery->whereIn('id', $request->user()?->getMyBranchIds() ?? []);
-        }
+        if ($canViewBranchPerformance) {
+            $branchPerformanceQuery = Branch::where('is_active', true)
+                ->when($request->user()?->company_id, fn($q, $companyId) => $q->where('company_id', $companyId));
 
-        $branchPerformance = $branchPerformanceQuery
-            ->get()
-            ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
+            if (! $this->visibility->isCompanyWideUser($request->user())) {
+                $branchPerformanceQuery->whereIn('id', $request->user()?->getMyBranchIds() ?? []);
+            }
+
+            $branchPerformance = $branchPerformanceQuery
+                ->get()
+                ->map(function ($branch) use ($request, $dateFrom, $dateTo) {
                 $q = Lead::where('branch_id', $branch->id)
                     ->when($dateFrom, fn($q2) => $q2->whereDate('lead_date', '>=', $dateFrom))
                     ->when($dateTo,   fn($q2) => $q2->whereDate('lead_date', '<=', $dateTo));
@@ -513,6 +529,9 @@ class DashboardController extends Controller
             })
             ->sortByDesc('converted_value')
             ->values();
+        } else {
+            $branchPerformance = [];
+        }
 
         // ── 9. Team performance ───────────────────────────────────
         $teamUsers = $this->visibility->visibleAssignableUsers($request->user());
@@ -666,8 +685,19 @@ class DashboardController extends Controller
 
         // ── Section Visibility Rules for Total Prospects & Key Metrics ──
         $authUser = $request->user();
-        $isCompanyAdmin = $authUser ? ($authUser->isSuperAdmin() || $authUser->isCompanyAdminRole()) : false;
-        $isCbo          = $authUser ? $authUser->isCbo() : false;
+        $isCompanyAdmin = $authUser ? (
+            $authUser->isSuperAdmin() ||
+            $authUser->isSystemAdmin() ||
+            $authUser->isCompanyAdminRole() ||
+            $authUser->isCompanyAdmin() ||
+            (bool)$authUser->is_company_admin ||
+            $authUser->hasAdminLikeRole() ||
+            $authUser->canViewProjectsDashboardSwitcher() ||
+            ($authUser->role && str_contains(strtolower((string)$authUser->role), 'admin')) ||
+            ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'admin'))
+        ) : false;
+        $isCbo          = $authUser ? ($authUser->isCbo() || ($authUser->role && str_contains(strtolower((string)$authUser->role), 'cbo'))) : false;
+        $canViewCst     = $isCompanyAdmin || $isCbo || ($authUser && ($authUser->isCustomerSuccessUser() || $authUser->belongsToCustomerSupportDepartment() || $authUser->canAccessCstModule()));
         $isBranchManager = $authUser ? ($authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo) : false;
         $isBranchAdmin   = $authUser ? ($authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager) : false;
         $isTl            = $authUser ? ($authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin) : false;
@@ -679,6 +709,8 @@ class DashboardController extends Controller
             $hasDefaultBranch = true;
             $hasCocoBranch    = true;
             $hasNonCocoBranch = true;
+            $canViewCst       = true;
+            $canViewActiveBranches = true;
         } elseif ($isBranchManager && $authUser) {
             $additionalBranchIds = array_values(array_filter($userBranchIds, fn($id) => (int)$id !== (int)$defaultBranchId));
             $additionalBranches = !empty($additionalBranchIds) ? \App\Models\Branch::whereIn('id', $additionalBranchIds)->get() : collect();
@@ -790,11 +822,13 @@ class DashboardController extends Controller
                     'show_nst_ho'               => (bool) $hasDefaultBranch,
                     'show_coco'                 => (bool) $hasCocoBranch,
                     'show_non_coco'             => (bool) $hasNonCocoBranch,
+                    'show_cst'                  => (bool) $canViewCst,
                     'show_active_branches'      => (bool) $canViewActiveBranches,
                     'has_default_branch'        => (bool) $hasDefaultBranch,
                     'has_coco_branch'           => (bool) $hasCocoBranch,
                     'has_non_coco_branch'       => (bool) $hasNonCocoBranch,
                     'can_view_active_branches'  => (bool) $canViewActiveBranches,
+                    'can_view_cst'              => (bool) $canViewCst,
                     'nst_ho'                    => $cpMetrics['nst_ho'],
                     'non_coco'                  => $cpMetrics['non_coco'],
                     'coco'                      => $cpMetrics['coco'],

@@ -174,6 +174,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     Route::get('dashboard/branch-hot-leads', [MobileDashboardController::class, 'branchHotLeads'])->name('dashboard.branch-hot-leads');
     Route::get('menu', [AppMenuController::class, 'index'])->name('menu');
     Route::get('modules', [AppMenuController::class, 'modules'])->name('modules');
+    Route::get('hrms/pending-counts', [AppMenuController::class, 'hrmsPendingCounts'])->name('hrms.pending-counts');
     Route::prefix('hrms')->name('hrms.')->group(function () {
         Route::get('dashboard',         [DashboardApiController::class,  'index'])->name('dashboard');
         Route::get('employees/meta',    [EmployeeApiController::class,    'meta'])->name('employees.meta');
