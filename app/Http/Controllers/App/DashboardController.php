@@ -677,95 +677,65 @@ class DashboardController extends Controller
                 if ($branchId)        $lq->where('branch_id', $branchId);
                 if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
             });
-        $currentMonthHotProductsCount = (clone $currentMonthHotProductsQuery)->count();
-        $currentMonthHotProductsValue = (float) (clone $currentMonthHotProductsQuery)->sum('total_price');
-        $currentMonthExpectedCollection = (float) (clone $currentMonthHotProductsQuery)->sum('expected_value');
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
         $cstMetrics = $this->buildCstProspectMetrics($request);
 
         // ── Section Visibility Rules for Total Prospects & Key Metrics ──
         $authUser = $request->user();
-        $isCompanyAdmin = $authUser ? (
-            $authUser->isSuperAdmin() ||
-            $authUser->isSystemAdmin() ||
-            $authUser->isCompanyAdminRole() ||
-            $authUser->isCompanyAdmin() ||
-            (bool)$authUser->is_company_admin ||
-            $authUser->hasAdminLikeRole() ||
-            $authUser->canViewProjectsDashboardSwitcher() ||
-            ($authUser->role && str_contains(strtolower((string)$authUser->role), 'admin')) ||
-            ($authUser->role_display && str_contains(strtolower((string)$authUser->role_display), 'admin'))
-        ) : false;
-        $isCbo          = $authUser ? ($authUser->isCbo() || ($authUser->role && str_contains(strtolower((string)$authUser->role), 'cbo'))) : false;
-        $canViewCst     = $isCompanyAdmin || $isCbo || ($authUser && ($authUser->isCustomerSuccessUser() || $authUser->belongsToCustomerSupportDepartment() || $authUser->canAccessCstModule()));
-        $isBranchManager = $authUser ? ($authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo) : false;
-        $isBranchAdmin   = $authUser ? ($authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager) : false;
-        $isTl            = $authUser ? ($authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin) : false;
+        $vis = $this->resolveForecastingVisibility($authUser);
+        $hasDefaultBranch      = $vis['hasDefaultBranch'];
+        $hasCocoBranch         = $vis['hasCocoBranch'];
+        $hasNonCocoBranch      = $vis['hasNonCocoBranch'];
+        $canViewCst            = $vis['canViewCst'];
+        $canViewActiveBranches = $vis['canViewActiveBranches'];
+        $userRoleType          = $vis['userRoleType'];
 
-        $userBranchIds = $authUser ? $authUser->getMyBranchIds() : [];
-        $defaultBranchId = \App\Models\Branch::where('is_default', true)->value('id') ?? 1;
+        // Aggregate ONLY the sections the logged-in user is authorized to see
+        $userTotalProspects = 0;
+        $userTotalDealValue = 0.0;
+        $userTotalExpectedCollection = 0.0;
 
-        if ($isCompanyAdmin || $isCbo) {
-            $hasDefaultBranch = true;
-            $hasCocoBranch    = true;
-            $hasNonCocoBranch = true;
-            $canViewCst       = true;
-            $canViewActiveBranches = true;
-        } elseif ($isBranchManager && $authUser) {
-            $additionalBranchIds = array_values(array_filter($userBranchIds, fn($id) => (int)$id !== (int)$defaultBranchId));
-            $additionalBranches = !empty($additionalBranchIds) ? \App\Models\Branch::whereIn('id', $additionalBranchIds)->get() : collect();
-
-            $hasCocoBranch    = $additionalBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
-            $hasNonCocoBranch = $additionalBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
-
-            $descendants = $this->visibility->descendantUserIds($authUser);
-            $hasHoMappedUsers = false;
-            if ($descendants->isNotEmpty()) {
-                $hasHoMappedUsers = User::withoutGlobalScope('branch')
-                    ->whereIn('id', $descendants)
-                    ->where('branch_id', $defaultBranchId)
-                    ->exists();
-            }
-            $hasOwnHoLeads = Lead::where('branch_id', $defaultBranchId)->where('assigned_to', $authUser->id)->exists();
-            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
-        } elseif ($isBranchAdmin && $authUser) {
-            $branchIds = $userBranchIds;
-            if (empty($branchIds) && $authUser->branch_id) {
-                $branchIds = [(int) $authUser->branch_id];
-            }
-            $adminBranches = !empty($branchIds) ? \App\Models\Branch::whereIn('id', $branchIds)->get() : collect();
-
-            $hasDefaultBranch = $adminBranches->contains(fn($b) => (bool) $b->is_default);
-            $hasCocoBranch    = $adminBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
-            $hasNonCocoBranch = $adminBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
-        } elseif ($isTl && $authUser) {
-            $teamUserIds = $this->visibility->descendantUserIds($authUser)->push($authUser->id)->unique();
-            $teamBranchIds = User::withoutGlobalScope('branch')
-                ->whereIn('id', $teamUserIds)
-                ->pluck('branch_id')
-                ->filter()
-                ->unique()
-                ->all();
-            if (empty($teamBranchIds) && $authUser->branch_id) {
-                $teamBranchIds = [(int) $authUser->branch_id];
-            }
-            $tlBranches = !empty($teamBranchIds) ? \App\Models\Branch::whereIn('id', $teamBranchIds)->get() : collect();
-
-            $hasDefaultBranch = $tlBranches->contains(fn($b) => (bool) $b->is_default);
-            $hasCocoBranch    = $tlBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
-            $hasNonCocoBranch = $tlBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
-        } elseif ($authUser) {
-            $execBranch = $authUser->branch;
-            $hasDefaultBranch = (bool) ($execBranch?->is_default || (int)$authUser->branch_id === (int)$defaultBranchId);
-            $hasCocoBranch    = strtoupper(trim((string) ($execBranch?->branch_type ?? ''))) === 'COCO';
-            $hasNonCocoBranch = in_array(strtoupper(trim((string) ($execBranch?->branch_type ?? ''))), ['NON COCO', 'NON_COCO', 'NON-COCO']);
-        } else {
-            $hasDefaultBranch = true;
-            $hasCocoBranch    = false;
-            $hasNonCocoBranch = false;
+        if ($hasDefaultBranch) {
+            $userTotalProspects += (int) ($cpMetrics['nst_ho']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['nst_ho']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['nst_ho']['expected_value'] ?? 0);
+        }
+        if ($hasNonCocoBranch) {
+            $userTotalProspects += (int) ($cpMetrics['non_coco']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['non_coco']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['non_coco']['expected_value'] ?? 0);
+        }
+        if ($hasCocoBranch) {
+            $userTotalProspects += (int) ($cpMetrics['coco']['count'] ?? 0);
+            $userTotalDealValue += (float) ($cpMetrics['coco']['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cpMetrics['coco']['expected_value'] ?? 0);
+        }
+        if ($canViewCst) {
+            $userTotalProspects += (int) ($cstMetrics['count'] ?? 0);
+            $userTotalDealValue += (float) ($cstMetrics['deal_value'] ?? 0);
+            $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
         }
 
-        $canViewActiveBranches = $isCompanyAdmin || $isCbo;
+        // ── Day Sales Tracker (Today Converted Products & Collections) ──
+        $todayConvertedQuery = LeadProduct::query()
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                  ->orWhere('lead_status_id', 5);
+            })
+            ->where(function ($q) {
+                $q->whereDate('converted_at', today())
+                  ->orWhere(function ($sub) {
+                      $sub->whereNull('converted_at')->whereDate('created_at', today());
+                  });
+            })
+            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+                $this->visibility->applyLeadVisibility($lq, $request->user());
+                if ($branchId)        $lq->where('branch_id', $branchId);
+                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
+            });
+        $todayConvertedCount = (clone $todayConvertedQuery)->count();
+        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
+        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
 
         // ── Build response ────────────────────────────────────────
         return response()->json([
@@ -794,31 +764,32 @@ class DashboardController extends Controller
                     'completed_calls_count'      => $completedCallsCount,
                     'today_completed_calls_count'=> $completedCallsCount,
                     'overdue_reminders_count'    => $overdueCount,
-                    'current_month_hot_products_count' => $currentMonthHotProductsCount,
-                    'total_prospects'            => $currentMonthHotProductsCount,
-                    'current_month_hot_products_value' => $currentMonthHotProductsValue,
-                    'current_month_expected_collection' => $currentMonthExpectedCollection,
-                    'nst_ho_prospects_count'     => $cpMetrics['nst_ho']['count'],
-                    'nst_ho_deal_value'          => $cpMetrics['nst_ho']['deal_value'],
-                    'nst_ho_expected_value'      => $cpMetrics['nst_ho']['expected_value'],
-                    'non_coco_prospects_count'   => $cpMetrics['non_coco']['count'],
-                    'non_coco_deal_value'        => $cpMetrics['non_coco']['deal_value'],
-                    'non_coco_expected_value'    => $cpMetrics['non_coco']['expected_value'],
-                    'coco_prospects_count'       => $cpMetrics['coco']['count'],
-                    'coco_deal_value'            => $cpMetrics['coco']['deal_value'],
-                    'coco_expected_value'        => $cpMetrics['coco']['expected_value'],
-                    'cst_prospects_count'        => $cstMetrics['count'],
-                    'cst_deal_value'             => $cstMetrics['deal_value'],
-                    'cst_expected_value'         => $cstMetrics['expected_value'],
+                    'current_month_hot_products_count' => $userTotalProspects,
+                    'total_prospects'            => $userTotalProspects,
+                    'current_month_hot_products_value' => $userTotalDealValue,
+                    'current_month_expected_collection' => $userTotalExpectedCollection,
+                    'nst_ho_prospects_count'     => $hasDefaultBranch ? $cpMetrics['nst_ho']['count'] : 0,
+                    'nst_ho_deal_value'          => $hasDefaultBranch ? $cpMetrics['nst_ho']['deal_value'] : 0.0,
+                    'nst_ho_expected_value'      => $hasDefaultBranch ? $cpMetrics['nst_ho']['expected_value'] : 0.0,
+                    'non_coco_prospects_count'   => $hasNonCocoBranch ? $cpMetrics['non_coco']['count'] : 0,
+                    'non_coco_deal_value'        => $hasNonCocoBranch ? $cpMetrics['non_coco']['deal_value'] : 0.0,
+                    'non_coco_expected_value'    => $hasNonCocoBranch ? $cpMetrics['non_coco']['expected_value'] : 0.0,
+                    'coco_prospects_count'       => $hasCocoBranch ? $cpMetrics['coco']['count'] : 0,
+                    'coco_deal_value'            => $hasCocoBranch ? $cpMetrics['coco']['deal_value'] : 0.0,
+                    'coco_expected_value'        => $hasCocoBranch ? $cpMetrics['coco']['expected_value'] : 0.0,
+                    'cst_prospects_count'        => $canViewCst ? $cstMetrics['count'] : 0,
+                    'cst_deal_value'             => $canViewCst ? $cstMetrics['deal_value'] : 0.0,
+                    'cst_expected_value'         => $canViewCst ? $cstMetrics['expected_value'] : 0.0,
                 ],
 
                 'forecasting' => [
-                    'total_prospects'           => $currentMonthHotProductsCount,
-                    'hot_products_count'        => $currentMonthHotProductsCount,
-                    'hot_products_value'        => $currentMonthHotProductsValue,
-                    'deal_value'                => $currentMonthHotProductsValue,
-                    'expected_collection_value' => $currentMonthExpectedCollection,
+                    'total_prospects'           => $userTotalProspects,
+                    'hot_products_count'        => $userTotalProspects,
+                    'hot_products_value'        => $userTotalDealValue,
+                    'deal_value'                => $userTotalDealValue,
+                    'expected_collection_value' => $userTotalExpectedCollection,
                     'month_name'                => now()->format('F Y'),
+                    'user_role_type'            => $userRoleType,
                     'show_nst_ho'               => (bool) $hasDefaultBranch,
                     'show_coco'                 => (bool) $hasCocoBranch,
                     'show_non_coco'             => (bool) $hasNonCocoBranch,
@@ -829,11 +800,17 @@ class DashboardController extends Controller
                     'has_non_coco_branch'       => (bool) $hasNonCocoBranch,
                     'can_view_active_branches'  => (bool) $canViewActiveBranches,
                     'can_view_cst'              => (bool) $canViewCst,
-                    'nst_ho'                    => $cpMetrics['nst_ho'],
-                    'non_coco'                  => $cpMetrics['non_coco'],
-                    'coco'                      => $cpMetrics['coco'],
-                    'cst'                       => $cstMetrics,
-                    'active_branches'           => $this->buildActiveBranchesHotMetrics($request),
+                    'nst_ho'                    => $hasDefaultBranch ? $cpMetrics['nst_ho'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'heading' => 'NST - HO'],
+                    'non_coco'                  => $hasNonCocoBranch ? $cpMetrics['non_coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner NON COCO Model'],
+                    'coco'                      => $hasCocoBranch ? $cpMetrics['coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner COCO Model'],
+                    'cst'                       => $canViewCst ? $cstMetrics : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'CST'],
+                    'active_branches'           => $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [],
+                ],
+
+                'day_sales_tracker' => [
+                    'count'            => $todayConvertedCount,
+                    'total_value'      => $todayConvertedValue,
+                    'total_collection' => $todayConvertedCollection,
                 ],
 
                 'financials' => [
@@ -1283,6 +1260,129 @@ class DashboardController extends Controller
     }
 
     /**
+     * Resolve forecasting section visibility flags and user role type matching web dashboard logic.
+     */
+    public function resolveForecastingVisibility(?User $authUser): array
+    {
+        if (!$authUser) {
+            return [
+                'hasDefaultBranch'      => false,
+                'hasCocoBranch'         => false,
+                'hasNonCocoBranch'      => false,
+                'canViewCst'            => false,
+                'canViewActiveBranches' => false,
+                'userRoleType'          => 'nst',
+            ];
+        }
+
+        $isCompanyAdmin = $authUser->isSuperAdmin() || $authUser->isSystemAdmin() || $authUser->isCompanyAdminRole();
+        $isCbo          = $authUser->isCbo();
+        $isBranchManager = $authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo;
+        $isBranchAdmin   = $authUser->isBranchAdmin() && !$isCompanyAdmin && !$isCbo && !$isBranchManager;
+        $isTl            = $authUser->hasTlLikeRole() && !$isCompanyAdmin && !$isCbo && !$isBranchManager && !$isBranchAdmin;
+
+        $userBranchIds = method_exists($authUser, 'getMyBranchIds') ? $authUser->getMyBranchIds() : [];
+        $defaultBranchId = Branch::where('is_default', true)->value('id') ?? 1;
+
+        if ($isCompanyAdmin || $isCbo) {
+            $hasDefaultBranch = true;
+            $hasCocoBranch    = true;
+            $hasNonCocoBranch = true;
+            $canViewCst       = true;
+            $canViewActiveBranches = true;
+        } elseif ($isBranchManager) {
+            // Branch Manager:
+            // 1. Additional branches (non-default) check for COCO / NON COCO
+            $additionalBranchIds = array_values(array_filter($userBranchIds, fn($id) => (int)$id !== (int)$defaultBranchId));
+            $additionalBranches = !empty($additionalBranchIds) ? Branch::whereIn('id', $additionalBranchIds)->get() : collect();
+
+            $hasCocoBranch    = $additionalBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $additionalBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+
+            // 2. HO: show if BM has users mapped under them in HO OR has leads assigned to themselves in HO
+            $descendants = $this->visibility->descendantUserIds($authUser);
+            $hasHoMappedUsers = false;
+            if ($descendants->isNotEmpty()) {
+                $hasHoMappedUsers = User::withoutGlobalScope('branch')
+                    ->whereIn('id', $descendants)
+                    ->where('branch_id', $defaultBranchId)
+                    ->exists();
+            }
+
+            $hasOwnHoLeads = Lead::where('branch_id', $defaultBranchId)
+                ->where('assigned_to', $authUser->id)
+                ->exists();
+
+            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } elseif ($isBranchAdmin) {
+            // Branch Admin: check their branch(es)
+            $branchIds = $userBranchIds;
+            if (empty($branchIds) && $authUser->branch_id) {
+                $branchIds = [(int) $authUser->branch_id];
+            }
+            $adminBranches = !empty($branchIds) ? Branch::whereIn('id', $branchIds)->get() : collect();
+
+            $hasDefaultBranch = $adminBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $adminBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $adminBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } elseif ($isTl) {
+            // Sales TL: check TL and team mapped members' branches
+            $teamUserIds = $this->visibility->descendantUserIds($authUser)->push($authUser->id)->unique();
+            $teamBranchIds = User::withoutGlobalScope('branch')
+                ->whereIn('id', $teamUserIds)
+                ->pluck('branch_id')
+                ->filter()
+                ->unique()
+                ->all();
+            if (empty($teamBranchIds) && $authUser->branch_id) {
+                $teamBranchIds = [(int) $authUser->branch_id];
+            }
+            $tlBranches = !empty($teamBranchIds) ? Branch::whereIn('id', $teamBranchIds)->get() : collect();
+
+            $hasDefaultBranch = $tlBranches->contains(fn($b) => (bool) $b->is_default);
+            $hasCocoBranch    = $tlBranches->contains(fn($b) => strtoupper(trim((string) $b->branch_type)) === 'COCO');
+            $hasNonCocoBranch = $tlBranches->contains(fn($b) => in_array(strtoupper(trim((string) $b->branch_type)), ['NON COCO', 'NON_COCO', 'NON-COCO']));
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        } else {
+            // Sales Executive (NST): check executive's branch
+            $execBranch = $authUser->branch;
+            $hasDefaultBranch = (bool) ($execBranch?->is_default || (int)$authUser->branch_id === (int)$defaultBranchId);
+            $hasCocoBranch    = strtoupper(trim((string) ($execBranch?->branch_type ?? ''))) === 'COCO';
+            $hasNonCocoBranch = in_array(strtoupper(trim((string) ($execBranch?->branch_type ?? ''))), ['NON COCO', 'NON_COCO', 'NON-COCO']);
+            $canViewActiveBranches = false;
+            $canViewCst = true;
+        }
+
+        if ($isCompanyAdmin) {
+            $userRoleType = 'company_admin';
+        } elseif ($isCbo) {
+            $userRoleType = 'cbo';
+        } elseif ($isBranchManager) {
+            $userRoleType = 'branch_manager';
+        } elseif ($isBranchAdmin) {
+            $userRoleType = 'branch_admin';
+        } elseif ($isTl) {
+            $userRoleType = 'tl';
+        } else {
+            $userRoleType = 'nst';
+        }
+
+        return [
+            'hasDefaultBranch'      => (bool) $hasDefaultBranch,
+            'hasCocoBranch'         => (bool) $hasCocoBranch,
+            'hasNonCocoBranch'      => (bool) $hasNonCocoBranch,
+            'canViewCst'            => (bool) $canViewCst,
+            'canViewActiveBranches' => (bool) $canViewActiveBranches,
+            'userRoleType'          => $userRoleType,
+        ];
+    }
+
+    /**
      * Build active branches current month hot prospect metrics for the Total Prospects modal.
      */
     private function buildActiveBranchesHotMetrics(Request $request): array
@@ -1355,12 +1455,25 @@ class DashboardController extends Controller
         $seenPiIds = [];
         $seenLpIds = [];
 
-        $isCompanyAdminOrCbo = $currentUser && (
-            $currentUser->isSuperAdmin() ||
-            $currentUser->isSystemAdmin() ||
-            $currentUser->isCompanyAdminRole() ||
-            $currentUser->isCbo()
-        );
+        $vis = $this->resolveForecastingVisibility($currentUser);
+        $userRoleType = $vis['userRoleType'];
+        $isCompanyAdminOrCbo = in_array($userRoleType, ['company_admin', 'cbo'], true);
+
+        // Security / Scoping: Resolve authorized filter user ID if specified
+        $filterUserId = null;
+        if ($request && $request->filled('user_id')) {
+            $requestedId = (int) $request->user_id;
+            if ($isCompanyAdminOrCbo) {
+                $filterUserId = $requestedId;
+            } else {
+                $visibleIds = $this->visibility->visibleUserIds($currentUser);
+                if ($visibleIds === null || $visibleIds->contains($requestedId)) {
+                    $filterUserId = $requestedId;
+                } else {
+                    $filterUserId = (int) $currentUser->id;
+                }
+            }
+        }
 
         // 1. Fetch count-wise recurring initiations for renewals (matching CST dashboard)
         $renewalPisQuery = ProductionInitiation::query()
@@ -1378,15 +1491,23 @@ class DashboardController extends Controller
             });
 
         if (!$isCompanyAdminOrCbo) {
-            $renewalPisQuery->whereHas('lead', function ($lq) use ($currentUser, $request) {
+            $renewalPisQuery->whereHas('lead', function ($lq) use ($currentUser, $filterUserId) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
-                if ($request && $request->filled('user_id')) {
-                    $lq->where('assigned_to', $request->user_id);
+                if ($filterUserId) {
+                    $lq->where(function ($sq) use ($filterUserId) {
+                        $sq->where('assigned_to', $filterUserId)
+                           ->orWhere('customer_support_executive_id', $filterUserId)
+                           ->orWhere('customer_support_tl_id', $filterUserId);
+                    });
                 }
             });
-        } elseif ($request && $request->filled('user_id')) {
-            $renewalPisQuery->whereHas('lead', function ($lq) use ($request) {
-                $lq->where('assigned_to', $request->user_id);
+        } elseif ($filterUserId) {
+            $renewalPisQuery->whereHas('lead', function ($lq) use ($filterUserId) {
+                $lq->where(function ($sq) use ($filterUserId) {
+                    $sq->where('assigned_to', $filterUserId)
+                       ->orWhere('customer_support_executive_id', $filterUserId)
+                       ->orWhere('customer_support_tl_id', $filterUserId);
+                });
             });
         }
 
@@ -1482,15 +1603,23 @@ class DashboardController extends Controller
             });
 
         if (!$isCompanyAdminOrCbo) {
-            $devPisQuery->whereHas('lead', function ($lq) use ($currentUser, $request) {
+            $devPisQuery->whereHas('lead', function ($lq) use ($currentUser, $filterUserId) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
-                if ($request && $request->filled('user_id')) {
-                    $lq->where('assigned_to', $request->user_id);
+                if ($filterUserId) {
+                    $lq->where(function ($sq) use ($filterUserId) {
+                        $sq->where('assigned_to', $filterUserId)
+                           ->orWhere('customer_support_executive_id', $filterUserId)
+                           ->orWhere('customer_support_tl_id', $filterUserId);
+                    });
                 }
             });
-        } elseif ($request && $request->filled('user_id')) {
-            $devPisQuery->whereHas('lead', function ($lq) use ($request) {
-                $lq->where('assigned_to', $request->user_id);
+        } elseif ($filterUserId) {
+            $devPisQuery->whereHas('lead', function ($lq) use ($filterUserId) {
+                $lq->where(function ($sq) use ($filterUserId) {
+                    $sq->where('assigned_to', $filterUserId)
+                       ->orWhere('customer_support_executive_id', $filterUserId)
+                       ->orWhere('customer_support_tl_id', $filterUserId);
+                });
             });
         }
 
@@ -1567,6 +1696,40 @@ class DashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Type or Branch ID is required.'], 422);
         }
 
+        $vis = $this->resolveForecastingVisibility($currentUser);
+        $hasDefaultBranch      = $vis['hasDefaultBranch'];
+        $hasCocoBranch         = $vis['hasCocoBranch'];
+        $hasNonCocoBranch      = $vis['hasNonCocoBranch'];
+        $canViewCst            = $vis['canViewCst'];
+        $canViewActiveBranches = $vis['canViewActiveBranches'];
+        $userRoleType          = $vis['userRoleType'];
+        $isCompanyAdminOrCbo   = in_array($userRoleType, ['company_admin', 'cbo'], true);
+
+        // Security: Block unauthorized user_id parameter tampering
+        if ($request->filled('user_id')) {
+            $requestedUserId = (int) $request->user_id;
+            if (!$isCompanyAdminOrCbo) {
+                $allowedUserIds = $this->visibility->visibleUserIds($currentUser);
+                if ($allowedUserIds !== null && !$allowedUserIds->contains($requestedUserId)) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized user filter.'], 403);
+                }
+            }
+        }
+
+        // Security: Validate section authorization
+        if ($type === 'nst_ho' && !$hasDefaultBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: NST - HO.'], 403);
+        }
+        if ($type === 'non_coco' && !$hasNonCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Channel Partner NON COCO.'], 403);
+        }
+        if ($type === 'coco' && !$hasCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: Channel Partner COCO.'], 403);
+        }
+        if ($type === 'cst' && !$canViewCst) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
+        }
+
         if ($type === 'cst') {
             $subtitle = 'Current Month Renewals & Development Prospects';
 
@@ -1575,6 +1738,33 @@ class DashboardController extends Controller
                 $item['index'] = $idx + 1;
                 return $item;
             });
+
+            // Search filter
+            if ($request->filled('search')) {
+                $s = strtolower(trim((string)$request->search));
+                $rows = $rows->filter(function ($r) use ($s) {
+                    return str_contains(strtolower($r['company_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['customer_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['executive_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['status'] ?? ''), $s);
+                })->values();
+            }
+
+            $totalCount = $rows->count();
+            $totalDeal = (float) $rows->sum('deal_value');
+            $totalExpected = (float) $rows->sum('expected_value');
+
+            // Pagination support
+            $page = max(1, (int) $request->input('page', 1));
+            $perPage = (int) $request->input('per_page', 0);
+            if ($perPage > 0) {
+                $paginatedRows = $rows->forPage($page, $perPage)->values();
+                $hasMore = ($page * $perPage) < $totalCount;
+            } else {
+                $paginatedRows = $rows;
+                $hasMore = false;
+            }
 
             return response()->json([
                 'success' => true,
@@ -1587,10 +1777,13 @@ class DashboardController extends Controller
                         'branch_type' => 'CST',
                     ],
                     'period'         => now()->format('F Y'),
-                    'total_count'    => $rows->count(),
-                    'total_deal'     => (float) $rows->sum('deal_value'),
-                    'total_expected' => (float) $rows->sum('expected_value'),
-                    'leads'          => $rows,
+                    'total_count'    => $totalCount,
+                    'total_deal'     => $totalDeal,
+                    'total_expected' => $totalExpected,
+                    'page'           => $page,
+                    'per_page'       => $perPage,
+                    'has_more'       => $hasMore,
+                    'leads'          => $paginatedRows,
                 ],
             ]);
         }
@@ -1622,10 +1815,14 @@ class DashboardController extends Controller
 
         if ($type === 'nst_ho') {
             $title = 'NST - HO';
-            $isCompanyAdminOrCbo = ($currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo())) && !$request->filled('user_id');
-            $subtitle = $isCompanyAdminOrCbo
-                ? 'Default Branch (HO) • Excl. Channel Partner'
-                : 'Default Branch (HO) • Hot Prospects';
+            $isCompanyAdminOrCboUnfiltered = $isCompanyAdminOrCbo && !$request->filled('user_id');
+            if ($isCompanyAdminOrCboUnfiltered) {
+                $subtitle = 'Default Branch (HO) • Excl. Channel Partner';
+            } elseif ($userRoleType === 'tl') {
+                $subtitle = 'Team Data • Default Branch (HO)';
+            } else {
+                $subtitle = 'Your Data • Default Branch (HO)';
+            }
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
             $catId = $channelPartnerCategory?->id;
@@ -1676,7 +1873,7 @@ class DashboardController extends Controller
                 $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
             }
 
-            if ($isCompanyAdminOrCbo) {
+            if ($isCompanyAdminOrCboUnfiltered) {
                 $query->where(function ($q) use ($cpProductIds) {
                     if (!empty($cpProductIds)) {
                         $q->whereNotIn('product_id', $cpProductIds);
@@ -1694,7 +1891,13 @@ class DashboardController extends Controller
 
         } elseif ($type === 'non_coco') {
             $title = 'Channel Partner - NON COCO Model';
-            $subtitle = 'NON COCO Hot Products';
+            if ($isCompanyAdminOrCbo) {
+                $subtitle = 'NON COCO Hot Products';
+            } elseif ($userRoleType === 'tl') {
+                $subtitle = 'Team Data • NON COCO';
+            } else {
+                $subtitle = 'Your Data • NON COCO';
+            }
             $branchType = 'NON COCO';
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
@@ -1721,7 +1924,13 @@ class DashboardController extends Controller
 
         } elseif ($type === 'coco') {
             $title = 'Channel Partner - COCO Model';
-            $subtitle = 'COCO Hot Products';
+            if ($isCompanyAdminOrCbo) {
+                $subtitle = 'COCO Hot Products';
+            } elseif ($userRoleType === 'tl') {
+                $subtitle = 'Team Data • COCO';
+            } else {
+                $subtitle = 'Your Data • COCO';
+            }
             $branchType = 'COCO';
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
@@ -1762,9 +1971,15 @@ class DashboardController extends Controller
                 return response()->json(['success' => false, 'message' => 'Branch not found.'], 404);
             }
 
-            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
-            if ($visibleBranchIds->isNotEmpty() && !$visibleBranchIds->contains($branchId)) {
-                return response()->json(['success' => false, 'message' => 'Unauthorized branch access.'], 403);
+            if (!$canViewActiveBranches) {
+                $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+                $myBranchIds = method_exists($currentUser, 'getMyBranchIds') ? $currentUser->getMyBranchIds() : [];
+                $isAllowed = ($visibleBranchIds->isNotEmpty() && $visibleBranchIds->contains($branchId))
+                    || in_array($branchId, $myBranchIds, true)
+                    || (int)$currentUser->branch_id === (int)$branchId;
+                if (!$isAllowed) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized branch access.'], 403);
+                }
             }
 
             $title = $branch->name;
@@ -1795,6 +2010,33 @@ class DashboardController extends Controller
             ];
         });
 
+        // Search filter
+        if ($request->filled('search')) {
+            $s = strtolower(trim((string)$request->search));
+            $rows = $rows->filter(function ($r) use ($s) {
+                return str_contains(strtolower($r['company_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['customer_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['executive_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['status'] ?? ''), $s);
+            })->values();
+        }
+
+        $totalCount = $rows->count();
+        $totalDeal = (float) $rows->sum('deal_value');
+        $totalExpected = (float) $rows->sum('expected_value');
+
+        // Pagination support
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = (int) $request->input('per_page', 0);
+        if ($perPage > 0) {
+            $paginatedRows = $rows->forPage($page, $perPage)->values();
+            $hasMore = ($page * $perPage) < $totalCount;
+        } else {
+            $paginatedRows = $rows;
+            $hasMore = false;
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Branch hot leads fetched.',
@@ -1807,10 +2049,13 @@ class DashboardController extends Controller
                     'subtitle'    => $subtitle,
                 ],
                 'period'         => now()->format('F Y'),
-                'total_count'    => $rows->count(),
-                'total_deal'     => (float) $rows->sum('deal_value'),
-                'total_expected' => (float) $rows->sum('expected_value'),
-                'leads'          => $rows,
+                'total_count'    => $totalCount,
+                'total_deal'     => $totalDeal,
+                'total_expected' => $totalExpected,
+                'page'           => $page,
+                'per_page'       => $perPage,
+                'has_more'       => $hasMore,
+                'leads'          => $paginatedRows,
             ],
         ]);
     }
