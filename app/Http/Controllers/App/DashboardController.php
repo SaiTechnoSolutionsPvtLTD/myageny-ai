@@ -674,8 +674,8 @@ class DashboardController extends Controller
             ->whereYear('closure_date', now()->year)
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId)        $lq->where('branch_id', $branchId);
-                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
+                if ($branchId) $lq->where('branch_id', $branchId);
+                if ($request->filled('user_id')) $lq->where('assigned_to', $request->user_id);
             });
         $cpMetrics = $this->buildChannelPartnerHotMetrics($currentMonthHotProductsQuery, $request);
         $cstMetrics = $this->buildCstProspectMetrics($request);
@@ -714,6 +714,28 @@ class DashboardController extends Controller
             $userTotalProspects += (int) ($cstMetrics['count'] ?? 0);
             $userTotalDealValue += (float) ($cstMetrics['deal_value'] ?? 0);
             $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
+        }
+
+        // For Company Admin / CBO, include NST prospects from other non-default active branches
+        $isCompanyAdminOrCboUnfiltered = ($authUser->isSuperAdmin() || $authUser->isSystemAdmin() || $authUser->isCompanyAdminRole() || $authUser->isCbo()) && !$request->filled('user_id');
+        if ($isCompanyAdminOrCboUnfiltered) {
+            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            $cpProductIds = [];
+            $channelPartnerCat = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            if ($channelPartnerCat) {
+                $cpProductIds = Product::where('product_category_id', $channelPartnerCat->id)->pluck('id')->toArray();
+            }
+
+            $otherBranchesNstQuery = (clone $currentMonthHotProductsQuery)
+                ->whereHas('lead', fn($lq) => $lq->whereNotIn('branch_id', $defaultBranchIds))
+                ->where(function ($q) use ($cpProductIds) {
+                    if (!empty($cpProductIds)) $q->whereNotIn('product_id', $cpProductIds);
+                    $q->where('product_name', 'not like', '%COCO%')->where('product_name', 'not like', '%Channel Partner%');
+                });
+
+            $userTotalProspects += (int) (clone $otherBranchesNstQuery)->count();
+            $userTotalDealValue += (float) (clone $otherBranchesNstQuery)->sum('total_price');
+            $userTotalExpectedCollection += (float) (clone $otherBranchesNstQuery)->sum('expected_value');
         }
 
         // ── Day Sales Tracker (Today Converted Products & Collections) ──
@@ -1210,25 +1232,19 @@ class DashboardController extends Controller
             $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
         }
 
-        // NST - HO Hot query: EXCLUDE Channel Partner products ONLY for Company Admin / CBO (unfiltered).
-        // For Sales TL, Branch Admin, Branch Manager, Sales Executive (or when scoped to a user),
-        // NST - HO represents all of their Default Branch (HO) hot prospects, including Channel Partner.
-        $currentUser = $request?->user() ?: auth()->user();
-        $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo()) && !$request->filled('user_id');
+        $vis = $this->resolveForecastingVisibility($currentUser);
+        $shouldExcludeCpFromHo = ($isCompanyAdminOrCbo || ($vis['hasCocoBranch'] ?? false)) && !$request?->filled('user_id');
 
-        $nstHoHotQuery = clone $currentMonthHotProductsQuery;
-        if ($isCompanyAdminOrCbo) {
+        $nstHoHotQuery = (clone $currentMonthHotProductsQuery)->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+            $lq->whereIn('branch_id', $defaultBranchIds);
+        });
+        if ($shouldExcludeCpFromHo) {
             $nstHoHotQuery->where(function ($q) use ($cpProductIds) {
                 if (!empty($cpProductIds)) {
                     $q->whereNotIn('product_id', $cpProductIds);
                 }
                 $q->where('product_name', 'not like', '%COCO%')
                   ->where('product_name', 'not like', '%Channel Partner%');
-            });
-        }
-        if (!empty($defaultBranchIds)) {
-            $nstHoHotQuery->whereHas('lead', function ($lq) use ($defaultBranchIds) {
-                $lq->whereIn('branch_id', $defaultBranchIds);
             });
         }
         $nstHoHotCount = (clone $nstHoHotQuery)->count();
@@ -1336,7 +1352,8 @@ class DashboardController extends Controller
                 ->where('assigned_to', $authUser->id)
                 ->exists();
 
-            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
+            $isMappedToDefaultBranch = in_array((int)$defaultBranchId, array_map('intval', $userBranchIds), true) || ((int)($authUser->branch_id ?? 0) === (int)$defaultBranchId);
+            $hasDefaultBranch = $isMappedToDefaultBranch || $hasHoMappedUsers || $hasOwnHoLeads;
             $canViewActiveBranches = false;
             $canViewCst = true;
         } elseif ($isBranchAdmin) {
@@ -1492,7 +1509,7 @@ class DashboardController extends Controller
      */
     public function getCstProspectItems(?Request $request = null): Collection
     {
-        $currentUser = auth('sanctum')->user() ?: ($request?->user() ?: auth()->user());
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
         $cmStart = now()->startOfMonth();
         $cmEnd   = now()->endOfMonth();
 
@@ -2050,12 +2067,6 @@ class DashboardController extends Controller
                     }
                     $q->where('product_name', 'not like', '%COCO%')
                       ->where('product_name', 'not like', '%Channel Partner%');
-                });
-            }
-
-            if (!empty($defaultBranchIds)) {
-                $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
-                    $lq->whereIn('branch_id', $defaultBranchIds);
                 });
             }
 

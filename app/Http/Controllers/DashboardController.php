@@ -106,11 +106,8 @@ class DashboardController extends Controller
                     ->exists();
             }
 
-            $hasOwnHoLeads = Lead::where('branch_id', $defaultBranchId)
-                ->where('assigned_to', $user->id)
-                ->exists();
-
-            $hasDefaultBranch = $hasHoMappedUsers || $hasOwnHoLeads;
+            $isMappedToDefaultBranch = in_array((int)$defaultBranchId, array_map('intval', $userBranchIds), true) || ((int)($user->branch_id ?? 0) === (int)$defaultBranchId);
+            $hasDefaultBranch = $isMappedToDefaultBranch || $hasHoMappedUsers || $hasOwnHoLeads;
         } elseif ($isBranchAdmin) {
             // Branch Admin: check their branch(es)
             $branchIds = $userBranchIds;
