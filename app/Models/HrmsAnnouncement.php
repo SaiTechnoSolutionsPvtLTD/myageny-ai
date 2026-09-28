@@ -34,6 +34,12 @@ class HrmsAnnouncement extends Model
         'updated_by',
     ];
 
+    protected $casts = [
+        'announcement_date' => 'date',
+        'is_active' => 'boolean',
+        'branch_ids' => 'array',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -106,6 +112,7 @@ class HrmsAnnouncement extends Model
 
         return $query->where(function ($bQuery) use ($userBranchIds) {
             $bQuery->whereNull('branch_ids')
+                   ->orWhere('branch_ids', '')
                    ->orWhere('branch_ids', '[]')
                    ->orWhereJsonLength('branch_ids', 0);
 

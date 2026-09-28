@@ -22,9 +22,9 @@ class AnnouncementApiController extends Controller
             $user = auth()->user();
             $canManage = $this->canManageAnnouncements($user);
             $hasBranchCol = HrmsAnnouncement::hasBranchIdsColumn();
+            $companyId = $user?->company_id;
 
             // Fetch active branches for company (used for formatting & filter options)
-            $companyId = $user?->company_id;
             $branches = Branch::query()
                 ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
                 ->where('is_active', true)
@@ -33,28 +33,44 @@ class AnnouncementApiController extends Controller
 
             $branchesById = $branches->keyBy('id');
 
-            // Scoped base query
+            // Scoped base query matching web controller
             $scopedQuery = HrmsAnnouncement::query()
-                ->with(['creator:id,name', 'updater:id,name'])
                 ->visibleForCompany($companyId);
 
             if (! $canManage) {
                 $scopedQuery->visibleForUser($user)->active();
             }
 
-            // Summary Counts (calculated before search/priority filters)
-            $allBranchesSql = $hasBranchCol
-                ? "COUNT(CASE WHEN branch_ids IS NULL OR branch_ids = '[]' THEN 1 END)"
-                : "COUNT(*)";
+            // Summary Counts - calculated safely using Eloquent and isolated from endpoint failure
+            $counts = [
+                'total'         => 0,
+                'high_priority' => 0,
+                'active'        => 0,
+                'all_branches'  => 0,
+            ];
 
-            $countsRaw = (clone $scopedQuery)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    COUNT(CASE WHEN priority = 'high' THEN 1 END) as high_priority,
-                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as active,
-                    {$allBranchesSql} as all_branches
-                ")
-                ->first();
+            try {
+                $counts['total'] = (int) (clone $scopedQuery)->count();
+                $counts['high_priority'] = (int) (clone $scopedQuery)->where('priority', 'high')->count();
+                $counts['active'] = (int) (clone $scopedQuery)->where('is_active', true)->count();
+
+                if (! $hasBranchCol) {
+                    $counts['all_branches'] = $counts['total'];
+                } else {
+                    $counts['all_branches'] = (int) (clone $scopedQuery)->where(function ($q) {
+                        $q->whereNull('branch_ids')
+                          ->orWhere('branch_ids', '')
+                          ->orWhere('branch_ids', '[]');
+                    })->count();
+                }
+            } catch (\Throwable $countErr) {
+                Log::warning('[HrmsAnnouncementApi] counts calculation warning: ' . $countErr->getMessage());
+                try {
+                    $counts['total'] = (int) (clone $scopedQuery)->count();
+                } catch (\Throwable) {
+                    // Ignore, defaults to 0
+                }
+            }
 
             $query = clone $scopedQuery;
 
@@ -86,8 +102,8 @@ class AnnouncementApiController extends Controller
                 $bId = (int) $request->branch_id;
                 $query->where(function ($bQuery) use ($bId) {
                     $bQuery->whereNull('branch_ids')
+                           ->orWhere('branch_ids', '')
                            ->orWhere('branch_ids', '[]')
-                           ->orWhereJsonLength('branch_ids', 0)
                            ->orWhereJsonContains('branch_ids', $bId)
                            ->orWhereJsonContains('branch_ids', (string) $bId);
                 });
@@ -103,26 +119,29 @@ class AnnouncementApiController extends Controller
 
             $perPage = min(max((int) ($request->per_page ?? 15), 5), 100);
             $announcements = $query
+                ->with(['creator:id,name', 'updater:id,name'])
                 ->orderByDesc('announcement_date')
                 ->latest('id')
                 ->paginate($perPage);
 
+            $formattedAnnouncements = collect($announcements->items())
+                ->map(fn ($a) => $this->formatAnnouncement($a, $branchesById))
+                ->values()
+                ->all();
+
+            $formattedBranches = $branches->values()->map(fn ($b) => [
+                'id'   => (int) $b->id,
+                'name' => (string) $b->name,
+                'code' => $b->code,
+            ])->all();
+
             return response()->json([
                 'success' => true,
                 'data'    => [
-                    'announcements' => $announcements->map(fn ($a) => $this->formatAnnouncement($a, $branchesById)),
-                    'counts'        => [
-                        'total'         => (int) ($countsRaw->total ?? 0),
-                        'high_priority' => (int) ($countsRaw->high_priority ?? 0),
-                        'active'        => (int) ($countsRaw->active ?? 0),
-                        'all_branches'  => (int) ($countsRaw->all_branches ?? 0),
-                    ],
-                    'can_manage'    => $canManage,
-                    'branches'      => $branches->map(fn ($b) => [
-                        'id'   => $b->id,
-                        'name' => $b->name,
-                        'code' => $b->code,
-                    ]),
+                    'announcements' => $formattedAnnouncements,
+                    'counts'        => $counts,
+                    'can_manage'    => (bool) $canManage,
+                    'branches'      => $formattedBranches,
                     'pagination'    => [
                         'current_page' => $announcements->currentPage(),
                         'last_page'    => $announcements->lastPage(),
@@ -137,6 +156,7 @@ class AnnouncementApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to load announcements at the moment. Please try again later.',
+                'debug'   => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
@@ -402,15 +422,25 @@ class AnnouncementApiController extends Controller
 
         // Compute branch labels in memory without per-row DB queries
         $hasBranchCol = HrmsAnnouncement::hasBranchIdsColumn();
-        $branchIds = $hasBranchCol ? (array) ($a->branch_ids ?? []) : [];
+        $rawBranchIds = $hasBranchCol ? $a->branch_ids : [];
+
+        $branchIds = [];
+        if (is_array($rawBranchIds)) {
+            $branchIds = $rawBranchIds;
+        } elseif (is_string($rawBranchIds) && !empty($rawBranchIds)) {
+            $decoded = json_decode($rawBranchIds, true);
+            $branchIds = is_array($decoded) ? $decoded : [];
+        }
+
         $targetBranchesLabel = 'All Branches';
         $targetBranchNames = [];
 
         if (!empty($branchIds)) {
             if ($branchesById !== null) {
                 foreach ($branchIds as $bId) {
-                    if (isset($branchesById[$bId])) {
-                        $targetBranchNames[] = $branchesById[$bId]->name;
+                    $intBId = (int) $bId;
+                    if (isset($branchesById[$intBId])) {
+                        $targetBranchNames[] = $branchesById[$intBId]->name;
                     }
                 }
             } else {
@@ -422,24 +452,24 @@ class AnnouncementApiController extends Controller
         }
 
         return [
-            'id'                     => $a->id,
-            'company_id'             => $a->company_id,
-            'title'                  => $a->title,
-            'message'                => $a->message,
-            'priority'               => strtolower((string) ($a->priority ?: 'medium')),
-            'announcement_date'      => $date?->toDateString() ?: now()->toDateString(),
+            'id'                          => (int) $a->id,
+            'company_id'                  => $a->company_id ? (int) $a->company_id : null,
+            'title'                       => (string) ($a->title ?? ''),
+            'message'                     => (string) ($a->message ?? ''),
+            'priority'                    => strtolower((string) ($a->priority ?: 'medium')),
+            'announcement_date'           => $date?->toDateString() ?: now()->toDateString(),
             'announcement_date_formatted' => $date?->format('d M Y') ?: now()->format('d M Y'),
-            'is_active'              => (bool) $a->is_active,
-            'target_type'            => empty($branchIds) ? 'all' : 'specific',
-            'branch_ids'             => array_values(array_map('intval', $branchIds)),
-            'target_branches_label'  => $targetBranchesLabel,
-            'target_branch_names'    => $targetBranchNames,
-            'created_by'             => $a->created_by,
-            'created_by_name'        => $a->creator?->name,
-            'updated_by'             => $a->updated_by,
-            'updated_by_name'        => $a->updater?->name,
-            'created_at'             => $a->created_at?->toIso8601String(),
-            'updated_at'             => $a->updated_at?->toIso8601String(),
+            'is_active'                   => (bool) $a->is_active,
+            'target_type'                 => empty($branchIds) ? 'all' : 'specific',
+            'branch_ids'                  => array_values(array_map('intval', $branchIds)),
+            'target_branches_label'       => $targetBranchesLabel,
+            'target_branch_names'         => $targetBranchNames,
+            'created_by'                  => $a->created_by ? (int) $a->created_by : null,
+            'created_by_name'             => $a->creator?->name,
+            'updated_by'                  => $a->updated_by ? (int) $a->updated_by : null,
+            'updated_by_name'             => $a->updater?->name,
+            'created_at'                  => $a->created_at?->toIso8601String(),
+            'updated_at'                  => $a->updated_at?->toIso8601String(),
         ];
     }
 
