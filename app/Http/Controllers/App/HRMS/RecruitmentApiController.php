@@ -39,6 +39,26 @@ class RecruitmentApiController extends Controller
 {
     private const RESUME_DISK = 'public';
 
+    /**
+     * Determine if the user is authorized to view recruitment candidates.
+     * Allowed only for company_admin, cbo, and hr (including super_admin / system_admin).
+     */
+    protected function canViewCandidates(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->isCbo()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin();
+    }
+
     // ── GET /api/mobile/hrms/recruitment/meta ────────────────────────────────
     // Static, cacheable dropdown data for the mobile Add Call Update / Schedule
     // Interview / Decision forms — mirrors the $statuses/$callTypes/
@@ -46,15 +66,7 @@ class RecruitmentApiController extends Controller
     public function meta(Request $request): JsonResponse
     {
         $user = auth()->user() ?? $request->user();
-        $isCompanyAdmin = (bool) ($user && (
-            $user->isSuperAdmin()
-            || $user->isSystemAdmin()
-            || $user->isCompanyAdmin()
-            || $user->isCbo()
-            || $user->belongsToHrDepartment()
-            || $user->hasHrLikeRole()
-            || $user->isHrOrAdmin()
-        ));
+        $isCompanyAdmin = $this->canViewCandidates($user);
 
         $interviewersQuery = User::query()
             ->with(['roles'])
@@ -94,6 +106,14 @@ class RecruitmentApiController extends Controller
     // ── GET /api/mobile/hrms/recruitment/call-updates ────────────────────────
     public function callUpdates(Request $request): JsonResponse
     {
+        $user = auth()->user() ?? $request->user();
+        if (! $this->canViewCandidates($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only company_admin, cbo, and hr roles are permitted to view call updates.',
+            ], 403);
+        }
+
         $request->validate([
             'per_page'   => ['nullable', 'integer', 'min:1', 'max:50'],
             'page'       => ['nullable', 'integer', 'min:1'],
@@ -279,6 +299,14 @@ class RecruitmentApiController extends Controller
     // ── GET /api/mobile/hrms/recruitment/reminders ───────────────────────────
     public function reminders(Request $request): JsonResponse
     {
+        $user = auth()->user() ?? $request->user();
+        if (! $this->canViewCandidates($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only company_admin, cbo, and hr roles are permitted to view reminders.',
+            ], 403);
+        }
+
         $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
             'page'     => ['nullable', 'integer', 'min:1'],
@@ -567,12 +595,19 @@ class RecruitmentApiController extends Controller
     // instead of ever fetching the whole candidate table at once.
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! $this->canViewCandidates($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only company_admin, cbo, and hr roles are permitted to view candidates.',
+            ], 403);
+        }
+
         $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
             'page'     => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $user     = $request->user();
         $employee = $this->currentEmployee($user);
 
         $query = RecruitmentCandidate::query()
@@ -666,6 +701,14 @@ class RecruitmentApiController extends Controller
     // actually opened, per the "fetch complete details on demand" requirement.
     public function show(Request $request, RecruitmentCandidate $recruitment): JsonResponse
     {
+        $user = $request->user();
+        if (! $this->canViewCandidates($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only company_admin, cbo, and hr roles are permitted to view candidate details.',
+            ], 403);
+        }
+
         $recruitment->load(['callUpdates.user', 'interviews.interviewer', 'creator', 'updater', 'latestInterview']);
 
         return response()->json([

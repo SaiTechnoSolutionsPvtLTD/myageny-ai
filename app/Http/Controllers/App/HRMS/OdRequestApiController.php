@@ -813,14 +813,23 @@ class OdRequestApiController extends Controller
     }
 
     /**
-     * Duplicate of web OdRequestController::markAttendanceRecords() (that
-     * method is private, and web files must never be touched) — marks each
-     * date in the OD range as 'od' (Present) in Daily Attendance, exactly
-     * the same fields/defaults web uses.
+     * Marks Daily Attendance for approved OD requests.
+     *
+     * BUSINESS RULE:
+     * - An employee's actual attendance check-in / check-out times must NEVER be
+     *   overwritten or modified when an OD request is approved.
+     * - If the employee already checked in (e.g. at 09:30 AM), their login_time,
+     *   logout_time (if checked out), location, coordinates, and photos are preserved.
+     * - If the employee is only checked in (not yet checked out), logout_time remains
+     *   null so they can check out normally at the end of their shift.
+     * - The approved OD details are noted in remarks and stored in od_requests.
+     * - If no attendance record exists for the date (full-day OD or employee was away
+     *   from office all day), a DailyAttendance record with status 'od' is created
+     *   so the employee is credited with attendance (present) rather than marked absent.
      */
     private function markAttendanceRecords(OdRequest $odRequest): void
     {
-        $employee = $odRequest->employee;
+        $employee = $odRequest->employee ?: $this->resolveEmployee($odRequest->user);
         if (! $employee) {
             return;
         }
@@ -828,8 +837,8 @@ class OdRequestApiController extends Controller
         $current = Carbon::parse($odRequest->from_date);
         $end     = Carbon::parse($odRequest->to_date);
 
-        $loginTime  = $odRequest->gate_out_time ? Carbon::parse($odRequest->gate_out_time)->format('H:i:s') : '09:30:00';
-        $logoutTime = $odRequest->gate_in_time ? Carbon::parse($odRequest->gate_in_time)->format('H:i:s') : '18:30:00';
+        $odStartTime = $odRequest->gate_out_time ? Carbon::parse($odRequest->gate_out_time)->format('H:i:s') : '09:30:00';
+        $odEndTime   = $odRequest->gate_in_time ? Carbon::parse($odRequest->gate_in_time)->format('H:i:s') : '18:30:00';
 
         $workingHours = '08:00:00';
         if ($odRequest->gate_out_time && $odRequest->gate_in_time) {
@@ -853,16 +862,49 @@ class OdRequestApiController extends Controller
                 ->first();
 
             if ($existing) {
-                $existing->update([
-                    'attendance_status'     => 'od',
-                    'login_location'        => 'On Duty (OD)',
-                    'logout_location'       => 'On Duty (OD)',
-                    'login_time'            => $loginTime,
-                    'logout_time'           => $logoutTime,
-                    'overall_working_hours' => $workingHours,
-                    'remarks'               => $odRequest->reason,
-                ]);
+                // Check if employee already has an actual check-in punch
+                $hasActualCheckin = filled($existing->login_time)
+                    && $existing->login_time !== '00:00:00'
+                    && $existing->login_location !== 'On Duty (OD)';
+
+                if ($hasActualCheckin) {
+                    // Employee already checked in at the office!
+                    // DO NOT overwrite login_time or logout_time.
+                    // DO NOT overwrite login_location or logout_location.
+                    // DO NOT overwrite overall_working_hours or attendance photos.
+                    $updateData = [];
+
+                    $odNote = "OD Approved: {$odStartTime} - {$odEndTime}" . ($odRequest->reason ? " ({$odRequest->reason})" : "");
+                    if (empty($existing->remarks)) {
+                        $updateData['remarks'] = $odNote;
+                    } elseif (! str_contains($existing->remarks, $odNote)) {
+                        $updateData['remarks'] = $existing->remarks . ' | ' . $odNote;
+                    }
+
+                    // If existing status was marked 'absent', flip to 'present'
+                    if ($existing->attendance_status === 'absent') {
+                        $updateData['attendance_status'] = 'present';
+                    }
+
+                    if (! empty($updateData)) {
+                        $existing->update($updateData);
+                    }
+                } else {
+                    // Employee had an empty attendance record or was marked absent with no real punches.
+                    // Mark as 'od' so they receive full attendance credit.
+                    $existing->update([
+                        'attendance_status'     => 'od',
+                        'login_location'        => 'On Duty (OD)',
+                        'logout_location'       => 'On Duty (OD)',
+                        'login_time'            => $odStartTime,
+                        'logout_time'           => $odEndTime,
+                        'overall_working_hours' => $workingHours,
+                        'remarks'               => $odRequest->reason,
+                    ]);
+                }
             } else {
+                // No attendance record exists for this date (e.g. Full Day OD).
+                // Create a record with status 'od' so the employee is marked Present (on OD) and not Absent.
                 DailyAttendance::create([
                     'company_id'            => $odRequest->company_id ?? $employee->company_id,
                     'employee_id'           => $employee->id,
@@ -872,11 +914,11 @@ class OdRequestApiController extends Controller
                     'login_location'        => 'On Duty (OD)',
                     'login_latitude'        => 0,
                     'login_longitude'       => 0,
-                    'login_time'            => $loginTime,
+                    'login_time'            => $odStartTime,
                     'logout_location'       => 'On Duty (OD)',
                     'logout_latitude'       => 0,
                     'logout_longitude'      => 0,
-                    'logout_time'           => $logoutTime,
+                    'logout_time'           => $odEndTime,
                     'overall_working_hours' => $workingHours,
                     'attendance_date'       => $dateStr,
                     'attendance_status'     => 'od',
@@ -900,22 +942,53 @@ class OdRequestApiController extends Controller
             ?: ($r->user?->roles?->first()?->name
             ?: ($employee?->role?->name ?? 'Employee'));
 
-        $data = [
-            'id'            => $r->id,
-            'user_id'       => $r->user_id,
-            'user_name'     => $userName,
-            'employee_name' => $employee?->name ?? $userName,
-            'employee_code' => $employee?->employee_id ?? '',
-            'user_role'     => $userRole,
-            'user_avatar'   => $r->user?->profile_photo_path ?? null,
-            'is_owner'      => $currentUser ? (int) $r->user_id === (int) $currentUser->id : false,
-            'from_date'          => $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date,
-            'to_date'            => $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date,
-            'gate_out_time'      => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,
-            'gate_in_time'       => $r->gate_in_time ? substr((string) $r->gate_in_time, 0, 5) : null,
-            'has_gate_out'       => !empty($r->gate_out_time),
-            'has_gate_in'        => !empty($r->gate_in_time),
-            'is_completed'       => !empty($r->gate_in_time),
+            $fromDateStr = $r->from_date instanceof Carbon ? $r->from_date->format('Y-m-d') : $r->from_date;
+            $toDateStr   = $r->to_date instanceof Carbon ? $r->to_date->format('Y-m-d') : $r->to_date;
+
+            $isApproved = $r->status === OdRequest::STATUS_APPROVED;
+            $now = now();
+            $isCompleted = false;
+            $timeStatus = 'pending';
+
+            if ($isApproved) {
+                $fromDateTime = Carbon::parse($fromDateStr . ' ' . ($r->gate_out_time ?: '09:30:00'));
+                $toDateTime   = Carbon::parse($toDateStr . ' ' . ($r->gate_in_time ?: '18:30:00'));
+
+                if ($now->lt($fromDateTime)) {
+                    $timeStatus = 'upcoming';
+                    $isCompleted = false;
+                } elseif ($now->lte($toDateTime)) {
+                    $timeStatus = 'active';
+                    $isCompleted = false;
+                } else {
+                    $timeStatus = 'completed';
+                    $isCompleted = true;
+                }
+            } elseif ($r->status === OdRequest::STATUS_REJECTED) {
+                $timeStatus = 'rejected';
+                $isCompleted = false;
+            } else {
+                $timeStatus = 'pending';
+                $isCompleted = false;
+            }
+
+            $data = [
+                'id'            => $r->id,
+                'user_id'       => $r->user_id,
+                'user_name'     => $userName,
+                'employee_name' => $employee?->name ?? $userName,
+                'employee_code' => $employee?->employee_id ?? '',
+                'user_role'     => $userRole,
+                'user_avatar'   => $r->user?->profile_photo_path ?? null,
+                'is_owner'      => $currentUser ? (int) $r->user_id === (int) $currentUser->id : false,
+                'from_date'          => $fromDateStr,
+                'to_date'            => $toDateStr,
+                'gate_out_time'      => $r->gate_out_time ? substr((string) $r->gate_out_time, 0, 5) : null,
+                'gate_in_time'       => $r->gate_in_time ? substr((string) $r->gate_in_time, 0, 5) : null,
+                'has_gate_out'       => !empty($r->gate_out_time),
+                'has_gate_in'        => !empty($r->gate_in_time),
+                'is_completed'       => $isCompleted,
+                'time_status'        => $timeStatus,
             'formatted_gate_out' => $r->gate_out_time ? Carbon::parse($r->gate_out_time)->format('h:i A') : null,
             'formatted_gate_in'  => $r->gate_in_time ? Carbon::parse($r->gate_in_time)->format('h:i A') : null,
             'total_days'         => $r->total_days,

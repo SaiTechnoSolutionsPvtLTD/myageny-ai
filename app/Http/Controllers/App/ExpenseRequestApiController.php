@@ -280,7 +280,7 @@ class ExpenseRequestApiController extends Controller
                 'description'         => 'required|string|max:2000',
                 'attachment'          => 'nullable',
                 'attachments'         => 'nullable|array',
-                'attachments.*'       => 'file|mimes:pdf,jpg,jpeg,png,webp,doc,docx|max:5120',
+                'attachments.*'       => 'nullable|file|max:10240',
             ]);
 
             $uploadedPaths = [];
@@ -324,9 +324,14 @@ class ExpenseRequestApiController extends Controller
                 'current_step'             => $currentStep,
                 'current_approver_role_id' => $currentApproverRoleId,
                 'status'                   => 'pending',
+                'stage_history'            => [],
             ]);
 
-            $this->sendApproverNotification($expenseRequest);
+            try {
+                $this->sendApproverNotification($expenseRequest);
+            } catch (Throwable $notifErr) {
+                \Log::warning('Expense approver notification dispatch failed: ' . $notifErr->getMessage());
+            }
 
             $expenseRequest->load(['user.roles', 'user.branch', 'user.employee', 'category', 'approver', 'currentApproverRole']);
 
@@ -345,7 +350,7 @@ class ExpenseRequestApiController extends Controller
             report($e);
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to submit expense request. Please try again.',
+                'message' => 'Unable to submit the expense request at the moment. Please try again later.',
             ], 500);
         }
     }
@@ -559,7 +564,7 @@ class ExpenseRequestApiController extends Controller
             ->pluck('role_id')
             ->toArray();
 
-        if (empty($userRoleIds) && $user->relationLoaded('roles')) {
+        if (empty($userRoleIds)) {
             $userRoleIds = $user->roles->pluck('id')->toArray();
         }
 
@@ -901,19 +906,23 @@ class ExpenseRequestApiController extends Controller
         // In-app Notification Center row — database channel only (AppNotification
         // only adds a mail channel for MAIL_ENABLED_TYPES, which doesn't include
         // expense_request_* types), so this never duplicates the Mail::send below.
-        $this->notifications->notifyMany($approverUsers, 'hrms', 'expense_request_pending', [
-            'title' => "Expense Approval Request (Stage {$stepNumber})",
-            'message' => "{$applicantName} submitted an expense request of ₹" . number_format($amount, 2) . " for {$categoryName} — awaiting your approval.",
-            'detail' => $description,
-            'action_url' => $actionUrl,
-            'action_label' => 'Review Request',
-            'priority' => 'medium',
-            'request_type' => 'expense',
-            'request_id' => $expenseRequest->id,
-            'actor_name' => $applicantName,
-            'requester_name' => $applicantName,
-            'status' => 'pending',
-        ]);
+        try {
+            $this->notifications->notifyMany($approverUsers, 'hrms', 'expense_request_pending', [
+                'title' => "Expense Approval Request (Stage {$stepNumber})",
+                'message' => "{$applicantName} submitted an expense request of ₹" . number_format($amount, 2) . " for {$categoryName} — awaiting your approval.",
+                'detail' => $description,
+                'action_url' => $actionUrl,
+                'action_label' => 'Review Request',
+                'priority' => 'medium',
+                'request_type' => 'expense',
+                'request_id' => $expenseRequest->id,
+                'actor_name' => $applicantName,
+                'requester_name' => $applicantName,
+                'status' => 'pending',
+            ]);
+        } catch (Throwable $notifEx) {
+            \Log::warning('Expense in-app notification failed: ' . $notifEx->getMessage());
+        }
 
         $emails = $approverUsers->pluck('email')->filter()->toArray();
         if (empty($emails)) {

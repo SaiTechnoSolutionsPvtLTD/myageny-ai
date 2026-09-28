@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
 use App\Models\InternJoiningForm;
+use App\Models\OdRequest;
 use App\Models\PayrollSetting;
 use App\Models\User;
 use App\Services\DataVisibilityService;
@@ -373,6 +374,7 @@ class AttendanceApiController extends Controller
                 'branch_name'     => $e->branch_name !== '—' ? $e->branch_name : ($e->portalUser?->branch?->name ?? ''),
                 'department_id'   => $e->department_id,
                 'department_name' => $e->department?->name ?? '',
+                'portal_user_id'  => $e->portal_user_id,
             ]);
 
         $interns = $internQuery
@@ -389,6 +391,7 @@ class AttendanceApiController extends Controller
                 'branch_name'     => $i->branch_name !== '—' ? $i->branch_name : ($i->portalUser?->branch?->name ?? ''),
                 'department_id'   => $i->department_id,
                 'department_name' => $i->department?->name ?? '',
+                'portal_user_id'  => $i->portal_user_id,
             ]);
 
         return $employees->concat($interns)
@@ -622,8 +625,9 @@ class AttendanceApiController extends Controller
             ]);
         }
 
-        $accessibleEmployeeIds = $accessibleAttendees->where('attendee_type', 'employee')->pluck('id')->values();
-        $accessibleInternIds   = $accessibleAttendees->where('attendee_type', 'intern')->pluck('id')->values();
+        $accessibleEmployeeIds   = $accessibleAttendees->where('attendee_type', 'employee')->pluck('id')->values();
+        $accessibleInternIds     = $accessibleAttendees->where('attendee_type', 'intern')->pluck('id')->values();
+        $accessiblePortalUserIds = $accessibleAttendees->pluck('portal_user_id')->filter()->values();
 
         // ── Fetch present / leave records across the range (scoped to accessible) ──
         $attendanceCollection = DailyAttendance::query()
@@ -648,7 +652,44 @@ class AttendanceApiController extends Controller
             ->orderBy('login_time')
             ->get();
 
-        $attendanceRecords = $attendanceCollection->map(fn(DailyAttendance $a) => $this->formatRecord($a));
+        // ── Fetch approved OD requests across the range for accessible employees ──
+        $approvedOds = collect();
+        if ($accessibleEmployeeIds->isNotEmpty() || $accessiblePortalUserIds->isNotEmpty()) {
+            $approvedOds = OdRequest::query()
+                ->where('status', OdRequest::STATUS_APPROVED)
+                ->whereDate('from_date', '<=', $selectedToDate)
+                ->whereDate('to_date', '>=', $selectedFromDate)
+                ->where(function ($q) use ($accessibleEmployeeIds, $accessiblePortalUserIds) {
+                    if ($accessibleEmployeeIds->isNotEmpty()) {
+                        $q->whereIn('employee_id', $accessibleEmployeeIds);
+                    }
+                    if ($accessiblePortalUserIds->isNotEmpty()) {
+                        $q->orWhereIn('user_id', $accessiblePortalUserIds);
+                    }
+                })
+                ->get();
+        }
+
+        $findOdPeriods = function ($empId, $portalUserId, string $date) use ($approvedOds) {
+            return $approvedOds->filter(function (OdRequest $od) use ($empId, $portalUserId, $date) {
+                $matches = ($empId && (int) $od->employee_id === (int) $empId)
+                    || ($portalUserId && (int) $od->user_id === (int) $portalUserId);
+                if (! $matches) {
+                    return false;
+                }
+                $from = optional($od->from_date)->format('Y-m-d');
+                $to   = optional($od->to_date)->format('Y-m-d');
+                return $date >= $from && $date <= $to;
+            })->map(fn(OdRequest $od) => $this->mapOdPeriod($od))->values()->all();
+        };
+
+        $attendanceRecords = $attendanceCollection->map(function (DailyAttendance $a) use ($findOdPeriods) {
+            $date = optional($a->attendance_date)->format('Y-m-d');
+            $empId = $a->employee_id;
+            $portalUserId = $a->employee?->portal_user_id;
+            $odPeriods = $findOdPeriods($empId, $portalUserId, $date);
+            return $this->formatRecord($a, $odPeriods);
+        });
 
         // ── Build absent records — one per missing day per accessible attendee ──
         // Mirrors AttendanceController::buildAttendanceData() on the web side:
@@ -670,7 +711,7 @@ class AttendanceApiController extends Controller
             ->values();
 
         $absentRecords = $selectedDates
-            ->flatMap(function (string $date) use ($accessibleAttendees, $presentKeys) {
+            ->flatMap(function (string $date) use ($accessibleAttendees, $presentKeys, $findOdPeriods) {
                 return $accessibleAttendees
                     ->reject(function (array $attendee) use ($presentKeys, $date) {
                         return $presentKeys->contains(implode(':', [
@@ -679,7 +720,10 @@ class AttendanceApiController extends Controller
                             $date,
                         ]));
                     })
-                    ->map(fn(array $attendee) => $this->absentRecord($attendee, $date));
+                    ->map(function (array $attendee) use ($date, $findOdPeriods) {
+                        $odPeriods = $findOdPeriods($attendee['id'] ?? null, $attendee['portal_user_id'] ?? null, $date);
+                        return $this->absentRecord($attendee, $date, $odPeriods);
+                    });
             })
             ->values();
 
@@ -687,7 +731,7 @@ class AttendanceApiController extends Controller
         $stats = [
             'total_employees'  => $accessibleAttendees->count(),
             'present_count'    => $attendanceRecords->where('attendance_status', 'present')->count(),
-            'od_count'         => $attendanceRecords->where('attendance_status', 'od')->count(),
+            'od_count'         => $attendanceRecords->filter(fn($r) => $r['attendance_status'] === 'od' || !empty($r['od_periods']))->count(),
             'absent_count'     => $absentRecords->count(),
             'leave_count'      => $attendanceRecords->where('attendance_status', 'leave')->count(),
             'late_count'       => $attendanceRecords->where('login_timing', 'late')->count(),
@@ -700,7 +744,7 @@ class AttendanceApiController extends Controller
         // ── Merge & status filter ────────────────────────────────────────────
         $records = match ($statusFilter) {
             'present' => $attendanceRecords->where('attendance_status', 'present')->values(),
-            'od'      => $attendanceRecords->where('attendance_status', 'od')->values(),
+            'od'      => $attendanceRecords->filter(fn($r) => $r['attendance_status'] === 'od' || !empty($r['od_periods']))->values(),
             'absent'  => $absentRecords->values(),
             'leave'   => $attendanceRecords->where('attendance_status', 'leave')->values(),
             default   => $attendanceRecords->concat($absentRecords),
@@ -1278,7 +1322,24 @@ class AttendanceApiController extends Controller
 
     // ── Private formatters ───────────────────────────────────────────────────
 
-    private function formatRecord(DailyAttendance $a): array
+    private function mapOdPeriod(OdRequest $od): array
+    {
+        return [
+            'id'            => $od->id,
+            'from_date'     => optional($od->from_date)->format('Y-m-d'),
+            'to_date'       => optional($od->to_date)->format('Y-m-d'),
+            'gate_out_time' => $od->gate_out_time,
+            'gate_in_time'  => $od->gate_in_time,
+            'time_label'    => ($od->gate_out_time && $od->gate_in_time)
+                ? (Carbon::parse($od->gate_out_time)->format('h:i A') . ' – ' . Carbon::parse($od->gate_in_time)->format('h:i A'))
+                : ($od->gate_out_time ? 'From ' . Carbon::parse($od->gate_out_time)->format('h:i A') : 'Full Day OD'),
+            'reason'        => $od->reason,
+            'status'        => $od->status,
+            'total_days'    => $od->total_days,
+        ];
+    }
+
+    private function formatRecord(DailyAttendance $a, array $odPeriods = []): array
     {
         $isIntern    = $a->attendee_type === 'intern';
         $employeeId  = $isIntern
@@ -1300,6 +1361,28 @@ class AttendanceApiController extends Controller
         $departmentName = $isIntern
             ? ($a->intern?->department?->name ?? '')
             : ($a->employee?->department?->name ?? '');
+
+        if (empty($odPeriods) && $a->attendance_date) {
+            $dateStr = optional($a->attendance_date)->format('Y-m-d');
+            $empDbId = $a->employee_id;
+            $portalUserId = $a->employee?->portal_user_id;
+
+            $ods = OdRequest::query()
+                ->where('status', OdRequest::STATUS_APPROVED)
+                ->whereDate('from_date', '<=', $dateStr)
+                ->whereDate('to_date', '>=', $dateStr)
+                ->where(function ($q) use ($empDbId, $portalUserId) {
+                    if ($empDbId) {
+                        $q->where('employee_id', $empDbId);
+                    }
+                    if ($portalUserId) {
+                        $q->orWhere('user_id', $portalUserId);
+                    }
+                })
+                ->get();
+
+            $odPeriods = $ods->map(fn(OdRequest $od) => $this->mapOdPeriod($od))->values()->all();
+        }
 
         return [
             'id'                    => $a->id,
@@ -1338,11 +1421,14 @@ class AttendanceApiController extends Controller
             'checkout_location_status' => $a->logout_time
                 ? ($a->is_outside_office_checkout ? 'outside_office' : 'inside_office')
                 : null,
+            'od_periods'            => $odPeriods,
+            'has_od'                => !empty($odPeriods),
+            'od_summary'            => !empty($odPeriods) ? implode(', ', array_column($odPeriods, 'time_label')) : null,
             'is_derived'            => false,
         ];
     }
 
-    private function absentRecord(array $attendee, string $date): array
+    private function absentRecord(array $attendee, string $date, array $odPeriods = []): array
     {
         return [
             'id'                    => null,
@@ -1376,6 +1462,9 @@ class AttendanceApiController extends Controller
             'outside_office_checkout_reason' => null,
             'checkin_location_status'  => null,
             'checkout_location_status' => null,
+            'od_periods'            => $odPeriods,
+            'has_od'                => !empty($odPeriods),
+            'od_summary'            => !empty($odPeriods) ? implode(', ', array_column($odPeriods, 'time_label')) : null,
             'is_derived'            => true,
         ];
     }

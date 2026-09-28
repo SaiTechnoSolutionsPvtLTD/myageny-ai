@@ -1332,6 +1332,36 @@ class DashboardApiController extends Controller
             ?: ($od->user?->roles?->first()?->name
             ?: ($employee?->role?->name ?? 'Employee'));
 
+        $isApproved = $od->status === OdRequest::STATUS_APPROVED;
+        $now = now();
+        $isCompleted = false;
+        $timeStatus = 'pending';
+
+        $fromDateStr = $od->from_date instanceof Carbon ? $od->from_date->format('Y-m-d') : $od->from_date;
+        $toDateStr   = $od->to_date instanceof Carbon ? $od->to_date->format('Y-m-d') : $od->to_date;
+
+        if ($isApproved) {
+            $fromDateTime = Carbon::parse($fromDateStr . ' ' . ($od->gate_out_time ?: '09:30:00'));
+            $toDateTime   = Carbon::parse($toDateStr . ' ' . ($od->gate_in_time ?: '18:30:00'));
+
+            if ($now->lt($fromDateTime)) {
+                $timeStatus = 'upcoming';
+                $isCompleted = false;
+            } elseif ($now->lte($toDateTime)) {
+                $timeStatus = 'active';
+                $isCompleted = false;
+            } else {
+                $timeStatus = 'completed';
+                $isCompleted = true;
+            }
+        } elseif ($od->status === OdRequest::STATUS_REJECTED) {
+            $timeStatus = 'rejected';
+            $isCompleted = false;
+        } else {
+            $timeStatus = 'pending';
+            $isCompleted = false;
+        }
+
         return [
             'id'                 => $od->id,
             'user_id'            => $od->user_id,
@@ -1341,13 +1371,14 @@ class DashboardApiController extends Controller
             'user_role'          => $userRole,
             'user_avatar'        => $od->user?->profile_photo_path ?? null,
             'is_owner'           => true,
-            'from_date'          => $od->from_date instanceof Carbon ? $od->from_date->format('Y-m-d') : $od->from_date,
-            'to_date'            => $od->to_date instanceof Carbon ? $od->to_date->format('Y-m-d') : $od->to_date,
+            'from_date'          => $fromDateStr,
+            'to_date'            => $toDateStr,
             'gate_out_time'      => $od->gate_out_time ? substr((string) $od->gate_out_time, 0, 5) : null,
             'gate_in_time'       => $od->gate_in_time ? substr((string) $od->gate_in_time, 0, 5) : null,
             'has_gate_out'       => !empty($od->gate_out_time),
             'has_gate_in'        => !empty($od->gate_in_time),
-            'is_completed'       => !empty($od->gate_in_time),
+            'is_completed'       => $isCompleted,
+            'time_status'        => $timeStatus,
             'formatted_gate_out' => $od->gate_out_time ? Carbon::parse($od->gate_out_time)->format('h:i A') : null,
             'formatted_gate_in'  => $od->gate_in_time ? Carbon::parse($od->gate_in_time)->format('h:i A') : null,
             'total_days'         => $od->total_days,

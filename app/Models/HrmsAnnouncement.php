@@ -6,10 +6,21 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class HrmsAnnouncement extends Model
 {
     use HasFactory;
+
+    protected static ?bool $hasBranchIdsColumn = null;
+
+    public static function hasBranchIdsColumn(): bool
+    {
+        if (static::$hasBranchIdsColumn === null) {
+            static::$hasBranchIdsColumn = Schema::hasColumn('hrms_announcements', 'branch_ids');
+        }
+        return static::$hasBranchIdsColumn;
+    }
 
     protected $fillable = [
         'company_id',
@@ -44,12 +55,15 @@ class HrmsAnnouncement extends Model
 
     public function isForAllBranches(): bool
     {
+        if (! static::hasBranchIdsColumn()) {
+            return true;
+        }
         return empty($this->branch_ids);
     }
 
     public function getTargetBranchesLabel(): string
     {
-        if ($this->isForAllBranches()) {
+        if (! static::hasBranchIdsColumn() || $this->isForAllBranches()) {
             return 'All Branches';
         }
 
@@ -81,6 +95,10 @@ class HrmsAnnouncement extends Model
 
         // HR / Admin users can see all announcements to manage them
         if ($user->isSystemAdmin() || $user->isCompanyAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole()) {
+            return $query;
+        }
+
+        if (! static::hasBranchIdsColumn()) {
             return $query;
         }
 
