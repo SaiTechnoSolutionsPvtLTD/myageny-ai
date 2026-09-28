@@ -807,8 +807,8 @@ class CampaignApiController extends Controller
         if ($newStatus === 'paused' && $oldStatus !== 'paused') {
             $updateData['paused_at'] = $now;
         } elseif ($newStatus === 'active' && $oldStatus === 'paused') {
-            $pausedAt = $resolvedCampaign->paused_at ?: $resolvedCampaign->updated_at;
-            $diffDays = $pausedAt ? max(1, (int) $pausedAt->diffInDays($now)) : 1;
+            $pausedAt = $resolvedCampaign->paused_at ? Carbon::parse($resolvedCampaign->paused_at) : ($resolvedCampaign->updated_at ? Carbon::parse($resolvedCampaign->updated_at) : $now);
+            $diffDays = max(1, (int) $pausedAt->diffInDays($now));
 
             $history = $resolvedCampaign->pause_history ?? [];
             $history[] = [
@@ -823,6 +823,10 @@ class CampaignApiController extends Controller
             $updateData['total_paused_days'] = ((int) $resolvedCampaign->total_paused_days) + $diffDays;
             $updateData['pause_history']     = $history;
             $updateData['paused_at']         = null;
+
+            if ($resolvedCampaign->end_date && empty($validated['end_date'])) {
+                $updateData['end_date'] = Carbon::parse($resolvedCampaign->end_date)->addDays($diffDays)->toDateString();
+            }
         }
 
         $resolvedCampaign->update($updateData);
@@ -905,7 +909,7 @@ class CampaignApiController extends Controller
         ]);
 
         $resumeDate = $validated['resume_date'] ? Carbon::parse($validated['resume_date']) : Carbon::now();
-        $pausedAt = $resolvedCampaign->paused_at ?: ($resolvedCampaign->updated_at ?: Carbon::now());
+        $pausedAt = $resolvedCampaign->paused_at ? Carbon::parse($resolvedCampaign->paused_at) : ($resolvedCampaign->updated_at ? Carbon::parse($resolvedCampaign->updated_at) : Carbon::now());
 
         $diffDays = max(1, (int) $pausedAt->diffInDays($resumeDate));
 
@@ -929,12 +933,21 @@ class CampaignApiController extends Controller
             'updated_by'        => $user->id,
         ];
 
+        if ($resolvedCampaign->end_date) {
+            $updateData['end_date'] = Carbon::parse($resolvedCampaign->end_date)->addDays($diffDays)->toDateString();
+        }
+
         if (! empty($validated['remarks'])) {
             $updateData['remarks'] = $validated['remarks'];
         }
 
         $resolvedCampaign->update($updateData);
+
+        $newEndDateFormatted = isset($updateData['end_date']) ? Carbon::parse($updateData['end_date'])->format('d M Y') : null;
         $msg = "Campaign activated! Was paused for {$diffDays} " . ($diffDays === 1 ? 'day' : 'days') . " (from " . $pausedAt->format('d M Y') . " to " . $resumeDate->format('d M Y') . ").";
+        if ($newEndDateFormatted) {
+            $msg .= " Expiry date extended to {$newEndDateFormatted}.";
+        }
 
         return response()->json([
             'status'   => true,
