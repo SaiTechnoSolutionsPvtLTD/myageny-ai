@@ -3028,16 +3028,6 @@ class SuperAdminDashboardController extends ApiController
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
             });
-        } elseif ($type === 'coco') {
-            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
-            });
-        } elseif ($type === 'non_coco') {
-            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
-            });
         }
 
         if ($cstItemsToAppend->isNotEmpty()) {
