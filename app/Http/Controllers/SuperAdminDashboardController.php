@@ -2927,7 +2927,7 @@ class SuperAdminDashboardController extends ApiController
                 });
             })->first();
 
-            $query->where(function ($q) use ($nonCocoProduct) {
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2935,9 +2935,12 @@ class SuperAdminDashboardController extends ApiController
                     } else {
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
-                })->orWhereHas('lead.branch', function ($bq) {
-                    $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
                 });
+                if (!$isCompanyAdminOrCbo) {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                    });
+                }
             });
 
         } elseif ($type === 'coco') {
@@ -2962,7 +2965,7 @@ class SuperAdminDashboardController extends ApiController
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct) {
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2976,9 +2979,12 @@ class SuperAdminDashboardController extends ApiController
                         $sub->where('product_name', 'like', '%COCO%')
                             ->where('product_name', 'not like', '%NON%');
                     }
-                })->orWhereHas('lead.branch', function ($bq) {
-                    $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
                 });
+                if (!$isCompanyAdminOrCbo) {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                    });
+                }
             });
 
         } else {
