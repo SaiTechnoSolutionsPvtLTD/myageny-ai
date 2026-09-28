@@ -839,6 +839,17 @@ class DashboardApiController extends Controller
             || $user->hasRole('company_admin'));
     }
 
+    private function isHrUser(?\App\Models\User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin();
+    }
+
     private function canFilterBranch(?\App\Models\User $user): bool
     {
         if (! $user) {
@@ -847,7 +858,8 @@ class DashboardApiController extends Controller
 
         return $this->isCompanyAdminUser($user)
             || $user->isCbo()
-            || $user->isBranchAdmin();
+            || $user->isBranchAdmin()
+            || $this->isHrUser($user);
     }
 
     private function availableBranches(?\App\Models\User $user): \Illuminate\Support\Collection
@@ -865,7 +877,7 @@ class DashboardApiController extends Controller
         }
 
         // Branch Manager only sees their own assigned branch(es)
-        $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
+        $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo() && ! $this->isHrUser($user);
         if ($isBranchManagerOnly) {
             $branchIds = $user->getMyBranchIds() ?? [];
             if (empty($branchIds) && $user->branch_id) {
@@ -889,7 +901,7 @@ class DashboardApiController extends Controller
         }
 
         if ($this->canFilterBranch($user)) {
-            $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo();
+            $isBranchManagerOnly = ! $this->isCompanyAdminUser($user) && ! $user->isCbo() && ! $this->isHrUser($user);
             $myBranchIds = $user->getMyBranchIds() ?? [];
             if (empty($myBranchIds) && $user->branch_id) {
                 $myBranchIds = [(int) $user->branch_id];

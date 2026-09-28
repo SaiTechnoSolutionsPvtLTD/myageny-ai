@@ -46,7 +46,15 @@ class RecruitmentApiController extends Controller
     public function meta(Request $request): JsonResponse
     {
         $user = auth()->user() ?? $request->user();
-        $isCompanyAdmin = (bool) ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin()));
+        $isCompanyAdmin = (bool) ($user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->isCbo()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin()
+        ));
 
         $interviewersQuery = User::query()
             ->with(['roles'])

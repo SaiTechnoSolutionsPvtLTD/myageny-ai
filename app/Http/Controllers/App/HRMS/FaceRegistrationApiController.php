@@ -28,7 +28,15 @@ class FaceRegistrationApiController extends Controller
 
     private function isCompanyAdmin($user): bool
     {
-        return (bool) ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin()));
+        return (bool) ($user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->isCbo()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin()
+        ));
     }
 
     private function isHrOrAdmin(): bool

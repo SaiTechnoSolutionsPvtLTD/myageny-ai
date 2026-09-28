@@ -267,6 +267,8 @@ class CustomerSuccessDashboardApiController extends Controller
             $search   = trim((string) $request->query('search', ''));
             $bucket   = trim((string) $request->query('bucket', ''));
             $category = trim((string) $request->query('category', ''));
+            $executionStatus = trim((string) ($request->query('execution_status') ?? $request->query('status', '')));
+            $paymentStatus   = trim((string) $request->query('payment_status', ''));
 
             $filters = $request->only([
                 'user_id', 'branch_id', 'product_id', 'source', 'from_date', 'to_date'
@@ -422,7 +424,7 @@ class CustomerSuccessDashboardApiController extends Controller
                     ]);
 
                 case 'development_ongoing':
-                    $devOngoing = $this->getDevOngoingData($filters, $applySupportScope, $page, $perPage, $search);
+                    $devOngoing = $this->getDevOngoingData($filters, $applySupportScope, $page, $perPage, $search, $executionStatus, $paymentStatus);
                     return response()->json([
                         'success' => true,
                         'section' => 'development_ongoing',
@@ -431,6 +433,9 @@ class CustomerSuccessDashboardApiController extends Controller
                             'current_page' => $page,
                             'per_page'     => $perPage,
                             'total'        => $devOngoing['count'],
+                            'value'        => $devOngoing['value'],
+                            'received'     => $devOngoing['received'],
+                            'pending'      => $devOngoing['pending'],
                             'has_more'     => $devOngoing['has_more'],
                         ],
                     ]);
@@ -1203,7 +1208,15 @@ class CustomerSuccessDashboardApiController extends Controller
         ];
     }
 
-    private function getDevOngoingData(array $filters, \Closure $applySupportScope, ?int $page = 1, ?int $perPage = 5, string $search = ''): array
+    private function getDevOngoingData(
+        array $filters,
+        \Closure $applySupportScope,
+        ?int $page = 1,
+        ?int $perPage = 5,
+        string $search = '',
+        string $executionStatus = '',
+        string $paymentStatus = ''
+    ): array
     {
         $devOngoingProjects = ProductionInitiation::query()
             ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
@@ -1243,16 +1256,56 @@ class CustomerSuccessDashboardApiController extends Controller
             ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+            ->when(!empty($executionStatus) && $executionStatus !== 'all', function ($q) use ($executionStatus) {
+                $status = strtolower($executionStatus);
+                if (str_contains($status, 'progress')) {
+                    $q->whereRaw('LOWER(production_initiations.project_execution_status) LIKE ?', ['%progress%']);
+                } elseif (str_contains($status, 'waiting') || str_contains($status, 'content')) {
+                    $q->where(function ($sq) {
+                        $sq->whereRaw('LOWER(production_initiations.project_execution_status) LIKE ?', ['%waiting%'])
+                           ->orWhereRaw('LOWER(production_initiations.project_execution_status) LIKE ?', ['%content%']);
+                    });
+                } else {
+                    $q->whereRaw('LOWER(production_initiations.project_execution_status) = ?', [$status]);
+                }
+            })
+            ->when(!empty($paymentStatus) && $paymentStatus !== 'all', function ($q) use ($paymentStatus) {
+                $pay = strtolower($paymentStatus);
+                if ($pay === 'paid') {
+                    $q->where(function ($sq) {
+                        $sq->where('lead_products.amount_paid', '>=', DB::raw('lead_products.total_price'))
+                           ->orWhere('lead_products.payment_status', 'paid');
+                    });
+                } elseif ($pay === 'unpaid') {
+                    $q->where(function ($sq) {
+                        $sq->where('lead_products.amount_paid', '<=', 0)
+                           ->orWhere('lead_products.payment_status', 'unpaid');
+                    });
+                } elseif ($pay === 'partial') {
+                    $q->where('lead_products.amount_paid', '>', 0)
+                      ->where('lead_products.amount_paid', '<', DB::raw('lead_products.total_price'));
+                }
+            })
             ->when(!empty($search), function ($q) use ($search) {
                 $q->where(function ($sq) use ($search) {
                     $sq->where('leads.company_name', 'like', "%{$search}%")
                        ->orWhere('leads.contact_name', 'like', "%{$search}%")
                        ->orWhere('production_initiations.product_name', 'like', "%{$search}%")
+                       ->orWhere('production_initiations.company_name', 'like', "%{$search}%")
+                       ->orWhere('production_initiations.client_name', 'like', "%{$search}%")
+                       ->orWhere('branches.name', 'like', "%{$search}%")
                        ->orWhere('leads.mobile_number', 'like', "%{$search}%");
                 });
             });
 
-        $totalCount = (clone $devOngoingProjects)->count();
+        $aggregates = (clone $devOngoingProjects)
+            ->selectRaw('COUNT(*) as total_count, SUM(lead_products.total_price) as total_val, SUM(lead_products.amount_paid) as total_rec')
+            ->first();
+        $totalCount           = (int) ($aggregates?->total_count ?? 0);
+        $overallTotalValue    = (float) ($aggregates?->total_val ?? 0);
+        $overallTotalReceived = (float) ($aggregates?->total_rec ?? 0);
+        $overallTotalPending  = max(0, $overallTotalValue - $overallTotalReceived);
+
         $p = $page ?: 1;
         $pp = $perPage ?: 5;
         $offset = ($p - 1) * $pp;
@@ -1280,9 +1333,6 @@ class CustomerSuccessDashboardApiController extends Controller
             : collect();
 
         $devOngoingItems = [];
-        $devOngoingTotalValue = 0;
-        $devOngoingTotalReceived = 0;
-        $devOngoingTotalPending = 0;
         $devOngoingOntrackCount = 0;
         $devOngoingHoldCount = 0;
 
@@ -1308,10 +1358,6 @@ class CustomerSuccessDashboardApiController extends Controller
             $price   = (float) $dp->total_price;
             $paid    = (float) $dp->amount_paid;
             $pending = max(0, $price - $paid);
-
-            $devOngoingTotalValue += $price;
-            $devOngoingTotalReceived += $paid;
-            $devOngoingTotalPending += $pending;
 
             $rawStatus = strtolower(trim((string) ($dp->project_execution_status ?: 'ontrack')));
             if ($rawStatus === 'ontrack') $devOngoingOntrackCount++;
@@ -1345,9 +1391,9 @@ class CustomerSuccessDashboardApiController extends Controller
 
         return [
             'count'         => $totalCount,
-            'value'         => round($devOngoingTotalValue, 2),
-            'received'      => round($devOngoingTotalReceived, 2),
-            'pending'       => round($devOngoingTotalPending, 2),
+            'value'         => round($overallTotalValue, 2),
+            'received'      => round($overallTotalReceived, 2),
+            'pending'       => round($overallTotalPending, 2),
             'ontrack_count' => $devOngoingOntrackCount,
             'hold_count'    => $devOngoingHoldCount,
             'items'         => $devOngoingItems,

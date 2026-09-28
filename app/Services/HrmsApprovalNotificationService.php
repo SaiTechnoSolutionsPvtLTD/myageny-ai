@@ -244,94 +244,124 @@ class HrmsApprovalNotificationService
 
     public function sendOdSubmitted(OdRequest $odRequest): void
     {
-        $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
-        $branchId = $odRequest->user?->branch_id;
+        try {
+            $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
+            $branchId = $odRequest->user?->branch_id;
 
-        $currentApproval = $this->currentOdApproval($odRequest);
+            $currentApproval = $this->currentOdApproval($odRequest);
 
-        if ($currentApproval?->approver) {
-            $this->notifyUser($currentApproval->approver, [
-                'title' => 'New OD Request Awaiting Approval',
-                'message' => "{$odRequest->user?->name} submitted an OD (On Duty) request that needs your approval.",
-                'detail' => $this->odDetail($odRequest),
-                'action_url' => route('od-requests.show', $odRequest),
-                'request_type' => 'od',
-                'branch_id' => $branchId,
-                'event_type' => 'submitted',
-                'request_id' => $odRequest->id,
-                'actor_name' => $odRequest->user?->name,
-                'requester_name' => $odRequest->user?->name,
-                'status' => OdRequest::STATUS_PENDING,
+            if ($currentApproval?->approver) {
+                $actionUrl = \Illuminate\Support\Facades\Route::has('od-requests.show')
+                    ? route('od-requests.show', $odRequest)
+                    : url('/od-requests/' . $odRequest->id);
+
+                $this->notifyUser($currentApproval->approver, [
+                    'title' => 'New OD Request Awaiting Approval',
+                    'message' => "{$odRequest->user?->name} submitted an OD (On Duty) request that needs your approval.",
+                    'detail' => $this->odDetail($odRequest),
+                    'action_url' => $actionUrl,
+                    'request_type' => 'od',
+                    'branch_id' => $branchId,
+                    'event_type' => 'submitted',
+                    'request_id' => $odRequest->id,
+                    'actor_name' => $odRequest->user?->name,
+                    'requester_name' => $odRequest->user?->name,
+                    'status' => OdRequest::STATUS_PENDING,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('HrmsApprovalNotificationService::sendOdSubmitted failed: ' . $e->getMessage(), [
+                'od_request_id' => $odRequest->id,
             ]);
         }
     }
 
     public function sendOdApproved(OdRequest $odRequest, OdApproval $actedApproval, ?OdApproval $nextApproval): void
     {
-        $branchId = $odRequest->user?->branch_id;
-        $odRequest->loadMissing('user');
-        $actedApproval->loadMissing(['approver', 'actionedBy']);
+        try {
+            $branchId = $odRequest->user?->branch_id;
+            $odRequest->loadMissing('user');
+            $actedApproval->loadMissing(['approver', 'actionedBy']);
 
-        if ($nextApproval?->approver) {
-            $this->notifyUser($nextApproval->approver, [
-                'title' => 'OD Request Moved to Your Approval Stage',
-                'message' => "{$odRequest->user?->name}'s OD request is now waiting for your approval.",
-                'detail' => $this->odDetail($odRequest),
-                'action_url' => route('od-requests.show', $odRequest),
-                'request_type' => 'od',
-                'branch_id' => $branchId,
-                'event_type' => 'next_stage',
-                'request_id' => $odRequest->id,
-                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
-                'requester_name' => $odRequest->user?->name,
-                'status' => OdRequest::STATUS_PENDING,
-            ]);
-        }
+            $actionUrl = \Illuminate\Support\Facades\Route::has('od-requests.show')
+                ? route('od-requests.show', $odRequest)
+                : url('/od-requests/' . $odRequest->id);
 
-        if ($odRequest->user) {
-            $isFinalApproval = ! $nextApproval;
-            $title = $isFinalApproval
-                ? 'OD Request Approved'
-                : "OD Request Approved by {$actedApproval->step_name}";
-            $message = $isFinalApproval
-                ? 'Your OD request has received final approval and attendance is marked as OD.'
-                : (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' approved your OD request.');
+            if ($nextApproval?->approver) {
+                $this->notifyUser($nextApproval->approver, [
+                    'title' => 'OD Request Moved to Your Approval Stage',
+                    'message' => "{$odRequest->user?->name}'s OD request is now waiting for your approval.",
+                    'detail' => $this->odDetail($odRequest),
+                    'action_url' => $actionUrl,
+                    'request_type' => 'od',
+                    'branch_id' => $branchId,
+                    'event_type' => 'next_stage',
+                    'request_id' => $odRequest->id,
+                    'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                    'requester_name' => $odRequest->user?->name,
+                    'status' => OdRequest::STATUS_PENDING,
+                ]);
+            }
 
-            $this->notifyUser($odRequest->user, [
-                'title' => $title,
-                'message' => $message,
-                'detail' => $this->odDetail($odRequest),
-                'action_url' => route('od-requests.show', $odRequest),
-                'request_type' => 'od',
-                'branch_id' => $branchId,
-                'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
-                'request_id' => $odRequest->id,
-                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
-                'requester_name' => $odRequest->user?->name,
-                'status' => $isFinalApproval ? OdRequest::STATUS_APPROVED : OdRequest::STATUS_PENDING,
+            if ($odRequest->user) {
+                $isFinalApproval = ! $nextApproval;
+                $title = $isFinalApproval
+                    ? 'OD Request Approved'
+                    : "OD Request Approved by {$actedApproval->step_name}";
+                $message = $isFinalApproval
+                    ? 'Your OD request has received final approval and attendance is marked as OD.'
+                    : (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' approved your OD request.');
+
+                $this->notifyUser($odRequest->user, [
+                    'title' => $title,
+                    'message' => $message,
+                    'detail' => $this->odDetail($odRequest),
+                    'action_url' => $actionUrl,
+                    'request_type' => 'od',
+                    'branch_id' => $branchId,
+                    'event_type' => $isFinalApproval ? 'approved' : 'approval_progress',
+                    'request_id' => $odRequest->id,
+                    'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                    'requester_name' => $odRequest->user?->name,
+                    'status' => $isFinalApproval ? OdRequest::STATUS_APPROVED : OdRequest::STATUS_PENDING,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('HrmsApprovalNotificationService::sendOdApproved failed: ' . $e->getMessage(), [
+                'od_request_id' => $odRequest->id,
             ]);
         }
     }
 
     public function sendOdRejected(OdRequest $odRequest, OdApproval $actedApproval): void
     {
-        $branchId = $odRequest->user?->branch_id;
-        $odRequest->loadMissing('user');
-        $actedApproval->loadMissing(['approver', 'actionedBy']);
+        try {
+            $branchId = $odRequest->user?->branch_id;
+            $odRequest->loadMissing('user');
+            $actedApproval->loadMissing(['approver', 'actionedBy']);
 
-        if ($odRequest->user) {
-            $this->notifyUser($odRequest->user, [
-                'title' => 'OD Request Rejected',
-                'message' => (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' rejected your OD request.'),
-                'detail' => $this->odDetail($odRequest),
-                'action_url' => route('od-requests.show', $odRequest),
-                'request_type' => 'od',
-                'branch_id' => $branchId,
-                'event_type' => 'rejected',
-                'request_id' => $odRequest->id,
-                'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
-                'requester_name' => $odRequest->user?->name,
-                'status' => OdRequest::STATUS_REJECTED,
+            if ($odRequest->user) {
+                $actionUrl = \Illuminate\Support\Facades\Route::has('od-requests.show')
+                    ? route('od-requests.show', $odRequest)
+                    : url('/od-requests/' . $odRequest->id);
+
+                $this->notifyUser($odRequest->user, [
+                    'title' => 'OD Request Rejected',
+                    'message' => (($actedApproval->actionedBy?->name ?? $actedApproval->approver?->name ?? 'An approver') . ' rejected your OD request.'),
+                    'detail' => $this->odDetail($odRequest),
+                    'action_url' => $actionUrl,
+                    'request_type' => 'od',
+                    'branch_id' => $branchId,
+                    'event_type' => 'rejected',
+                    'request_id' => $odRequest->id,
+                    'actor_name' => $actedApproval->actionedBy?->name ?? $actedApproval->approver?->name,
+                    'requester_name' => $odRequest->user?->name,
+                    'status' => OdRequest::STATUS_REJECTED,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('HrmsApprovalNotificationService::sendOdRejected failed: ' . $e->getMessage(), [
+                'od_request_id' => $odRequest->id,
             ]);
         }
     }
@@ -406,6 +436,14 @@ class HrmsApprovalNotificationService
             return;
         }
 
-        $user->notify(new HrmsApprovalFlowNotification($payload));
+        try {
+            $user->notify(new HrmsApprovalFlowNotification($payload));
+        } catch (\Throwable $e) {
+            \Log::warning('HrmsApprovalFlowNotification delivery failed: ' . $e->getMessage(), [
+                'user_id' => $user->id,
+                'payload' => $payload,
+                'error'   => $e->getMessage(),
+            ]);
+        }
     }
 }

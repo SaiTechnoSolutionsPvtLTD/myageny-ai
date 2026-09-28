@@ -337,12 +337,31 @@ class DaySalesTrackerApiController extends Controller
 
     /**
      * Check if user has permission to add, edit, or modify Day Sales Tracker records.
-     * Only Company Admin / CBO / Super Admin role is allowed.
+     * Strictly restricted to the Company Admin role only.
+     * The CBO role and all other non-company-admin roles are strictly view-only.
      */
     protected function canUserEditDaySalesTracker(?User $user): bool
     {
-        if (!$user) return false;
-        return (bool) ($user->isSuperAdmin() || $user->isCompanyAdminRole() || $user->isCbo());
+        if (!$user) {
+            return false;
+        }
+
+        $roleKey = strtolower((string) ($user->role ?? ''));
+        $roleKeys = collect($user->roleKeys()->all())->map(fn($k) => strtolower((string) $k));
+
+        $isCompanyAdmin = $user->isCompanyAdminRole()
+            || $user->isCompanyAdmin()
+            || $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $roleKey === 'company_admin'
+            || $roleKeys->contains('company_admin');
+
+        // CBO and all other non-company-admin roles are strictly view-only
+        if ($user->isCbo() && !$isCompanyAdmin) {
+            return false;
+        }
+
+        return (bool) $isCompanyAdmin;
     }
 
     /**

@@ -16,6 +16,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Mobile API — OD (On Duty) Requests.
@@ -297,78 +300,107 @@ class OdRequestApiController extends Controller
     // ── POST /api/mobile/hrms/od-requests ─────────────────────────────────────
     public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'from_date'     => ['required', 'date', 'after_or_equal:today'],
-            'to_date'       => ['required', 'date', 'after_or_equal:from_date'],
-            'gate_out_time' => ['nullable', 'date_format:H:i'],
-            'gate_in_time'  => ['nullable', 'date_format:H:i'],
-            'reason'        => ['required', 'string', 'max:2000'],
-        ], [
-            'from_date.after_or_equal' => 'Past dates cannot be selected for OD requests.',
-            'to_date.after_or_equal'   => 'To Date must be equal to or after From Date.',
-        ]);
-
-        // Validation: If both gate times provided on the same day, Gate Out must be before Gate In.
-        if (!empty($validated['gate_out_time']) && !empty($validated['gate_in_time'])) {
-            if ($validated['from_date'] === $validated['to_date']) {
-                if ($validated['gate_out_time'] >= $validated['gate_in_time']) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Gate Out Time cannot be after Gate In Time.',
-                    ], 422);
-                }
-            }
-        }
-
-        $user         = $request->user();
-        $approvalRows = $this->approvalRowsFor($user);
-
-        // Mirror web: block if no approval hierarchy is mapped for this user.
-        if ($approvalRows === []) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Approval hierarchy not mapped. Please contact HR to map you under a manager first.',
-            ], 422);
-        }
-
-        $from      = Carbon::parse($validated['from_date']);
-        $to        = Carbon::parse($validated['to_date']);
-        $totalDays = $from->diffInDays($to) + 1;
-        $branchId  = $this->resolveBranchId($user);
-
-        $odRequest = DB::transaction(function () use ($user, $validated, $approvalRows, $totalDays, $branchId) {
-            $od = OdRequest::create([
-                'company_id'    => $user->company_id,
-                'user_id'       => $user->id,
-                'employee_id'   => $this->resolveEmployee($user)?->id,
-                // Mobile-only — see class docblock. Stamped from the
-                // requester's own branch so listing/detail can be scoped by
-                // it later; web-created rows are left null and unaffected.
-                'branch_id'     => $branchId,
-                'from_date'     => $validated['from_date'],
-                'to_date'       => $validated['to_date'],
-                'gate_out_time' => $validated['gate_out_time'] ?? null,
-                'gate_in_time'  => $validated['gate_in_time'] ?? null,
-                'total_days'    => $totalDays,
-                'reason'        => $validated['reason'],
-                'status'        => OdRequest::STATUS_PENDING,
-                'current_step'  => $approvalRows[0]['step_key'],
-                'submitted_at'  => now(),
+        try {
+            $validated = $request->validate([
+                'from_date'     => ['required', 'date', 'after_or_equal:today'],
+                'to_date'       => ['required', 'date', 'after_or_equal:from_date'],
+                'gate_out_time' => ['nullable', 'date_format:H:i'],
+                'gate_in_time'  => ['nullable', 'date_format:H:i'],
+                'reason'        => ['required', 'string', 'max:2000'],
+            ], [
+                'from_date.after_or_equal' => 'Past dates cannot be selected for OD requests.',
+                'to_date.after_or_equal'   => 'To Date must be equal to or after From Date.',
             ]);
 
-            $od->approvals()->createMany($approvalRows);
+            // Validation: If both gate times provided on the same day, Gate Out must be before Gate In.
+            if (!empty($validated['gate_out_time']) && !empty($validated['gate_in_time'])) {
+                if ($validated['from_date'] === $validated['to_date']) {
+                    if ($validated['gate_out_time'] >= $validated['gate_in_time']) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Gate Out Time cannot be after Gate In Time.',
+                        ], 422);
+                    }
+                }
+            }
 
-            return $od;
-        });
+            $user         = $request->user();
+            $approvalRows = $this->approvalRowsFor($user);
 
-        $odRequest->load(['user', 'approvals.approver']);
-        app(HrmsApprovalNotificationService::class)->sendOdSubmitted($odRequest);
+            // Mirror web: block if no approval hierarchy is mapped for this user.
+            if ($approvalRows === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Approval hierarchy not mapped. Please contact HR to map you under a manager first.',
+                ], 422);
+            }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'OD request submitted successfully. Approval started with your hierarchy.',
-            'data'    => $this->mapOdRequest($odRequest, true, $user),
-        ], 201);
+            $from      = Carbon::parse($validated['from_date']);
+            $to        = Carbon::parse($validated['to_date']);
+            $totalDays = $from->diffInDays($to) + 1;
+            $branchId  = $this->resolveBranchId($user);
+
+            $odRequest = DB::transaction(function () use ($user, $validated, $approvalRows, $totalDays, $branchId) {
+                $payload = [
+                    'company_id'    => $user->company_id,
+                    'user_id'       => $user->id,
+                    'employee_id'   => $this->resolveEmployee($user)?->id,
+                    'from_date'     => $validated['from_date'],
+                    'to_date'       => $validated['to_date'],
+                    'gate_out_time' => $validated['gate_out_time'] ?? null,
+                    'gate_in_time'  => $validated['gate_in_time'] ?? null,
+                    'total_days'    => $totalDays,
+                    'reason'        => $validated['reason'],
+                    'status'        => OdRequest::STATUS_PENDING,
+                    'current_step'  => $approvalRows[0]['step_key'],
+                    'submitted_at'  => now(),
+                ];
+
+                // Only set branch_id if the column exists in the database table
+                if ($branchId !== null && Schema::hasColumn('od_requests', 'branch_id')) {
+                    $payload['branch_id'] = $branchId;
+                }
+
+                $od = OdRequest::create($payload);
+
+                $od->approvals()->createMany($approvalRows);
+
+                return $od;
+            });
+
+            $odRequest->load(['user', 'approvals.approver']);
+            try {
+                app(HrmsApprovalNotificationService::class)->sendOdSubmitted($odRequest);
+            } catch (\Throwable $ne) {
+                Log::warning('OD submitted notification failed: ' . $ne->getMessage(), [
+                    'od_request_id' => $odRequest->id,
+                    'error'         => $ne->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OD request submitted successfully. Approval started with your hierarchy.',
+                'data'    => $this->mapOdRequest($odRequest, true, $user),
+            ], 201);
+        } catch (ValidationException $ve) {
+            return response()->json([
+                'success' => false,
+                'message' => $ve->validator->errors()->first() ?: 'Validation failed.',
+                'errors'  => $ve->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('OD request store error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to submit the OD request at the moment. Please try again later.',
+            ], 500);
+        }
     }
 
     // ── POST /api/mobile/hrms/od-requests/{odRequest}/gate-out ─────────────────
@@ -475,107 +507,149 @@ class OdRequestApiController extends Controller
     // ── POST /api/mobile/hrms/od-requests/{odRequest}/approvals/{approval}/approve
     public function approve(Request $request, OdRequest $odRequest, OdApproval $approval): JsonResponse
     {
-        $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
+        try {
+            $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
 
-        if ((int) $approval->od_request_id !== (int) $odRequest->id) {
-            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
-        }
-
-        $approval->loadMissing(['odRequest.user', 'approver', 'actionedBy']);
-        $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
-
-        // Approval authorization is hierarchy-only (no branch check) — a
-        // manager legitimately in the requester's chain can act regardless
-        // of their own branch assignment.
-        if (! $this->canActOnApproval($approval, $request->user())) {
-            return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
-        }
-
-        DB::transaction(function () use ($request, $odRequest, $approval) {
-            $approval->update([
-                'status'      => OdApproval::STATUS_APPROVED,
-                'actioned_by' => auth()->id(),
-                'actioned_at' => now(),
-                'remarks'     => $request->input('remarks'),
-            ]);
-
-            $next = $odRequest->approvals()
-                ->where('status', OdApproval::STATUS_PENDING)
-                ->where('step_order', '>', $approval->step_order)
-                ->orderBy('step_order')
-                ->first();
-
-            if ($next) {
-                $odRequest->update(['current_step' => $next->step_key]);
-                return;
+            if ((int) $approval->od_request_id !== (int) $odRequest->id) {
+                return response()->json(['success' => false, 'message' => 'Not found.'], 404);
             }
 
-            $odRequest->update([
-                'status'       => OdRequest::STATUS_APPROVED,
-                'current_step' => null,
-                'approved_at'  => now(),
+            $approval->loadMissing(['odRequest.user', 'approver', 'actionedBy']);
+            $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
+
+            // Approval authorization is hierarchy-only (no branch check) — a
+            // manager legitimately in the requester's chain can act regardless
+            // of their own branch assignment.
+            if (! $this->canActOnApproval($approval, $request->user())) {
+                return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
+            }
+
+            DB::transaction(function () use ($request, $odRequest, $approval) {
+                $approval->update([
+                    'status'      => OdApproval::STATUS_APPROVED,
+                    'actioned_by' => auth()->id(),
+                    'actioned_at' => now(),
+                    'remarks'     => $request->input('remarks'),
+                ]);
+
+                $next = $odRequest->approvals()
+                    ->where('status', OdApproval::STATUS_PENDING)
+                    ->where('step_order', '>', $approval->step_order)
+                    ->orderBy('step_order')
+                    ->first();
+
+                if ($next) {
+                    $odRequest->update(['current_step' => $next->step_key]);
+                    return;
+                }
+
+                $odRequest->update([
+                    'status'       => OdRequest::STATUS_APPROVED,
+                    'current_step' => null,
+                    'approved_at'  => now(),
+                ]);
+
+                $this->markAttendanceRecords($odRequest);
+            });
+
+            $odRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+            $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+            $nextApproval = $odRequest->approvals->firstWhere('step_key', $odRequest->current_step);
+            try {
+                app(HrmsApprovalNotificationService::class)->sendOdApproved($odRequest, $approval, $nextApproval);
+            } catch (\Throwable $ne) {
+                Log::warning('OD approved notification failed: ' . $ne->getMessage(), [
+                    'od_request_id' => $odRequest->id,
+                    'approval_id'   => $approval->id,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$approval->step_name} approval completed.",
+                'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
             ]);
-
-            $this->markAttendanceRecords($odRequest);
-        });
-
-        $odRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
-        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
-        $nextApproval = $odRequest->approvals->firstWhere('step_key', $odRequest->current_step);
-        app(HrmsApprovalNotificationService::class)->sendOdApproved($odRequest, $approval, $nextApproval);
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$approval->step_name} approval completed.",
-            'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
-        ]);
+        } catch (ValidationException $ve) {
+            return response()->json([
+                'success' => false,
+                'message' => $ve->validator->errors()->first() ?: 'Validation failed.',
+                'errors'  => $ve->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('OD approve error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve OD request: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     // ── POST /api/mobile/hrms/od-requests/{odRequest}/approvals/{approval}/reject
     public function reject(Request $request, OdRequest $odRequest, OdApproval $approval): JsonResponse
     {
-        $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
+        try {
+            $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
 
-        if ((int) $approval->od_request_id !== (int) $odRequest->id) {
-            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
-        }
+            if ((int) $approval->od_request_id !== (int) $odRequest->id) {
+                return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+            }
 
-        $approval->loadMissing(['odRequest.user', 'approver', 'actionedBy']);
-        $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
+            $approval->loadMissing(['odRequest.user', 'approver', 'actionedBy']);
+            $odRequest->loadMissing(['user', 'approvals.approver', 'approvals.actionedBy']);
 
-        if (! $this->canActOnApproval($approval, $request->user())) {
-            return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
-        }
+            if (! $this->canActOnApproval($approval, $request->user())) {
+                return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
+            }
 
-        DB::transaction(function () use ($request, $odRequest, $approval) {
-            $approval->update([
-                'status'      => OdApproval::STATUS_REJECTED,
-                'actioned_by' => auth()->id(),
-                'actioned_at' => now(),
-                'remarks'     => $request->input('remarks'),
+            DB::transaction(function () use ($request, $odRequest, $approval) {
+                $approval->update([
+                    'status'      => OdApproval::STATUS_REJECTED,
+                    'actioned_by' => auth()->id(),
+                    'actioned_at' => now(),
+                    'remarks'     => $request->input('remarks'),
+                ]);
+
+                $odRequest->approvals()
+                    ->where('status', OdApproval::STATUS_PENDING)
+                    ->where('id', '!=', $approval->id)
+                    ->update(['status' => OdApproval::STATUS_SKIPPED]);
+
+                $odRequest->update([
+                    'status'       => OdRequest::STATUS_REJECTED,
+                    'current_step' => null,
+                    'rejected_at'  => now(),
+                ]);
+            });
+
+            $odRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
+            $approval->refresh()->loadMissing(['approver', 'actionedBy']);
+            try {
+                app(HrmsApprovalNotificationService::class)->sendOdRejected($odRequest, $approval);
+            } catch (\Throwable $ne) {
+                Log::warning('OD rejected notification failed: ' . $ne->getMessage(), [
+                    'od_request_id' => $odRequest->id,
+                    'approval_id'   => $approval->id,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$approval->step_name} rejected the OD request.",
+                'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
             ]);
-
-            $odRequest->approvals()
-                ->where('status', OdApproval::STATUS_PENDING)
-                ->where('id', '!=', $approval->id)
-                ->update(['status' => OdApproval::STATUS_SKIPPED]);
-
-            $odRequest->update([
-                'status'       => OdRequest::STATUS_REJECTED,
-                'current_step' => null,
-                'rejected_at'  => now(),
-            ]);
-        });
-
-        $odRequest->refresh()->load(['user', 'approvals.approver', 'approvals.actionedBy']);
-        $approval->refresh()->loadMissing(['approver', 'actionedBy']);
-        app(HrmsApprovalNotificationService::class)->sendOdRejected($odRequest, $approval);
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$approval->step_name} rejected the OD request.",
-            'data'    => $this->mapOdRequest($odRequest, true, $request->user()),
-        ]);
+        } catch (ValidationException $ve) {
+            return response()->json([
+                'success' => false,
+                'message' => $ve->validator->errors()->first() ?: 'Validation failed.',
+                'errors'  => $ve->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('OD reject error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reject OD request: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     // =========================================================================
@@ -667,7 +741,7 @@ class OdRequestApiController extends Controller
         }
 
         if ($vis['is_admin_or_hr']) {
-            $requestBranchId = $odRequest->branch_id ? (int) $odRequest->branch_id : null;
+            $requestBranchId = ($odRequest->branch_id ?? $odRequest->user?->branch_id) ? (int) ($odRequest->branch_id ?? $odRequest->user?->branch_id) : null;
             $viewerBranchIds = $this->userBranchIds($user);
 
             if ($requestBranchId === null || empty($viewerBranchIds)) {
@@ -848,7 +922,7 @@ class OdRequestApiController extends Controller
             'reason'             => $r->reason ?? '',
             'status'             => $r->status,
             'current_step'       => $r->current_step,
-            'branch_id'          => $r->branch_id,
+            'branch_id'          => $r->branch_id ?? $r->user?->branch_id,
             'submitted_at'       => $r->submitted_at ? ($r->submitted_at instanceof Carbon ? $r->submitted_at->format('Y-m-d H:i:s') : (string) $r->submitted_at) : null,
             'approved_at'        => $r->approved_at ? ($r->approved_at instanceof Carbon ? $r->approved_at->format('Y-m-d H:i:s') : (string) $r->approved_at) : null,
             'rejected_at'        => $r->rejected_at ? ($r->rejected_at instanceof Carbon ? $r->rejected_at->format('Y-m-d H:i:s') : (string) $r->rejected_at) : null,

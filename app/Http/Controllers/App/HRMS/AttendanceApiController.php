@@ -89,9 +89,18 @@ class AttendanceApiController extends Controller
             'cheif_operating_officer',
             'chief_operating_officer',
             'chief_business_officer',
+            'hr',
+            'human_resource',
+            'human_resources',
+            'hr_manager',
+            'hr_executive',
+            'hrms',
+            'people_operations',
+            'talent_acquisition',
+            'recruitment',
         ];
 
-        if ($keys->intersect($exemptRoles)->isNotEmpty()) {
+        if ($keys->intersect($exemptRoles)->isNotEmpty() || $user->belongsToHrDepartment() || $user->hasHrLikeRole() || $user->isHrOrAdmin()) {
             return false;
         }
 

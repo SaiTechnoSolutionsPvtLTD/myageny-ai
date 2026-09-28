@@ -1012,14 +1012,14 @@ class ProjectApiController extends Controller
         }
 
         // ── Prospect tab visibility & data (mirrors web show.blade.php 372-391) ──
-        $canSeeProspectTab = $user && (
-            $user->canAccessProjectProspect() ||
-            $this->hasProjectCoordinatorRole($user)
-        );
-        $prospectExpectedDate      = $productionInitiation->expected_date;
-        $prospectExpectedValue     = $productionInitiation->expected_value !== null
+        $canSeeProspectTab = $this->canSeeProspectTab($productionInitiation, $user);
+        $prospectExpectedDate = $productionInitiation->expected_date
+            ?? $productionInitiation->leadProduct?->closure_date;
+        $prospectExpectedValue = $productionInitiation->expected_value !== null
             ? (float) $productionInitiation->expected_value
-            : null;
+            : ($productionInitiation->leadProduct?->expected_value !== null
+                ? (float) $productionInitiation->leadProduct->expected_value
+                : null);
         $prospectExpectedDateFormatted  = $prospectExpectedDate
             ? Carbon::parse($prospectExpectedDate)->format('d M Y')
             : null;
@@ -1027,25 +1027,15 @@ class ProjectApiController extends Controller
             ? '₹' . number_format($prospectExpectedValue, 2)
             : null;
         // Product / Service & Client Details for the tab
-        $prospectProductName   = $productionInitiation->product_name ?? null;
+        $prospectProductName   = $productionInitiation->product_name
+            ?: ($productionInitiation->leadProduct?->product_name ?? null);
         $prospectDepartment    = optional($productionInitiation->department)->name ?? null;
         $prospectClientName    = $productionInitiation->client_name
-            ?? optional($productionInitiation->lead)->contact_name
-            ?? null;
+            ?: (optional($productionInitiation->lead)->contact_name ?? null);
         $prospectCompanyName   = $productionInitiation->company_name
-            ?? optional($productionInitiation->lead)->company_name
-            ?? null;
+            ?: (optional($productionInitiation->lead)->company_name ?? null);
         // Relative time for expected closure date
-        $prospectRelativeTime = null;
-        if ($prospectExpectedDate) {
-            $ed = Carbon::parse($prospectExpectedDate)->startOfDay();
-            $today = Carbon::today();
-            if ($ed->lt($today)) {
-                $prospectRelativeTime = 'Overdue by ' . $ed->diffForHumans($today, true);
-            } else {
-                $prospectRelativeTime = 'Target: ' . $ed->diffForHumans($today, true) . ' remaining';
-            }
-        }
+        $prospectRelativeTime = $this->prospectRelativeTime($prospectExpectedDate);
 
         return response()->json([
             'success' => true,
@@ -1102,10 +1092,7 @@ class ProjectApiController extends Controller
     public function updateProspect(Request $request, ProductionInitiation $productionInitiation): JsonResponse
     {
         $user = auth()->user();
-        $canManageProspect = $user && (
-            $user->canAccessProjectProspect() ||
-            $this->hasProjectCoordinatorRole($user)
-        );
+        $canManageProspect = $this->canSeeProspectTab($productionInitiation, $user);
 
         if (! $canManageProspect) {
             return response()->json([
@@ -2268,7 +2255,52 @@ class ProjectApiController extends Controller
             // branch in show.blade.php around the cc-sheet-form.
             'can_edit_content_calendar_sheet' => ! ($user?->belongsToDesigningDepartment() ?? false),
             'can_see_testing_tab' => $this->canSeeTestingTab($p, $user),
+            'can_see_prospect_tab'            => $this->canSeeProspectTab($p, $user),
+            'prospect_expected_date'          => $p->expected_date ?? $p->leadProduct?->closure_date,
+            'prospect_expected_date_formatted' => ($p->expected_date ?? $p->leadProduct?->closure_date)
+                ? Carbon::parse($p->expected_date ?? $p->leadProduct?->closure_date)->format('d M Y')
+                : null,
+            'prospect_expected_date_relative' => $this->prospectRelativeTime($p->expected_date ?? $p->leadProduct?->closure_date),
+            'prospect_expected_value'         => $p->expected_value !== null
+                ? (float) $p->expected_value
+                : ($p->leadProduct?->expected_value !== null ? (float) $p->leadProduct->expected_value : null),
+            'prospect_expected_value_formatted' => ($p->expected_value !== null || $p->leadProduct?->expected_value !== null)
+                ? '₹' . number_format((float) ($p->expected_value ?? $p->leadProduct->expected_value), 2)
+                : null,
+            'prospect_product_name'           => $p->product_name ?: ($p->leadProduct?->product_name ?? null),
+            'prospect_department'             => optional($p->department)->name ?? null,
+            'prospect_client_name'            => $p->client_name ?: (optional($p->lead)->contact_name ?? null),
+            'prospect_company_name'           => $p->company_name ?: (optional($p->lead)->company_name ?? null),
         ]);
+    }
+
+    private function canSeeProspectTab(ProductionInitiation $productionInitiation, ?User $user): bool
+    {
+        return $user && (
+            $user->canAccessProjectProspect() ||
+            $this->hasProjectCoordinatorRole($user) ||
+            $user->isDevelopmentProjectCoordinator() ||
+            $user->isProjectCoordinator() ||
+            $user->isCustomerSuccessUser() ||
+            $user->isCbo() ||
+            $user->isSuperAdmin() ||
+            $user->isCompanyAdmin()
+        );
+    }
+
+    private function prospectRelativeTime(?string $expectedDate): ?string
+    {
+        if (! $expectedDate) {
+            return null;
+        }
+        try {
+            $cDate = Carbon::parse($expectedDate);
+            return $cDate->isPast()
+                ? 'Overdue (' . $cDate->diffForHumans() . ')'
+                : 'Target: ' . $cDate->diffForHumans();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function isContentCalendarDept(ProductionInitiation $productionInitiation): bool

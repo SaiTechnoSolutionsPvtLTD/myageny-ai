@@ -52,6 +52,10 @@ class OutsideOfficeApprovalApiController extends Controller
             || $user->isSystemAdmin()
             || $user->isCompanyAdmin()
             || $user->hasRole('company_admin')
+            || $user->isCbo()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin()
         ));
     }
 

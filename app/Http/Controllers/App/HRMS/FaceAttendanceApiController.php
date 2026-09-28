@@ -610,7 +610,7 @@ class FaceAttendanceApiController extends Controller
 
             if ($requestedEmp) {
                 // If user has admin/HR permissions, allow marking for this employee
-                if ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin())) {
+                if ($user && ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin() || $user->isCbo() || $user->belongsToHrDepartment() || $user->hasHrLikeRole() || $user->isHrOrAdmin())) {
                     return $requestedEmp;
                 }
                 // If regular user, verify it belongs to their own account
@@ -671,7 +671,7 @@ class FaceAttendanceApiController extends Controller
         }
 
         // 5. Admin fallback: If admin user, pick an active employee in their company
-        if ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin()) {
+        if ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isBranchAdmin() || $user->isCbo() || $user->belongsToHrDepartment() || $user->hasHrLikeRole() || $user->isHrOrAdmin()) {
             return EmployeeOnboarding::query()
                 ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
                 ->active()
