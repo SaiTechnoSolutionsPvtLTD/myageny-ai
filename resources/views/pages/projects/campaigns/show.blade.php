@@ -852,7 +852,7 @@
                 </div>
 
                 <div id="resumeCalculatedPreview" style="padding:10px 12px; border-radius:8px; background:#f0fdf4; border:1px solid #bbf7d0; font-size:12px; color:#166534; font-weight:700;">
-                    ⏱️ Calculated Pause Duration: <span id="resumeDiffDays">1 day</span>
+                    ⏱️ Calculated Pause Duration: <span id="resumeDiffDays">1 day</span> <span id="resumeExtNote" style="font-weight:600; color:#15803d; margin-left:6px; display:none;">• Campaign Expiry Date will extend by <span id="resumeExtDays">1 day</span>.</span>
                 </div>
 
                 <div class="cmp-form-group">
@@ -1474,6 +1474,17 @@ function calculateResumeDays() {
     if (isNaN(diffDays)) diffDays = 1;
 
     document.getElementById('resumeDiffDays').textContent = diffDays + (diffDays === 1 ? ' day' : ' days');
+
+    const extNote = document.getElementById('resumeExtNote');
+    const extDays = document.getElementById('resumeExtDays');
+    if (extNote && extDays) {
+        if (currentActiveResumeCampaign.end_date) {
+            extDays.textContent = diffDays + (diffDays === 1 ? ' day' : ' days');
+            extNote.style.display = 'inline';
+        } else {
+            extNote.style.display = 'none';
+        }
+    }
 }
 
 // 6. Extend / Renew Modal (Clean naming avoiding repetitive Renewal strings)
