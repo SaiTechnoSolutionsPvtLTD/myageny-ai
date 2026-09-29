@@ -740,16 +740,27 @@ class DashboardController extends Controller
         }
 
         // ── Day Sales Tracker (Today Converted Products & Collections) ──
+        $todayStr = today()->toDateString();
         $todayConvertedQuery = LeadProduct::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                   ->orWhere('lead_status_id', 5);
             })
-            ->where(function ($q) {
-                $q->whereDate('converted_at', today())
-                  ->orWhere(function ($sub) {
-                      $sub->whereNull('converted_at')->whereDate('created_at', today());
-                  });
+            ->where(function ($q) use ($todayStr) {
+                $q->whereHas('payments', function ($pq) use ($todayStr) {
+                    $pq->whereDate('payment_date', $todayStr);
+                })
+                ->orWhereDate('payment_date', $todayStr)
+                ->orWhere(function ($sub) use ($todayStr) {
+                    $sub->whereNull('payment_date')
+                        ->whereDoesntHave('payments')
+                        ->where(function ($dateSub) use ($todayStr) {
+                            $dateSub->whereDate('converted_at', $todayStr)
+                                    ->orWhere(function ($cSub) use ($todayStr) {
+                                        $cSub->whereNull('converted_at')->whereDate('created_at', $todayStr);
+                                    });
+                        });
+                });
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());

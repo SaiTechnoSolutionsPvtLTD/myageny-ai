@@ -97,23 +97,27 @@ class CstDailyClosingController extends Controller
 
         $canViewAll = $this->canViewAllCst($user);
         $isAdminLike = $canViewAll;
-        $isTlLike = false; // Only Company Admin & CBO see all; remaining users see only what is allocated to them
+        $isTlLike = false;
 
+        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
-        if (empty($supportUserIds)) {
-            $supportUserIds = [$user->id];
-        }
 
         if ($canViewAll) {
             $assignableUsers = User::whereIn('id', $supportUserIds)->orderBy('name')->get(['id', 'name']);
             if ($assignableUsers->isEmpty()) {
                 $assignableUsers = collect([$user]);
             }
+            $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         } else {
-            $assignableUsers = collect([$user]);
+            $assignableUsers = $this->visibility->visibleAssignableUsers($user);
+            if ($assignableUsers->isEmpty()) {
+                $assignableUsers = collect([$user]);
+            }
+            $branches = $this->visibility->visibleBranches($user);
+            if ($branches->isEmpty() && $user->branch) {
+                $branches = collect([$user->branch]);
+            }
         }
-
-        $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         // Base query for CstDailyClosing submissions
         $query = CstDailyClosing::with([
@@ -122,11 +126,26 @@ class CstDailyClosingController extends Controller
             'reviewer:id,name',
         ])->latest('closing_date')->latest('id');
 
-        // Apply visibility: Company Admin and CBO can see all submissions, remaining users only see their own
+        // Apply visibility
         if (!$canViewAll) {
-            $query->where('user_id', $user->id);
-        } elseif ($request->filled('user_id') && (int) $request->input('user_id') > 0) {
-            $query->where('user_id', (int) $request->input('user_id'));
+            if ($visibleUserIds !== null) {
+                $query->whereIn('user_id', $visibleUserIds);
+            } else {
+                $query->where('user_id', $user->id);
+            }
+        }
+
+        if ($request->filled('user_id') && (int) $request->input('user_id') > 0) {
+            $filterUserId = (int) $request->input('user_id');
+            if ($canViewAll || ($visibleUserIds !== null && in_array($filterUserId, $visibleUserIds, true))) {
+                $query->where('user_id', $filterUserId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        if ($request->filled('branch_id') && (int) $request->input('branch_id') > 0) {
+            $query->where('branch_id', (int) $request->input('branch_id'));
         }
 
         if ($fromDate && $toDate) {
@@ -152,15 +171,15 @@ class CstDailyClosingController extends Controller
 
         $closings = $query->paginate(15)->withQueryString();
 
-        // Target user for KPI stats:
-        // - Non-admin/CBO: always current user (only their allocated accounts & achievements)
-        // - Admin/CBO: specific user if selected in filter, otherwise null (company-wide CST stats)
-        $targetUserId = $canViewAll
-            ? ($request->filled('user_id') && (int) $request->input('user_id') > 0 ? (int) $request->input('user_id') : null)
-            : $user->id;
+        $targetUserId = $request->filled('user_id') && (int) $request->input('user_id') > 0
+            ? (int) $request->input('user_id')
+            : (!$canViewAll && $visibleUserIds !== null && count($visibleUserIds) === 1 ? $user->id : null);
+
+        $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
+        $dateRangeFilter = ($fromDate && $toDate) ? [$fromDate, $toDate] : ($fromDate ?: ($toDate ?: $selectedDate));
 
         $targetUser = $targetUserId ? User::find($targetUserId) : null;
-        $kpiStats = $this->calculateCstStats($targetUserId, $selectedDate);
+        $kpiStats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
 
         // Check if the current user has submitted today's closing
         $myTodayClosing = CstDailyClosing::where('user_id', $user->id)
@@ -186,35 +205,31 @@ class CstDailyClosingController extends Controller
     }
 
     /**
-     * AJAX endpoint: calculate CST stats dynamically for selected user & date.
+     * AJAX endpoint: calculate CST stats dynamically for selected user, branch & date range.
      */
     public function getStats(Request $request): JsonResponse
     {
         $user = auth()->user();
         $canViewAll = $this->canViewAllCst($user);
-        $closingDate = trim((string) $request->input('closing_date', now()->toDateString()));
+        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
 
-        // If not company admin / CBO, strictly force targetUserId to current user
-        if (!$canViewAll) {
-            $targetUserId = $user->id;
-        } else {
-            $targetUserId = $request->filled('user_id') && (int) $request->input('user_id') > 0
-                ? (int) $request->input('user_id')
-                : null;
-        }
+        $fromDate = $request->input('from_date') ?: $request->input('date_from');
+        $toDate = $request->input('to_date') ?: $request->input('date_to');
+        $closingDate = trim((string) $request->input('closing_date', $request->input('date', now()->toDateString())));
+        $dateRangeFilter = ($fromDate && $toDate) ? [$fromDate, $toDate] : ($fromDate ?: ($toDate ?: $closingDate));
 
-        try {
-            $date = Carbon::parse($closingDate)->toDateString();
-        } catch (\Throwable) {
-            $date = now()->toDateString();
-        }
+        $targetUserId = $request->filled('user_id') && (int) $request->input('user_id') > 0
+            ? (int) $request->input('user_id')
+            : (!$canViewAll && $visibleUserIds !== null && count($visibleUserIds) === 1 ? $user->id : null);
 
-        $stats = $this->calculateCstStats($targetUserId, $date);
+        $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
 
-        // Check if closing already exists for this user and date
+        $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
+
         $lookupUserId = $targetUserId ?? $user->id;
+        $lookupDate = is_array($dateRangeFilter) ? $dateRangeFilter[1] : $dateRangeFilter;
         $existing = CstDailyClosing::where('user_id', $lookupUserId)
-            ->whereDate('closing_date', $date)
+            ->whereDate('closing_date', $lookupDate)
             ->first();
 
         $existingData = null;
@@ -242,7 +257,7 @@ class CstDailyClosingController extends Controller
 
         return response()->json([
             'success'  => true,
-            'date'     => $date,
+            'date'     => is_array($dateRangeFilter) ? implode(' to ', $dateRangeFilter) : $dateRangeFilter,
             'stats'    => $stats,
             'exists'   => (bool) $existing,
             'closing'  => $existingData,
@@ -579,14 +594,15 @@ class CstDailyClosingController extends Controller
     }
 
     /**
-     * Calculate CST Department stats for a specific user and date.
+     * Calculate CST Department stats for a specific user, branch, and date/date range.
      */
-    public function calculateCstStats(?int $userId, string $date): array
+    public function calculateCstStats(?int $userId, string|array $dateRange, ?array $allowedUserIds = null, ?int $branchId = null): array
     {
         $currentUser = auth()->user();
-        $supportUserIds = $this->getSupportUserIds($currentUser);
+        $supportUserIds = $allowedUserIds !== null ? $allowedUserIds : $this->getSupportUserIds($currentUser);
 
-        $parsedDate = Carbon::parse($date);
+        $refDateStr = is_array($dateRange) ? ($dateRange[1] ?? $dateRange[0]) : $dateRange;
+        $parsedDate = Carbon::parse($refDateStr);
         $monthStart = (clone $parsedDate)->startOfMonth();
         $monthEnd   = (clone $parsedDate)->endOfMonth();
         $weekStart  = (clone $parsedDate)->startOfWeek();
@@ -728,8 +744,16 @@ class CstDailyClosingController extends Controller
         }
 
         // 2. Today's Revenue : Today Received Value
-        $todayPaymentQuery = LeadProductPayment::query()
-            ->whereDate('payment_date', $date);
+        $todayPaymentQuery = LeadProductPayment::query();
+        if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
+            $todayPaymentQuery->whereBetween('payment_date', [$dateRange[0], $dateRange[1]]);
+        } else {
+            $todayPaymentQuery->whereDate('payment_date', $refDateStr);
+        }
+
+        if ($branchId) {
+            $todayPaymentQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
+        }
 
         if ($userId) {
             $todayPaymentQuery->where(function($q) use ($userId) {
@@ -747,7 +771,11 @@ class CstDailyClosingController extends Controller
         // 3. Till Now Achieved : Month Starting la irundhu current date varaikum evlo achive panirukanga
         $achievedPaymentQuery = LeadProductPayment::query()
             ->whereDate('payment_date', '>=', $monthStart->toDateString())
-            ->whereDate('payment_date', '<=', $date);
+            ->whereDate('payment_date', '<=', $refDateStr);
+
+        if ($branchId) {
+            $achievedPaymentQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
+        }
 
         if ($userId) {
             $achievedPaymentQuery->where(function($q) use ($userId) {
@@ -827,12 +855,20 @@ class CstDailyClosingController extends Controller
             ->whereHas('products', function($pq) {
                 $pq->where('product_status', '=', 'converted');
             })
-            ->where(function($q) use ($date) {
-                $q->whereDate('customer_support_allocated_at', $date)
-                  ->orWhere(function($sub) use ($date) {
-                      $sub->whereNull('customer_support_allocated_at')
-                          ->whereDate('created_at', $date);
-                  });
+            ->where(function($q) use ($dateRange, $refDateStr) {
+                if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
+                    $q->whereBetween('customer_support_allocated_at', [$dateRange[0] . ' 00:00:00', $dateRange[1] . ' 23:59:59'])
+                      ->orWhere(function($sub) use ($dateRange) {
+                          $sub->whereNull('customer_support_allocated_at')
+                              ->whereBetween('created_at', [$dateRange[0] . ' 00:00:00', $dateRange[1] . ' 23:59:59']);
+                      });
+                } else {
+                    $q->whereDate('customer_support_allocated_at', $refDateStr)
+                      ->orWhere(function($sub) use ($refDateStr) {
+                          $sub->whereNull('customer_support_allocated_at')
+                              ->whereDate('created_at', $refDateStr);
+                      });
+                }
             });
 
         if ($userId) {

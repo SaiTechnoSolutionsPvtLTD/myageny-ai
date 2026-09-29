@@ -281,13 +281,25 @@
                     <input type="date" name="to_date" value="{{ request('to_date', $toDate) }}" class="sdc-input">
                 </div>
 
-                @if($canViewAll)
+                @if($canViewAll || count($assignableUsers) > 1)
                     <div class="sdc-filter-group">
                         <label class="sdc-label">CST Executive</label>
                         <select name="user_id" class="sdc-select">
                             <option value="">All Team Members</option>
                             @foreach($assignableUsers as $u)
                                 <option value="{{ $u->id }}" @selected(request('user_id') == $u->id)>{{ $u->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                @endif
+
+                @if(!empty($branches) && count($branches) > 0)
+                    <div class="sdc-filter-group">
+                        <label class="sdc-label">Branch</label>
+                        <select name="branch_id" class="sdc-select">
+                            <option value="">All Branches</option>
+                            @foreach($branches as $b)
+                                <option value="{{ $b->id }}" @selected(request('branch_id') == $b->id)>{{ $b->name }}</option>
                             @endforeach
                         </select>
                     </div>

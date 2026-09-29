@@ -680,16 +680,27 @@ class SuperAdminDashboardController extends ApiController
         }
 
         // ── Day Sales Tracker (Current Date Converted Products) ──
+        $todayStr = today()->toDateString();
         $todayConvertedQuery = LeadProduct::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                     ->orWhere('lead_status_id', 5);
             })
-            ->where(function ($q) {
-                $q->whereDate('converted_at', today())
-                    ->orWhere(function ($sub) {
-                        $sub->whereNull('converted_at')->whereDate('created_at', today());
-                    });
+            ->where(function ($q) use ($todayStr) {
+                $q->whereHas('payments', function ($pq) use ($todayStr) {
+                    $pq->whereDate('payment_date', $todayStr);
+                })
+                ->orWhereDate('payment_date', $todayStr)
+                ->orWhere(function ($sub) use ($todayStr) {
+                    $sub->whereNull('payment_date')
+                        ->whereDoesntHave('payments')
+                        ->where(function ($dateSub) use ($todayStr) {
+                            $dateSub->whereDate('converted_at', $todayStr)
+                                    ->orWhere(function ($cSub) use ($todayStr) {
+                                        $cSub->whereNull('converted_at')->whereDate('created_at', $todayStr);
+                                    });
+                        });
+                });
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -2648,9 +2659,9 @@ class SuperAdminDashboardController extends ApiController
                         $seenLpIds[$pi->lead_product_id] = true;
                     }
 
-                    $assignedName = $lead?->customerSupportExecutive?->name
-                        ?: ($lead?->customerSupportTl?->name
-                            ?: ($lead?->assignedTo?->name ?: 'Unassigned'));
+                    $salesPerson = $lead?->assignedTo?->name ?: '-';
+                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
                     $items->push([
                         'pi_id'            => $pi->id,
@@ -2665,8 +2676,10 @@ class SuperAdminDashboardController extends ApiController
                         'expected_value'   => $expVal,
                         'closure_date'     => $rDate->format('d M Y'),
                         'closure_date_raw' => $rDate->format('Y-m-d'),
+                        'sales_person_name' => $salesPerson,
+                        'cst_person_name'   => $cstPerson,
                         'assigned_to'      => $assignedName,
-                        'executive_name'   => $assignedName,
+                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                         'branch_id'        => $lead?->branch_id,
                         'branch_name'      => $lead?->branch?->name ?: 'General',
                         'source_type'      => 'renewal',
@@ -2679,7 +2692,7 @@ class SuperAdminDashboardController extends ApiController
         $devPisQuery = ProductionInitiation::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'leadProduct',
                 'product',
@@ -2729,8 +2742,9 @@ class SuperAdminDashboardController extends ApiController
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
             $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-            $assignedName = $lead?->customerSupportExecutive?->name
-                ?: ($lead?->assignedTo?->name ?: 'Unassigned');
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+            $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
             $items->push([
                 'pi_id'            => $pi->id,
@@ -2745,8 +2759,10 @@ class SuperAdminDashboardController extends ApiController
                 'expected_value'   => $expVal,
                 'closure_date'     => $cExpDate->format('d M Y'),
                 'closure_date_raw' => $cExpDate->format('Y-m-d'),
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
                 'assigned_to'      => $assignedName,
-                'executive_name'   => $assignedName,
+                'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                 'branch_id'        => $lead?->branch_id,
                 'branch_name'      => $lead?->branch?->name ?: 'General',
                 'source_type'      => 'development',
@@ -2830,7 +2846,7 @@ class SuperAdminDashboardController extends ApiController
             $query = LeadProduct::query()
                 ->with([
                     'lead' => function ($lq) {
-                        $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                        $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                     },
                     'product:id,product_name',
                     'leadStatus:id,name'
@@ -2850,6 +2866,8 @@ class SuperAdminDashboardController extends ApiController
 
             $rows = $hotProducts->map(function ($item, $idx) {
                 $lead = $item->lead;
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
                 return [
                     'index'            => $idx + 1,
                     'lead_id'          => $lead?->id,
@@ -2862,7 +2880,9 @@ class SuperAdminDashboardController extends ApiController
                     'expected_value'   => (float) ($item->expected_value ?? 0),
                     'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                     'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                    'executive_name'   => $lead?->assignedTo?->name ?: '-',
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
                     'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
                 ];
             });
@@ -2882,7 +2902,9 @@ class SuperAdminDashboardController extends ApiController
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
-                    'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
+                    'executive_name'   => $cItem['sales_person_name'] ?? ($cItem['executive_name'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
             }
@@ -2944,7 +2966,7 @@ class SuperAdminDashboardController extends ApiController
         $query = LeadProduct::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'product:id,product_name',
                 'leadStatus:id,name'
@@ -3215,19 +3237,23 @@ class SuperAdminDashboardController extends ApiController
 
         $rows = $hotProducts->map(function ($item, $idx) {
             $lead = $item->lead;
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
             return [
-                'index'          => $idx + 1,
-                'lead_id'        => $lead?->id,
-                'lead_view_url'  => $lead ? route('leads.show', $lead->id) : null,
-                'company_name'   => $lead?->company_name ?: ($lead?->business_name ?: '-'),
-                'customer_name'  => $lead?->contact_name ?: '-',
-                'product_name'   => $item->product_name ?: ($item->product?->product_name ?: '-'),
-                'status'         => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
-                'deal_value'     => (float) $item->total_price,
-                'expected_value' => (float) ($item->expected_value ?? 0),
-                'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
+                'index'            => $idx + 1,
+                'lead_id'          => $lead?->id,
+                'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
+                'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
+                'customer_name'    => $lead?->contact_name ?: '-',
+                'product_name'     => $item->product_name ?: ($item->product?->product_name ?: '-'),
+                'status'           => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
+                'deal_value'       => (float) $item->total_price,
+                'expected_value'   => (float) ($item->expected_value ?? 0),
+                'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                 'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                'executive_name'   => $lead?->assignedTo?->name ?: '-',
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
+                'executive_name'   => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
                 'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
             ];
         });
@@ -3275,7 +3301,9 @@ class SuperAdminDashboardController extends ApiController
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
-                    'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
+                    'executive_name'   => $cItem['sales_person_name'] ?? ($cItem['executive_name'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
             }

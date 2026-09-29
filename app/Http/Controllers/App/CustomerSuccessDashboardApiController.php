@@ -35,7 +35,18 @@ class CustomerSuccessDashboardApiController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']);
 
-            $branches = $this->visibility->visibleBranches($currentUser);
+            if ($this->canViewAllBranches($currentUser)) {
+                $branches = \App\Models\Branch::where('is_active', true)
+                    ->when($currentUser->company_id, fn($q) => $q->where('company_id', $currentUser->company_id))
+                    ->orderBy('name')
+                    ->get(['id', 'name']);
+            } else {
+                $myBranchIds = $currentUser->getMyBranchIds();
+                $branches = \App\Models\Branch::where('is_active', true)
+                    ->whereIn('id', $myBranchIds)
+                    ->orderBy('name')
+                    ->get(['id', 'name']);
+            }
 
             $products = Product::query()
                 ->where('is_this_renewal_product', true)
@@ -510,7 +521,7 @@ class CustomerSuccessDashboardApiController extends Controller
             ])
             ->where(fn($q) => $q->where('products.count_wise_report', true)->orWhere('products.is_this_renewal_product', true))
             ->where($applySupportScope)
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
             ->when(!empty($search), function ($q) use ($search) {
@@ -592,7 +603,7 @@ class CustomerSuccessDashboardApiController extends Controller
             ->where($applySupportScope)
             ->where('lead_products.payment_status', '!=', 'paid')
             ->whereRaw('(lead_products.total_price - lead_products.amount_paid) > 0')
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where(function($sub) use ($filters) {
                 $sub->where('lead_products.product_id', $filters['product_id'])
                     ->orWhere('products.id', $filters['product_id']);
@@ -662,7 +673,7 @@ class CustomerSuccessDashboardApiController extends Controller
             ->where('lead_products.product_status', '=', 'converted')
             ->where('products.count_wise_report', '!=', true)
             ->where('products.is_this_renewal_product', '!=', true)
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('lead_products.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
             ->when(!empty($search), function ($q) use ($search) {
@@ -724,6 +735,7 @@ class CustomerSuccessDashboardApiController extends Controller
                 $q->whereNotNull('customer_support_executive_id')
                   ->orWhereNotNull('customer_support_tl_id');
             })
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, $currentUser, 'leads.branch_id'))
             ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
             ->when($toDate, fn($q) => $q->whereDate('lead_date', '<=', $toDate))
             ->selectRaw('COALESCE(customer_support_executive_id, customer_support_tl_id) as uid, COUNT(*) as cnt')
@@ -738,6 +750,7 @@ class CustomerSuccessDashboardApiController extends Controller
                   ->orWhereNotNull('customer_support_tl_id');
             })
             ->where('lead_status_id', 5)
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, $currentUser, 'leads.branch_id'))
             ->when($fromDate, fn($q) => $q->whereDate('lead_date', '>=', $fromDate))
             ->when($toDate, fn($q) => $q->whereDate('lead_date', '<=', $toDate))
             ->selectRaw('COALESCE(customer_support_executive_id, customer_support_tl_id) as uid, COUNT(*) as cnt')
@@ -747,11 +760,13 @@ class CustomerSuccessDashboardApiController extends Controller
 
         // Optimized: Single group query for collected sums
         $collectedSums = LeadProductPayment::query()
-            ->whereIn('recorded_by', $supportUserIds)
-            ->when($fromDate, fn($q) => $q->whereDate('payment_date', '>=', $fromDate))
-            ->when($toDate, fn($q) => $q->whereDate('payment_date', '<=', $toDate))
-            ->selectRaw('recorded_by as uid, SUM(amount) as total')
-            ->groupBy('recorded_by')
+            ->join('leads', 'leads.id', '=', 'lead_product_payments.lead_id')
+            ->whereIn('lead_product_payments.recorded_by', $supportUserIds)
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, $currentUser, 'leads.branch_id'))
+            ->when($fromDate, fn($q) => $q->whereDate('lead_product_payments.payment_date', '>=', $fromDate))
+            ->when($toDate, fn($q) => $q->whereDate('lead_product_payments.payment_date', '<=', $toDate))
+            ->selectRaw('lead_product_payments.recorded_by as uid, SUM(lead_product_payments.amount) as total')
+            ->groupBy('lead_product_payments.recorded_by')
             ->pluck('total', 'uid')
             ->toArray();
 
@@ -799,7 +814,7 @@ class CustomerSuccessDashboardApiController extends Controller
             ])
             ->where($applySupportScope)
             ->whereRaw('LOWER(departments.name) LIKE ?', ['%development%'])
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
             ->when(!empty($search), function ($q) use ($search) {
@@ -914,7 +929,7 @@ class CustomerSuccessDashboardApiController extends Controller
                 'leads.customer_support_executive_id',
             ])
             ->where($applySupportScope)
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
             ->when(!empty($search), function ($q) use ($search) {
                 $q->where(function ($sq) use ($search) {
@@ -1021,9 +1036,7 @@ class CustomerSuccessDashboardApiController extends Controller
                        ->orWhereHas('lead', fn($lq) => $lq->where('company_id', $currentUser->company_id));
                 });
             })
-            ->when(!empty($filters['branch_id']), function ($q) use ($filters) {
-                $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id']));
-            })
+            ->tap(fn($q) => $this->applyRelationBranchScope($q, $filters, $currentUser, 'lead'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), function ($q) use ($filters) {
                 $q->whereHas('lead', fn($lq) => $lq->where('lead_source', $filters['source']));
@@ -1107,9 +1120,7 @@ class CustomerSuccessDashboardApiController extends Controller
                        ->orWhereHas('lead', fn($lq) => $lq->where('company_id', $currentUser->company_id));
                 });
             })
-            ->when(!empty($filters['branch_id']), function ($q) use ($filters) {
-                $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id']));
-            })
+            ->tap(fn($q) => $this->applyRelationBranchScope($q, $filters, $currentUser, 'lead'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('smm_sheets.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), function ($q) use ($filters) {
                 $q->whereHas('lead', fn($lq) => $lq->where('lead_source', $filters['source']));
@@ -1253,7 +1264,7 @@ class CustomerSuccessDashboardApiController extends Controller
                 $q->whereNull('production_initiations.production_approval_status')
                   ->orWhere('production_initiations.production_approval_status', '!=', 'rejected');
             })
-            ->when(!empty($filters['branch_id']), fn($q) => $q->where('leads.branch_id', $filters['branch_id']))
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
             ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
             ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
             ->when(!empty($executionStatus) && $executionStatus !== 'all', function ($q) use ($executionStatus) {
@@ -1490,5 +1501,96 @@ class CustomerSuccessDashboardApiController extends Controller
                 'has_more'      => false,
             ],
         ];
+    }
+
+    private function canViewAllBranches(User $user): bool
+    {
+        if ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->isCbo() || $this->visibility->isCompanyWideUser($user)) {
+            return true;
+        }
+
+        if ($user->isBranchManager() || $user->isBranchAdmin() || $this->visibility->hasBranchAdminRole($user) || $this->visibility->hasBranchManagerRole($user)) {
+            return false;
+        }
+
+        if ($user->belongsToCustomerSupportDepartment() || $user->hasCustomerSupportLikeRole()) {
+            return true;
+        }
+
+        return User::where('id', $user->id)->where(function($query) {
+            $query->whereHas('roles.department', function($q) {
+                $q->where('name', 'like', '%customer support%')
+                  ->orWhere('name', 'like', '%customer success%')
+                  ->orWhere('id', 5);
+            })->orWhereHas('employeeOnboarding', function($q) {
+                $q->where('department_id', 5);
+            });
+        })->exists();
+    }
+
+    private function applyBranchScope($query, array $filters, ?User $currentUser = null, string $branchColumn = 'leads.branch_id')
+    {
+        $currentUser ??= auth()->user();
+        if (!$currentUser) {
+            return $query;
+        }
+
+        $canViewAllBranches = $this->canViewAllBranches($currentUser);
+        $myBranchIds = $currentUser->getMyBranchIds();
+
+        if (!empty($filters['branch_id'])) {
+            $selectedBranch = (int) $filters['branch_id'];
+            if (!$canViewAllBranches) {
+                if (in_array($selectedBranch, $myBranchIds, true)) {
+                    $query->where($branchColumn, $selectedBranch);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            } else {
+                $query->where($branchColumn, $selectedBranch);
+            }
+        } else {
+            if (!$canViewAllBranches) {
+                if (!empty($myBranchIds)) {
+                    $query->whereIn($branchColumn, $myBranchIds);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            }
+        }
+        return $query;
+    }
+
+    private function applyRelationBranchScope($query, array $filters, ?User $currentUser = null, string $relation = 'lead')
+    {
+        $currentUser ??= auth()->user();
+        if (!$currentUser) {
+            return $query;
+        }
+
+        $canViewAllBranches = $this->canViewAllBranches($currentUser);
+        $myBranchIds = $currentUser->getMyBranchIds();
+
+        if (!empty($filters['branch_id'])) {
+            $selectedBranch = (int) $filters['branch_id'];
+            if (!$canViewAllBranches) {
+                if (in_array($selectedBranch, $myBranchIds, true)) {
+                    $query->whereHas($relation, fn($lq) => $lq->where('branch_id', $selectedBranch));
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            } else {
+                $query->whereHas($relation, fn($lq) => $lq->where('branch_id', $selectedBranch));
+            }
+        } else {
+            if (!$canViewAllBranches) {
+                if (!empty($myBranchIds)) {
+                    $query->whereHas($relation, fn($lq) => $lq->whereIn('branch_id', $myBranchIds));
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            }
+        }
+        return $query;
     }
 }

@@ -126,15 +126,20 @@ class SalesDailyClosingController extends Controller
         $closings = $query->paginate(15)->withQueryString();
 
         // Calculate KPI summary for the selected date & user filter
-        $targetUserId = $request->filled('user_id')
-            ? (int) $request->input('user_id')
-            : ($isExecutive ? $user->id : null);
+        $targetUserId = $request->filled('user_id') ? (int) $request->input('user_id') : null;
 
         if ($targetUserId && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
             $targetUserId = $user->id;
         }
 
-        $kpiStats = $this->calculateCallStats($targetUserId, $selectedDate, $visibleUserIds);
+        if (!$isCompanyAdmin && !$targetUserId && $visibleUserIds !== null && count($visibleUserIds) === 1) {
+            $targetUserId = $user->id;
+        }
+
+        $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
+        $dateRangeFilter = ($dateFrom && $dateTo) ? [$dateFrom, $dateTo] : ($dateFrom ?: ($dateTo ?: $selectedDate));
+
+        $kpiStats = $this->calculateCallStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
 
         // Check if the current user has submitted today's closing
         $myTodayClosing = SalesDailyClosing::where('user_id', $user->id)
@@ -174,32 +179,34 @@ class SalesDailyClosingController extends Controller
     }
 
     /**
-     * AJAX endpoint: calculate call stats dynamically for selected user & date.
+     * AJAX endpoint: calculate call stats dynamically for selected user, branch & date range.
      */
     public function getCallStats(Request $request): JsonResponse
     {
         $user = auth()->user();
-        $targetUserId = (int) ($request->input('user_id') ?: $user->id);
-        $closingDate = trim((string) $request->input('closing_date', now()->toDateString()));
+        $targetUserId = $request->filled('user_id') ? (int) $request->input('user_id') : null;
+        $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
+
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $closingDate = trim((string) $request->input('closing_date', $request->input('date', now()->toDateString())));
+
+        $dateRangeFilter = ($dateFrom && $dateTo) ? [$dateFrom, $dateTo] : ($dateFrom ?: ($dateTo ?: $closingDate));
 
         $visibleUserIds = $this->resolveVisibleUserIds($user);
 
         // Check permission if viewing another user's stats
-        if ($targetUserId !== $user->id && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
+        if ($targetUserId !== null && $targetUserId !== $user->id && $visibleUserIds !== null && !in_array($targetUserId, $visibleUserIds, true)) {
             return response()->json(['success' => false, 'message' => 'Unauthorized access'], 403);
         }
 
-        try {
-            $date = Carbon::parse($closingDate)->toDateString();
-        } catch (\Throwable) {
-            $date = now()->toDateString();
-        }
-
-        $stats = $this->calculateCallStats($targetUserId, $date, $visibleUserIds);
+        $stats = $this->calculateCallStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
 
         // Check if closing already exists for this user and date
-        $existing = SalesDailyClosing::where('user_id', $targetUserId)
-            ->whereDate('closing_date', $date)
+        $lookupUserId = $targetUserId ?? $user->id;
+        $lookupDate = is_array($dateRangeFilter) ? $dateRangeFilter[1] : $dateRangeFilter;
+        $existing = SalesDailyClosing::where('user_id', $lookupUserId)
+            ->whereDate('closing_date', $lookupDate)
             ->first();
 
         $existingData = null;
@@ -219,7 +226,7 @@ class SalesDailyClosingController extends Controller
 
         return response()->json([
             'success' => true,
-            'date' => $date,
+            'date' => is_array($dateRangeFilter) ? implode(' to ', $dateRangeFilter) : $dateRangeFilter,
             'stats' => $stats,
             'exists' => (bool) $existing,
             'closing' => $existingData,
@@ -232,8 +239,10 @@ class SalesDailyClosingController extends Controller
     public function getCallDetails(Request $request): JsonResponse
     {
         $user = auth()->user();
-        $metric = trim((string) $request->input('metric', 'unique_calls'));
-        $date = trim((string) $request->input('date', now()->toDateString()));
+        $metric     = trim((string) $request->input('metric', 'unique_calls'));
+        $dateFrom   = trim((string) $request->input('date_from', ''));
+        $dateTo     = trim((string) $request->input('date_to', ''));
+        $singleDate = trim((string) $request->input('date', ''));
         $targetUserId = $request->filled('user_id') ? (int) $request->input('user_id') : null;
 
         $visibleUserIds = $this->resolveVisibleUserIds($user);
@@ -246,10 +255,31 @@ class SalesDailyClosingController extends Controller
             $targetUserId = $user->id;
         }
 
-        try {
-            $date = Carbon::parse($date)->toDateString();
-        } catch (\Throwable) {
-            $date = now()->toDateString();
+        if ($dateFrom && $dateTo) {
+            try {
+                $startDate = Carbon::parse($dateFrom)->startOfDay();
+                $endDate   = Carbon::parse($dateTo)->endOfDay();
+                $dateLabel = Carbon::parse($dateFrom)->format('d M Y') . ' – ' . Carbon::parse($dateTo)->format('d M Y');
+            } catch (\Throwable) {
+                $startDate = now()->startOfDay();
+                $endDate   = now()->endOfDay();
+                $dateLabel = now()->format('d M Y');
+            }
+        } elseif ($dateFrom || $singleDate) {
+            $ref = $dateFrom ?: $singleDate;
+            try {
+                $startDate = Carbon::parse($ref)->startOfDay();
+                $endDate   = Carbon::parse($ref)->endOfDay();
+                $dateLabel = Carbon::parse($ref)->format('d M Y');
+            } catch (\Throwable) {
+                $startDate = now()->startOfDay();
+                $endDate   = now()->endOfDay();
+                $dateLabel = now()->format('d M Y');
+            }
+        } else {
+            $startDate = now()->startOfDay();
+            $endDate   = now()->endOfDay();
+            $dateLabel = now()->format('d M Y');
         }
 
         $query = LeadCallUpdate::with([
@@ -257,7 +287,7 @@ class SalesDailyClosingController extends Controller
             'user:id,name',
             'outCome:id,name',
             'outComeSubCategory:id,name',
-        ])->whereDate('called_at', $date)->latest('called_at');
+        ])->whereBetween('called_at', [$startDate, $endDate])->latest('called_at');
 
         if ($targetUserId) {
             $query->where('user_id', $targetUserId);
@@ -278,15 +308,15 @@ class SalesDailyClosingController extends Controller
             case 'new_calls':
             case 'total_new_calls':
                 $metricTitle = 'Total New Calls (Fresh Outreach)';
-                $query->whereNotExists(function ($q) use ($date) {
+                $query->whereNotExists(function ($q) use ($startDate) {
                     $q->select(DB::raw(1))
                         ->from('lead_call_updates as prev')
                         ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
-                        ->whereDate('prev.called_at', '<', $date);
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
+                        ->where('prev.called_at', '<', $startDate);
+                })->whereIn('lead_call_updates.id', function ($sub) use ($startDate, $endDate, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
-                        ->whereDate('called_at', $date);
+                        ->whereBetween('called_at', [$startDate, $endDate]);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
                     } elseif ($visibleUserIds !== null) {
@@ -298,15 +328,15 @@ class SalesDailyClosingController extends Controller
 
             case 'followup_calls':
                 $metricTitle = 'Followup Calls (Pipeline Leads)';
-                $query->whereExists(function ($q) use ($date) {
+                $query->whereExists(function ($q) use ($startDate) {
                     $q->select(DB::raw(1))
                         ->from('lead_call_updates as prev')
                         ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
-                        ->whereDate('prev.called_at', '<', $date);
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
+                        ->where('prev.called_at', '<', $startDate);
+                })->whereIn('lead_call_updates.id', function ($sub) use ($startDate, $endDate, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
-                        ->whereDate('called_at', $date);
+                        ->whereBetween('called_at', [$startDate, $endDate]);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
                     } elseif ($visibleUserIds !== null) {
@@ -325,10 +355,10 @@ class SalesDailyClosingController extends Controller
                       ->orWhere('outcome', '6')
                       ->orWhere('outcome', 'not_interested')
                       ->orWhere('outcome', 'closed');
-                })->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
+                })->whereIn('lead_call_updates.id', function ($sub) use ($startDate, $endDate, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
-                        ->whereDate('called_at', $date);
+                        ->whereBetween('called_at', [$startDate, $endDate]);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
                     } elseif ($visibleUserIds !== null) {
@@ -340,10 +370,10 @@ class SalesDailyClosingController extends Controller
 
             case 'unique_calls':
                 $metricTitle = 'Unique Calls (Distinct Leads Contacted)';
-                $query->whereIn('lead_call_updates.id', function ($sub) use ($date, $targetUserId, $visibleUserIds) {
+                $query->whereIn('lead_call_updates.id', function ($sub) use ($startDate, $endDate, $targetUserId, $visibleUserIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
-                        ->whereDate('called_at', $date);
+                        ->whereBetween('called_at', [$startDate, $endDate]);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
                     } elseif ($visibleUserIds !== null) {
@@ -392,7 +422,7 @@ class SalesDailyClosingController extends Controller
             'success' => true,
             'metric' => $metric,
             'title' => $metricTitle,
-            'date' => Carbon::parse($date)->format('d M Y'),
+            'date' => $dateLabel,
             'total' => $rows->count(),
             'rows' => $rows,
         ]);
@@ -644,97 +674,112 @@ class SalesDailyClosingController extends Controller
      * 6. Converted / Won Leads count on that date
      * 7. Quotations Created count on that date
      */
-    private function calculateCallStats(?int $userId, string $date, ?array $allowedUserIds = null): array
+    private function calculateCallStats(?int $userId, string|array $dateRange, ?array $allowedUserIds = null, ?int $branchId = null): array
     {
-        // 1. Total Calls Made on that date
-        $totalCallsQuery = LeadCallUpdate::whereDate('called_at', $date);
-        if ($userId) {
-            $totalCallsQuery->where('user_id', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $totalCallsQuery->whereIn('user_id', $allowedUserIds);
-        }
+        $applyDate = function($q, $col = 'called_at') use ($dateRange) {
+            if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
+                $q->whereBetween($col, [$dateRange[0], $dateRange[1]]);
+            } elseif (is_string($dateRange) && !empty($dateRange)) {
+                $q->whereDate($col, $dateRange);
+            }
+        };
+
+        $applyUser = function($q, $col = 'user_id') use ($userId, $allowedUserIds) {
+            if ($userId) {
+                $q->where($col, $userId);
+            } elseif ($allowedUserIds !== null) {
+                $q->whereIn($col, $allowedUserIds);
+            }
+        };
+
+        $applyBranch = function($q, $relation = 'lead') use ($branchId) {
+            if ($branchId) {
+                if ($relation) {
+                    $q->whereHas($relation, fn($lq) => $lq->where('branch_id', $branchId));
+                } else {
+                    $q->where('branch_id', $branchId);
+                }
+            }
+        };
+
+        // 1. Total Calls Made
+        $totalCallsQuery = LeadCallUpdate::query();
+        $applyDate($totalCallsQuery, 'called_at');
+        $applyUser($totalCallsQuery, 'user_id');
+        $applyBranch($totalCallsQuery, 'lead');
         $totalCalls = (int) $totalCallsQuery->count();
 
-        // 2. Unique Calls (Distinct Leads)
-        $uniqueCallsQuery = LeadCallUpdate::whereDate('called_at', $date);
-        if ($userId) {
-            $uniqueCallsQuery->where('user_id', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $uniqueCallsQuery->whereIn('user_id', $allowedUserIds);
-        }
+        // 2. Unique Calls
+        $uniqueCallsQuery = LeadCallUpdate::query();
+        $applyDate($uniqueCallsQuery, 'called_at');
+        $applyUser($uniqueCallsQuery, 'user_id');
+        $applyBranch($uniqueCallsQuery, 'lead');
         $uniqueCalls = (int) $uniqueCallsQuery->distinct('lead_id')->count('lead_id');
 
-        // 3. Total New Calls (First ever outreach to this lead before this date)
-        $newCallsQuery = LeadCallUpdate::whereDate('called_at', $date)
-            ->whereNotExists(function ($q) use ($date) {
-                $q->select(DB::raw(1))
-                    ->from('lead_call_updates as prev')
-                    ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
-                    ->whereDate('prev.called_at', '<', $date);
-            });
-        if ($userId) {
-            $newCallsQuery->where('user_id', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $newCallsQuery->whereIn('user_id', $allowedUserIds);
-        }
+        // 3. Total New Calls
+        $refDate = is_array($dateRange) ? $dateRange[0] : $dateRange;
+        $newCallsQuery = LeadCallUpdate::query();
+        $applyDate($newCallsQuery, 'called_at');
+        $applyUser($newCallsQuery, 'user_id');
+        $applyBranch($newCallsQuery, 'lead');
+        $newCallsQuery->whereNotExists(function ($q) use ($refDate) {
+            $q->select(DB::raw(1))
+                ->from('lead_call_updates as prev')
+                ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
+                ->whereDate('prev.called_at', '<', $refDate);
+        });
         $newCalls = (int) $newCallsQuery->distinct('lead_id')->count('lead_id');
 
-        // 4. Followup Calls (Lead has at least one prior call before this date)
-        $followupCallsQuery = LeadCallUpdate::whereDate('called_at', $date)
-            ->whereExists(function ($q) use ($date) {
-                $q->select(DB::raw(1))
-                    ->from('lead_call_updates as prev')
-                    ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
-                    ->whereDate('prev.called_at', '<', $date);
-            });
-        if ($userId) {
-            $followupCallsQuery->where('user_id', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $followupCallsQuery->whereIn('user_id', $allowedUserIds);
-        }
+        // 4. Followup Calls
+        $followupCallsQuery = LeadCallUpdate::query();
+        $applyDate($followupCallsQuery, 'called_at');
+        $applyUser($followupCallsQuery, 'user_id');
+        $applyBranch($followupCallsQuery, 'lead');
+        $followupCallsQuery->whereExists(function ($q) use ($refDate) {
+            $q->select(DB::raw(1))
+                ->from('lead_call_updates as prev')
+                ->whereColumn('prev.lead_id', 'lead_call_updates.lead_id')
+                ->whereDate('prev.called_at', '<', $refDate);
+        });
         $followupCalls = (int) $followupCallsQuery->distinct('lead_id')->count('lead_id');
 
-        // 5. All One-Time Calls (Single touch / no future follow-up scheduled or closed)
-        $onetimeCallsQuery = LeadCallUpdate::whereDate('called_at', $date)
-            ->where(function ($q) {
-                $q->whereNull('next_follow_up')
-                  ->orWhere('outcome', '9') // Not Interested category id
-                  ->orWhere('outcome', '6') // Closed category id
-                  ->orWhere('outcome', 'not_interested')
-                  ->orWhere('outcome', 'closed');
-            });
-        if ($userId) {
-            $onetimeCallsQuery->where('user_id', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $onetimeCallsQuery->whereIn('user_id', $allowedUserIds);
-        }
+        // 5. One-time Calls
+        $onetimeCallsQuery = LeadCallUpdate::query();
+        $applyDate($onetimeCallsQuery, 'called_at');
+        $applyUser($onetimeCallsQuery, 'user_id');
+        $applyBranch($onetimeCallsQuery, 'lead');
+        $onetimeCallsQuery->where(function ($q) {
+            $q->whereNull('next_follow_up')
+              ->orWhere('outcome', '9')
+              ->orWhere('outcome', '6')
+              ->orWhere('outcome', 'not_interested')
+              ->orWhere('outcome', 'closed');
+        });
         $onetimeCalls = (int) $onetimeCallsQuery->distinct('lead_id')->count('lead_id');
 
-        // 6. Converted Leads today
+        // 6. Converted Leads
         $convertedStatusIds = LeadStatus::whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])->pluck('id')->toArray();
         if (empty($convertedStatusIds)) {
             $convertedStatusIds = [5, 15];
         }
 
-        $convertedQuery = Lead::where(function ($q) use ($convertedStatusIds) {
+        $convertedQuery = Lead::query();
+        $applyDate($convertedQuery, 'updated_at');
+        $applyUser($convertedQuery, 'assigned_to');
+        if ($branchId) {
+            $convertedQuery->where('branch_id', $branchId);
+        }
+        $convertedQuery->where(function ($q) use ($convertedStatusIds) {
             $q->whereIn('lead_status', ['won', 'converted'])
               ->orWhereIn('lead_status_id', $convertedStatusIds);
-        })->whereDate('updated_at', $date);
-
-        if ($userId) {
-            $convertedQuery->where('assigned_to', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $convertedQuery->whereIn('assigned_to', $allowedUserIds);
-        }
+        });
         $convertedCount = (int) $convertedQuery->count();
 
-        // 7. Quotations created on that date
-        $quotationsQuery = Quotation::whereDate('created_at', $date);
-        if ($userId) {
-            $quotationsQuery->where('created_by', $userId);
-        } elseif ($allowedUserIds !== null) {
-            $quotationsQuery->whereIn('created_by', $allowedUserIds);
-        }
+        // 7. Quotations created
+        $quotationsQuery = Quotation::query();
+        $applyDate($quotationsQuery, 'created_at');
+        $applyUser($quotationsQuery, 'created_by');
+        $applyBranch($quotationsQuery, 'lead');
         $quotationsCount = (int) $quotationsQuery->count();
 
         return [

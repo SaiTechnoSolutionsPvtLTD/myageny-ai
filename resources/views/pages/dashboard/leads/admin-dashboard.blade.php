@@ -2073,8 +2073,12 @@
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">Date:</label>
-                    <input type="date" id="daDstDatePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:135px;" onchange="loadDaySalesTrackerData(this.value)">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">From:</label>
+                    <input type="date" id="daDstFromDatePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:130px;" onchange="handleDaySalesTrackerDateChange()">
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <label style="font-size:12px; font-weight:700; color:#64748b; margin:0;">To:</label>
+                    <input type="date" id="daDstToDatePicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:130px;" onchange="handleDaySalesTrackerDateChange()">
                 </div>
                 <input type="text" id="daDstSearchInput" placeholder="Quick search..." class="form-control" style="font-size:12px; height:34px; padding:4px 10px; border-radius:8px; border:1px solid #cbd5e1; width:200px;" oninput="filterDaySalesTable(this.value)">
                 @if(($userRoleType ?? 'company_admin') === 'company_admin')
@@ -2092,10 +2096,10 @@
             </div>
         </div>
 
-        <div class="da-modal-body" style="padding:16px 28px 28px; max-width:1700px;">
-            <div class="da-modal-table-wrap" style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div class="da-modal-body" style="padding:16px 28px 28px; max-width:1700px; flex:1; overflow:hidden; display:flex; flex-direction:column;">
+            <div class="da-modal-table-wrap" style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:auto; max-height:calc(100vh - 120px); flex:1; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
                 <table class="da-modal-table" style="width:100%; border-collapse:collapse;">
-                    <thead>
+                    <thead style="position:sticky; top:0; z-index:10; background:#f8fafc;">
                         <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
                             <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:center; width:45px;">#</th>
                             <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:70px;">Mon</th>
@@ -2113,7 +2117,7 @@
                     <tbody id="daDstTableBody">
                         <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading converted product details...</td></tr>
                     </tbody>
-                    <tfoot id="daDstTableFoot">
+                    <tfoot id="daDstTableFoot" style="position:sticky; bottom:0; background:#f8fafc; z-index:10;">
                     </tfoot>
                 </table>
             </div>
@@ -2459,12 +2463,13 @@
                             <th style="text-align: right;">Deal Value</th>
                             <th style="text-align: right;">Expected Amount</th>
                             <th style="text-align: center;">Closure Date</th>
-                            <th>Executive Name</th>
+                            <th>Sales Person</th>
+                            <th>CST Person</th>
                         </tr>
                     </thead>
                     <tbody id="daBranchHotLeadsBody">
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 36px; color: #94a3b8;">
+                            <td colspan="10" style="text-align: center; padding: 36px; color: #94a3b8;">
                                 Loading branch prospects...
                             </td>
                         </tr>
@@ -3380,13 +3385,26 @@ window.openDaySalesTrackerModal = function() {
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 
-    var datePicker = document.getElementById('daDstDatePicker');
+    var fromPicker = document.getElementById('daDstFromDatePicker');
+    var toPicker = document.getElementById('daDstToDatePicker');
     var todayStr = new Date().toISOString().split('T')[0];
-    if (datePicker && !datePicker.value) {
-        datePicker.value = todayStr;
+    if (fromPicker && !fromPicker.value) {
+        fromPicker.value = todayStr;
     }
-    var selectedDate = (datePicker && datePicker.value) ? datePicker.value : todayStr;
-    loadDaySalesTrackerData(selectedDate);
+    if (toPicker && !toPicker.value) {
+        toPicker.value = todayStr;
+    }
+    var fromDate = (fromPicker && fromPicker.value) ? fromPicker.value : todayStr;
+    var toDate = (toPicker && toPicker.value) ? toPicker.value : todayStr;
+    loadDaySalesTrackerData(fromDate, toDate);
+};
+
+window.handleDaySalesTrackerDateChange = function() {
+    var fromPicker = document.getElementById('daDstFromDatePicker');
+    var toPicker = document.getElementById('daDstToDatePicker');
+    var fromDate = fromPicker ? fromPicker.value : '';
+    var toDate = toPicker ? toPicker.value : '';
+    loadDaySalesTrackerData(fromDate, toDate);
 };
 
 window.closeDaySalesTrackerModal = function() {
@@ -3396,15 +3414,19 @@ window.closeDaySalesTrackerModal = function() {
     document.body.style.overflow = '';
 };
 
-window.loadDaySalesTrackerData = function(date) {
+window.loadDaySalesTrackerData = function(dateFrom, dateTo) {
     var tbody = document.getElementById('daDstTableBody');
     if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#94a3b8;"><span class="spinner-border spinner-border-sm" role="status" style="margin-right:6px;"></span> Loading converted product details...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;"><span class="spinner-border spinner-border-sm" role="status" style="margin-right:6px;"></span> Loading converted product details...</td></tr>';
     }
 
     var url = '{{ url("/api/day-sales-tracker/data") }}';
-    if (date) {
-        url += '?date=' + encodeURIComponent(date);
+    var params = [];
+    if (dateFrom) params.push('date_from=' + encodeURIComponent(dateFrom));
+    if (dateTo)   params.push('date_to=' + encodeURIComponent(dateTo));
+
+    if (params.length > 0) {
+        url += '?' + params.join('&');
     }
 
     var headers = {
@@ -4590,7 +4612,7 @@ function filterSubmodalViews() {
     // 1. Filtered Leads for Full Details
     var filteredLeads = currentLoadedLeads.filter(function(l) {
         if (!q) return true;
-        var text = ((l.company_name || '') + ' ' + (l.customer_name || '') + ' ' + (l.product_name || '') + ' ' + (l.executive_name || '') + ' ' + (l.branch_name || '') + ' ' + (l.status || '')).toLowerCase();
+        var text = ((l.company_name || '') + ' ' + (l.customer_name || '') + ' ' + (l.product_name || '') + ' ' + (l.executive_name || '') + ' ' + (l.sales_person_name || '') + ' ' + (l.cst_person_name || '') + ' ' + (l.branch_name || '') + ' ' + (l.status || '')).toLowerCase();
         return text.indexOf(q) !== -1;
     });
 
@@ -4716,7 +4738,7 @@ function renderFullDetailsTable(leads) {
     if (!tbody) return;
 
     if (leads.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;">' + (currentSubmodalSearch ? 'No matching leads found.' : 'No hot prospects found in current month.') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:36px; color:#94a3b8;">' + (currentSubmodalSearch ? 'No matching leads found.' : 'No hot prospects found in current month.') + '</td></tr>';
         if (tfoot) tfoot.innerHTML = '';
         return;
     }
@@ -4746,6 +4768,9 @@ function renderFullDetailsTable(leads) {
         var statusColor = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#16a34a' : ((l.source_type === 'development') ? '#2563eb' : '#dc2626');
         var statusBorder = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#bbf7d0' : ((l.source_type === 'development') ? '#bfdbfe' : '#fecaca');
 
+        var salesPerson = l.sales_person_name || l.executive_name || '-';
+        var cstPerson   = l.cst_person_name || '-';
+
         rowsHtml += '<tr>' +
             '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
             '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
@@ -4759,7 +4784,8 @@ function renderFullDetailsTable(leads) {
             '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(eVal) + '</td>' +
             '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + (l.closure_date || '-') + '</td>' +
-            '<td style="font-weight:600; color:#1e293b;">' + (l.executive_name || '-') + '</td>' +
+            '<td style="font-weight:600; color:#1e293b;">' + salesPerson + '</td>' +
+            '<td style="font-weight:600; color:#0d9488;">' + cstPerson + '</td>' +
         '</tr>';
     });
 
@@ -4770,7 +4796,7 @@ function renderFullDetailsTable(leads) {
             '<td colspan="5" style="font-weight:800;">Total (' + leads.length + ' Hot Prospects)</td>' +
             '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-            '<td colspan="2"></td>' +
+            '<td colspan="3"></td>' +
         '</tr>';
     }
 }
@@ -5001,7 +5027,7 @@ window.openBranchHotLeadsModal = function(target, targetName) {
     switchPivotTab('full');
 
     if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading hot prospects...</span></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:36px; color:#94a3b8;"><div style="display:inline-flex; align-items:center; gap:8px;"><svg class="spinning" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>Loading hot prospects...</span></div></td></tr>';
     }
     if (tfoot) tfoot.innerHTML = '';
 
