@@ -1019,4 +1019,302 @@ class CstDailyClosingController extends Controller
 
         return $attachments;
     }
+
+    /**
+     * AJAX Endpoint: Fetch detailed records list for KPI card clicked on CST Day Closing page.
+     */
+    public function getMetricDetails(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        $canViewAll = $this->canViewAllCst($user);
+        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
+        $supportUserIds = $this->getSupportUserIds($user);
+
+        $metric = trim((string) $request->input('metric', ''));
+        $fromDate = $request->input('from_date') ?: $request->input('date_from');
+        $toDate = $request->input('to_date') ?: $request->input('date_to');
+        $refDateStr = trim((string) $request->input('closing_date', $request->input('date', now()->toDateString())));
+        $dateRangeFilter = ($fromDate && $toDate) ? [$fromDate, $toDate] : ($fromDate ?: ($toDate ?: $refDateStr));
+
+        $targetUserId = $request->filled('user_id') && (int) $request->input('user_id') > 0
+            ? (int) $request->input('user_id')
+            : (!$canViewAll && $visibleUserIds !== null && count($visibleUserIds) === 1 ? $user->id : null);
+
+        $branchId = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
+
+        $parsedDate = Carbon::parse(is_array($dateRangeFilter) ? $dateRangeFilter[1] : $dateRangeFilter);
+        $monthStart = (clone $parsedDate)->startOfMonth();
+        $monthEnd   = (clone $parsedDate)->endOfMonth();
+        $weekStart  = (clone $parsedDate)->startOfWeek();
+        $weekEnd    = (clone $parsedDate)->endOfWeek();
+
+        $records = [];
+        $title = 'Metric Details';
+
+        switch ($metric) {
+            case 'today_revenue':
+                $title = "Today's Revenue Payment Collection";
+                $q = LeadProductPayment::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'leadProduct.product:id,name', 'recorder:id,name']);
+                if (is_array($dateRangeFilter)) {
+                    $q->whereBetween('payment_date', [$dateRangeFilter[0], $dateRangeFilter[1]]);
+                } else {
+                    $q->whereDate('payment_date', $refDateStr);
+                }
+                if ($branchId) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
+                }
+                if ($targetUserId) {
+                    $q->where(function($sub) use ($targetUserId) {
+                        $sub->where('recorded_by', $targetUserId)
+                            ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                    });
+                } elseif (!empty($supportUserIds)) {
+                    $q->where(function($sub) use ($supportUserIds) {
+                        $sub->whereIn('recorded_by', $supportUserIds)
+                            ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                    });
+                }
+                $items = $q->latest('payment_date')->latest('id')->get();
+                foreach ($items as $p) {
+                    $records[] = [
+                        'account_name' => $p->lead?->company_name ?: ($p->lead?->name ?: 'Lead #' . $p->lead_id),
+                        'branch_name'  => $p->lead?->branch?->name ?: '—',
+                        'product_name' => $p->leadProduct?->product?->name ?: '—',
+                        'amount'       => (float) $p->amount,
+                        'date'         => $p->payment_date ? Carbon::parse($p->payment_date)->format('d M Y') : '—',
+                        'mode'         => ucfirst($p->payment_mode ?? 'online'),
+                        'recorded_by'  => $p->recorder?->name ?: 'System',
+                    ];
+                }
+                break;
+
+            case 'till_now_achieved':
+                $title = "Month-to-Date Achieved Revenue Collection";
+                $q = LeadProductPayment::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'leadProduct.product:id,name', 'recorder:id,name'])
+                    ->whereDate('payment_date', '>=', $monthStart->toDateString())
+                    ->whereDate('payment_date', '<=', $parsedDate->toDateString());
+                if ($branchId) {
+                    $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
+                }
+                if ($targetUserId) {
+                    $q->where(function($sub) use ($targetUserId) {
+                        $sub->where('recorded_by', $targetUserId)
+                            ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                    });
+                } elseif (!empty($supportUserIds)) {
+                    $q->where(function($sub) use ($supportUserIds) {
+                        $sub->whereIn('recorded_by', $supportUserIds)
+                            ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                    });
+                }
+                $items = $q->latest('payment_date')->get();
+                foreach ($items as $p) {
+                    $records[] = [
+                        'account_name' => $p->lead?->company_name ?: ($p->lead?->name ?: 'Lead #' . $p->lead_id),
+                        'branch_name'  => $p->lead?->branch?->name ?: '—',
+                        'product_name' => $p->leadProduct?->product?->name ?: '—',
+                        'amount'       => (float) $p->amount,
+                        'date'         => $p->payment_date ? Carbon::parse($p->payment_date)->format('d M Y') : '—',
+                        'mode'         => ucfirst($p->payment_mode ?? 'online'),
+                        'recorded_by'  => $p->recorder?->name ?: 'System',
+                    ];
+                }
+                break;
+
+            case 'monthly_target':
+                $title = "Monthly Target Breakdown";
+                // Hot prospect lead products
+                $hotProds = LeadProduct::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'product:id,name'])
+                    ->whereRaw('LOWER(product_status) = ?', ['hot'])
+                    ->whereMonth('closure_date', $monthStart->month)
+                    ->whereYear('closure_date', $monthStart->year);
+                if ($targetUserId) {
+                    $hotProds->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                } elseif (!empty($supportUserIds)) {
+                    $hotProds->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                }
+                foreach ($hotProds->get() as $hp) {
+                    $records[] = [
+                        'account_name' => $hp->lead?->company_name ?: ($hp->lead?->name ?: 'Lead #' . $hp->lead_id),
+                        'branch_name'  => $hp->lead?->branch?->name ?: '—',
+                        'product_name' => $hp->product?->name ?: 'Prospect Deal',
+                        'amount'       => (float) $hp->total_price,
+                        'date'         => $hp->closure_date ? Carbon::parse($hp->closure_date)->format('d M Y') : '—',
+                        'mode'         => 'Prospect (Hot)',
+                        'recorded_by'  => 'CST Target',
+                    ];
+                }
+                break;
+
+            case 'completed_percentage':
+                $title = "Target vs Achieved Overview";
+                $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchId);
+                $records[] = [
+                    'account_name' => 'Monthly Target',
+                    'branch_name'  => '—',
+                    'product_name' => 'Committed Target',
+                    'amount'       => (float) $stats['monthly_target'],
+                    'date'         => $parsedDate->format('M Y'),
+                    'mode'         => 'Target',
+                    'recorded_by'  => 'CST Team',
+                ];
+                $records[] = [
+                    'account_name' => 'Till Now Achieved',
+                    'branch_name'  => '—',
+                    'product_name' => 'Month-to-Date Collections',
+                    'amount'       => (float) $stats['till_now_achieved'],
+                    'date'         => $parsedDate->format('d M Y'),
+                    'mode'         => 'Achieved (' . $stats['completed_percentage'] . '%)',
+                    'recorded_by'  => 'CST Team',
+                ];
+                break;
+
+            case 'current_week_meetings':
+                $title = "Current Week Meetings, Reviews & Updates";
+                $meetingsQ = LeadReminder::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'user:id,name'])
+                    ->where(fn($q) => $q->where('type', 'meeting')->orWhere('title', 'like', '%meeting%'))
+                    ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+                if ($targetUserId) {
+                    $meetingsQ->where('user_id', $targetUserId);
+                } elseif (!empty($supportUserIds)) {
+                    $meetingsQ->whereIn('user_id', $supportUserIds);
+                }
+                foreach ($meetingsQ->get() as $m) {
+                    $records[] = [
+                        'account_name' => $m->lead?->company_name ?: ($m->lead?->name ?: 'Lead #' . $m->lead_id),
+                        'branch_name'  => $m->lead?->branch?->name ?: '—',
+                        'product_name' => $m->title ?: 'Meeting',
+                        'amount'       => 0,
+                        'date'         => $m->remind_at ? Carbon::parse($m->remind_at)->format('d M Y h:i A') : '—',
+                        'mode'         => 'Scheduled Meeting',
+                        'recorded_by'  => $m->user?->name ?: 'CST Exec',
+                    ];
+                }
+
+                $updatesQ = \App\Models\LeadCstUpdate::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'user:id,name'])
+                    ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+                if ($targetUserId) {
+                    $updatesQ->where('user_id', $targetUserId);
+                } elseif (!empty($supportUserIds)) {
+                    $updatesQ->whereIn('user_id', $supportUserIds);
+                }
+                foreach ($updatesQ->get() as $u) {
+                    $records[] = [
+                        'account_name' => $u->lead?->company_name ?: ($u->lead?->name ?: 'Lead #' . $u->lead_id),
+                        'branch_name'  => $u->lead?->branch?->name ?: '—',
+                        'product_name' => ucfirst(str_replace('_', ' ', $u->update_type)),
+                        'amount'       => 0,
+                        'date'         => $u->created_at ? $u->created_at->format('d M Y h:i A') : '—',
+                        'mode'         => Str::limit($u->notes ?? '', 60),
+                        'recorded_by'  => $u->user?->name ?: 'CST Exec',
+                    ];
+                }
+                break;
+
+            case 'total_allocated_accounts':
+                $title = "Total Active Allocated Accounts";
+                $allocQ = Lead::with(['branch:id,name', 'cstExecutive:id,name', 'products:id,lead_id,product_id,product_status', 'products.product:id,name'])
+                    ->whereNull('deleted_at')
+                    ->whereHas('products', fn($pq) => $pq->where('product_status', 'converted'));
+                if ($targetUserId) {
+                    $allocQ->where('customer_support_executive_id', $targetUserId);
+                } elseif (!empty($supportUserIds)) {
+                    $allocQ->whereIn('customer_support_executive_id', $supportUserIds);
+                }
+                foreach ($allocQ->latest('id')->limit(100)->get() as $l) {
+                    $prodNames = $l->products->filter(fn($p) => $p->product_status === 'converted')->map(fn($p) => $p->product?->name)->filter()->implode(', ');
+                    $records[] = [
+                        'account_name' => $l->company_name ?: ($l->name ?: 'Lead #' . $l->id),
+                        'branch_name'  => $l->branch?->name ?: '—',
+                        'product_name' => $prodNames ?: 'Converted Product',
+                        'amount'       => 0,
+                        'date'         => $l->customer_support_allocated_at ? Carbon::parse($l->customer_support_allocated_at)->format('d M Y') : $l->created_at?->format('d M Y'),
+                        'mode'         => 'Active Allocation',
+                        'recorded_by'  => $l->cstExecutive?->name ?: 'Unassigned',
+                    ];
+                }
+                break;
+
+            case 'today_added_accounts':
+                $title = "Newly Added Allocated Accounts";
+                $addedQ = Lead::with(['branch:id,name', 'cstExecutive:id,name', 'products:id,lead_id,product_id,product_status', 'products.product:id,name'])
+                    ->whereNull('deleted_at')
+                    ->whereHas('products', fn($pq) => $pq->where('product_status', 'converted'))
+                    ->where(function($q) use ($dateRangeFilter, $refDateStr) {
+                        if (is_array($dateRangeFilter)) {
+                            $q->whereBetween('customer_support_allocated_at', [$dateRangeFilter[0] . ' 00:00:00', $dateRangeFilter[1] . ' 23:59:59'])
+                              ->orWhere(function($sub) use ($dateRangeFilter) {
+                                  $sub->whereNull('customer_support_allocated_at')
+                                      ->whereBetween('created_at', [$dateRangeFilter[0] . ' 00:00:00', $dateRangeFilter[1] . ' 23:59:59']);
+                              });
+                        } else {
+                            $q->whereDate('customer_support_allocated_at', $refDateStr)
+                              ->orWhere(function($sub) use ($refDateStr) {
+                                  $sub->whereNull('customer_support_allocated_at')
+                                      ->whereDate('created_at', $refDateStr);
+                              });
+                        }
+                    });
+                if ($targetUserId) {
+                    $addedQ->where('customer_support_executive_id', $targetUserId);
+                } elseif (!empty($supportUserIds)) {
+                    $addedQ->whereIn('customer_support_executive_id', $supportUserIds);
+                }
+                foreach ($addedQ->latest('id')->get() as $l) {
+                    $prodNames = $l->products->filter(fn($p) => $p->product_status === 'converted')->map(fn($p) => $p->product?->name)->filter()->implode(', ');
+                    $records[] = [
+                        'account_name' => $l->company_name ?: ($l->name ?: 'Lead #' . $l->id),
+                        'branch_name'  => $l->branch?->name ?: '—',
+                        'product_name' => $prodNames ?: 'Converted Product',
+                        'amount'       => 0,
+                        'date'         => $l->customer_support_allocated_at ? Carbon::parse($l->customer_support_allocated_at)->format('d M Y') : $l->created_at?->format('d M Y'),
+                        'mode'         => 'Newly Added Today',
+                        'recorded_by'  => $l->cstExecutive?->name ?: 'Unassigned',
+                    ];
+                }
+                break;
+
+            case 'welcome_call_pending_count':
+                $title = "Welcome Call Pending Accounts";
+                $ovpQ = ProductionInitiation::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'product:id,name', 'ovpAllocatedUser:id,name'])
+                    ->whereIn('status', ['ovp_pending', 'initiated', 'pending']);
+                if ($targetUserId) {
+                    $ovpQ->where(function($q) use ($targetUserId) {
+                        $q->where('ovp_allocated_to', $targetUserId)
+                          ->orWhere(fn($sub) => $sub->whereNull('ovp_allocated_to')->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId)));
+                    });
+                } elseif (!empty($supportUserIds)) {
+                    $ovpQ->where(function($q) use ($supportUserIds) {
+                        $q->whereIn('ovp_allocated_to', $supportUserIds)
+                          ->orWhere(fn($sub) => $sub->whereNull('ovp_allocated_to')->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds)));
+                    });
+                }
+                $threeDaysAgo = Carbon::now()->subDays(3);
+                foreach ($ovpQ->latest('id')->get() as $pi) {
+                    $st = 'Pending';
+                    if (in_array($pi->status, ['ovp_pending', 'initiated'])) {
+                        $st = $pi->created_at >= $threeDaysAgo ? 'New Welcome Call' : 'Overdue Call';
+                    }
+                    $records[] = [
+                        'account_name' => $pi->lead?->company_name ?: ($pi->lead?->name ?: 'Lead #' . $pi->lead_id),
+                        'branch_name'  => $pi->lead?->branch?->name ?: '—',
+                        'product_name' => $pi->product?->name ?: 'OVP Product',
+                        'amount'       => 0,
+                        'date'         => $pi->created_at ? $pi->created_at->format('d M Y') : '—',
+                        'mode'         => $st,
+                        'recorded_by'  => $pi->ovpAllocatedUser?->name ?: 'CST Team',
+                    ];
+                }
+                break;
+        }
+
+        return response()->json([
+            'success' => true,
+            'metric'  => $metric,
+            'title'   => $title,
+            'count'   => count($records),
+            'records' => $records,
+        ]);
+    }
 }
+

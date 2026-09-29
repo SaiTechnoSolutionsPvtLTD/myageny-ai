@@ -2067,8 +2067,8 @@
                     </svg>
                     <span>Day Sales Tracker</span>
                 </div>
-                <span class="da-badge" id="daDstDateBadge" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd; font-weight:700;">Today</span>
-                <span class="da-badge" id="daDstCountBadge" style="background:#dcfce7; color:#15803d; border-color:#bbf7d0; font-weight:700;">0 Converted</span>
+                <span class="da-badge" id="daDstDateBadge" style="display:none;">Today</span>
+                <span class="da-badge" id="daDstCountBadge" style="background:#dcfce7; color:#15803d; border-color:#bbf7d0; font-weight:700;">Total Payment Collection: 0</span>
                 <span class="da-badge" id="daDstCollectionBadge" style="background:#fef3c7; color:#b45309; border-color:#fde68a; font-weight:700;">₹0.00 Collection</span>
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
@@ -2211,7 +2211,7 @@
                 <div style="font-size:18px; font-weight:800; color:#0f172a;" id="daDstReportCatCount">0</div>
             </div>
             <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; text-align:center;">
-                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">Total Converted Sales</div>
+                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">81 Collection</div>
                 <div style="font-size:18px; font-weight:800; color:#166534;" id="daDstReportSalesCount">0</div>
             </div>
             <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:12px; text-align:center;">
@@ -3453,8 +3453,8 @@ window.loadDaySalesTrackerData = function(dateFrom, dateTo) {
             var countBadge = document.getElementById('daDstCountBadge');
             var colBadge = document.getElementById('daDstCollectionBadge');
 
-            if (dateBadge) dateBadge.textContent = d.formatted_date || d.date || 'Today';
-            if (countBadge) countBadge.textContent = (d.total_count || 0) + ' Converted';
+            if (dateBadge) dateBadge.style.display = 'none';
+            if (countBadge) countBadge.textContent = 'Total Payment Collection: ' + (d.total_count || 0);
             if (colBadge) colBadge.textContent = fmt(d.total_collection || 0) + ' Collection';
 
             renderDaySalesTrackerTable(window.dstData.items, window.dstData.categories);

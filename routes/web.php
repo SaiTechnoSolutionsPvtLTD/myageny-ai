@@ -647,6 +647,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('cst/day-closing')->name('cst.day-closing.')->group(function () {
         Route::get('/', [\App\Http\Controllers\CstDailyClosingController::class, 'index'])->name('index');
         Route::get('/stats', [\App\Http\Controllers\CstDailyClosingController::class, 'getStats'])->name('stats');
+        Route::get('/metric-details', [\App\Http\Controllers\CstDailyClosingController::class, 'getMetricDetails'])->name('metric-details');
         Route::post('/', [\App\Http\Controllers\CstDailyClosingController::class, 'store'])->name('store');
         Route::patch('/{closing}', [\App\Http\Controllers\CstDailyClosingController::class, 'update'])->name('update');
         Route::post('/{closing}/review', [\App\Http\Controllers\CstDailyClosingController::class, 'review'])->name('review');
