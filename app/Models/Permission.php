@@ -18,6 +18,8 @@ class Permission extends SpatiePermission
         'call_updates' => ['menuview', 'view', 'create', 'delete'],
         'quotations' => ['menuview', 'view', 'create', 'delete', 'approve'],
         'price_requests' => ['menuview', 'view', 'create', 'approve', 'reject'],
+        'day_closing' => ['menuview', 'view', 'create', 'edit', 'delete', 'approve', 'reject'],
+        'cst_day_closing' => ['menuview', 'view', 'create', 'edit', 'delete', 'approve', 'reject'],
         'projects' => ['menuview'],
         'tasks' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'timesheets' => ['menuview', 'view', 'create', 'edit', 'delete'],

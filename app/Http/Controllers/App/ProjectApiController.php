@@ -5348,10 +5348,10 @@ class ProjectApiController extends Controller
             ];
         })->sortByDesc('raw_end_date')->values();
 
-        $renewalsPage = max(1, (int) $request->query('renewals_page', 1));
-        $renewalsPerPage = max(1, (int) $request->query('renewals_per_page', 5));
-        $expiredPage = max(1, (int) $request->query('expired_page', 1));
-        $expiredPerPage = max(1, (int) $request->query('expired_per_page', 5));
+        $renewalsPage = max(1, (int) ($request->get('renewals_page') ?? $request->query('renewals_page', 1)));
+        $renewalsPerPage = max(1, (int) ($request->get('renewals_per_page') ?? $request->query('renewals_per_page', 5)));
+        $expiredPage = max(1, (int) ($request->get('expired_page') ?? $request->query('expired_page', 1)));
+        $expiredPerPage = max(1, (int) ($request->get('expired_per_page') ?? $request->query('expired_per_page', 5)));
 
         $totalRenewals = $renewalItems->count();
         $totalExpired = $expiredItems->count();
@@ -5407,8 +5407,8 @@ class ProjectApiController extends Controller
 
         $totalCount = (clone $query)->count();
 
-        $page = max(1, (int) $request->query('seo_page', 1));
-        $perPage = max(1, (int) $request->query('seo_per_page', 5));
+        $page = max(1, (int) ($request->get('seo_page') ?? $request->query('seo_page', 1)));
+        $perPage = max(1, (int) ($request->get('seo_per_page') ?? $request->query('seo_per_page', 5)));
 
         $pagedProjects = $query->latest('id')
             ->forPage($page, $perPage)
@@ -5502,8 +5502,8 @@ class ProjectApiController extends Controller
 
         $totalCount = (clone $query)->count();
 
-        $page = max(1, (int) $request->query('wc_page', 1));
-        $perPage = max(1, (int) $request->query('wc_per_page', 5));
+        $page = max(1, (int) ($request->get('wc_page') ?? $request->query('wc_page', 1)));
+        $perPage = max(1, (int) ($request->get('wc_per_page') ?? $request->query('wc_per_page', 5)));
 
         $pagedProjects = $query->latest('id')
             ->forPage($page, $perPage)
@@ -5535,15 +5535,17 @@ class ProjectApiController extends Controller
         }
 
         $section = trim((string) $request->query('section', ''));
-        $page = max(1, (int) $request->query('page', 1));
-        $perPage = max(1, (int) $request->query('per_page', 5));
-        $search = trim((string) $request->query('search', ''));
+        $page = max(1, (int) ($request->get('page') ?? $request->query('page', 1)));
+        $perPage = max(1, (int) ($request->get('per_page') ?? $request->query('per_page', 5)));
+        $search = trim((string) ($request->get('search') ?? $request->query('search', '')));
         $dashboardFilters = ['search' => $search];
 
         switch ($section) {
             case 'welcome_calls':
             case 'pending_welcome_calls':
-                $departmentType = trim((string) $request->query('department_type', 'dm'));
+                $departmentType = trim((string) ($request->get('department_type') ?: $request->query('department_type', 'dm')));
+                $request->query->set('wc_page', $page);
+                $request->query->set('wc_per_page', $perPage);
                 $request->merge(['wc_page' => $page, 'wc_per_page' => $perPage]);
                 $data = $this->getPendingWelcomeCallProjectsData($user, $departmentType, $dashboardFilters, $request);
                 return response()->json([
@@ -5560,6 +5562,8 @@ class ProjectApiController extends Controller
 
             case 'technical_seo':
             case 'active_technical_seo':
+                $request->query->set('seo_page', $page);
+                $request->query->set('seo_per_page', $perPage);
                 $request->merge(['seo_page' => $page, 'seo_per_page' => $perPage]);
                 $data = $this->getActiveTechnicalSeoProjectsData($user, $dashboardFilters, $request);
                 return response()->json([
@@ -5576,6 +5580,8 @@ class ProjectApiController extends Controller
 
             case 'campaign_renewals':
             case 'renewals':
+                $request->query->set('renewals_page', $page);
+                $request->query->set('renewals_per_page', $perPage);
                 $request->merge(['renewals_page' => $page, 'renewals_per_page' => $perPage]);
                 $data = $this->getDmCampaignsData($user, $dashboardFilters, $request);
                 return response()->json([
@@ -5592,6 +5598,8 @@ class ProjectApiController extends Controller
 
             case 'campaign_expired':
             case 'expired':
+                $request->query->set('expired_page', $page);
+                $request->query->set('expired_per_page', $perPage);
                 $request->merge(['expired_page' => $page, 'expired_per_page' => $perPage]);
                 $data = $this->getDmCampaignsData($user, $dashboardFilters, $request);
                 return response()->json([
