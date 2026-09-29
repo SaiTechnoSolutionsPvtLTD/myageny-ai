@@ -2076,7 +2076,32 @@ class DashboardController extends Controller
                 $cpProductIds[] = $cocoProduct->id;
             }
 
-            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+
+            // Resolve active scoped branches for COCO and NON COCO classification (matching buildActiveBranchesHotMetrics)
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
+
+            $cocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) === 'COCO')
+                ->pluck('id')
+                ->toArray();
+
+            $nonCocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) !== 'COCO')
+                ->pluck('id')
+                ->toArray();
+
             $defaultBranchQuery = Branch::where('is_default', true);
             if ($companyId) {
                 $defaultBranchQuery->where('company_id', $companyId);
@@ -2105,6 +2130,26 @@ class DashboardController extends Controller
             }
 
         } elseif ($type === 'non_coco') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
+
+            $nonCocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) !== 'COCO')
+                ->pluck('id')
+                ->toArray();
+
             $title = 'Channel Partner - NON COCO Model';
             if ($isCompanyAdminOrCbo) {
                 $subtitle = 'Channel Partner NON COCO Hot Products & Branch Prospects';
@@ -2130,7 +2175,7 @@ class DashboardController extends Controller
                 });
             })->first();
 
-            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
+            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2139,14 +2184,39 @@ class DashboardController extends Controller
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
+                if (!empty($nonCocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                        $lq->whereIn('branch_id', $nonCocoBranchIds);
+                    });
+                } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                        $bq->where('is_default', false)
+                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
                     });
                 }
             });
 
         } elseif ($type === 'coco') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
+
+            $cocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) === 'COCO')
+                ->pluck('id')
+                ->toArray();
+
             $title = 'Channel Partner - COCO Model';
             if ($isCompanyAdminOrCbo) {
                 $subtitle = 'Channel Partner COCO Hot Products & Branch Prospects';
@@ -2175,7 +2245,7 @@ class DashboardController extends Controller
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
+            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2190,9 +2260,14 @@ class DashboardController extends Controller
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
+                if (!empty($cocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                        $lq->whereIn('branch_id', $cocoBranchIds);
+                    });
+                } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        $bq->where('is_default', false)
+                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
                     });
                 }
             });
@@ -2249,6 +2324,16 @@ class DashboardController extends Controller
         if ($branchId) {
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
+            });
+        } elseif ($type === 'coco') {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
+                $bId = $cItem['branch_id'] ?? null;
+                return $bId && in_array((int)$bId, array_map('intval', $cocoBranchIds), true);
+            });
+        } elseif ($type === 'non_coco') {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
+                $bId = $cItem['branch_id'] ?? null;
+                return $bId && in_array((int)$bId, array_map('intval', $nonCocoBranchIds), true);
             });
         }
 

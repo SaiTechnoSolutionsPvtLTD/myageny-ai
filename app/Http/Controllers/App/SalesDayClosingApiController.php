@@ -217,12 +217,20 @@ class SalesDayClosingApiController extends Controller
         }
 
         $query = LeadCallUpdate::with([
-            'lead:id,company_name,contact_name,mobile_number,email',
-            'user:id,name',
+            'lead' => function ($lq) {
+                $lq->withoutGlobalScopes()->withTrashed()->select('id', 'company_name', 'contact_name', 'mobile_number', 'email', 'assigned_to')
+                   ->with(['assignedTo' => function ($aq) {
+                       $aq->withoutGlobalScopes()->withTrashed()->select('id', 'name');
+                   }]);
+            },
+            'user' => function ($uq) {
+                $uq->withoutGlobalScopes()->withTrashed()->select('id', 'name');
+            },
             'outCome:id,name',
             'outComeSubCategory:id,name',
         ])->whereDate('called_at', $date)->latest('called_at');
 
+        $subordinateIds = null;
         if ($targetUserId) {
             $query->where('user_id', $targetUserId);
         } elseif ($isTlLike && !$isAdminLike) {
@@ -245,20 +253,26 @@ class SalesDayClosingApiController extends Controller
             : (Schema::hasColumn('lead_call_updates', 'next_followup_time') ? 'next_followup_time' : null);
 
         // Filter according to selected metric card
+        $metricTitle = 'Call Details';
         switch ($metric) {
             case 'unique_calls':
-                $query->whereIn('id', function ($sub) use ($date, $targetUserId) {
+                $metricTitle = 'Unique Calls (Distinct Leads Contacted)';
+                $query->whereIn('id', function ($sub) use ($date, $targetUserId, $subordinateIds) {
                     $sub->select(DB::raw('MAX(id)'))
                         ->from('lead_call_updates')
                         ->whereDate('called_at', $date);
                     if ($targetUserId) {
                         $sub->where('user_id', $targetUserId);
+                    } elseif ($subordinateIds) {
+                        $sub->whereIn('user_id', $subordinateIds);
                     }
                     $sub->groupBy('lead_id');
                 });
                 break;
 
             case 'new_calls':
+            case 'total_new_calls':
+                $metricTitle = 'Total New Calls (Fresh Outreach)';
                 $query->whereNotExists(function ($q) use ($date) {
                     $q->select(DB::raw(1))
                         ->from('lead_call_updates as prev')
@@ -268,6 +282,7 @@ class SalesDayClosingApiController extends Controller
                 break;
 
             case 'followup_calls':
+                $metricTitle = 'Followup Calls (Pipeline Leads)';
                 $query->whereExists(function ($q) use ($date) {
                     $q->select(DB::raw(1))
                         ->from('lead_call_updates as prev')
@@ -277,6 +292,10 @@ class SalesDayClosingApiController extends Controller
                 break;
 
             case 'one_time_calls':
+            case 'onetime_calls':
+            case 'all_one_time_calls':
+            case 'all_onetime_calls':
+                $metricTitle = 'All One Time Calls (No Future Follow-up)';
                 if ($nextFollowupDateCol) {
                     $query->whereNull($nextFollowupDateCol);
                 }
@@ -286,36 +305,73 @@ class SalesDayClosingApiController extends Controller
                 break;
 
             case 'total_calls':
+            case 'total_dials':
             default:
+                $metricTitle = 'Total Dials (All Call Attempts)';
                 break;
         }
 
-        $perPage = min((int) ($request->input('per_page', 30)), 100);
+        $perPage = min((int) ($request->input('per_page', 300)), 500);
         $paginator = $query->paginate($perPage);
+
+        $mappedRows = collect($paginator->items())->map(function ($c) use ($nextFollowupDateCol, $nextFollowupTimeCol) {
+            $lead = $c->lead;
+            $leadId = $lead ? 'LD-' . str_pad($lead->id, 4, '0', STR_PAD_LEFT) : 'N/A';
+            $companyName = $lead?->company_name ?: ($lead?->contact_name ?: 'Unknown Lead');
+            $contactName = $lead?->contact_name ?: '—';
+            $mobileNumber = $lead?->mobile_number ?: '—';
+            $leadUrl = $lead ? url('/leads/' . $lead->id) : '';
+
+            $callerName = $c->user?->name
+                ?: ($c->user_id ? \App\Models\User::withoutGlobalScopes()->withTrashed()->where('id', $c->user_id)->value('name') : null)
+                ?: ($lead?->assignedTo?->name ?: '—');
+            if (empty($callerName) || trim($callerName) === '') {
+                $callerName = '—';
+            }
+
+            $calledTime = $c->called_at ? Carbon::parse($c->called_at)->format('h:i A') : '—';
+            $callType = $c->call_type_label ?? ucfirst((string) ($c->call_type ?: 'outgoing'));
+            $outcome = $c->outcome_label ?? ($c->outCome?->name ?? (is_string($c->outcome) ? ucfirst($c->outcome) : 'N/A'));
+            $outcomeSubcategory = $c->outcome_subcategory_label ?? ($c->outComeSubCategory?->name ?? '—');
+            $outcomeColor = is_array($c->outcome_color) ? ($c->outcome_color['text'] ?? null) : ($c->outcome_color ?: null);
+
+            $dateVal = $nextFollowupDateCol ? $c->{$nextFollowupDateCol} : ($c->next_follow_up ?? null);
+            $timeVal = $nextFollowupTimeCol ? $c->{$nextFollowupTimeCol} : ($c->followup_time ?? null);
+            $nextFollowup = $dateVal ? (Carbon::parse($dateVal)->format('d M Y') . ($timeVal ? ' (' . $timeVal . ')' : '')) : '—';
+
+            $notes = $c->notes ?: ($c->remarks ?: '—');
+
+            return [
+                'id' => $c->id,
+                'lead_id' => $leadId,
+                'lead_url' => $leadUrl,
+                'company_name' => $companyName,
+                'contact_name' => $contactName,
+                'mobile_number' => $mobileNumber,
+                'caller_name' => $callerName,
+                'user_name' => $callerName,
+                'called_time' => $calledTime,
+                'called_at' => $calledTime,
+                'call_type' => $callType,
+                'outcome' => $outcome,
+                'outcome_subcategory' => $outcomeSubcategory,
+                'sub_outcome' => $outcomeSubcategory,
+                'outcome_color' => $outcomeColor,
+                'next_follow_up' => $nextFollowup,
+                'next_followup' => $nextFollowup,
+                'notes' => $notes,
+                'remarks' => $notes,
+            ];
+        });
 
         return response()->json([
             'success' => true,
             'metric' => $metric,
-            'date' => $date,
+            'title' => $metricTitle,
+            'date' => Carbon::parse($date)->format('d M Y'),
             'total' => $paginator->total(),
-            'data' => collect($paginator->items())->map(function ($c) use ($nextFollowupDateCol, $nextFollowupTimeCol) {
-                $dateVal = $nextFollowupDateCol ? $c->{$nextFollowupDateCol} : null;
-                $timeVal = $nextFollowupTimeCol ? $c->{$nextFollowupTimeCol} : null;
-                $nextFollowup = $dateVal ? (Carbon::parse($dateVal)->format('Y-m-d') . ($timeVal ? ' ' . $timeVal : '')) : null;
-
-                return [
-                    'id' => $c->id,
-                    'lead_id' => $c->lead_id,
-                    'company_name' => $c->lead?->company_name ?? 'N/A',
-                    'contact_name' => $c->lead?->contact_name ?? '',
-                    'user_name' => $c->user?->name ?? 'Unknown',
-                    'outcome' => $c->outCome?->name ?? 'N/A',
-                    'sub_outcome' => $c->outComeSubCategory?->name,
-                    'called_at' => $c->called_at ? Carbon::parse($c->called_at)->format('h:i A') : '',
-                    'remarks' => $c->remarks ?? '',
-                    'next_followup' => $nextFollowup,
-                ];
-            }),
+            'rows' => $mappedRows,
+            'data' => $mappedRows,
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
