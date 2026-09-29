@@ -23,6 +23,8 @@
 .sdc-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; box-shadow:0 4px 14px rgba(15,23,42,0.03); display:flex; flex-direction:column; justify-content:space-between; transition:all 0.2s cubic-bezier(0.4,0,0.2,1); }
 .sdc-kpi-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,0.06); }
 .sdc-kpi-card.highlight { border-color:#fed7aa; background:linear-gradient(135deg,#fff 0%,#fffaf5 100%); }
+.sdc-kpi-clickable { cursor:pointer; }
+.sdc-kpi-clickable:hover { border-color:#fe5f04 !important; box-shadow:0 8px 24px rgba(254,95,4,0.14) !important; }
 .sdc-kpi-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .sdc-kpi-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; }
 .sdc-kpi-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -36,7 +38,7 @@
 .sdc-label { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:#64748b; }
 .sdc-input, .sdc-select, .sdc-textarea { width:100%; border:1px solid #cbd5e1; border-radius:9px; background:#fff; font-size:13.5px; color:#0f172a; transition:border-color 0.15s, box-shadow 0.15s; }
 .sdc-input, .sdc-select { height:40px; padding:8px 12px; }
-.sdc-textarea { padding:12px; resize:vertical; min-height:120px; line-height:1.55; }
+.sdc-textarea { padding:12px; resize:vertical; min-height:120px; line-height:1.55; border-radius:9px; }
 .sdc-input:focus, .sdc-select:focus, .sdc-textarea:focus { outline:none; border-color:#fe5f04; box-shadow:0 0 0 3px rgba(254,95,4,0.14); }
 
 /* Main Card & Table */
@@ -45,7 +47,7 @@
 .sdc-card-title { font-size:15px; font-weight:900; color:#0f172a; }
 .sdc-card-sub { font-size:12px; color:#64748b; margin-top:2px; }
 
-.sdc-table-wrap { overflow-x:auto; }
+.sdc-table-wrap { overflow:auto; max-height:680px; }
 .sdc-table { width:100%; border-collapse:collapse; min-width:1050px; }
 .sdc-table th { padding:12px 16px; background:#f8fafc; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:#64748b; border-bottom:1px solid #e2e8f0; text-align:left; vertical-align:middle; }
 .sdc-table td { padding:14px 16px; border-bottom:1px solid #f1f5f9; font-size:13px; color:#0f172a; vertical-align:middle; }
@@ -119,10 +121,12 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                 <span>CST Dashboard</span>
             </a>
-            <button type="button" class="sdc-btn sdc-btn-primary" data-open-closing-modal>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                <span>Add Day Closing Update</span>
-            </button>
+            @if(auth()->user()->belongsToCustomerSupportDepartment() || auth()->user()->hasCustomerSupportLikeRole())
+                <button type="button" class="sdc-btn sdc-btn-primary" data-open-closing-modal>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Add Day Closing Update</span>
+                </button>
+            @endif
         </div>
     </div>
 
@@ -167,7 +171,7 @@
 
             <div class="sdc-kpi-grid">
                 <!-- 1. Monthly Target (Current Month Prospect Value default) -->
-                <div class="sdc-kpi-card highlight">
+                <div class="sdc-kpi-card highlight sdc-kpi-clickable" data-open-kpi-details data-metric="monthly_target" title="Click to view Monthly Target details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Monthly Target</span>
                         <div class="sdc-kpi-icon" style="background:#fff7ed; color:#fe5f04;">
@@ -176,10 +180,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#fe5f04;">₹{{ number_format($kpiStats['monthly_target']) }}</div>
                     <div class="sdc-kpi-sub">Prospect + Renewals + Dev &gt;60%</div>
+                    <div style="font-size:10px; color:#fe5f04; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 2. Today's Revenue (Today Received Value) -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="today_revenue" title="Click to view Today's Revenue details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Today's Revenue</span>
                         <div class="sdc-kpi-icon" style="background:#f0fdf4; color:#16a34a;">
@@ -188,10 +196,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#16a34a;">₹{{ number_format($kpiStats['today_revenue']) }}</div>
                     <div class="sdc-kpi-sub">Today received value</div>
+                    <div style="font-size:10px; color:#16a34a; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 3. Till Now Achieved -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="till_now_achieved" title="Click to view Till Now Achieved details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Till Now Achieved</span>
                         <div class="sdc-kpi-icon" style="background:#eff6ff; color:#2563eb;">
@@ -200,10 +212,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#2563eb;">₹{{ number_format($kpiStats['till_now_achieved']) }}</div>
                     <div class="sdc-kpi-sub">Month start to selected date</div>
+                    <div style="font-size:10px; color:#2563eb; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 4. Completed Percentage -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="completed_percentage" title="Click to view Completed Pct overview">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Completed Pct</span>
                         <div class="sdc-kpi-icon" style="background:#faf5ff; color:#9333ea;">
@@ -212,10 +228,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#9333ea;">{{ number_format($kpiStats['completed_percentage'], 1) }}%</div>
                     <div class="sdc-kpi-sub">Achieved vs monthly target</div>
+                    <div style="font-size:10px; color:#9333ea; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view overview</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 5. Current Week Meetings -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="current_week_meetings" title="Click to view Week Meetings details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Week Meetings</span>
                         <div class="sdc-kpi-icon" style="background:#fefce8; color:#ca8a04;">
@@ -224,10 +244,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#ca8a04;">{{ number_format($kpiStats['current_week_meetings']) }}</div>
                     <div class="sdc-kpi-sub">Meetings, Weekly Updates, Reviews &amp; Escalations</div>
+                    <div style="font-size:10px; color:#ca8a04; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 6. Total Allocated Account -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="total_allocated_accounts" title="Click to view Total Allocated Accounts details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Total Allocated</span>
                         <div class="sdc-kpi-icon" style="background:#f0fdfa; color:#0d9488;">
@@ -236,10 +260,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#0d9488;">{{ number_format($kpiStats['total_allocated_accounts']) }}</div>
                     <div class="sdc-kpi-sub">Active accounts allocated to CST</div>
+                    <div style="font-size:10px; color:#0d9488; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 7. Today's Added Account -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="today_added_accounts" title="Click to view Today's Added Accounts details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Today's Added</span>
                         <div class="sdc-kpi-icon" style="background:#ecfeff; color:#0891b2;">
@@ -248,10 +276,14 @@
                     </div>
                     <div class="sdc-kpi-value" style="color:#0891b2;">{{ number_format($kpiStats['today_added_accounts']) }}</div>
                     <div class="sdc-kpi-sub">Newly allocated to CST today</div>
+                    <div style="font-size:10px; color:#0891b2; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
+                        <span>Click to view details</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
                 </div>
 
                 <!-- 8. Welcome Call Pending Account Count -->
-                <div class="sdc-kpi-card">
+                <div class="sdc-kpi-card sdc-kpi-clickable" data-open-kpi-details data-metric="welcome_call_pending_count" title="Click to view Welcome Call Pending details">
                     <div class="sdc-kpi-top">
                         <span class="sdc-kpi-label">Welcome Call Pending</span>
                         <div class="sdc-kpi-icon" style="background:#fff1f2; color:#e11d48;">
@@ -766,6 +798,52 @@
         </div>
     </div>
 </div>
+
+<!-- Modal 3: KPI Metric Details Modal Popup -->
+<div class="sdc-modal-overlay" data-kpi-modal-overlay></div>
+<div class="sdc-modal" data-kpi-modal style="width:min(920px, calc(100vw - 32px));">
+    <div class="sdc-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; color:#fe5f04; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            </div>
+            <div>
+                <div class="sdc-card-title" id="kpiModalTitle">Metric Details</div>
+                <div class="sdc-card-sub" id="kpiModalSub">Detailed live records list</div>
+            </div>
+        </div>
+        <button type="button" class="sdc-modal-close" data-close-kpi-modal aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <div class="sdc-modal-body">
+        <div id="kpiModalLoading" style="text-align:center; padding:36px; color:#fe5f04; font-weight:700;">
+            <div style="display:inline-flex; align-items:center; gap:8px;">
+                <span>Loading CST metric details...</span>
+            </div>
+        </div>
+        <div id="kpiModalContent" style="display:none; max-height:550px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+            <table class="sdc-table" style="width:100%; border-collapse:collapse; min-width:800px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                        <th style="width:40px; text-align:center;">#</th>
+                        <th>Account / Company Name</th>
+                        <th style="width:120px;">Branch</th>
+                        <th style="width:160px;">Product / Item</th>
+                        <th style="width:130px; text-align:right;">Value / Amount</th>
+                        <th style="width:140px; text-align:center;">Date / Time</th>
+                        <th style="width:130px;">Status / Mode</th>
+                        <th style="width:130px;">Executive</th>
+                    </tr>
+                </thead>
+                <tbody id="kpiModalTableBody"></tbody>
+            </table>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:flex-end; margin-top:16px; padding-top:14px; border-top:1px solid #e2e8f0;">
+            <button type="button" class="sdc-btn" data-close-kpi-modal>Close</button>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -782,6 +860,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const viewModal = document.querySelector('[data-view-modal]');
     const viewOverlay = document.querySelector('[data-view-modal-overlay]');
     const closeViewBtns = document.querySelectorAll('[data-close-view-modal]');
+
+    const kpiModal = document.querySelector('[data-kpi-modal]');
+    const kpiOverlay = document.querySelector('[data-kpi-modal-overlay]');
+    const closeKpiBtns = document.querySelectorAll('[data-close-kpi-modal]');
 
     // Elements
     const modalClosingDate = document.getElementById('modalClosingDate');
@@ -1037,6 +1119,77 @@ document.addEventListener('DOMContentLoaded', function () {
     closeViewBtns.forEach(btn => btn.addEventListener('click', () => setViewModalState(false)));
     if (viewOverlay) viewOverlay.addEventListener('click', () => setViewModalState(false));
 
+    function setKpiModalState(isOpen) {
+        if (!kpiModal || !kpiOverlay) return;
+        kpiModal.classList.toggle('is-open', isOpen);
+        kpiOverlay.classList.toggle('is-open', isOpen);
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+    }
+
+    closeKpiBtns.forEach(btn => btn.addEventListener('click', () => setKpiModalState(false)));
+    if (kpiOverlay) kpiOverlay.addEventListener('click', () => setKpiModalState(false));
+
+    // Handle KPI card click
+    document.querySelectorAll('[data-open-kpi-details]').forEach(card => {
+        card.addEventListener('click', function() {
+            const metric = this.getAttribute('data-metric');
+            const label = this.querySelector('.sdc-kpi-label')?.textContent || 'Metric Details';
+
+            const modalTitle = document.getElementById('kpiModalTitle');
+            const modalSub = document.getElementById('kpiModalSub');
+            const loading = document.getElementById('kpiModalLoading');
+            const content = document.getElementById('kpiModalContent');
+            const tbody = document.getElementById('kpiModalTableBody');
+
+            if (modalTitle) modalTitle.textContent = label + ' Details';
+            if (modalSub) modalSub.textContent = 'Live CST records breakdown';
+            if (loading) loading.style.display = 'block';
+            if (content) content.style.display = 'none';
+
+            setKpiModalState(true);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('metric', metric);
+
+            fetch(`{{ route("cst.day-closing.metric-details") }}?${urlParams.toString()}`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (loading) loading.style.display = 'none';
+                if (content) content.style.display = 'block';
+                if (!tbody) return;
+                tbody.innerHTML = '';
+
+                if (res.success && Array.isArray(res.records) && res.records.length > 0) {
+                    res.records.forEach((rec, idx) => {
+                        const tr = document.createElement('tr');
+                        const amtStr = rec.amount > 0 ? '₹' + Math.round(rec.amount).toLocaleString('en-IN') : '—';
+                        tr.innerHTML = `
+                            <td style="text-align:center; font-weight:700; color:#64748b;">${idx + 1}</td>
+                            <td style="font-weight:800; color:#0f172a;">${escapeHtml(rec.account_name)}</td>
+                            <td>${escapeHtml(rec.branch_name)}</td>
+                            <td>${escapeHtml(rec.product_name)}</td>
+                            <td style="text-align:right; font-weight:800; color:#16a34a;">${amtStr}</td>
+                            <td style="text-align:center; font-size:12px; color:#475569;">${escapeHtml(rec.date)}</td>
+                            <td><span class="sdc-badge metric" style="font-size:11px;">${escapeHtml(rec.mode)}</span></td>
+                            <td style="font-weight:700; color:#475569;">${escapeHtml(rec.recorded_by)}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748b;">No records found for this metric.</td></tr>';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                if (loading) loading.style.display = 'none';
+                if (content) content.style.display = 'block';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">Failed to load metric details.</td></tr>';
+            });
+        });
+    });
+
     // Delegate Click for View and Edit buttons
     document.addEventListener('click', function(e) {
         // VIEW DETAILS
@@ -1265,6 +1418,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 alert('An error occurred while updating status.');
             });
         });
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            setModalState(false);
+            setViewModalState(false);
+            setKpiModalState(false);
+        }
     });
 });
 </script>
