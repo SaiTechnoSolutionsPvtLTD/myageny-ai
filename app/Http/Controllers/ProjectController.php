@@ -867,6 +867,7 @@ class ProjectController extends Controller
             'dmCampaignsData' => $dmCampaignsData,
             'activeTechnicalSeoCount' => $technicalSeoData['count'],
             'technicalSeoProjects' => $technicalSeoData['paginated'],
+            'allTechnicalSeoProjects' => $technicalSeoData['all'] ?? collect(),
             'isTlScopedView' => $this->shouldLimitToAssignedProjects($user),
             'isContributorScopedView' => $this->shouldLimitToEmployeeProjects($user),
             'canQuickAddProductionUpdate' => $canQuickAddProductionUpdate,
@@ -4447,6 +4448,7 @@ class ProjectController extends Controller
 
         return [
             'count' => $count,
+            'all' => $allProjects,
             'paginated' => $paginated,
         ];
     }

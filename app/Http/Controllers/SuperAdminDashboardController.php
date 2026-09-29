@@ -65,13 +65,13 @@ class SuperAdminDashboardController extends ApiController
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
                 ->when($source, fn($q) => $q->where('lead_source_id', $source))
-                ->when($dateFrom, fn($q) => $q->where(function($dq) use ($dateFrom) {
+                ->when($dateFrom, fn($q) => $q->where(function ($dq) use ($dateFrom) {
                     $dq->whereDate('lead_date', '>=', $dateFrom)
-                      ->orWhereDate('created_at', '>=', $dateFrom);
+                        ->orWhereDate('created_at', '>=', $dateFrom);
                 }))
-                ->when($dateTo, fn($q) => $q->where(function($dq) use ($dateTo) {
+                ->when($dateTo, fn($q) => $q->where(function ($dq) use ($dateTo) {
                     $dq->whereDate('lead_date', '<=', $dateTo)
-                      ->orWhereDate('created_at', '<=', $dateTo);
+                        ->orWhereDate('created_at', '<=', $dateTo);
                 }));
         };
 
@@ -84,7 +84,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedStatusIds = LeadStatus::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
-                  ->orWhere('name', 'like', '%convert%');
+                    ->orWhere('name', 'like', '%convert%');
             })
             ->pluck('id')
             ->toArray();
@@ -99,7 +99,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    ->orWhereIn('lead_status_id', $convertedStatusIds);
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -172,7 +172,7 @@ class SuperAdminDashboardController extends ApiController
             $count = (clone $base())
                 ->where(function ($q) use ($sameNameIds, $src) {
                     $q->whereIn('lead_source_id', $sameNameIds)
-                      ->orWhere('lead_source', $src->name);
+                        ->orWhere('lead_source', $src->name);
                 })
                 ->count();
             $sourceTotal += $count;
@@ -197,7 +197,7 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
-        $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalPaid         = (float) $allLpProducts->sum(fn(LeadProduct $lp) => $lp->amount_paid);
         $totalPending      = max(0, $convertedValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
         $payPct            = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
@@ -265,7 +265,7 @@ class SuperAdminDashboardController extends ApiController
         if ($effectiveUserId) {
             $recentCallUpdatesQuery->where(function ($q) use ($effectiveUserId) {
                 $q->where('user_id', $effectiveUserId)
-                  ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+                    ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
             });
         }
 
@@ -313,9 +313,9 @@ class SuperAdminDashboardController extends ApiController
             ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
-                  ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
+                    ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                    ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
                 $q->where(function ($sub) use ($effectiveUserId) {
@@ -412,9 +412,9 @@ class SuperAdminDashboardController extends ApiController
 
                 // Converted products for this branch within converted date range
                 $branchConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
-                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                            ->orWhereIn('lead_status_id', $convertedStatusIds);
-                    })
+                    $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                        ->orWhereIn('lead_status_id', $convertedStatusIds);
+                })
                     ->whereHas('lead', function ($lq) use ($branch, $request, $userId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('branch_id', $branch->id);
@@ -504,9 +504,9 @@ class SuperAdminDashboardController extends ApiController
 
                 // Converted products for this user within converted date range
                 $userConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
-                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                            ->orWhereIn('lead_status_id', $convertedStatusIds);
-                    })
+                    $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                        ->orWhereIn('lead_status_id', $convertedStatusIds);
+                })
                     ->whereHas('lead', function ($lq) use ($user, $request, $branchId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('assigned_to', $user->id);
@@ -683,13 +683,13 @@ class SuperAdminDashboardController extends ApiController
         $todayConvertedQuery = LeadProduct::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                  ->orWhere('lead_status_id', 5);
+                    ->orWhere('lead_status_id', 5);
             })
             ->where(function ($q) {
                 $q->whereDate('converted_at', today())
-                  ->orWhere(function ($sub) {
-                      $sub->whereNull('converted_at')->whereDate('created_at', today());
-                  });
+                    ->orWhere(function ($sub) {
+                        $sub->whereNull('converted_at')->whereDate('created_at', today());
+                    });
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -982,14 +982,14 @@ class SuperAdminDashboardController extends ApiController
         if ($dateFrom) {
             $query->whereHas('lead', function ($lq) use ($dateFrom) {
                 $lq->whereDate('lead_date', '>=', $dateFrom)
-                   ->orWhereDate('created_at', '>=', $dateFrom);
+                    ->orWhereDate('created_at', '>=', $dateFrom);
             });
         }
 
         if ($dateTo) {
             $query->whereHas('lead', function ($lq) use ($dateTo) {
                 $lq->whereDate('lead_date', '<=', $dateTo)
-                   ->orWhereDate('created_at', '<=', $dateTo);
+                    ->orWhereDate('created_at', '<=', $dateTo);
             });
         }
 
@@ -1087,8 +1087,8 @@ class SuperAdminDashboardController extends ApiController
         // 2. Default fallback: Group by product_status column (case insensitive)
         $rawCounts = $leadProducts->isEmpty()
             ? collect()
-            : $leadProducts->groupBy(fn ($lp) => strtolower(trim($lp->product_status)))
-                ->map(fn ($group) => $group->count());
+            : $leadProducts->groupBy(fn($lp) => strtolower(trim($lp->product_status)))
+            ->map(fn($group) => $group->count());
 
         $stageTotal = (int) $rawCounts->sum();
         $stages = [];
@@ -1173,13 +1173,13 @@ class SuperAdminDashboardController extends ApiController
                 ->when($userId, fn($q) => $q->where('assigned_to', $userId))
                 ->when($stage, fn($q) => $q->where('lead_status', $stage))
                 ->when($source, fn($q) => $q->where('lead_source_id', $source))
-                ->when($dateFrom, fn($q) => $q->where(function($dq) use ($dateFrom) {
+                ->when($dateFrom, fn($q) => $q->where(function ($dq) use ($dateFrom) {
                     $dq->whereDate('lead_date', '>=', $dateFrom)
-                      ->orWhereDate('created_at', '>=', $dateFrom);
+                        ->orWhereDate('created_at', '>=', $dateFrom);
                 }))
-                ->when($dateTo, fn($q) => $q->where(function($dq) use ($dateTo) {
+                ->when($dateTo, fn($q) => $q->where(function ($dq) use ($dateTo) {
                     $dq->whereDate('lead_date', '<=', $dateTo)
-                      ->orWhereDate('created_at', '<=', $dateTo);
+                        ->orWhereDate('created_at', '<=', $dateTo);
                 }));
         };
 
@@ -1192,7 +1192,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedStatusIds = LeadStatus::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(name) in (?, ?)', ['converted', 'won'])
-                  ->orWhere('name', 'like', '%convert%');
+                    ->orWhere('name', 'like', '%convert%');
             })
             ->pluck('id')
             ->toArray();
@@ -1207,7 +1207,7 @@ class SuperAdminDashboardController extends ApiController
         $convertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    ->orWhereIn('lead_status_id', $convertedStatusIds);
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -1245,7 +1245,7 @@ class SuperAdminDashboardController extends ApiController
         $prevConvertedProductsQuery = LeadProduct::query()
             ->where(function ($q) use ($convertedStatusIds) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                  ->orWhereIn('lead_status_id', $convertedStatusIds);
+                    ->orWhereIn('lead_status_id', $convertedStatusIds);
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -1290,7 +1290,7 @@ class SuperAdminDashboardController extends ApiController
         $prevNonConverted = $prevLpProducts->reject($isConvertedProduct);
         $prevAllLpProducts = $prevNonConverted->merge($prevConvertedProducts)->unique('id');
         $prevTotalProductValue = (float) $prevAllLpProducts->sum('total_price');
-        $prevTotalPaid         = (float) $prevAllLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $prevTotalPaid         = (float) $prevAllLpProducts->sum(fn(LeadProduct $lp) => $lp->amount_paid);
         $prevTotalPending      = max(0, $prevConvertedValue - $prevTotalPaid);
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
@@ -1329,7 +1329,7 @@ class SuperAdminDashboardController extends ApiController
             $count = (clone $base())
                 ->where(function ($q) use ($sameNameIds, $src) {
                     $q->whereIn('lead_source_id', $sameNameIds)
-                      ->orWhere('lead_source', $src->name);
+                        ->orWhere('lead_source', $src->name);
                 })
                 ->count();
             $sourceTotal += $count;
@@ -1354,7 +1354,7 @@ class SuperAdminDashboardController extends ApiController
 
         // ── 4. Financials (from lead_products + payments) ─────────
         $totalProductValue = (float) $allLpProducts->sum('total_price');
-        $totalPaid         = (float) $allLpProducts->sum(fn (LeadProduct $lp) => $lp->amount_paid);
+        $totalPaid         = (float) $allLpProducts->sum(fn(LeadProduct $lp) => $lp->amount_paid);
         $totalPending      = max(0, $convertedValue - $totalPaid);
         $convertedCount    = $convertedProductsCount;
         $payPct            = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
@@ -1423,7 +1423,7 @@ class SuperAdminDashboardController extends ApiController
         if ($effectiveUserId) {
             $recentCallUpdatesQuery->where(function ($q) use ($effectiveUserId) {
                 $q->where('user_id', $effectiveUserId)
-                  ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
+                    ->orWhereHas('lead', fn($lq) => $lq->where('assigned_to', $effectiveUserId));
             });
         }
 
@@ -1471,9 +1471,9 @@ class SuperAdminDashboardController extends ApiController
             ->whereHas('lead', function ($q) use ($request, $branchId, $effectiveUserId, $stage, $source) {
                 $this->visibility->applyLeadVisibility($q, $request->user());
                 $q->when($branchId, fn($q2) => $q2->where('branch_id', $branchId))
-                  ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
-                  ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
-                  ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
+                    ->when($effectiveUserId, fn($q2) => $q2->where('assigned_to', $effectiveUserId))
+                    ->when($stage, fn($q2) => $q2->where('lead_status', $stage))
+                    ->when($source, fn($q2) => $q2->where('lead_source_id', $source));
             })
             ->when($effectiveUserId, function ($q) use ($effectiveUserId) {
                 $q->where(function ($sub) use ($effectiveUserId) {
@@ -1540,9 +1540,9 @@ class SuperAdminDashboardController extends ApiController
                 $dealValue = $l->products->sum('total_price');
                 $sourceName = $l->leadSource?->name
                     ?: ($l->lead_source
-                    ?: ($l->products->first()?->leadSource?->name
-                    ?: ($l->source_label
-                    ?: '—')));
+                        ?: ($l->products->first()?->leadSource?->name
+                            ?: ($l->source_label
+                                ?: '—')));
 
                 return [
                     'id'                     => $l->id,
@@ -1585,9 +1585,9 @@ class SuperAdminDashboardController extends ApiController
 
                 // Converted products for this branch within converted date range
                 $branchConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
-                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                            ->orWhereIn('lead_status_id', $convertedStatusIds);
-                    })
+                    $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                        ->orWhereIn('lead_status_id', $convertedStatusIds);
+                })
                     ->whereHas('lead', function ($lq) use ($branch, $request, $userId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('branch_id', $branch->id);
@@ -1677,9 +1677,9 @@ class SuperAdminDashboardController extends ApiController
 
                 // Converted products for this user within converted date range
                 $userConvProductQuery = LeadProduct::where(function ($lpq) use ($convertedStatusIds) {
-                        $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                            ->orWhereIn('lead_status_id', $convertedStatusIds);
-                    })
+                    $lpq->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
+                        ->orWhereIn('lead_status_id', $convertedStatusIds);
+                })
                     ->whereHas('lead', function ($lq) use ($user, $request, $branchId, $stage, $source) {
                         $this->visibility->applyLeadVisibility($lq, $request->user());
                         $lq->where('assigned_to', $user->id);
@@ -1864,13 +1864,13 @@ class SuperAdminDashboardController extends ApiController
         $todayConvertedQuery = LeadProduct::query()
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
-                  ->orWhere('lead_status_id', 5);
+                    ->orWhere('lead_status_id', 5);
             })
             ->where(function ($q) {
                 $q->whereDate('converted_at', today())
-                  ->orWhere(function ($sub) {
-                      $sub->whereNull('converted_at')->whereDate('created_at', today());
-                  });
+                    ->orWhere(function ($sub) {
+                        $sub->whereNull('converted_at')->whereDate('created_at', today());
+                    });
             })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
@@ -2190,11 +2190,11 @@ class SuperAdminDashboardController extends ApiController
             }
             $q->where(function ($sq) {
                 $sq->where('product_name', 'like', '%COCO%')
-                   ->orWhere('package_name', 'like', '%COCO%');
+                    ->orWhere('package_name', 'like', '%COCO%');
             });
         })->where(function ($q) {
             $q->where('product_name', 'not like', '%NON%')
-              ->where('package_name', 'not like', '%NON%');
+                ->where('package_name', 'not like', '%NON%');
         })->first();
 
         $nonCocoProduct = Product::where(function ($q) use ($catId) {
@@ -2203,7 +2203,7 @@ class SuperAdminDashboardController extends ApiController
             }
             $q->where(function ($sq) {
                 $sq->where('product_name', 'like', '%NON%COCO%')
-                   ->orWhere('package_name', 'like', '%NON%COCO%');
+                    ->orWhere('package_name', 'like', '%NON%COCO%');
             });
         })->first();
 
@@ -2236,10 +2236,10 @@ class SuperAdminDashboardController extends ApiController
                 if ($cocoProduct) {
                     $sub->where(function ($sq) use ($cocoProduct) {
                         $sq->where('product_id', $cocoProduct->id)
-                           ->orWhere(function ($ssq) {
-                               $ssq->where('product_name', 'like', '%COCO%')
-                                   ->where('product_name', 'not like', '%NON%');
-                           });
+                            ->orWhere(function ($ssq) {
+                                $ssq->where('product_name', 'like', '%COCO%')
+                                    ->where('product_name', 'not like', '%NON%');
+                            });
                     });
                 } else {
                     $sub->where('product_name', 'like', '%COCO%')
@@ -2296,7 +2296,7 @@ class SuperAdminDashboardController extends ApiController
                     $q->whereNotIn('product_id', $cpProductIds);
                 }
                 $q->where('product_name', 'not like', '%COCO%')
-                  ->where('product_name', 'not like', '%Channel Partner%');
+                    ->where('product_name', 'not like', '%Channel Partner%');
             });
         }
         $nstHoHotCount = (clone $nstHoHotQuery)->count();
@@ -2343,8 +2343,8 @@ class SuperAdminDashboardController extends ApiController
             ];
         }
 
-        $isCompanyAdmin = $authUser->isSuperAdmin() 
-            || $authUser->isSystemAdmin() 
+        $isCompanyAdmin = $authUser->isSuperAdmin()
+            || $authUser->isSystemAdmin()
             || $authUser->isCompanyAdminRole()
             || $authUser->isCompanyAdmin();
         $isCbo          = $authUser->isCbo();
@@ -2360,12 +2360,14 @@ class SuperAdminDashboardController extends ApiController
         if (!$isCompanyAdmin && method_exists($authUser, 'hasAnyRole')) {
             try {
                 $isCompanyAdmin = $authUser->hasAnyRole(['company_admin', 'super_admin', 'admin', 'Super Admin', 'Company Admin']);
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
         if (!$isCbo && method_exists($authUser, 'hasAnyRole')) {
             try {
                 $isCbo = $authUser->hasAnyRole(['cbo', 'CBO', 'chief_business_officer', 'cheif_business_officer']);
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         $isBranchManager = $authUser->isBranchManager() && !$isCompanyAdmin && !$isCbo;
@@ -2587,7 +2589,7 @@ class SuperAdminDashboardController extends ApiController
             ])
             ->whereHas('product', function ($q) {
                 $q->where('count_wise_report', true)
-                  ->orWhere('is_this_renewal_product', true);
+                    ->orWhere('is_this_renewal_product', true);
             });
 
         if (!$isCompanyAdminOrCbo) {
@@ -2623,7 +2625,8 @@ class SuperAdminDashboardController extends ApiController
                         try {
                             $rDateStr = Carbon::parse($val)->toDateString();
                             break;
-                        } catch (\Throwable $e) {}
+                        } catch (\Throwable $e) {
+                        }
                     }
                 }
             }
@@ -2684,15 +2687,15 @@ class SuperAdminDashboardController extends ApiController
             ])
             ->where(function ($q) {
                 $q->where('department_id', 1)
-                  ->orWhereHas('department', function ($dq) {
-                      $dq->where('name', 'like', '%develop%');
-                  });
+                    ->orWhereHas('department', function ($dq) {
+                        $dq->where('name', 'like', '%develop%');
+                    });
             })
             ->where(function ($q) use ($cmStart, $cmEnd) {
                 $q->whereBetween('expected_date', [$cmStart, $cmEnd])
-                  ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
-                      $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
-                  });
+                    ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
+                        $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
+                    });
             });
 
         if (!$isCompanyAdminOrCbo) {
@@ -2974,11 +2977,11 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%COCO%')
-                       ->orWhere('package_name', 'like', '%COCO%');
+                        ->orWhere('package_name', 'like', '%COCO%');
                 });
             })->where(function ($q) {
                 $q->where('product_name', 'not like', '%NON%')
-                  ->where('package_name', 'not like', '%NON%');
+                    ->where('package_name', 'not like', '%NON%');
             })->first();
 
             $nonCocoProduct = Product::where(function ($q) use ($catId) {
@@ -2987,7 +2990,7 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%NON%COCO%')
-                       ->orWhere('package_name', 'like', '%NON%COCO%');
+                        ->orWhere('package_name', 'like', '%NON%COCO%');
                 });
             })->first();
 
@@ -3045,10 +3048,9 @@ class SuperAdminDashboardController extends ApiController
                         $q->whereNotIn('product_id', $cpProductIds);
                     }
                     $q->where('product_name', 'not like', '%COCO%')
-                      ->where('product_name', 'not like', '%Channel Partner%');
+                        ->where('product_name', 'not like', '%Channel Partner%');
                 });
             }
-
         } elseif ($type === 'non_coco') {
             $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
             $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
@@ -3084,7 +3086,7 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%NON%COCO%')
-                       ->orWhere('package_name', 'like', '%NON%COCO%');
+                        ->orWhere('package_name', 'like', '%NON%COCO%');
                 });
             })->first();
 
@@ -3104,11 +3106,16 @@ class SuperAdminDashboardController extends ApiController
                 } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
                         $bq->where('is_default', false)
-                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                            ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
                     });
                 }
             });
 
+            //kesav
+
+            $query->whereHas('lead.branch', function ($bq) {
+                $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+            });
         } elseif ($type === 'coco') {
             $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
             $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
@@ -3144,11 +3151,11 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%COCO%')
-                       ->orWhere('package_name', 'like', '%COCO%');
+                        ->orWhere('package_name', 'like', '%COCO%');
                 });
             })->where(function ($q) {
                 $q->where('product_name', 'not like', '%NON%')
-                  ->where('package_name', 'not like', '%NON%');
+                    ->where('package_name', 'not like', '%NON%');
             })->first();
 
             $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
@@ -3156,10 +3163,10 @@ class SuperAdminDashboardController extends ApiController
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
                             $sq->where('product_id', $cocoProduct->id)
-                               ->orWhere(function ($ssq) {
-                                   $ssq->where('product_name', 'like', '%COCO%')
-                                       ->where('product_name', 'not like', '%NON%');
-                               });
+                                ->orWhere(function ($ssq) {
+                                    $ssq->where('product_name', 'like', '%COCO%')
+                                        ->where('product_name', 'not like', '%NON%');
+                                });
                         });
                     } else {
                         $sub->where('product_name', 'like', '%COCO%')
@@ -3173,11 +3180,16 @@ class SuperAdminDashboardController extends ApiController
                 } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
                         $bq->where('is_default', false)
-                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                            ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
                     });
                 }
             });
 
+            //kesav
+
+            $query->whereHas('lead.branch', function ($bq) {
+                $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+            });
         } else {
             // By Branch ID
             $branch = Branch::find($branchId);
@@ -3234,6 +3246,17 @@ class SuperAdminDashboardController extends ApiController
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
                 $bId = $cItem['branch_id'] ?? null;
                 return $bId && in_array((int)$bId, array_map('intval', $nonCocoBranchIds), true);
+            });
+
+            // kesav
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
+            });
+        } elseif ($type === 'non_coco') {
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
             });
         }
 

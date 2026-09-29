@@ -989,7 +989,7 @@
                     </a>
 
                     {{-- 4. Active Technical SEO Projects --}}
-                    <a href="#technical-seo-projects-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); text-decoration:none; cursor:pointer;">
+                    <div onclick="openTechnicalSeoModal()" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); cursor:pointer;" title="Click to view Active Technical SEO Projects modal">
                         <div class="pjd-stat-header">
                             <span class="pjd-stat-label">Active Technical SEO Projects</span>
                             <span class="pjd-stat-icon"><i class="bi bi-search"></i></span>
@@ -997,8 +997,8 @@
                         <div class="pjd-stat-value">
                             <span>{{ number_format($activeTechnicalSeoCount ?? 0) }}</span>
                         </div>
-                        <div class="pjd-stat-sub">Active Technical SEO accounts.</div>
-                    </a>
+                        <div class="pjd-stat-sub">Active Technical SEO accounts. Click to view details.</div>
+                    </div>
 
                     {{-- 5. Pending Welcome Calls --}}
                     <a href="#pending-welcome-call-projects-section" class="pjd-stat" style="--stat-gradient: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); text-decoration:none; cursor:pointer;">
@@ -1753,6 +1753,130 @@
                 </div>
             </div>
         </div>
+
+        {{-- Active Technical SEO Projects Modal --}}
+        @if(in_array(($selectedDashboard ?? ''), ['dm', 'digital_marketing'], true))
+        <div id="techSeoModalOverlay" class="pjd-update-modal-overlay" onclick="closeTechnicalSeoModal()"></div>
+        <div id="techSeoModal" class="pjd-update-modal" style="width: min(1100px, calc(100vw - 32px));">
+            <div class="pjd-update-modal-head" style="background: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%); border-bottom: 1px solid #c7d2fe;">
+                <div>
+                    <div class="pjd-card-title" style="color: #3730a3; display: flex; align-items: center; gap: 8px;">
+                        <i class="bi bi-search" style="color: #6366f1;"></i>
+                        Active Technical SEO Projects
+                    </div>
+                    <div class="pjd-card-sub" style="color: #4338ca;">
+                        Active Technical SEO client projects, allocated team, and execution status.
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="pjd-highlight" style="background: #e0e7ff; border-color: #c7d2fe; color: #3730a3;">
+                        {{ number_format($activeTechnicalSeoCount ?? 0) }} Active Projects
+                    </span>
+                    <button type="button" class="pjd-update-modal-close" onclick="closeTechnicalSeoModal()" aria-label="Close modal" style="border-color: #c7d2fe;">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="pjd-update-modal-body" style="padding: 20px;">
+                @php
+                    $seoModalProjects = $allTechnicalSeoProjects ?? ($technicalSeoProjects?->items() ?? []);
+                @endphp
+                @if(!empty($seoModalProjects) && count($seoModalProjects) > 0)
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; flex-wrap: wrap;">
+                        <input type="text" id="techSeoSearchInput" onkeyup="filterTechSeoTable()" placeholder="Search company, client, product, status..." class="ps-input" style="max-width: 320px; min-height: 38px; padding: 8px 12px; font-size: 13px; border-radius: 10px;">
+                        <span style="font-size: 12px; color: #64748b; font-weight: 700;">
+                            Showing <span id="techSeoShowingCount">{{ count($seoModalProjects) }}</span> of {{ number_format($activeTechnicalSeoCount ?? 0) }} projects
+                        </span>
+                    </div>
+                    <div class="pjd-table-wrap" style="max-height: 520px; overflow-y: auto;">
+                        <table class="pjd-table">
+                            <thead style="position: sticky; top: 0; z-index: 5; background: #f8fafc;">
+                                <tr>
+                                    <th style="width: 40px;">#</th>
+                                    <th>Project / Client</th>
+                                    <th>Product</th>
+                                    <th>Allocated Team</th>
+                                    <th>Status</th>
+                                    <th>Project Value</th>
+                                    <th>Received</th>
+                                    <th>Balance</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($seoModalProjects as $idx => $project)
+                                    @php
+                                        $compName = $project->company_name ?: ($project->lead?->company_name ?: 'No company');
+                                        $clientName = $project->client_name ?: ($project->lead?->contact_name ?: 'N/A');
+                                        $prodName = $project->product_name;
+                                        $execTeam = $project->allocated_person_label ?: 'Not Allocated';
+                                        $statusVal = strtolower((string) ($project->project_execution_status ?: 'ontrack'));
+                                        $statusLabels = [
+                                            'ontrack' => 'Onboard',
+                                            'hold' => 'Hold',
+                                            'delivered' => 'Delivered',
+                                            'in progress' => 'In Progress',
+                                            'new' => 'New',
+                                        ];
+                                        $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
+                                        $statusClass = match($statusVal) {
+                                            'ontrack' => 'status-ontrack',
+                                            'hold' => 'status-hold',
+                                            'delivered' => 'status-delivered',
+                                            'in progress', 'inprogress' => 'status-in-progress',
+                                            'new' => 'status-new',
+                                            default => 'status-ontrack',
+                                        };
+                                        $searchText = strtolower($compName . ' ' . $clientName . ' ' . $prodName . ' ' . $execTeam . ' ' . $statusLabel);
+                                    @endphp
+                                    <tr class="tech-seo-row" data-search-text="{{ $searchText }}">
+                                        <td>{{ $idx + 1 }}</td>
+                                        <td>
+                                            <div class="pjd-product">{{ $compName }}</div>
+                                            <div class="pjd-meta">
+                                                {{ $clientName }}
+                                                @if($project->lead?->mobile_number)
+                                                    &bull; {{ $project->lead->mobile_number }}
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="pjd-pill" style="background:#e0e7ff; color:#3730a3; font-weight:700;">
+                                                {{ $prodName }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style="font-weight:600; color:#1e293b;">
+                                                {{ $execTeam }}
+                                            </div>
+                                            <div class="pjd-meta">{{ $project->department?->name ?: 'Digital Marketing' }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="pjd-pill {{ $statusClass }}">{{ $statusLabel }}</span>
+                                        </td>
+                                        <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
+                                        <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
+                                        <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
+                                        <td style="text-align: right;">
+                                            <a href="{{ route('projects.show', $project) }}" class="pjd-link" target="_blank">View &rarr;</a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div class="pjd-empty">No active Technical SEO projects found.</div>
+                @endif
+            </div>
+            <div style="padding: 16px 22px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                <div style="font-size: 13px; color: #64748b;">
+                    <i class="bi bi-info-circle me-1"></i> Data automatically reflects current dashboard filters.
+                </div>
+                <button type="button" class="pjd-btn" onclick="closeTechnicalSeoModal()">Close</button>
+            </div>
+        </div>
+        @endif
     </div>
 @endif
 @endsection
@@ -2395,9 +2519,52 @@ function filterPjdExpectedTable() {
     }
 }
 
+function openTechnicalSeoModal() {
+    const modal = document.getElementById('techSeoModal');
+    const overlay = document.getElementById('techSeoModalOverlay');
+    if (modal && overlay) {
+        modal.classList.add('is-open');
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeTechnicalSeoModal() {
+    const modal = document.getElementById('techSeoModal');
+    const overlay = document.getElementById('techSeoModalOverlay');
+    if (modal && overlay) {
+        modal.classList.remove('is-open');
+        overlay.classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+}
+
+function filterTechSeoTable() {
+    const input = document.getElementById('techSeoSearchInput');
+    const filter = input ? input.value.toLowerCase().trim() : '';
+    const rows = document.querySelectorAll('.tech-seo-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const searchText = row.getAttribute('data-search-text') || '';
+        if (!filter || searchText.includes(filter)) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    const showingCount = document.getElementById('techSeoShowingCount');
+    if (showingCount) {
+        showingCount.textContent = visibleCount;
+    }
+}
+
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         closePjdExpectedValueModal();
+        closeTechnicalSeoModal();
     }
 });
 </script>
