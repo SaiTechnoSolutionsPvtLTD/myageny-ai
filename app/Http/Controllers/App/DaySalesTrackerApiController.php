@@ -33,10 +33,22 @@ class DaySalesTrackerApiController extends Controller
                 ], 401);
             }
 
-            $date = $request->input('date', now()->toDateString());
+            $date     = $request->input('date', now()->toDateString());
             $dateFrom = $request->input('date_from');
-            $dateTo = $request->input('date_to');
-            $parsedDate = Carbon::parse($date);
+            $dateTo   = $request->input('date_to');
+
+            $startDateStr = Carbon::parse($dateFrom ?: ($dateTo ?: $date))->toDateString();
+            $endDateStr   = Carbon::parse($dateTo ?: ($dateFrom ?: $date))->toDateString();
+
+            if ($startDateStr > $endDateStr) {
+                [$startDateStr, $endDateStr] = [$endDateStr, $startDateStr];
+            }
+
+            if ($startDateStr === $endDateStr) {
+                $formattedDateLabel = Carbon::parse($startDateStr)->format('d-m-Y');
+            } else {
+                $formattedDateLabel = Carbon::parse($startDateStr)->format('d-m-Y') . ' to ' . Carbon::parse($endDateStr)->format('d-m-Y');
+            }
 
             $query = LeadProduct::query()
                 ->with([
@@ -45,32 +57,31 @@ class DaySalesTrackerApiController extends Controller
                     'lead.assignedTo.employeeOnboarding.department',
                     'lead.assignedTo.mappedManagers',
                     'lead.customerSupportTl',
-                    'payments' => function ($q) use ($parsedDate) {
-                        $q->whereMonth('payment_date', $parsedDate->month)
-                          ->whereYear('payment_date', $parsedDate->year);
+                    'payments' => function ($q) use ($startDateStr, $endDateStr) {
+                        $q->whereBetween('payment_date', [$startDateStr, $endDateStr]);
                     }
                 ])
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                       ->orWhere('lead_status_id', 5);
+                })
+                ->where(function ($q) use ($startDateStr, $endDateStr) {
+                    $q->whereHas('payments', function ($pq) use ($startDateStr, $endDateStr) {
+                        $pq->whereBetween('payment_date', [$startDateStr, $endDateStr]);
+                    })
+                    ->orWhereBetween('payment_date', [$startDateStr, $endDateStr])
+                    ->orWhere(function ($sub) use ($startDateStr, $endDateStr) {
+                        $sub->whereNull('payment_date')
+                            ->whereDoesntHave('payments')
+                            ->where(function ($dateSub) use ($startDateStr, $endDateStr) {
+                                $dateSub->whereBetween('converted_at', [$startDateStr, $endDateStr])
+                                        ->orWhere(function ($cSub) use ($startDateStr, $endDateStr) {
+                                            $cSub->whereNull('converted_at')
+                                                 ->whereBetween('created_at', [$startDateStr, $endDateStr]);
+                                        });
+                            });
+                    });
                 });
-
-            // Date filtering: Supports date range (date_from / date_to) or single date
-            if ($dateFrom && $dateTo) {
-                $query->where(function ($q) use ($dateFrom, $dateTo) {
-                    $q->whereBetween('converted_at', [$dateFrom, $dateTo])
-                      ->orWhere(function ($sub) use ($dateFrom, $dateTo) {
-                          $sub->whereNull('converted_at')->whereBetween('created_at', [$dateFrom, $dateTo]);
-                      });
-                });
-            } else {
-                $query->where(function ($q) use ($date) {
-                    $q->whereDate('converted_at', $date)
-                      ->orWhere(function ($sub) use ($date) {
-                          $sub->whereNull('converted_at')->whereDate('created_at', $date);
-                      });
-                });
-            }
 
             // Apply Strict Server-Side Role-Based Scope & Security Constraints
             $this->applyRoleBasedDataVisibility($query, $user, $request);
@@ -80,8 +91,23 @@ class DaySalesTrackerApiController extends Controller
             $items = [];
             foreach ($convertedProducts as $idx => $lp) {
                 $lead = $lp->lead;
-                $convDate = $lp->converted_at ?: $lp->created_at;
-                $carbonDate = $convDate ? Carbon::parse($convDate) : $parsedDate;
+
+                // Determine payment received date & collection amount in selected range
+                $paymentDate = null;
+                $receivedAmount = 0.0;
+
+                if ($lp->payments && $lp->payments->count() > 0) {
+                    $paymentDate = $lp->payments->first()->payment_date;
+                    $receivedAmount = (float) $lp->payments->sum('amount');
+                } elseif ($lp->payment_date) {
+                    $paymentDate = $lp->payment_date;
+                    $receivedAmount = (float) ($lp->amount_paid ?: 0);
+                } else {
+                    $paymentDate = $lp->converted_at ?: $lp->created_at;
+                    $receivedAmount = (float) ($lp->amount_paid ?: 0);
+                }
+
+                $carbonDate = $paymentDate ? Carbon::parse($paymentDate) : Carbon::parse($startDateStr);
 
                 // 1. Mon
                 $mon = $carbonDate->format('M');
@@ -178,11 +204,9 @@ class DaySalesTrackerApiController extends Controller
                     $accountName = $compName ?: ($contactName ?: 'N/A');
                 }
 
-                // 9. Current Month Collection (Received amount)
-                $monthPayments = (float) $lp->payments->sum('amount');
-                $receivedAmount = $monthPayments > 0 ? $monthPayments : (float) ($lp->amount_paid ?: 0);
+                // 9. Collection & pending balance
                 $productPrice = (float) ($lp->total_price ?: ($lp->deal_price ?: 0));
-                $totalPaidAllTime = (float) ($lp->total_paid ?? ($monthPayments > 0 ? $monthPayments : ($lp->amount_paid ?: 0)));
+                $totalPaidAllTime = (float) ($lp->total_paid ?? ($receivedAmount > 0 ? $receivedAmount : ($lp->amount_paid ?: 0)));
                 $balancePending = max(0, $productPrice - $totalPaidAllTime);
 
                 $productName = $lp->product_name ?: 'Product';
@@ -246,8 +270,10 @@ class DaySalesTrackerApiController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'date' => $date,
-                    'formatted_date' => Carbon::parse($date)->format('d-m-Y'),
+                    'date' => $startDateStr,
+                    'date_from' => $startDateStr,
+                    'date_to' => $endDateStr,
+                    'formatted_date' => $formattedDateLabel,
                     'total_count' => $totalCount,
                     'total_collection' => $totalCollection,
                     'total_value' => $totalValue,

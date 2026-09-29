@@ -243,8 +243,13 @@
         <div class="sdc-filter-card">
             <form method="GET" action="{{ route('crm.day-closing.index') }}" class="sdc-filter-form">
                 <div class="sdc-filter-group">
-                    <label class="sdc-label">Date</label>
-                    <input type="date" name="date" value="{{ request('date', $selectedDate) }}" class="sdc-input">
+                    <label class="sdc-label">From Date</label>
+                    <input type="date" name="date_from" value="{{ request('date_from', $dateFrom) }}" class="sdc-input">
+                </div>
+
+                <div class="sdc-filter-group">
+                    <label class="sdc-label">To Date</label>
+                    <input type="date" name="date_to" value="{{ request('date_to', $dateTo) }}" class="sdc-input">
                 </div>
 
                 @if($isAdminLike || $isTlLike)
@@ -268,16 +273,6 @@
                         </select>
                     </div>
                 @endif
-
-                <div class="sdc-filter-group">
-                    <label class="sdc-label">Status</label>
-                    <select name="status" class="sdc-select">
-                        <option value="">All Statuses</option>
-                        <option value="submitted" @selected(request('status') === 'submitted')>Submitted</option>
-                        <option value="reviewed" @selected(request('status') === 'reviewed')>Reviewed</option>
-                        <option value="approved" @selected(request('status') === 'approved')>Approved</option>
-                    </select>
-                </div>
 
                 <div class="sdc-filter-group">
                     <label class="sdc-label">Search Keyword</label>
@@ -313,7 +308,6 @@
                             <th style="width:280px;">Call Metrics Breakdown</th>
                             <th style="min-width:240px;">Day Closing Update</th>
                             <th style="width:200px;">Tomorrow&apos;s Plan &amp; Target</th>
-                            <th style="width:120px; text-align:center;">Review Status</th>
                             <th style="width:140px; text-align:center;">Actions</th>
                         </tr>
                     </thead>
@@ -409,21 +403,6 @@
                                         </div>
                                     @else
                                         <span style="font-size:12px; color:#94a3b8;">None</span>
-                                    @endif
-                                </td>
-                                <td style="text-align:center;">
-                                    @if($isAdminLike || $isTlLike)
-                                        <select class="status-dropdown {{ $closing->status }}"
-                                                data-update-url="{{ route('crm.day-closing.update-status', $closing->id) }}"
-                                                title="Change review status">
-                                            <option value="submitted" @selected($closing->status === 'submitted')>Submitted</option>
-                                            <option value="reviewed" @selected($closing->status === 'reviewed')>Reviewed</option>
-                                            <option value="approved" @selected($closing->status === 'approved')>Approved</option>
-                                        </select>
-                                    @else
-                                        <span class="sdc-badge {{ $closing->status }}">
-                                            {{ ucfirst($closing->status) }}
-                                        </span>
                                     @endif
                                 </td>
                                 <td style="text-align:center;">
@@ -1353,13 +1332,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to fetch call details when a KPI card is clicked
     function openCallDetailsModal(metric, titleHint) {
-        const currentDate = '{{ request("date", $selectedDate ?: $today) }}';
-        const currentUserId = '{{ request("user_id") }}';
-        const currentBranchId = '{{ request("branch_id") }}';
+        const dateFromInput = document.querySelector('input[name="date_from"]')?.value;
+        const dateToInput = document.querySelector('input[name="date_to"]')?.value;
+        const dateFrom = dateFromInput || '{{ request("date_from", $dateFrom) }}';
+        const dateTo = dateToInput || '{{ request("date_to", $dateTo) }}';
+        const userIdInput = document.querySelector('select[name="user_id"]')?.value;
+        const currentUserId = userIdInput !== undefined ? userIdInput : '{{ request("user_id") }}';
+        const branchIdInput = document.querySelector('select[name="branch_id"]')?.value;
+        const currentBranchId = branchIdInput !== undefined ? branchIdInput : '{{ request("branch_id") }}';
+
+        const dateRangeStr = dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : (dateFrom || 'Today');
 
         if (callDetailsTitle) callDetailsTitle.textContent = titleHint || 'Call Update Details';
-        if (callDetailsSubTitle) callDetailsSubTitle.textContent = `CRM Call Logs for ${currentDate}`;
-        if (callDetailsDateNote) callDetailsDateNote.textContent = currentDate;
+        if (callDetailsSubTitle) callDetailsSubTitle.textContent = `CRM Call Logs for ${dateRangeStr}`;
+        if (callDetailsDateNote) callDetailsDateNote.textContent = dateRangeStr;
         if (callDetailsSearchInput) callDetailsSearchInput.value = '';
         if (callDetailsTableWrap) callDetailsTableWrap.style.display = 'none';
         if (callDetailsEmptyState) callDetailsEmptyState.style.display = 'none';
@@ -1370,7 +1356,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const params = new URLSearchParams({
             metric: metric,
-            date: currentDate,
+            date_from: dateFrom,
+            date_to: dateTo,
         });
         if (currentUserId) params.append('user_id', currentUserId);
         if (currentBranchId) params.append('branch_id', currentBranchId);
