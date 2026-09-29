@@ -188,6 +188,30 @@ class MenuService
             return $staticLabel;
         }
 
+        $itemKey = $item['key'] ?? '';
+        $basePermName = preg_replace('/^company_\d+__/', '', (string)$permissionRecord->name);
+        $declaredPerm = ! empty($item['permission']) ? preg_replace('/^company_\d+__/', '', (string)$item['permission']) : '';
+
+        // If the permission matched is a fallback/borrowed permission (e.g. leads.view for lead_products, reminders_tasks, or day_closing),
+        // do not let the borrowed permission's display_name overwrite this item's specific label.
+        $permEntity = explode('.', $basePermName)[0] ?? '';
+        $itemEntity = explode('.', $itemKey)[0] ?? '';
+
+        $isOwnPermission = ($declaredPerm !== '' && strcasecmp($basePermName, $declaredPerm) === 0)
+            || ($permEntity !== '' && (
+                strcasecmp($permEntity, $itemEntity) === 0 ||
+                strcasecmp($permEntity, $itemKey) === 0
+            ));
+
+        if (! $isOwnPermission) {
+            return $staticLabel;
+        }
+
+        // Extra safeguard: do not let a generic "Leads" label overwrite items that are not Leads
+        if (strcasecmp($cleaned, 'leads') === 0 && ! in_array($itemKey, ['leads', 'all_leads'], true)) {
+            return $staticLabel;
+        }
+
         return $cleaned !== '' ? $cleaned : $staticLabel;
     }
 

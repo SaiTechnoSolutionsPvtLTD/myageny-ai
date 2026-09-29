@@ -3064,6 +3064,12 @@ class SuperAdminDashboardController extends ApiController
                 $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
             }
 
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                }
+            });
+
             if ($isCompanyAdminOrCbo) {
                 $query->where(function ($q) use ($cpProductIds) {
                     if (!empty($cpProductIds)) {
@@ -3112,7 +3118,7 @@ class SuperAdminDashboardController extends ApiController
                 });
             })->first();
 
-            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -3121,22 +3127,18 @@ class SuperAdminDashboardController extends ApiController
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!empty($nonCocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                        $lq->whereIn('branch_id', $nonCocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                            ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($nonCocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                            $lq->whereIn('branch_id', $nonCocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                                ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                        });
+                    }
                 }
-            });
-
-            //kesav
-
-            $query->whereHas('lead.branch', function ($bq) {
-                $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
             });
         } elseif ($type === 'coco') {
             $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
@@ -3180,7 +3182,7 @@ class SuperAdminDashboardController extends ApiController
                     ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -3195,22 +3197,18 @@ class SuperAdminDashboardController extends ApiController
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!empty($cocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                        $lq->whereIn('branch_id', $cocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                            ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($cocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                            $lq->whereIn('branch_id', $cocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                                ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        });
+                    }
                 }
-            });
-
-            //kesav
-
-            $query->whereHas('lead.branch', function ($bq) {
-                $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
             });
         } else {
             // By Branch ID
@@ -3262,27 +3260,6 @@ class SuperAdminDashboardController extends ApiController
         if ($branchId) {
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
-            });
-        } elseif ($type === 'coco') {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
-                $bId = $cItem['branch_id'] ?? null;
-                return $bId && in_array((int)$bId, array_map('intval', $cocoBranchIds), true);
-            });
-        } elseif ($type === 'non_coco') {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
-                $bId = $cItem['branch_id'] ?? null;
-                return $bId && in_array((int)$bId, array_map('intval', $nonCocoBranchIds), true);
-            });
-
-            // kesav
-            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
-            });
-        } elseif ($type === 'non_coco') {
-            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
             });
         }
 

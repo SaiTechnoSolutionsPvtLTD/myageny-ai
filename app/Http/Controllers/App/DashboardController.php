@@ -1194,7 +1194,7 @@ class DashboardController extends Controller
             });
         })->first();
 
-        $currentUser = $request?->user() ?: auth()->user();
+        $currentUser = auth('sanctum')->user() ?: ($request?->user() ?: auth()->user());
         $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
 
         // NON COCO Hot query: For Company Admin & CBO, filter strictly by Channel Partner NON COCO product
@@ -1256,7 +1256,7 @@ class DashboardController extends Controller
         }
 
         // Company's default branch filter for NST - HO
-        $user = $request?->user();
+        $user = $currentUser;
         $companyId = $user ? ($this->visibility->companyIdFor($user) ?? $user->company_id) : null;
         $defaultBranchQuery = Branch::where('is_default', true);
         if ($companyId) {
@@ -1652,9 +1652,9 @@ class DashboardController extends Controller
                         $seenLpIds[$pi->lead_product_id] = true;
                     }
 
-                    $assignedName = $lead?->customerSupportExecutive?->name
-                        ?: ($lead?->customerSupportTl?->name
-                            ?: ($lead?->assignedTo?->name ?: 'Unassigned'));
+                    $salesPerson = $lead?->assignedTo?->name ?: '-';
+                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
                     $items->push([
                         'pi_id'            => $pi->id,
@@ -1669,8 +1669,10 @@ class DashboardController extends Controller
                         'expected_value'   => $expVal,
                         'closure_date'     => $rDate->format('d M Y'),
                         'closure_date_raw' => $rDate->format('Y-m-d'),
+                        'sales_person_name' => $salesPerson,
+                        'cst_person_name'   => $cstPerson,
                         'assigned_to'      => $assignedName,
-                        'executive_name'   => $assignedName,
+                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                         'branch_id'        => $lead?->branch_id,
                         'branch_name'      => $lead?->branch?->name ?: 'General',
                         'source_type'      => 'renewal',
@@ -1683,7 +1685,7 @@ class DashboardController extends Controller
         $devPisQuery = ProductionInitiation::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'leadProduct',
                 'product',
@@ -1741,8 +1743,9 @@ class DashboardController extends Controller
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
             $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-            $assignedName = $lead?->customerSupportExecutive?->name
-                ?: ($lead?->assignedTo?->name ?: 'Unassigned');
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+            $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
             $items->push([
                 'pi_id'            => $pi->id,
@@ -1757,8 +1760,10 @@ class DashboardController extends Controller
                 'expected_value'   => $expVal,
                 'closure_date'     => $cExpDate->format('d M Y'),
                 'closure_date_raw' => $cExpDate->format('Y-m-d'),
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
                 'assigned_to'      => $assignedName,
-                'executive_name'   => $assignedName,
+                'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                 'branch_id'        => $lead?->branch_id,
                 'branch_name'      => $lead?->branch?->name ?: 'General',
                 'source_type'      => 'development',
@@ -1842,7 +1847,7 @@ class DashboardController extends Controller
             $query = LeadProduct::query()
                 ->with([
                     'lead' => function ($lq) {
-                        $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                        $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                     },
                     'product:id,product_name',
                     'leadStatus:id,name'
@@ -1862,6 +1867,8 @@ class DashboardController extends Controller
 
             $rows = $hotProducts->map(function ($item, $idx) {
                 $lead = $item->lead;
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
                 return [
                     'index'            => $idx + 1,
                     'lead_id'          => $lead?->id,
@@ -1874,7 +1881,9 @@ class DashboardController extends Controller
                     'expected_value'   => (float) ($item->expected_value ?? 0),
                     'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                     'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                    'executive_name'   => $lead?->assignedTo?->name ?: '-',
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'executive_name'   => $salesPerson,
                     'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
                 ];
             });
@@ -1894,6 +1903,8 @@ class DashboardController extends Controller
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
                     'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
@@ -1971,6 +1982,8 @@ class DashboardController extends Controller
                     return str_contains(strtolower($r['company_name'] ?? ''), $s)
                         || str_contains(strtolower($r['customer_name'] ?? ''), $s)
                         || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['sales_person_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['cst_person_name'] ?? ''), $s)
                         || str_contains(strtolower($r['executive_name'] ?? ''), $s)
                         || str_contains(strtolower($r['status'] ?? ''), $s);
                 })->values();
@@ -2022,7 +2035,7 @@ class DashboardController extends Controller
         $query = LeadProduct::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'product:id,product_name',
                 'leadStatus:id,name'
@@ -2186,7 +2199,7 @@ class DashboardController extends Controller
                 });
             })->first();
 
-            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2195,15 +2208,17 @@ class DashboardController extends Controller
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!empty($nonCocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                        $lq->whereIn('branch_id', $nonCocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($nonCocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                            $lq->whereIn('branch_id', $nonCocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                               ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                        });
+                    }
                 }
             });
 
@@ -2256,7 +2271,7 @@ class DashboardController extends Controller
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2271,15 +2286,17 @@ class DashboardController extends Controller
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!empty($cocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                        $lq->whereIn('branch_id', $cocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($cocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                            $lq->whereIn('branch_id', $cocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                               ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        });
+                    }
                 }
             });
 
@@ -2314,6 +2331,8 @@ class DashboardController extends Controller
 
         $rows = $hotProducts->map(function ($item, $idx) use ($branch) {
             $lead = $item->lead;
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
             return [
                 'index'          => $idx + 1,
                 'lead_id'        => $lead?->id,
@@ -2326,7 +2345,9 @@ class DashboardController extends Controller
                 'expected_value' => (float) ($item->expected_value ?? 0),
                 'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                 'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                'executive_name' => $lead?->assignedTo?->name ?: '-',
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
+                'executive_name' => $salesPerson,
                 'branch_name'    => $lead?->branch?->name ?: ($branch?->name ?: 'Coimbatore (HO)'),
             ];
         });
@@ -2335,16 +2356,6 @@ class DashboardController extends Controller
         if ($branchId) {
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
-            });
-        } elseif ($type === 'coco') {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
-                $bId = $cItem['branch_id'] ?? null;
-                return $bId && in_array((int)$bId, array_map('intval', $cocoBranchIds), true);
-            });
-        } elseif ($type === 'non_coco') {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
-                $bId = $cItem['branch_id'] ?? null;
-                return $bId && in_array((int)$bId, array_map('intval', $nonCocoBranchIds), true);
             });
         }
 
@@ -2363,6 +2374,8 @@ class DashboardController extends Controller
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
                     'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
@@ -2380,6 +2393,8 @@ class DashboardController extends Controller
                 return str_contains(strtolower($r['company_name'] ?? ''), $s)
                     || str_contains(strtolower($r['customer_name'] ?? ''), $s)
                     || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['sales_person_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['cst_person_name'] ?? ''), $s)
                     || str_contains(strtolower($r['executive_name'] ?? ''), $s)
                     || str_contains(strtolower($r['branch_name'] ?? ''), $s)
                     || str_contains(strtolower($r['status'] ?? ''), $s);

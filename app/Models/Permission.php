@@ -15,6 +15,7 @@ class Permission extends SpatiePermission
         'products' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'form_customization' => ['menuview'],
         'leads' => ['menuview', 'view', 'create', 'edit', 'delete', 'update'],
+        'lead_products' => ['menuview', 'view', 'create', 'edit', 'delete', 'update'],
         'call_updates' => ['menuview', 'view', 'create', 'delete'],
         'quotations' => ['menuview', 'view', 'create', 'delete', 'approve'],
         'price_requests' => ['menuview', 'view', 'create', 'approve', 'reject'],

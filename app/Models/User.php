@@ -790,6 +790,16 @@ class User extends Authenticatable
         return $this->belongsToCustomerSupportDepartment() || $this->hasCustomerSupportLikeRole();
     }
 
+    public function isCustomerSuccessOnlyUser(): bool
+    {
+        return ($this->belongsToCustomerSupportDepartment() || $this->hasCustomerSupportLikeRole())
+            && ! $this->hasSalesLikeRole()
+            && ! $this->belongsToSalesDepartment()
+            && ! $this->hasAdminLikeRole()
+            && ! $this->isCompanyAdmin()
+            && ! $this->isSuperAdmin();
+    }
+
     public function canAccessCrmModule(): bool
     {
         return $this->isSuperAdmin()
