@@ -124,7 +124,7 @@ return [
     'hrms' => [
         'label' => 'HRMS',
         'order' => 30,
-        'gate' => null,
+        'gate' => ['require_method' => 'canAccessHrmsModule'],
         'items' => [
             // Dashboard + Attendance: no forbid_method — matches sidebar.blade.php,
             // these two are the ONLY items visible to $hrmsSelfService users.

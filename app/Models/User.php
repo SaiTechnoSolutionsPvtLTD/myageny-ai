@@ -1085,7 +1085,12 @@ class User extends Authenticatable
 
     public function canAccessHrmsModule(): bool
     {
-        return true;
+        return $this->can('modules_menu.hrms')
+            || $this->isCompanyAdmin()
+            || $this->isSuperAdmin()
+            || $this->belongsToHrDepartment()
+            || $this->hasHrLikeRole()
+            || $this->isHrOrAdmin();
     }
 
     public function allowsPriceRequests(): bool

@@ -2174,32 +2174,9 @@ class DashboardController extends Controller
                 ->pluck('id')
                 ->toArray();
 
-            $title = 'Channel Partner - NON COCO Model';
-            if ($isCompanyAdminOrCbo) {
-                $subtitle = 'Channel Partner NON COCO Hot Products & Branch Prospects';
-            } elseif ($userRoleType === 'tl') {
-                $subtitle = 'Team Data • NON COCO';
-            } elseif (in_array($userRoleType, ['branch_manager', 'branch_admin'], true)) {
-                $subtitle = 'Branch Data • NON COCO';
-            } else {
-                $subtitle = 'Your Data • NON COCO';
-            }
-            $branchType = 'NON COCO';
+            $targetBranchIds = $nonCocoBranchIds;
 
-            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
-            $catId = $channelPartnerCategory?->id;
-
-            $nonCocoProduct = Product::where(function ($q) use ($catId) {
-                if ($catId) {
-                    $q->where('product_category_id', $catId);
-                }
-                $q->where(function ($sq) {
-                    $sq->where('product_name', 'like', '%NON%COCO%')
-                       ->orWhere('package_name', 'like', '%NON%COCO%');
-                });
-            })->first();
-
-            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
+            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2208,17 +2185,15 @@ class DashboardController extends Controller
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
-                    if (!empty($nonCocoBranchIds)) {
-                        $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                            $lq->whereIn('branch_id', $nonCocoBranchIds);
-                        });
-                    } else {
-                        $q->orWhereHas('lead.branch', function ($bq) {
-                            $bq->where('is_default', false)
-                               ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                        });
-                    }
+                if (!empty($nonCocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                        $lq->whereIn('branch_id', $nonCocoBranchIds);
+                    });
+                } else {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->where('is_default', false)
+                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                    });
                 }
             });
 
@@ -2242,6 +2217,8 @@ class DashboardController extends Controller
                 ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) === 'COCO')
                 ->pluck('id')
                 ->toArray();
+
+            $targetBranchIds = $cocoBranchIds;
 
             $title = 'Channel Partner - COCO Model';
             if ($isCompanyAdminOrCbo) {
@@ -2271,7 +2248,7 @@ class DashboardController extends Controller
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
+            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2286,17 +2263,15 @@ class DashboardController extends Controller
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
-                    if (!empty($cocoBranchIds)) {
-                        $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                            $lq->whereIn('branch_id', $cocoBranchIds);
-                        });
-                    } else {
-                        $q->orWhereHas('lead.branch', function ($bq) {
-                            $bq->where('is_default', false)
-                               ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                        });
-                    }
+                if (!empty($cocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                        $lq->whereIn('branch_id', $cocoBranchIds);
+                    });
+                } else {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->where('is_default', false)
+                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                    });
                 }
             });
 
@@ -2318,6 +2293,7 @@ class DashboardController extends Controller
                 }
             }
 
+            $targetBranchIds = [$branchId];
             $title = $branch->name;
             $subtitle = 'Hot prospects for current month closure';
             $branchType = $branch->branch_type;
@@ -2353,9 +2329,9 @@ class DashboardController extends Controller
         });
 
         $cstItemsToAppend = collect();
-        if ($branchId) {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
-                return ($cItem['branch_id'] ?? null) == $branchId;
+        if (!empty($targetBranchIds)) {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($targetBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $targetBranchIds);
             });
         }
 

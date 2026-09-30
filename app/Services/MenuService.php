@@ -101,10 +101,20 @@ class MenuService
     {
         $modules = [];
 
-        $alwaysVisible = ['hrms', 'face_attendance'];
-
         foreach (config('mobile_menu', []) as $key => $config) {
-            $canAccess = in_array($key, $alwaysVisible, true) || $user->can("modules_menu.$key");
+            $canAccess = false;
+
+            if ($key === 'crm') {
+                $canAccess = $user->can('modules_menu.crm') || $user->canAccessMobileCrmModule();
+            } elseif ($key === 'hrms') {
+                $canAccess = $user->canAccessHrmsModule();
+            } elseif ($key === 'projects') {
+                $canAccess = $user->can('modules_menu.projects') || $user->canAccessMobileProjectsModule();
+            } elseif ($key === 'cst') {
+                $canAccess = $user->can('modules_menu.cst') || $user->canAccessMobileCstModule();
+            } else {
+                $canAccess = $user->can("modules_menu.$key") || $user->isCompanyAdmin() || $user->isSuperAdmin();
+            }
 
             if ($canAccess) {
                 $modules[] = [

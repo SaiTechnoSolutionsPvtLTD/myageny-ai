@@ -773,6 +773,22 @@ class DashboardApiController extends Controller
      * "Interview Assigned" panel is about who's interviewing today, not
      * about dashboard mode.
      */
+    private function isPrivilegedRecruitmentUser(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return (bool) ($user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->isCbo()
+            || $user->belongsToHrDepartment()
+            || $user->hasHrLikeRole()
+            || $user->isHrOrAdmin());
+    }
+
     private function assignedInterviewsForUser(): array
     {
         $user = auth()->user();
@@ -780,7 +796,7 @@ class DashboardApiController extends Controller
             return [];
         }
 
-        $isHrOrAdmin = $this->canViewOrganizationDashboard();
+        $isHrOrAdmin = $this->isPrivilegedRecruitmentUser($user);
 
         $query = RecruitmentInterview::query()
             ->with(['candidate'])
