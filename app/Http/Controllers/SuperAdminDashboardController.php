@@ -613,10 +613,11 @@ class SuperAdminDashboardController extends ApiController
             })->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -767,7 +768,8 @@ class SuperAdminDashboardController extends ApiController
                 'hot_products_value'         => $totalProspectsDealValue,
                 'deal_value'                 => $totalProspectsDealValue,
                 'expected_collection_value'  => $totalProspectsExpectedCollection,
-                'month_name'                 => now()->format('F Y'),
+                'month_name'                 => $parsedMonth['month_name'],
+                'target_month'               => $parsedMonth['target_month'],
                 'user_role_type'             => $userRoleType,
                 'show_nst_ho'                => (bool) $hasDefaultBranch,
                 'show_coco'                  => (bool) $hasCocoBranch,
@@ -1811,10 +1813,11 @@ class SuperAdminDashboardController extends ApiController
             })->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -2314,26 +2317,43 @@ class SuperAdminDashboardController extends ApiController
         $nstHoDealValue = (float) (clone $nstHoHotQuery)->sum('total_price');
         $nstHoExpectedValue = (float) (clone $nstHoHotQuery)->sum('expected_value');
 
+        $vis = $this->resolveForecastingVisibility($request?->user());
+        $userBranchName = $vis['userBranchName'] ?? null;
+
+        $nstHoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'NST - HO'
+            : "NST ({$userBranchName})";
+
+        $nonCocoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'Channel Partner - NON COCO Model'
+            : "Channel Partner - NON COCO Model ({$userBranchName})";
+
+        $cocoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'Channel Partner - COCO Model'
+            : "Channel Partner - COCO Model ({$userBranchName})";
+
         return [
             'nst_ho' => [
                 'count'          => $nstHoHotCount,
                 'deal_value'     => $nstHoDealValue,
                 'expected_value' => $nstHoExpectedValue,
-                'heading'        => 'NST - HO',
+                'heading'        => $nstHoHeading,
             ],
             'non_coco' => [
                 'count'          => $nonCocoHotCount,
                 'deal_value'     => $nonCocoDealValue,
                 'expected_value' => $nonCocoExpectedValue,
                 'product_id'     => $nonCocoProduct?->id,
-                'product_name'   => $nonCocoProduct?->product_name ?? 'Channel Partner NON COCO Model',
+                'product_name'   => $nonCocoHeading,
+                'heading'        => $nonCocoHeading,
             ],
             'coco' => [
                 'count'          => $cocoHotCount,
                 'deal_value'     => $cocoDealValue,
                 'expected_value' => $cocoExpectedValue,
                 'product_id'     => $cocoProduct?->id,
-                'product_name'   => $cocoProduct?->product_name ?? 'Channel Partner COCO Model',
+                'product_name'   => $cocoHeading,
+                'heading'        => $cocoHeading,
             ],
         ];
     }
@@ -2474,6 +2494,13 @@ class SuperAdminDashboardController extends ApiController
             $userRoleType = 'nst';
         }
 
+        $userBranchName = null;
+        if (!empty($userBranchIds)) {
+            $userBranchName = Branch::whereIn('id', $userBranchIds)->value('name');
+        } elseif ($authUser->branch_id) {
+            $userBranchName = Branch::where('id', $authUser->branch_id)->value('name');
+        }
+
         return [
             'hasDefaultBranch'      => (bool) $hasDefaultBranch,
             'hasCocoBranch'         => (bool) $hasCocoBranch,
@@ -2481,6 +2508,33 @@ class SuperAdminDashboardController extends ApiController
             'canViewCst'            => (bool) $canViewCst,
             'canViewActiveBranches' => (bool) $canViewActiveBranches,
             'userRoleType'          => $userRoleType,
+            'userBranchName'        => $userBranchName,
+        ];
+    }
+
+    /**
+     * Parse target month parameter from request or default to current month.
+     */
+    private function parseTargetMonth(?Request $request): array
+    {
+        $targetDate = now();
+        if ($request && $request->filled('month')) {
+            $mStr = trim((string) $request->input('month'));
+            if (preg_match('/^(\d{4})-(\d{2})$/', $mStr, $m)) {
+                $targetDate = \Illuminate\Support\Carbon::createFromDate((int) $m[1], (int) $m[2], 1);
+            } elseif (is_numeric($mStr) && (int) $mStr >= 1 && (int) $mStr <= 12) {
+                $year = $request->filled('year') ? (int) $request->year : now()->year;
+                $targetDate = \Illuminate\Support\Carbon::createFromDate($year, (int) $mStr, 1);
+            }
+        }
+
+        return [
+            'month'        => (int) $targetDate->month,
+            'year'         => (int) $targetDate->year,
+            'month_name'   => $targetDate->format('F Y'),
+            'target_month' => $targetDate->format('Y-m'),
+            'start_date'   => (clone $targetDate)->startOfMonth(),
+            'end_date'     => (clone $targetDate)->endOfMonth(),
         ];
     }
 
@@ -2492,6 +2546,7 @@ class SuperAdminDashboardController extends ApiController
     {
         $companyId = $this->visibility->companyIdFor($request->user()) ?? ($request->user()?->company_id ?: 1);
         $visibleBranchIds = $this->visibility->visibleBranchIds($request->user());
+        $parsedMonth = $this->parseTargetMonth($request);
 
         $branches = Branch::where('is_active', true)
             ->where(function ($query) use ($companyId) {
@@ -2516,8 +2571,8 @@ class SuperAdminDashboardController extends ApiController
         $hotProductsGrouped = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
-            ->whereMonth('lead_products.closure_date', now()->month)
-            ->whereYear('lead_products.closure_date', now()->year)
+            ->whereMonth('lead_products.closure_date', $parsedMonth['month'])
+            ->whereYear('lead_products.closure_date', $parsedMonth['year'])
             ->whereIn('leads.branch_id', $branchIds)
             ->when($request->filled('user_id'), fn($q) => $q->where('leads.assigned_to', $request->user_id))
             ->select(
@@ -2572,8 +2627,9 @@ class SuperAdminDashboardController extends ApiController
     public function getCstProspectItems(?Request $request = null): Collection
     {
         $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
-        $cmStart = now()->startOfMonth();
-        $cmEnd   = now()->endOfMonth();
+        $parsedMonth = $this->parseTargetMonth($request);
+        $cmStart = $parsedMonth['start_date'];
+        $cmEnd   = $parsedMonth['end_date'];
 
         $items = collect();
         $seenPiIds = [];
@@ -2831,13 +2887,24 @@ class SuperAdminDashboardController extends ApiController
         if ($type === 'all' && !$canViewActiveBranches) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: Active Branches.'], 403);
         }
+        if ($type === 'active_branch_coco' && !$canViewActiveBranches && !$hasCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_non_coco' && !$canViewActiveBranches && !$hasNonCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: NON COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_ho' && !$canViewActiveBranches && !$hasDefaultBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: HO Branches.'], 403);
+        }
         if ($type === 'cst' && !$canViewCst) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
         }
 
+        $parsedMonth = $this->parseTargetMonth($request);
+
         if ($type === 'all') {
             $title = 'All Active Branches Brief Report';
-            $subtitle = 'Current month closure hot prospects & branch performance summary';
+            $subtitle = 'Hot prospects & branch performance summary for ' . $parsedMonth['month_name'];
             $branchType = 'ALL';
 
             $query = LeadProduct::query()
@@ -2849,8 +2916,8 @@ class SuperAdminDashboardController extends ApiController
                     'leadStatus:id,name'
                 ])
                 ->whereRaw('LOWER(product_status) = ?', ['hot'])
-                ->whereMonth('closure_date', now()->month)
-                ->whereYear('closure_date', now()->year);
+                ->whereMonth('closure_date', $parsedMonth['month'])
+                ->whereYear('closure_date', $parsedMonth['year']);
 
             $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
@@ -2920,7 +2987,7 @@ class SuperAdminDashboardController extends ApiController
                         'subtitle'    => $subtitle,
                         'branch_type' => $branchType,
                     ],
-                    'period'         => now()->format('F Y'),
+                    'period'         => $parsedMonth['month_name'],
                     'total_count'    => $rows->count(),
                     'total_deal'     => (float) $rows->sum('deal_value'),
                     'total_expected' => (float) $rows->sum('expected_value'),
@@ -2930,7 +2997,7 @@ class SuperAdminDashboardController extends ApiController
         }
 
         if ($type === 'cst') {
-            $subtitle = 'Current Month Renewals & Development Prospects';
+            $subtitle = 'Renewals & Development Prospects for ' . $parsedMonth['month_name'];
 
             $items = $this->getCstProspectItems($request);
             $rows = $items->values()->map(function ($item, $idx) {
@@ -2957,7 +3024,7 @@ class SuperAdminDashboardController extends ApiController
 
         $branch = null;
         $title = 'Hot Prospects';
-        $subtitle = 'Current month closure hot leads';
+        $subtitle = 'Closure hot leads for ' . $parsedMonth['month_name'];
         $branchType = null;
 
         $query = LeadProduct::query()
@@ -2969,8 +3036,8 @@ class SuperAdminDashboardController extends ApiController
                 'leadStatus:id,name'
             ])
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year);
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year']);
 
         // Apply Lead Visibility
         $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
@@ -3036,7 +3103,14 @@ class SuperAdminDashboardController extends ApiController
                 $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
             }
 
-            if ($isCompanyAdminOrCbo) {
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                }
+            });
+
+            $shouldExcludeCpFromHo = ($isCompanyAdminOrCbo || ($vis['hasCocoBranch'] ?? false)) && !$request->filled('user_id');
+            if ($shouldExcludeCpFromHo) {
                 $query->where(function ($q) use ($cpProductIds) {
                     if (!empty($cpProductIds)) {
                         $q->whereNotIn('product_id', $cpProductIds);
@@ -3049,21 +3123,133 @@ class SuperAdminDashboardController extends ApiController
         } elseif ($type === 'non_coco') {
             $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
             $title = 'Channel Partner - NON COCO Model';
-            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner NON COCO Hot Products & Branch Prospects' : 'NON COCO Hot Products & Branch Prospects';
+            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner NON COCO Hot Products' : 'NON COCO Hot Products & Branch Prospects';
             $branchType = 'NON COCO';
 
-            $query->whereHas('lead.branch', function ($bq) {
-                $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            $catId = $channelPartnerCategory?->id;
+
+            $nonCocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%NON%COCO%')
+                       ->orWhere('package_name', 'like', '%NON%COCO%');
+                });
+            })->first();
+
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
+                $q->where(function ($sub) use ($nonCocoProduct) {
+                    if ($nonCocoProduct) {
+                        $sub->where('product_id', $nonCocoProduct->id)
+                            ->orWhere('product_name', 'like', '%NON%COCO%');
+                    } else {
+                        $sub->where('product_name', 'like', '%NON%COCO%');
+                    }
+                });
+                if (!$isCompanyAdminOrCbo) {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                    });
+                }
             });
 
         } elseif ($type === 'coco') {
             $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
             $title = 'Channel Partner - COCO Model';
-            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner COCO Hot Products & Branch Prospects' : 'COCO Hot Products & Branch Prospects';
+            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner COCO Hot Products' : 'COCO Hot Products & Branch Prospects';
             $branchType = 'COCO';
 
-            $query->whereHas('lead.branch', function ($bq) {
-                $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
+            $catId = $channelPartnerCategory?->id;
+
+            $cocoProduct = Product::where(function ($q) use ($catId) {
+                if ($catId) {
+                    $q->where('product_category_id', $catId);
+                }
+                $q->where(function ($sq) {
+                    $sq->where('product_name', 'like', '%COCO%')
+                       ->orWhere('package_name', 'like', '%COCO%');
+                });
+            })->where(function ($q) {
+                $q->where('product_name', 'not like', '%NON%')
+                  ->where('package_name', 'not like', '%NON%');
+            })->first();
+
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
+                $q->where(function ($sub) use ($cocoProduct) {
+                    if ($cocoProduct) {
+                        $sub->where(function ($sq) use ($cocoProduct) {
+                            $sq->where('product_id', $cocoProduct->id)
+                               ->orWhere(function ($ssq) {
+                                   $ssq->where('product_name', 'like', '%COCO%')
+                                       ->where('product_name', 'not like', '%NON%');
+                               });
+                        });
+                    } else {
+                        $sub->where('product_name', 'like', '%COCO%')
+                            ->where('product_name', 'not like', '%NON%');
+                    }
+                });
+                if (!$isCompanyAdminOrCbo) {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                    });
+                }
+            });
+
+        } elseif ($type === 'active_branch_coco') {
+            $title = 'COCO Branches';
+            $subtitle = 'Hot products & branch prospects for COCO model branches';
+            $branchType = 'COCO';
+
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($cocoBranchIds) {
+                if (!empty($cocoBranchIds)) {
+                    $lq->whereIn('branch_id', $cocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_non_coco') {
+            $title = 'NON COC Branches';
+            $subtitle = 'Hot products & branch prospects for NON COCO model branches';
+            $branchType = 'NON COCO';
+
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                if (!empty($nonCocoBranchIds)) {
+                    $lq->whereIn('branch_id', $nonCocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_ho') {
+            $title = 'Head Office (HO)';
+            $subtitle = 'Hot products & branch prospects for default HO branches';
+            $branchType = 'HO';
+
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            } else {
+                $defaultBranchQuery->where('company_id', 1);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
             });
 
         } else {
@@ -3117,15 +3303,28 @@ class SuperAdminDashboardController extends ApiController
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
             });
-        } elseif ($type === 'coco') {
+        } elseif ($type === 'active_branch_coco') {
             $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
                 return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
             });
-        } elseif ($type === 'non_coco') {
+        } elseif ($type === 'active_branch_non_coco') {
             $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
                 return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
+            });
+        } elseif ($type === 'active_branch_ho') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($defaultBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $defaultBranchIds);
             });
         }
 

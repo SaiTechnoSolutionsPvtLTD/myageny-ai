@@ -669,10 +669,11 @@ class DashboardController extends Controller
             : (clone $reminderQuery())->whereDate('remind_at', today())->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -822,7 +823,8 @@ class DashboardController extends Controller
                     'hot_products_value'        => $userTotalDealValue,
                     'deal_value'                => $userTotalDealValue,
                     'expected_collection_value' => $userTotalExpectedCollection,
-                    'month_name'                => now()->format('F Y'),
+                    'month_name'                => $parsedMonth['month_name'],
+                    'target_month'              => $parsedMonth['target_month'],
                     'user_role_type'            => $userRoleType,
                     'show_nst_ho'               => (bool) $hasDefaultBranch,
                     'show_coco'                 => (bool) $hasCocoBranch,
@@ -1459,6 +1461,29 @@ class DashboardController extends Controller
         ];
     }
 
+    private function parseTargetMonth(?Request $request): array
+    {
+        $targetDate = now();
+        if ($request && $request->filled('month')) {
+            $mStr = trim((string) $request->input('month'));
+            if (preg_match('/^(\d{4})-(\d{2})$/', $mStr, $m)) {
+                $targetDate = \Illuminate\Support\Carbon::createFromDate((int) $m[1], (int) $m[2], 1);
+            } elseif (is_numeric($mStr) && (int) $mStr >= 1 && (int) $mStr <= 12) {
+                $year = $request->filled('year') ? (int) $request->year : now()->year;
+                $targetDate = \Illuminate\Support\Carbon::createFromDate($year, (int) $mStr, 1);
+            }
+        }
+
+        return [
+            'month'        => (int) $targetDate->month,
+            'year'         => (int) $targetDate->year,
+            'month_name'   => $targetDate->format('F Y'),
+            'target_month' => $targetDate->format('Y-m'),
+            'start_date'   => (clone $targetDate)->startOfMonth(),
+            'end_date'     => (clone $targetDate)->endOfMonth(),
+        ];
+    }
+
     /**
      * Build active branches current month hot prospect metrics for the Total Prospects modal.
      */
@@ -1467,6 +1492,7 @@ class DashboardController extends Controller
         $user = $request->user();
         $companyId = $user ? ($this->visibility->companyIdFor($user) ?? ($user->company_id ?: 1)) : 1;
         $visibleBranchIds = $user ? $this->visibility->visibleBranchIds($user) : collect();
+        $parsedMonth = $this->parseTargetMonth($request);
 
         $branches = Branch::where('is_active', true)
             ->where(function ($query) use ($companyId) {
@@ -1491,8 +1517,8 @@ class DashboardController extends Controller
         $hotProductsGrouped = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
-            ->whereMonth('lead_products.closure_date', now()->month)
-            ->whereYear('lead_products.closure_date', now()->year)
+            ->whereMonth('lead_products.closure_date', $parsedMonth['month'])
+            ->whereYear('lead_products.closure_date', $parsedMonth['year'])
             ->whereIn('leads.branch_id', $branchIds)
             ->when($request->filled('user_id'), fn($q) => $q->where('leads.assigned_to', $request->user_id))
             ->select(
@@ -1547,8 +1573,9 @@ class DashboardController extends Controller
     public function getCstProspectItems(?Request $request = null): Collection
     {
         $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
-        $cmStart = now()->startOfMonth();
-        $cmEnd   = now()->endOfMonth();
+        $parsedMonth = $this->parseTargetMonth($request);
+        $cmStart = $parsedMonth['start_date'];
+        $cmEnd   = $parsedMonth['end_date'];
 
         $items = collect();
         $seenPiIds = [];
@@ -1834,9 +1861,11 @@ class DashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
         }
 
+        $parsedMonth = $this->parseTargetMonth($request);
+
         if ($type === 'all') {
             $title = 'All Active Branches Brief Report';
-            $subtitle = 'Current month closure hot prospects & branch performance summary';
+            $subtitle = 'Hot prospects & branch performance summary for ' . $parsedMonth['month_name'];
             $branchType = 'ALL';
 
             $query = LeadProduct::query()
@@ -1848,8 +1877,8 @@ class DashboardController extends Controller
                     'leadStatus:id,name'
                 ])
                 ->whereRaw('LOWER(product_status) = ?', ['hot'])
-                ->whereMonth('closure_date', now()->month)
-                ->whereYear('closure_date', now()->year);
+                ->whereMonth('closure_date', $parsedMonth['month'])
+                ->whereYear('closure_date', $parsedMonth['year']);
 
             $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
@@ -2002,7 +2031,7 @@ class DashboardController extends Controller
                         'subtitle'    => $subtitle,
                         'branch_type' => 'CST',
                     ],
-                    'period'         => now()->format('F Y'),
+                    'period'         => $parsedMonth['month_name'],
                     'total_count'    => $totalCount,
                     'total_deal'     => $totalDeal,
                     'total_expected' => $totalExpected,
@@ -2016,7 +2045,7 @@ class DashboardController extends Controller
 
         $branch = null;
         $title = 'Hot Prospects';
-        $subtitle = 'Current month closure hot leads';
+        $subtitle = 'Closure hot leads for ' . $parsedMonth['month_name'];
         $branchType = null;
 
         $query = LeadProduct::query()
@@ -2028,8 +2057,8 @@ class DashboardController extends Controller
                 'leadStatus:id,name'
             ])
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year);
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year']);
 
         // Apply Lead Visibility
         $query->whereHas('lead', function ($lq) use ($currentUser, $request) {

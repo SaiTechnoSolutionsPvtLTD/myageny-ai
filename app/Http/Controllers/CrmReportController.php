@@ -467,16 +467,33 @@ class CrmReportController extends Controller
     public function updatePaymentCollection(Request $request, $payment): JsonResponse
     {
         $user = auth()->user();
-        $isSuperAdmin = $user && ($user->isSuperAdmin() || $user->hasRole('super_admin'));
-        if (! $isSuperAdmin) {
+        $canEdit = $user && (
+            $user->isSuperAdmin() ||
+            $user->hasRole('super_admin') ||
+            $user->isCompanyAdmin() ||
+            $user->isCompanyAdminRole() ||
+            $user->hasRole('company_admin')
+        );
+
+        if (! $canEdit) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized. Only Super Admin can edit payment details.',
+                'message' => 'Unauthorized. Only Super Admin and Company Admin can edit payment details.',
             ], 403);
         }
 
         if (! ($payment instanceof LeadProductPayment)) {
             $payment = LeadProductPayment::findOrFail($payment);
+        }
+
+        if ($user && ! $user->isSuperAdmin() && ! $user->hasRole('super_admin')) {
+            $paymentLead = $payment->lead;
+            if ($user->company_id && $paymentLead && (int) $paymentLead->company_id !== (int) $user->company_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only edit payments for your company.',
+                ], 403);
+            }
         }
 
         $validated = $request->validate([

@@ -471,7 +471,14 @@
 
 @section('content')
 @php
-    $isSuperAdmin = auth()->user() && (auth()->user()->isSuperAdmin() || auth()->user()->hasRole('super_admin'));
+    $authUser = auth()->user();
+    $isSuperAdmin = $authUser && (
+        $authUser->isSuperAdmin() ||
+        $authUser->hasRole('super_admin') ||
+        $authUser->isCompanyAdmin() ||
+        $authUser->isCompanyAdminRole() ||
+        $authUser->hasRole('company_admin')
+    );
     $hasCustomFilters =
         request()->filled('customer_id')
         || request()->filled('company_name')
@@ -1096,7 +1103,7 @@
             <div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span id="crmEditModalCode" class="crm-pay-code" style="font-size:13px; font-weight:800; background:#f1f5f9; padding:3px 8px; border-radius:6px; color:#0f172a;"></span>
-                    <span class="crm-modal-badge">Super Admin Only</span>
+                    <span class="crm-modal-badge">Admin Access</span>
                 </div>
                 <h3 id="crmEditPaymentTitle" class="crm-modal-title">Edit Payment Details</h3>
                 <p id="crmEditModalCustomer" class="crm-modal-sub"></p>
@@ -1439,13 +1446,40 @@ function openEditPaymentModal(data) {
     document.getElementById('crmEditModalCode').textContent = data.code;
     document.getElementById('crmEditModalCustomer').textContent = data.customer ? `Customer: ${data.customer}` : '';
     
-    let pType = (data.payment_type || '').toLowerCase().replace(/[\s-]/g, '_');
-    if (pType === 'new_sales') pType = 'new_sale';
-    if (pType === 'renewal') pType = 'renewals';
+    let rawType = (data.payment_type || '').toLowerCase().trim().replace(/[\s-]/g, '_');
+    let pType = 'new_sale';
+    if (['new_sale', 'new_sales', 'newsale', 'newsales', 'new'].includes(rawType)) {
+        pType = 'new_sale';
+    } else if (['balance_payment', 'balance', 'balance_pay', 'balancepayment'].includes(rawType)) {
+        pType = 'balance_payment';
+    } else if (['renewals', 'renewal', 'renewal_payment', 'renewalpayment'].includes(rawType)) {
+        pType = 'renewals';
+    } else {
+        pType = rawType || 'new_sale';
+    }
     
     const typeSelect = document.getElementById('edit_payment_type');
     if (typeSelect) {
-        typeSelect.value = pType || 'new_sale';
+        let matched = false;
+        for (let i = 0; i < typeSelect.options.length; i++) {
+            if (typeSelect.options[i].value === pType) {
+                typeSelect.selectedIndex = i;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            typeSelect.value = pType;
+        }
+
+        if (window.jQuery) {
+            window.jQuery(typeSelect).val(pType).trigger('change');
+            if (window.jQuery.fn.select2 && window.jQuery(typeSelect).data('select2')) {
+                window.jQuery(typeSelect).trigger('change.select2');
+            }
+        } else {
+            typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
     }
 
     document.getElementById('edit_payment_date').value = data.payment_date || '';
