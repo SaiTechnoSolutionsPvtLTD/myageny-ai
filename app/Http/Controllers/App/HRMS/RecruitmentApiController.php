@@ -59,6 +59,26 @@ class RecruitmentApiController extends Controller
             || $user->isHrOrAdmin();
     }
 
+    protected function isAssignedInterviewer(?User $user, RecruitmentCandidate $candidate): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $employee = $this->currentEmployee($user);
+
+        return $candidate->interviews()
+            ->where(function ($q) use ($user, $employee) {
+                $q->where('interviewer_id', $user->id)
+                    ->orWhere('interviewer_name', $user->name);
+
+                if ($employee && $employee->name && $employee->name !== $user->name) {
+                    $q->orWhere('interviewer_name', $employee->name);
+                }
+            })
+            ->exists();
+    }
+
     // ── GET /api/mobile/hrms/recruitment/meta ────────────────────────────────
     // Static, cacheable dropdown data for the mobile Add Call Update / Schedule
     // Interview / Decision forms — mirrors the $statuses/$callTypes/
@@ -702,10 +722,13 @@ class RecruitmentApiController extends Controller
     public function show(Request $request, RecruitmentCandidate $recruitment): JsonResponse
     {
         $user = $request->user();
-        if (! $this->canViewCandidates($user)) {
+        $isPrivileged = $this->canViewCandidates($user);
+        $isAssigned   = $this->isAssignedInterviewer($user, $recruitment);
+
+        if (! $isPrivileged && ! $isAssigned) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized. Only company_admin, cbo, and hr roles are permitted to view candidate details.',
+                'message' => 'Unauthorized. You do not have permission to view candidate details.',
             ], 403);
         }
 
@@ -713,7 +736,7 @@ class RecruitmentApiController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $this->formatDetail($recruitment),
+            'data' => $this->formatDetail($recruitment, $isPrivileged),
         ]);
     }
 
@@ -982,9 +1005,15 @@ class RecruitmentApiController extends Controller
         ];
     }
 
-    private function formatDetail(RecruitmentCandidate $c): array
+    private function formatDetail(RecruitmentCandidate $c, ?bool $isPrivileged = null): array
     {
+        if ($isPrivileged === null) {
+            $user = auth()->user();
+            $isPrivileged = $this->canViewCandidates($user);
+        }
+
         return array_merge($this->formatSummary($c), [
+            'is_privileged'        => (bool) $isPrivileged,
             'institute_name'       => $c->institute_name,
             'course_name'          => $c->course_name,
             'internship_months'    => $c->internship_months,

@@ -54,7 +54,17 @@ class MenuService
             return [];
         }
 
-        return $this->filterAndSort($config['items'] ?? [], $user);
+        $companyId = $user->company_id;
+        $dbPermissions = \Illuminate\Support\Facades\DB::table('permissions')
+            ->where(function ($q) use ($companyId) {
+                $q->whereNull('company_id');
+                if ($companyId) {
+                    $q->orWhere('company_id', $companyId);
+                }
+            })
+            ->get(['name', 'display_name', 'company_id']);
+
+        return $this->filterAndSort($config['items'] ?? [], $user, $dbPermissions);
     }
 
     /**
@@ -91,10 +101,20 @@ class MenuService
     {
         $modules = [];
 
-        $alwaysVisible = ['hrms', 'face_attendance'];
-
         foreach (config('mobile_menu', []) as $key => $config) {
-            $canAccess = in_array($key, $alwaysVisible, true) || $user->can("modules_menu.$key");
+            $canAccess = false;
+
+            if ($key === 'crm') {
+                $canAccess = $user->can('modules_menu.crm') || $user->canAccessMobileCrmModule();
+            } elseif ($key === 'hrms') {
+                $canAccess = $user->canAccessHrmsModule();
+            } elseif ($key === 'projects') {
+                $canAccess = $user->can('modules_menu.projects') || $user->canAccessMobileProjectsModule();
+            } elseif ($key === 'cst') {
+                $canAccess = $user->can('modules_menu.cst') || $user->canAccessMobileCstModule();
+            } else {
+                $canAccess = $user->can("modules_menu.$key") || $user->isCompanyAdmin() || $user->isSuperAdmin();
+            }
 
             if ($canAccess) {
                 $modules[] = [
@@ -110,25 +130,38 @@ class MenuService
         return array_values($modules);
     }
 
-    private function filterAndSort(array $items, User $user): array
+    private function filterAndSort(array $items, User $user, $dbPermissions = null): array
     {
+        if ($dbPermissions === null) {
+            $companyId = $user->company_id;
+            $dbPermissions = \Illuminate\Support\Facades\DB::table('permissions')
+                ->where(function ($q) use ($companyId) {
+                    $q->whereNull('company_id');
+                    if ($companyId) {
+                        $q->orWhere('company_id', $companyId);
+                    }
+                })
+                ->get(['name', 'display_name', 'company_id']);
+        }
+
         $visible = [];
 
         foreach ($items as $item) {
-            if (! $this->isVisible($user, $item)) {
+            $matchedPermission = null;
+            if (! $this->isVisible($user, $item, $dbPermissions, $matchedPermission)) {
                 continue;
             }
 
             $node = [
                 'key'         => $item['key'],
-                'label'       => $item['label'],
+                'label'       => $this->resolveItemLabel($item, $matchedPermission),
                 'section'     => $item['section'] ?? null,
                 'order'       => $item['order'] ?? 0,
                 'badge_count' => $this->resolveBadgeCount($item, $user),
             ];
 
             $node['children'] = ! empty($item['children'])
-                ? $this->filterAndSort($item['children'], $user)
+                ? $this->filterAndSort($item['children'], $user, $dbPermissions)
                 : [];
 
             $visible[] = $node;
@@ -140,13 +173,148 @@ class MenuService
     }
 
     /**
+     * Resolves the menu item's display label.
+     * Uses the backend dynamic display_name from the permissions table when available,
+     * stripping seeder prefixes ("Menuview ", "View ") and falling back to static label.
+     */
+    private function resolveItemLabel(array $item, ?object $permissionRecord): string
+    {
+        $staticLabel = $item['label'] ?? '';
+
+        if (! $permissionRecord || empty($permissionRecord->display_name)) {
+            return $staticLabel;
+        }
+
+        $rawDisplayName = trim($permissionRecord->display_name);
+        if ($rawDisplayName === '') {
+            return $staticLabel;
+        }
+
+        // Clean common seeder prefixes like "Menuview " or "View "
+        $cleaned = trim(preg_replace('/^(menuview|view)\s+/i', '', $rawDisplayName));
+
+        // If after cleaning it matches static label case-insensitively, keep static formatting
+        if (strcasecmp($cleaned, $staticLabel) === 0 || strcasecmp(str_replace(' ', '', $cleaned), str_replace(' ', '', $staticLabel)) === 0) {
+            return $staticLabel;
+        }
+
+        $itemKey = $item['key'] ?? '';
+        $basePermName = preg_replace('/^company_\d+__/', '', (string)$permissionRecord->name);
+        $declaredPerm = ! empty($item['permission']) ? preg_replace('/^company_\d+__/', '', (string)$item['permission']) : '';
+
+        // If the permission matched is a fallback/borrowed permission (e.g. leads.view for lead_products, reminders_tasks, or day_closing),
+        // do not let the borrowed permission's display_name overwrite this item's specific label.
+        $permEntity = explode('.', $basePermName)[0] ?? '';
+        $itemEntity = explode('.', $itemKey)[0] ?? '';
+
+        $isOwnPermission = ($declaredPerm !== '' && strcasecmp($basePermName, $declaredPerm) === 0)
+            || ($permEntity !== '' && (
+                strcasecmp($permEntity, $itemEntity) === 0 ||
+                strcasecmp($permEntity, $itemKey) === 0
+            ));
+
+        if (! $isOwnPermission) {
+            return $staticLabel;
+        }
+
+        // Extra safeguard: do not let a generic "Leads" label overwrite items that are not Leads
+        if (strcasecmp($cleaned, 'leads') === 0 && ! in_array($itemKey, ['leads', 'all_leads'], true)) {
+            return $staticLabel;
+        }
+
+        return $cleaned !== '' ? $cleaned : $staticLabel;
+    }
+
+    /**
+     * Locate the matching permission record in the database for the given rule.
+     * Checks primary permission and any aliases, prioritizing company-scoped permissions.
+     */
+    private function findPermissionRecord(array $rule, ?int $companyId, $dbPermissions): ?object
+    {
+        $candidates = [];
+        if (! empty($rule['permission'])) {
+            $candidates[] = $rule['permission'];
+        }
+        if (! empty($rule['permission_aliases']) && is_array($rule['permission_aliases'])) {
+            foreach ($rule['permission_aliases'] as $alias) {
+                if (! in_array($alias, $candidates, true)) {
+                    $candidates[] = $alias;
+                }
+            }
+        }
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        // 1. Check company-scoped permission name first (e.g. company_1__day_closing.menuview)
+        if ($companyId) {
+            foreach ($candidates as $cand) {
+                $scopedName = "company_{$companyId}__{$cand}";
+                $found = $dbPermissions->first(fn($p) => $p->name === $scopedName && (int)$p->company_id === (int)$companyId);
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        // 2. Check company-matching permission with exact name
+        if ($companyId) {
+            foreach ($candidates as $cand) {
+                $found = $dbPermissions->first(fn($p) => $p->name === $cand && (int)$p->company_id === (int)$companyId);
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        // 3. Check global permission (company_id is null)
+        foreach ($candidates as $cand) {
+            $found = $dbPermissions->first(fn($p) => $p->name === $cand);
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Same check used for both individual menu items AND whole-module gates
      * (the `gate` key in config/mobile_menu.php) — one rule set, two callers.
      */
-    private function isVisible(User $user, array $rule): bool
+    private function isVisible(User $user, array $rule, $dbPermissions = null, ?object &$matchedPermission = null): bool
     {
-        if (! empty($rule['permission']) && ! $user->can($rule['permission'])) {
-            return false;
+        if (! empty($rule['permission'])) {
+            if ($dbPermissions === null) {
+                $companyId = $user->company_id;
+                $dbPermissions = \Illuminate\Support\Facades\DB::table('permissions')
+                    ->where(function ($q) use ($companyId) {
+                        $q->whereNull('company_id');
+                        if ($companyId) {
+                            $q->orWhere('company_id', $companyId);
+                        }
+                    })
+                    ->get(['name', 'display_name', 'company_id']);
+            }
+
+            $matchedPermission = $this->findPermissionRecord($rule, $user->company_id, $dbPermissions);
+
+            // If the permission does not exist in the database (deleted or renamed),
+            // it MUST NOT be visible, even if the user is a super admin!
+            if (! $matchedPermission) {
+                return false;
+            }
+
+            // Check if user has permission to access this record or the base permission
+            $hasAccess = $user->can($matchedPermission->name);
+            if (! $hasAccess && ! empty($rule['permission']) && $matchedPermission->name !== $rule['permission']) {
+                $hasAccess = $user->can($rule['permission']);
+            }
+
+            if (! $hasAccess) {
+                return false;
+            }
         }
 
         if (! empty($rule['require_method'])) {
@@ -169,7 +337,7 @@ class MenuService
             }
         }
 
-        // NEW — inverse of require_method: hide when the method returns true.
+        // Inverse of require_method: hide when the method returns true.
         // Used by the CRM module gate (forbid isHrmsAttendanceOnlyUser) and by
         // every HRMS item except Dashboard/Attendance.
         if (! empty($rule['forbid_method'])) {

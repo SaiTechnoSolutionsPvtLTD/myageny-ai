@@ -45,9 +45,9 @@ class DaySalesTrackerApiController extends Controller
             }
 
             if ($startDateStr === $endDateStr) {
-                $formattedDateLabel = Carbon::parse($startDateStr)->format('d-m-Y');
+                $formattedDateLabel = Carbon::parse($startDateStr)->format('d M Y');
             } else {
-                $formattedDateLabel = Carbon::parse($startDateStr)->format('d-m-Y') . ' to ' . Carbon::parse($endDateStr)->format('d-m-Y');
+                $formattedDateLabel = Carbon::parse($startDateStr)->format('d M Y') . ' to ' . Carbon::parse($endDateStr)->format('d M Y');
             }
 
             $query = LeadProduct::query()

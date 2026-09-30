@@ -749,6 +749,8 @@ Route::middleware('auth:sanctum')->prefix('mobile/day-closing')->name('mobile.da
 
 Route::middleware('auth:sanctum')->prefix('mobile/cst-day-closing')->name('mobile.cst-day-closing.')->group(function () {
     Route::get('/', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'index'])->name('index');
+    Route::get('/stats', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'getStats'])->name('stats');
+    Route::get('/metric-details', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'getMetricDetails'])->name('metric-details');
     Route::post('/', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'store'])->name('store');
     Route::put('/{closing}', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'update'])->name('update');
     Route::patch('/{closing}', [\App\Http\Controllers\App\CstDayClosingApiController::class, 'update'])->name('update-put');

@@ -1196,7 +1196,7 @@ class DashboardController extends Controller
             });
         })->first();
 
-        $currentUser = $request?->user() ?: auth()->user();
+        $currentUser = auth('sanctum')->user() ?: ($request?->user() ?: auth()->user());
         $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
 
         // NON COCO Hot query: For Company Admin & CBO, filter strictly by Channel Partner NON COCO product
@@ -1258,7 +1258,7 @@ class DashboardController extends Controller
         }
 
         // Company's default branch filter for NST - HO
-        $user = $request?->user();
+        $user = $currentUser;
         $companyId = $user ? ($this->visibility->companyIdFor($user) ?? $user->company_id) : null;
         $defaultBranchQuery = Branch::where('is_default', true);
         if ($companyId) {
@@ -1679,9 +1679,9 @@ class DashboardController extends Controller
                         $seenLpIds[$pi->lead_product_id] = true;
                     }
 
-                    $assignedName = $lead?->customerSupportExecutive?->name
-                        ?: ($lead?->customerSupportTl?->name
-                            ?: ($lead?->assignedTo?->name ?: 'Unassigned'));
+                    $salesPerson = $lead?->assignedTo?->name ?: '-';
+                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
                     $items->push([
                         'pi_id'            => $pi->id,
@@ -1696,8 +1696,10 @@ class DashboardController extends Controller
                         'expected_value'   => $expVal,
                         'closure_date'     => $rDate->format('d M Y'),
                         'closure_date_raw' => $rDate->format('Y-m-d'),
+                        'sales_person_name' => $salesPerson,
+                        'cst_person_name'   => $cstPerson,
                         'assigned_to'      => $assignedName,
-                        'executive_name'   => $assignedName,
+                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                         'branch_id'        => $lead?->branch_id,
                         'branch_name'      => $lead?->branch?->name ?: 'General',
                         'source_type'      => 'renewal',
@@ -1710,7 +1712,7 @@ class DashboardController extends Controller
         $devPisQuery = ProductionInitiation::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'leadProduct',
                 'product',
@@ -1768,8 +1770,9 @@ class DashboardController extends Controller
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
             $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-            $assignedName = $lead?->customerSupportExecutive?->name
-                ?: ($lead?->assignedTo?->name ?: 'Unassigned');
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+            $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
             $items->push([
                 'pi_id'            => $pi->id,
@@ -1784,8 +1787,10 @@ class DashboardController extends Controller
                 'expected_value'   => $expVal,
                 'closure_date'     => $cExpDate->format('d M Y'),
                 'closure_date_raw' => $cExpDate->format('Y-m-d'),
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
                 'assigned_to'      => $assignedName,
-                'executive_name'   => $assignedName,
+                'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
                 'branch_id'        => $lead?->branch_id,
                 'branch_name'      => $lead?->branch?->name ?: 'General',
                 'source_type'      => 'development',
@@ -1871,7 +1876,7 @@ class DashboardController extends Controller
             $query = LeadProduct::query()
                 ->with([
                     'lead' => function ($lq) {
-                        $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                        $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                     },
                     'product:id,product_name',
                     'leadStatus:id,name'
@@ -1891,6 +1896,8 @@ class DashboardController extends Controller
 
             $rows = $hotProducts->map(function ($item, $idx) {
                 $lead = $item->lead;
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
                 return [
                     'index'            => $idx + 1,
                     'lead_id'          => $lead?->id,
@@ -1903,7 +1910,9 @@ class DashboardController extends Controller
                     'expected_value'   => (float) ($item->expected_value ?? 0),
                     'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                     'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                    'executive_name'   => $lead?->assignedTo?->name ?: '-',
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'executive_name'   => $salesPerson,
                     'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
                 ];
             });
@@ -1923,6 +1932,8 @@ class DashboardController extends Controller
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
                     'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
@@ -2000,6 +2011,8 @@ class DashboardController extends Controller
                     return str_contains(strtolower($r['company_name'] ?? ''), $s)
                         || str_contains(strtolower($r['customer_name'] ?? ''), $s)
                         || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['sales_person_name'] ?? ''), $s)
+                        || str_contains(strtolower($r['cst_person_name'] ?? ''), $s)
                         || str_contains(strtolower($r['executive_name'] ?? ''), $s)
                         || str_contains(strtolower($r['status'] ?? ''), $s);
                 })->values();
@@ -2051,7 +2064,7 @@ class DashboardController extends Controller
         $query = LeadProduct::query()
             ->with([
                 'lead' => function ($lq) {
-                    $lq->with(['assignedTo:id,name', 'branch:id,name']);
+                    $lq->with(['assignedTo:id,name', 'branch:id,name', 'customerSupportExecutive:id,name', 'customerSupportTl:id,name']);
                 },
                 'product:id,product_name',
                 'leadStatus:id,name'
@@ -2116,7 +2129,32 @@ class DashboardController extends Controller
                 $cpProductIds[] = $cocoProduct->id;
             }
 
-            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+
+            // Resolve active scoped branches for COCO and NON COCO classification (matching buildActiveBranchesHotMetrics)
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
+
+            $cocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) === 'COCO')
+                ->pluck('id')
+                ->toArray();
+
+            $nonCocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) !== 'COCO')
+                ->pluck('id')
+                ->toArray();
+
             $defaultBranchQuery = Branch::where('is_default', true);
             if ($companyId) {
                 $defaultBranchQuery->where('company_id', $companyId);
@@ -2145,32 +2183,29 @@ class DashboardController extends Controller
             }
 
         } elseif ($type === 'non_coco') {
-            $title = 'Channel Partner - NON COCO Model';
-            if ($isCompanyAdminOrCbo) {
-                $subtitle = 'Channel Partner NON COCO Hot Products & Branch Prospects';
-            } elseif ($userRoleType === 'tl') {
-                $subtitle = 'Team Data • NON COCO';
-            } elseif (in_array($userRoleType, ['branch_manager', 'branch_admin'], true)) {
-                $subtitle = 'Branch Data • NON COCO';
-            } else {
-                $subtitle = 'Your Data • NON COCO';
-            }
-            $branchType = 'NON COCO';
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
 
-            $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
-            $catId = $channelPartnerCategory?->id;
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
 
-            $nonCocoProduct = Product::where(function ($q) use ($catId) {
-                if ($catId) {
-                    $q->where('product_category_id', $catId);
-                }
-                $q->where(function ($sq) {
-                    $sq->where('product_name', 'like', '%NON%COCO%')
-                       ->orWhere('package_name', 'like', '%NON%COCO%');
-                });
-            })->first();
+            $nonCocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) !== 'COCO')
+                ->pluck('id')
+                ->toArray();
 
-            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
+            $targetBranchIds = $nonCocoBranchIds;
+
+            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2179,14 +2214,41 @@ class DashboardController extends Controller
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
+                if (!empty($nonCocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                        $lq->whereIn('branch_id', $nonCocoBranchIds);
+                    });
+                } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                        $bq->where('is_default', false)
+                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
                     });
                 }
             });
 
         } elseif ($type === 'coco') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
+
+            $activeScopedBranches = Branch::where('is_active', true)
+                ->where(function ($query) use ($companyId) {
+                    $query->where('is_default', false)
+                        ->orWhereNull('is_default')
+                        ->orWhere(function ($dq) use ($companyId) {
+                            $dq->where('is_default', true)->where('company_id', $companyId);
+                        });
+                })
+                ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
+                ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+                ->get();
+
+            $cocoBranchIds = $activeScopedBranches
+                ->filter(fn($b) => !$b->is_default && strtoupper(trim((string)$b->branch_type)) === 'COCO')
+                ->pluck('id')
+                ->toArray();
+
+            $targetBranchIds = $cocoBranchIds;
+
             $title = 'Channel Partner - COCO Model';
             if ($isCompanyAdminOrCbo) {
                 $subtitle = 'Channel Partner COCO Hot Products & Branch Prospects';
@@ -2215,7 +2277,7 @@ class DashboardController extends Controller
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
+            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2230,9 +2292,14 @@ class DashboardController extends Controller
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!$isCompanyAdminOrCbo) {
+                if (!empty($cocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                        $lq->whereIn('branch_id', $cocoBranchIds);
+                    });
+                } else {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        $bq->where('is_default', false)
+                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
                     });
                 }
             });
@@ -2255,6 +2322,7 @@ class DashboardController extends Controller
                 }
             }
 
+            $targetBranchIds = [$branchId];
             $title = $branch->name;
             $subtitle = 'Hot prospects for current month closure';
             $branchType = $branch->branch_type;
@@ -2268,6 +2336,8 @@ class DashboardController extends Controller
 
         $rows = $hotProducts->map(function ($item, $idx) use ($branch) {
             $lead = $item->lead;
+            $salesPerson = $lead?->assignedTo?->name ?: '-';
+            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
             return [
                 'index'          => $idx + 1,
                 'lead_id'        => $lead?->id,
@@ -2280,15 +2350,17 @@ class DashboardController extends Controller
                 'expected_value' => (float) ($item->expected_value ?? 0),
                 'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
                 'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                'executive_name' => $lead?->assignedTo?->name ?: '-',
+                'sales_person_name' => $salesPerson,
+                'cst_person_name'   => $cstPerson,
+                'executive_name' => $salesPerson,
                 'branch_name'    => $lead?->branch?->name ?: ($branch?->name ?: 'Coimbatore (HO)'),
             ];
         });
 
         $cstItemsToAppend = collect();
-        if ($branchId) {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
-                return ($cItem['branch_id'] ?? null) == $branchId;
+        if (!empty($targetBranchIds)) {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($targetBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $targetBranchIds);
             });
         }
 
@@ -2307,6 +2379,8 @@ class DashboardController extends Controller
                     'expected_value'   => (float) $cItem['expected_value'],
                     'closure_date'     => $cItem['closure_date'],
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'sales_person_name' => $cItem['sales_person_name'] ?? '-',
+                    'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
                     'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
@@ -2324,6 +2398,8 @@ class DashboardController extends Controller
                 return str_contains(strtolower($r['company_name'] ?? ''), $s)
                     || str_contains(strtolower($r['customer_name'] ?? ''), $s)
                     || str_contains(strtolower($r['product_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['sales_person_name'] ?? ''), $s)
+                    || str_contains(strtolower($r['cst_person_name'] ?? ''), $s)
                     || str_contains(strtolower($r['executive_name'] ?? ''), $s)
                     || str_contains(strtolower($r['branch_name'] ?? ''), $s)
                     || str_contains(strtolower($r['status'] ?? ''), $s);

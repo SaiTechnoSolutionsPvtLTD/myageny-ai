@@ -844,78 +844,43 @@ class LeadController extends Controller
         ]);
 
         $user = $request->user();
-        $companyId = $this->visibility->companyIdFor($user);
         $q = trim((string) $request->input('q', ''));
-        $isCompanyAdmin = $user && ($user->isCompanyAdmin() || $user->hasAdminLikeRole() || $this->visibility->isCompanyWideUser($user));
 
-        $query = User::query()
-            ->where('is_active', true)
-            ->where(function (\Illuminate\Database\Eloquent\Builder $sub) use ($isCompanyAdmin, $user) {
-                $sub->where(function ($subRole) use ($isCompanyAdmin) {
-                    $subRole->whereHas('roles.department', function (\Illuminate\Database\Eloquent\Builder $q) {
-                        $q->whereIn(DB::raw('LOWER(name)'), [
-                            'sales', 'crm', 'business development', 'marketing', 'telecalling',
-                        ])->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
-                            'sales', 'crm', 'business_development', 'marketing', 'telecalling',
-                        ]);
-                    })->orWhereHas('roles', function (\Illuminate\Database\Eloquent\Builder $q) use ($isCompanyAdmin) {
-                        $q->where(function ($r) {
-                            $r->whereIn(DB::raw('LOWER(name)'), [
-                                'sales_manager', 'sales_executive', 'sales_tl', 'sales_intern', 'bde', 'business_development_executive', 'telecaller',
-                            ])->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
-                                'sales_manager', 'sales_executive', 'sales_tl', 'sales_intern', 'bde', 'business_development_executive', 'telecaller',
-                            ])
-                            ->orWhere('name', 'like', '%sales_manager%')
-                            ->orWhere('name', 'like', '%sales_executive%')
-                            ->orWhere('name', 'like', '%sales_tl%')
-                            ->orWhere('name', 'like', '%sales_intern%')
-                            ->orWhere('name', 'like', '%bde%')
-                            ->orWhere('name', 'like', '%telecaller%');
-                        });
+        // Retrieve assignable users matching web DataVisibilityService::visibleAssignableUsers()
+        $assignableUsers = $this->visibility->visibleAssignableUsers($user);
+        $assignableUsers = $this->restrictUserCollectionToOwnBranch($assignableUsers, $user);
 
-                        if ($isCompanyAdmin || ($user && ($user->isBranchAdmin() || $user->isBranchManager()))) {
-                            $q->orWhere('name', 'like', '%branch_admin%')
-                              ->orWhere('name', 'like', '%branch_manager%')
-                              ->orWhere('name', 'like', '%bm%')
-                              ->orWhere('display_name', 'like', '%branch%admin%')
-                              ->orWhere('display_name', 'like', '%branch%manager%');
-                        }
-                    });
-                });
+        // Filter out pre-sales roles if any remain
+        $assignableUsers = $assignableUsers->reject(fn ($u) => method_exists($u, 'hasPreSalesLikeRole') && $u->hasPreSalesLikeRole())->values();
 
-                // Parity with DataVisibilityService::visibleAssignableUsers() (lines 316-320):
-                // The authenticated user is ALWAYS an eligible assignable user unless pre-sales.
-                if ($user && ! $user->hasPreSalesLikeRole()) {
-                    $sub->orWhere('id', $user->id);
-                }
-            })
-            // Exclude pre-sales roles per web LeadController@index (line 165)
-            ->whereDoesntHave('roles', function ($rq) {
-                $rq->where('name', 'like', '%pre_sale%')
-                   ->orWhere('display_name', 'like', '%pre%sale%');
-            })
-            ->when($companyId, fn ($qq) => $qq->where('company_id', $companyId));
-
-        $visibleIds = ($user && $user->hasPreSalesLikeRole()) ? null : $this->visibility->visibleUserIds($user);
-        if ($visibleIds !== null) {
-            $query->whereIn('id', $visibleIds);
-        }
-
-        $query = $this->scopeEmployeeQueryToOwnBranch($query, $user);
-
+        // Filter by search query if provided
         if ($q !== '') {
-            $query->where('name', 'like', "%{$q}%");
+            $qLower = strtolower($q);
+            $assignableUsers = $assignableUsers->filter(function ($u) use ($qLower) {
+                return str_contains(strtolower($u->name), $qLower)
+                    || str_contains(strtolower($u->email ?? ''), $qLower);
+            })->values();
         }
 
-        $employees = $query->orderBy('name')->paginate(20, ['id', 'name']);
+        // Sort by name
+        $assignableUsers = $assignableUsers->sortBy('name')->values();
+
+        // Paginate results (20 per page)
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = 20;
+        $total = $assignableUsers->count();
+        $lastPage = (int) ceil($total / $perPage);
+        if ($lastPage < 1) $lastPage = 1;
+
+        $paginated = $assignableUsers->slice(($page - 1) * $perPage, $perPage)->values();
 
         return response()->json([
             'status' => true,
-            'data' => collect($employees->items())->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
-            'meta' => [
-                'current_page' => $employees->currentPage(),
-                'last_page'    => $employees->lastPage(),
-                'has_more'     => $employees->currentPage() < $employees->lastPage(),
+            'data'   => $paginated->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+            'meta'   => [
+                'current_page' => $page,
+                'last_page'    => $lastPage,
+                'has_more'     => $page < $lastPage,
             ],
         ]);
     }

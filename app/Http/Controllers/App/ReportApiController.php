@@ -507,7 +507,10 @@ class ReportApiController extends Controller
 
             $companyQuery = Lead::query()
                 ->whereNotNull('company_name')
-                ->where('company_name', '!=', '');
+                ->where('company_name', '!=', '')
+                ->where('company_name', '!=', '-')
+                ->where('company_name', 'NOT LIKE', '-%')
+                ->where('company_name', 'NOT LIKE', '\_%');
             $companyId = $this->visibility->companyIdFor();
             $visibleUserIds = $this->visibility->visibleUserIds();
             if ($companyId) {
@@ -516,7 +519,47 @@ class ReportApiController extends Controller
             if ($visibleUserIds !== null) {
                 $companyQuery->whereIn('assigned_to', $visibleUserIds);
             }
-            $companyOptions = $companyQuery->distinct()->orderBy('company_name')->pluck('company_name');
+            $companyOptions = $companyQuery->distinct()
+                ->orderBy('company_name')
+                ->pluck('company_name')
+                ->filter(function ($name) {
+                    if (!is_string($name)) {
+                        return false;
+                    }
+                    $name = trim($name);
+                    if (mb_strlen($name) < 2) {
+                        return false;
+                    }
+
+                    // Must start with standard alphanumeric character (letter or number)
+                    if (!preg_match('/^[a-zA-Z0-9]/', $name)) {
+                        return false;
+                    }
+
+                    // Must not start or end with underscore or hyphen
+                    if (str_starts_with($name, '_') || str_ends_with($name, '_') || str_ends_with($name, '-')) {
+                        return false;
+                    }
+
+                    // Blacklist common dummy/placeholder values
+                    $lower = strtolower($name);
+                    if (in_array($lower, ['n/a', 'na', 'null', 'none', 'test', 'testing', 'unknown', 'dummy', 'undefined', 'nil', '-', '--', '---'])) {
+                        return false;
+                    }
+
+                    // Must not contain decorative unicode symbols, emojis, or enclosed/circled alphanumerics
+                    if (preg_match('/[\x{25A0}-\x{25FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2460}-\x{24FF}\x{1F100}-\x{1F1FF}\x{1F300}-\x{1F9FF}]/u', $name)) {
+                        return false;
+                    }
+
+                    // Must contain at least one letter
+                    if (!preg_match('/[a-zA-Z]/', $name)) {
+                        return false;
+                    }
+
+                    return true;
+                })
+                ->values();
 
             $rowsData = $reportRows->getCollection()->map(function ($row) use ($paymentModes) {
                 $paymentDate = $row->payment_date ? Carbon::parse($row->payment_date) : null;

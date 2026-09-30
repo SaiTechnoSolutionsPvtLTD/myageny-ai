@@ -306,10 +306,11 @@ class OdRequestApiController extends Controller
                 'to_date'       => ['required', 'date', 'after_or_equal:from_date'],
                 'gate_out_time' => ['nullable', 'date_format:H:i'],
                 'gate_in_time'  => ['nullable', 'date_format:H:i'],
-                'reason'        => ['required', 'string', 'max:2000'],
+                'reason'        => ['required_without:gate_in_time', 'nullable', 'string', 'max:2000'],
             ], [
                 'from_date.after_or_equal' => 'Past dates cannot be selected for OD requests.',
                 'to_date.after_or_equal'   => 'To Date must be equal to or after From Date.',
+                'reason.required_without'  => 'Remarks are required when Gate-in time is not provided.',
             ]);
 
             // Validation: If both gate times provided on the same day, Gate Out must be before Gate In.
@@ -837,22 +838,6 @@ class OdRequestApiController extends Controller
         $current = Carbon::parse($odRequest->from_date);
         $end     = Carbon::parse($odRequest->to_date);
 
-        $odStartTime = $odRequest->gate_out_time ? Carbon::parse($odRequest->gate_out_time)->format('H:i:s') : '09:30:00';
-        $odEndTime   = $odRequest->gate_in_time ? Carbon::parse($odRequest->gate_in_time)->format('H:i:s') : '18:30:00';
-
-        $workingHours = '08:00:00';
-        if ($odRequest->gate_out_time && $odRequest->gate_in_time) {
-            $in          = Carbon::parse($odRequest->gate_out_time);
-            $out         = Carbon::parse($odRequest->gate_in_time);
-            $diffSeconds = (int) max($in->diffInSeconds($out, false), 0);
-            $workingHours = sprintf(
-                '%02d:%02d:%02d',
-                floor($diffSeconds / 3600),
-                floor(($diffSeconds % 3600) / 60),
-                $diffSeconds % 60
-            );
-        }
-
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
 
@@ -861,50 +846,30 @@ class OdRequestApiController extends Controller
                 ->whereDate('attendance_date', $dateStr)
                 ->first();
 
+            $odNote = "OD Approved" . ($odRequest->reason ? " ({$odRequest->reason})" : "");
+
             if ($existing) {
-                // Check if employee already has an actual check-in punch
-                $hasActualCheckin = filled($existing->login_time)
-                    && $existing->login_time !== '00:00:00'
-                    && $existing->login_location !== 'On Duty (OD)';
+                // Employee already has an attendance record (e.g. check-in punch or absent entry).
+                // DO NOT overwrite or modify login_time, logout_time, login_location, logout_location,
+                // or working hours.
+                $updateData = [];
 
-                if ($hasActualCheckin) {
-                    // Employee already checked in at the office!
-                    // DO NOT overwrite login_time or logout_time.
-                    // DO NOT overwrite login_location or logout_location.
-                    // DO NOT overwrite overall_working_hours or attendance photos.
-                    $updateData = [];
+                if (empty($existing->remarks)) {
+                    $updateData['remarks'] = $odNote;
+                } elseif (! str_contains($existing->remarks, $odNote)) {
+                    $updateData['remarks'] = $existing->remarks . ' | ' . $odNote;
+                }
 
-                    $odNote = "OD Approved: {$odStartTime} - {$odEndTime}" . ($odRequest->reason ? " ({$odRequest->reason})" : "");
-                    if (empty($existing->remarks)) {
-                        $updateData['remarks'] = $odNote;
-                    } elseif (! str_contains($existing->remarks, $odNote)) {
-                        $updateData['remarks'] = $existing->remarks . ' | ' . $odNote;
-                    }
+                if (in_array($existing->attendance_status, ['absent', null, ''], true)) {
+                    $updateData['attendance_status'] = 'od';
+                }
 
-                    // If existing status was marked 'absent', flip to 'present'
-                    if ($existing->attendance_status === 'absent') {
-                        $updateData['attendance_status'] = 'present';
-                    }
-
-                    if (! empty($updateData)) {
-                        $existing->update($updateData);
-                    }
-                } else {
-                    // Employee had an empty attendance record or was marked absent with no real punches.
-                    // Mark as 'od' so they receive full attendance credit.
-                    $existing->update([
-                        'attendance_status'     => 'od',
-                        'login_location'        => 'On Duty (OD)',
-                        'logout_location'       => 'On Duty (OD)',
-                        'login_time'            => $odStartTime,
-                        'logout_time'           => $odEndTime,
-                        'overall_working_hours' => $workingHours,
-                        'remarks'               => $odRequest->reason,
-                    ]);
+                if (! empty($updateData)) {
+                    $existing->update($updateData);
                 }
             } else {
                 // No attendance record exists for this date (e.g. Full Day OD).
-                // Create a record with status 'od' so the employee is marked Present (on OD) and not Absent.
+                // Create a record with status 'od' without setting fake login_time or logout_time.
                 DailyAttendance::create([
                     'company_id'            => $odRequest->company_id ?? $employee->company_id,
                     'employee_id'           => $employee->id,
@@ -914,12 +879,12 @@ class OdRequestApiController extends Controller
                     'login_location'        => 'On Duty (OD)',
                     'login_latitude'        => 0,
                     'login_longitude'       => 0,
-                    'login_time'            => $odStartTime,
+                    'login_time'            => null,
                     'logout_location'       => 'On Duty (OD)',
                     'logout_latitude'       => 0,
                     'logout_longitude'      => 0,
-                    'logout_time'           => $odEndTime,
-                    'overall_working_hours' => $workingHours,
+                    'logout_time'           => null,
+                    'overall_working_hours' => null,
                     'attendance_date'       => $dateStr,
                     'attendance_status'     => 'od',
                     'remarks'               => $odRequest->reason,
