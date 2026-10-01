@@ -112,13 +112,9 @@ class EmployeeApiController extends Controller
                 $q->where(function (Builder $sub) use ($actingBranchIds, $branchCodes) {
                     $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($actingBranchIds));
                     if (!empty($branchCodes)) {
-                        $sub->orWhere(function (Builder $q2) use ($branchCodes) {
-                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('employee_id', 'like', $code . '%');
-                                }
-                            });
-                        });
+                        foreach ($branchCodes as $code) {
+                            $sub->orWhere('employee_id', 'like', $code . '%');
+                        }
                     }
                 });
             })
@@ -174,7 +170,7 @@ class EmployeeApiController extends Controller
             $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $userBranchIds)->pluck('code')->filter()->all();
 
             $matchesBranch = !empty(array_intersect($userBranchIds, $empBranchIds));
-            if (! $matchesBranch && is_null($employee->portal_user_id)) {
+            if (! $matchesBranch) {
                 foreach ($branchCodes as $code) {
                     if (str_starts_with($employee->employee_id ?? '', $code)) {
                         $matchesBranch = true;
@@ -220,7 +216,17 @@ class EmployeeApiController extends Controller
             if (empty($empBranchIds) && $employee->portalUser?->branch_id) {
                 $empBranchIds = [(int) $employee->portalUser->branch_id];
             }
-            if (!empty($userBranchIds) && !empty($empBranchIds) && empty(array_intersect($userBranchIds, $empBranchIds))) {
+            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $userBranchIds)->pluck('code')->filter()->all();
+            $matchesBranch = !empty(array_intersect($userBranchIds, $empBranchIds));
+            if (! $matchesBranch) {
+                foreach ($branchCodes as $code) {
+                    if (str_starts_with($employee->employee_id ?? '', $code)) {
+                        $matchesBranch = true;
+                        break;
+                    }
+                }
+            }
+            if (! $matchesBranch && $user?->id !== $employee->portal_user_id) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized for this branch.'], 403);
             }
         }

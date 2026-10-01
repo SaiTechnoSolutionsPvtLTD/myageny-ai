@@ -95,16 +95,16 @@ class DashboardApiController extends Controller
                         ->orWhereHas('intern.portalUser', fn ($pu) => $pu->inBranches($actingBranchIds));
                     if (! empty($branchCodes)) {
                         $sub->orWhereHas('employee', function ($eq) use ($branchCodes) {
-                            $eq->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
+                            $eq->where(function ($codeQ) use ($branchCodes) {
                                 foreach ($branchCodes as $code) {
                                     $codeQ->orWhere('employee_id', 'like', $code . '%');
                                 }
                             });
                         })
                         ->orWhereHas('intern', function ($iq) use ($branchCodes) {
-                            $iq->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
+                            $iq->where(function ($codeQ) use ($branchCodes) {
                                 foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('intern_id', 'like', $code . '%');
+                                    $codeQ->orWhere('intern_id', 'like', '%' . $code . '%');
                                 }
                             });
                         });
@@ -151,13 +151,9 @@ class DashboardApiController extends Controller
                                 ->where(function ($sub) use ($actingBranchIds, $branchCodes) {
                                     $sub->whereIn('portal_users.branch_id', $actingBranchIds);
                                     if (! empty($branchCodes)) {
-                                        $sub->orWhere(function ($q2) use ($branchCodes) {
-                                            $q2->whereNull('eo.portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                                foreach ($branchCodes as $code) {
-                                                    $codeQ->orWhere('eo.employee_id', 'like', $code . '%');
-                                                }
-                                            });
-                                        });
+                                        foreach ($branchCodes as $code) {
+                                            $sub->orWhere('eo.employee_id', 'like', $code . '%');
+                                        }
                                     }
                                 });
                             });
@@ -292,13 +288,9 @@ class DashboardApiController extends Controller
                         $eq->where(function ($sub) use ($actingBranchIds, $branchCodes) {
                             $sub->whereHas('portalUser', fn ($pu) => $pu->inBranches($actingBranchIds));
                             if (! empty($branchCodes)) {
-                                $sub->orWhere(function ($q2) use ($branchCodes) {
-                                    $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                        foreach ($branchCodes as $code) {
-                                            $codeQ->orWhere('employee_id', 'like', $code . '%');
-                                        }
-                                    });
-                                });
+                                foreach ($branchCodes as $code) {
+                                    $sub->orWhere('employee_id', 'like', $code . '%');
+                                }
                             }
                         });
                     });
@@ -723,23 +715,34 @@ class DashboardApiController extends Controller
             ->toArray();
     }
 
-    private function todayLeaveApprovals(Carbon $today, ?int $actingBranchId = null): array
+    private function todayLeaveApprovals(Carbon $today, array|int|null $branchIds = null): array
     {
-        $branch = $actingBranchId ? Branch::find($actingBranchId) : null;
-        $branchCode = $branch?->code;
+        if ($branchIds !== null) {
+            $branchIdsArr = is_array($branchIds) ? $branchIds : [$branchIds];
+            $branchIdsArr = array_filter($branchIdsArr, fn ($id) => $id !== null);
+        } else {
+            $branchIdsArr = null;
+        }
+
+        $branches = !empty($branchIdsArr) ? Branch::whereIn('id', $branchIdsArr)->get() : collect();
+        $branchCodes = $branches->pluck('code')->filter(fn ($c) => $c && $c !== 'STS')->toArray();
 
         return LeaveRequest::with(['employee.role', 'employee.department'])
             ->whereDate('start_date', '<=', $today->toDateString())
             ->whereDate('end_date', '>=', $today->toDateString())
             ->where('status', LeaveRequest::STATUS_APPROVED)
-            ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
-                $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
-                    $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches([$actingBranchId]));
-                        if ($branchCode && $branchCode !== 'STS') {
-                            $sub->orWhere(function ($q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
-                            });
+            ->when($branchIdsArr !== null, function ($q) use ($branchIdsArr, $branchCodes) {
+                if (empty($branchIdsArr) || in_array(-1, $branchIdsArr, true)) {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereHas('employee', function ($eq) use ($branchIdsArr, $branchCodes) {
+                    $eq->where(function ($sub) use ($branchIdsArr, $branchCodes) {
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches($branchIdsArr));
+                        if (! empty($branchCodes)) {
+                            foreach ($branchCodes as $code) {
+                                $sub->orWhere('employee_id', 'like', $code . '%');
+                            }
                         }
                     });
                 });
@@ -760,22 +763,33 @@ class DashboardApiController extends Controller
             ->toArray();
     }
 
-    private function todayPermissionApprovals(Carbon $today, ?int $actingBranchId = null): array
+    private function todayPermissionApprovals(Carbon $today, array|int|null $branchIds = null): array
     {
-        $branch = $actingBranchId ? Branch::find($actingBranchId) : null;
-        $branchCode = $branch?->code;
+        if ($branchIds !== null) {
+            $branchIdsArr = is_array($branchIds) ? $branchIds : [$branchIds];
+            $branchIdsArr = array_filter($branchIdsArr, fn ($id) => $id !== null);
+        } else {
+            $branchIdsArr = null;
+        }
+
+        $branches = !empty($branchIdsArr) ? Branch::whereIn('id', $branchIdsArr)->get() : collect();
+        $branchCodes = $branches->pluck('code')->filter(fn ($c) => $c && $c !== 'STS')->toArray();
 
         return PermissionRequest::with(['employee.role', 'employee.department'])
             ->whereDate('permission_date', $today->toDateString())
             ->where('status', PermissionRequest::STATUS_APPROVED)
-            ->when($actingBranchId, function ($q) use ($actingBranchId, $branchCode) {
-                $q->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
-                    $eq->where(function ($sub) use ($actingBranchId, $branchCode) {
-                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches([$actingBranchId]));
-                        if ($branchCode && $branchCode !== 'STS') {
-                            $sub->orWhere(function ($q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
-                            });
+            ->when($branchIdsArr !== null, function ($q) use ($branchIdsArr, $branchCodes) {
+                if (empty($branchIdsArr) || in_array(-1, $branchIdsArr, true)) {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereHas('employee', function ($eq) use ($branchIdsArr, $branchCodes) {
+                    $eq->where(function ($sub) use ($branchIdsArr, $branchCodes) {
+                        $sub->whereHas('portalUser', fn ($uq) => $uq->inBranches($branchIdsArr));
+                        if (! empty($branchCodes)) {
+                            foreach ($branchCodes as $code) {
+                                $sub->orWhere('employee_id', 'like', $code . '%');
+                            }
                         }
                     });
                 });
@@ -1040,13 +1054,9 @@ class DashboardApiController extends Controller
                 $query->where(function (Builder $q) use ($branchIdsArr, $branchCodes) {
                     $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches($branchIdsArr));
                     if (! empty($branchCodes)) {
-                        $q->orWhere(function (Builder $q2) use ($branchCodes) {
-                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('employee_id', 'like', $code . '%');
-                                }
-                            });
-                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('employee_id', 'like', $code . '%');
+                        }
                     }
                 });
             }
@@ -1080,13 +1090,9 @@ class DashboardApiController extends Controller
                 $query->where(function (Builder $q) use ($branchIdsArr, $branchCodes) {
                     $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches($branchIdsArr));
                     if (! empty($branchCodes)) {
-                        $q->orWhere(function (Builder $q2) use ($branchCodes) {
-                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('employee_id', 'like', $code . '%');
-                                }
-                            });
-                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('employee_id', 'like', $code . '%');
+                        }
                     }
                 });
             }
@@ -1125,13 +1131,9 @@ class DashboardApiController extends Controller
                 $query->where(function (Builder $q) use ($branchIdsArr, $branchCodes) {
                     $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches($branchIdsArr));
                     if (! empty($branchCodes)) {
-                        $q->orWhere(function (Builder $q2) use ($branchCodes) {
-                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('intern_id', 'like', $code . '%');
-                                }
-                            });
-                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('intern_id', 'like', '%' . $code . '%');
+                        }
                     }
                 });
             }
@@ -1165,13 +1167,9 @@ class DashboardApiController extends Controller
                 $query->where(function (Builder $q) use ($branchIdsArr, $branchCodes) {
                     $q->whereHas('portalUser', fn (Builder $sub) => $sub->inBranches($branchIdsArr));
                     if (! empty($branchCodes)) {
-                        $q->orWhere(function (Builder $q2) use ($branchCodes) {
-                            $q2->whereNull('portal_user_id')->where(function ($codeQ) use ($branchCodes) {
-                                foreach ($branchCodes as $code) {
-                                    $codeQ->orWhere('intern_id', 'like', $code . '%');
-                                }
-                            });
-                        });
+                        foreach ($branchCodes as $code) {
+                            $q->orWhere('intern_id', 'like', '%' . $code . '%');
+                        }
                     }
                 });
             }

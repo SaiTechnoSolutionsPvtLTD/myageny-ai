@@ -361,6 +361,8 @@ class LeadController extends Controller
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'lead_status'    => ['nullable', 'string'],
             'product_id'     => ['nullable', 'integer', 'exists:products,id'],
+            'product_name'   => ['nullable', 'string', 'max:255'],
+            'deal_value'     => ['nullable', 'numeric', 'min:0'],
             // The mobile app no longer exposes a Priority field on Add Lead
             // (Lead Priority – Mobile App Changes ticket) — this stays
             // 'nullable' rather than 'required' purely so the request
@@ -372,6 +374,7 @@ class LeadController extends Controller
             'remarks'       => ['nullable', 'string'],
             'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
             'assigned_to'   => ['nullable', 'integer', 'exists:users,id'],
+            'pre_sale_executive_id' => ['nullable', 'integer', 'exists:users,id'],
 
             'reminder'             => ['nullable', 'array'],
             'reminder.remind_at'   => ['required_with:reminder', 'date', 'after:now'],
@@ -428,6 +431,28 @@ class LeadController extends Controller
                 if ($leadSource) {
                     $leadData['lead_source_id'] = $leadSource->id;
                     $leadData['lead_source']    = $leadSource->name;
+                }
+            }
+
+            // Resolve lead_status and lead_status_id
+            if (!empty($leadData['lead_status_id'])) {
+                $leadStatus = LeadStatus::withoutGlobalScope('company')->find($leadData['lead_status_id']);
+                if ($leadStatus) {
+                    $leadData['lead_status_id'] = $leadStatus->id;
+                    $leadData['lead_status']    = $leadStatus->id;
+                }
+            } elseif (!empty($leadData['lead_status'])) {
+                $statusVal = trim((string) $leadData['lead_status']);
+                $leadStatus = is_numeric($statusVal)
+                    ? LeadStatus::withoutGlobalScope('company')->find((int) $statusVal)
+                    : LeadStatus::withoutGlobalScope('company')->where('name', $statusVal)
+                        ->when($request->user()?->company_id, function ($q, $cid) {
+                            $q->where(fn ($sub) => $sub->where('company_id', $cid)->orWhereNull('company_id'));
+                        })
+                        ->first();
+                if ($leadStatus) {
+                    $leadData['lead_status_id'] = $leadStatus->id;
+                    $leadData['lead_status']    = $leadStatus->id;
                 }
             }
 
@@ -565,10 +590,13 @@ class LeadController extends Controller
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
             'lead_status'    => ['nullable', 'string'],
             'product_id'     => ['nullable', 'integer', 'exists:products,id'],
+            'product_name'   => ['nullable', 'string', 'max:255'],
+            'deal_value'     => ['nullable', 'numeric', 'min:0'],
             'priority'       => ['sometimes', 'required', 'string', 'in:' . implode(',', array_keys(Lead::PRIORITIES))],
             'remarks'        => ['nullable', 'string'],
             'branch_id'      => ['nullable', 'integer', 'exists:branches,id'],
             'assigned_to'    => ['nullable', 'integer', 'exists:users,id'],
+            'pre_sale_executive_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         if (array_key_exists('assigned_to', $validated) && $validated['assigned_to']) {
@@ -602,6 +630,28 @@ class LeadController extends Controller
             if ($leadSource) {
                 $validated['lead_source_id'] = $leadSource->id;
                 $validated['lead_source']    = $leadSource->name;
+            }
+        }
+
+        // Resolve lead_status and lead_status_id
+        if (array_key_exists('lead_status_id', $validated) && !empty($validated['lead_status_id'])) {
+            $leadStatus = LeadStatus::withoutGlobalScope('company')->find($validated['lead_status_id']);
+            if ($leadStatus) {
+                $validated['lead_status_id'] = $leadStatus->id;
+                $validated['lead_status']    = $leadStatus->id;
+            }
+        } elseif (array_key_exists('lead_status', $validated) && !empty($validated['lead_status'])) {
+            $statusVal = trim((string) $validated['lead_status']);
+            $leadStatus = is_numeric($statusVal)
+                ? LeadStatus::withoutGlobalScope('company')->find((int) $statusVal)
+                : LeadStatus::withoutGlobalScope('company')->where('name', $statusVal)
+                    ->when($request->user()?->company_id, function ($q, $cid) {
+                        $q->where(fn ($sub) => $sub->where('company_id', $cid)->orWhereNull('company_id'));
+                    })
+                    ->first();
+            if ($leadStatus) {
+                $validated['lead_status_id'] = $leadStatus->id;
+                $validated['lead_status']    = $leadStatus->id;
             }
         }
 
@@ -1112,6 +1162,7 @@ class LeadController extends Controller
             'lead_source_id'       => $lead->leadSource?->id ?: $lead->lead_source_id,
             'lead_source'          => $lead->leadSource?->name ?: ($lead->lead_source ?: ($lead->products->first()?->leadSource?->name ?: $lead->source_label)),
             'source_label'         => $lead->leadSource?->name ?: ($lead->lead_source ?: ($lead->products->first()?->leadSource?->name ?: $lead->source_label)),
+            'lead_status_id'       => $lead->leadStatus?->id ?: ($lead->lead_status_id ?: (is_numeric($lead->lead_status) ? (int) $lead->lead_status : null)),
             'lead_status'          => $status ?: 'new',
             'status_label'         => $statusLabel ?: 'New',
             'status_color'         => $statusColor,

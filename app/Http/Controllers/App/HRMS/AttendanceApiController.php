@@ -341,17 +341,13 @@ class AttendanceApiController extends Controller
                     $employeeQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
                         $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($branchIds));
                         foreach ($branchCodes as $code) {
-                            $sub->orWhere(function (Builder $q2) use ($code) {
-                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $code . '%');
-                            });
+                            $sub->orWhere('employee_id', 'like', $code . '%');
                         }
                     });
                     $internQuery->where(function (Builder $sub) use ($branchIds, $branchCodes) {
                         $sub->whereHas('portalUser', fn (Builder $pu) => $pu->inBranches($branchIds));
                         foreach ($branchCodes as $code) {
-                            $sub->orWhere(function (Builder $q2) use ($code) {
-                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $code . '%');
-                            });
+                            $sub->orWhere('intern_id', 'like', '%' . $code . '%');
                         }
                     });
                 }
