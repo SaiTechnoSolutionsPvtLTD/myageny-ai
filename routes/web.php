@@ -111,6 +111,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('dashboard.admin');
     Route::get('/dashboard/branch-hot-leads', [SuperAdminDashboardController::class, 'branchHotLeads'])
         ->name('dashboard.branch-hot-leads');
+    Route::post('/dashboard/update-prospect-date', [SuperAdminDashboardController::class, 'updateProspectDate'])
+        ->name('dashboard.update-prospect-date');
 
     Route::get('/product-dashboard/admin', [SuperAdminDashboardController::class, 'adminProductindex'])
         ->middleware('can:dashboard.view');

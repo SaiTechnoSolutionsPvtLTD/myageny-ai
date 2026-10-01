@@ -762,7 +762,7 @@
 
     justify-content: center;
 
-    padding: 24px;
+    padding: 0;
 
 }
 
@@ -776,15 +776,17 @@
 
     background: #ffffff;
 
-    border-radius: 16px;
+    border-radius: 0;
 
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
 
-    width: 95vw;
+    width: 100vw;
 
-    max-width: 1400px;
+    max-width: 100vw;
 
-    max-height: 90vh;
+    height: 100vh;
+
+    max-height: 100vh;
 
     display: flex;
 
@@ -794,7 +796,7 @@
 
     animation: daSubModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 
-    border: 1px solid #e2e8f0;
+    border: none;
 
 }
 
@@ -804,6 +806,131 @@
 
     to { opacity: 1; transform: scale(1); }
 
+}
+
+/* ── Date Edit Modal Container (Height Fix) ── */
+.da-date-modal-container {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 90%;
+    max-width: 460px;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 24px;
+    border: 1px solid #e2e8f0;
+    margin: auto;
+    animation: daDateModalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes daDateModalPop {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Modern Toast Notification System ── */
+#daCustomToastContainer {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 1000000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.da-toast-alert {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 320px;
+    max-width: 450px;
+    padding: 14px 18px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.15), 0 4px 6px -2px rgba(15, 23, 42, 0.05);
+    border-left: 5px solid #10b981;
+    border-top: 1px solid #f1f5f9;
+    border-right: 1px solid #f1f5f9;
+    border-bottom: 1px solid #f1f5f9;
+    animation: daToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.3s ease;
+}
+
+.da-toast-alert.da-toast-error {
+    border-left-color: #ef4444;
+}
+
+.da-toast-alert.hiding {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.95);
+}
+
+@keyframes daToastSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.da-toast-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #d1fae5;
+    color: #059669;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.da-toast-alert.da-toast-error .da-toast-icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.da-toast-body {
+    flex: 1;
+}
+
+.da-toast-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 2px 0;
+}
+
+.da-toast-desc {
+    font-size: 12px;
+    font-weight: 500;
+    color: #475569;
+    margin: 0;
+}
+
+.da-toast-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.da-toast-close:hover {
+    color: #334155;
 }
 
 .da-submodal-head {
@@ -4878,6 +5005,56 @@
 
 </div>
 
+{{-- ── Edit Prospect Date Modal (Company Admin Only) ── --}}
+<div class="da-submodal-overlay" id="daEditProspectDateModal" style="display:none; z-index:999999;" onclick="if(event.target === this) closeEditProspectDateModal()">
+    <div class="da-date-modal-container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom: 1px solid #f1f5f9; padding-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">✏️</span>
+                <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Update Closure / Delivery Date</h3>
+            </div>
+            <button type="button" onclick="closeEditProspectDateModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b; line-height:1;">&times;</button>
+        </div>
+        
+        <div id="daEditDateCompanyName" style="font-size:13px; font-weight:700; color:#2563eb; margin-bottom:16px; background:#eff6ff; padding:8px 12px; border-radius:8px; border:1px solid #bfdbfe;"></div>
+        
+        <form id="daEditProspectDateForm" onsubmit="submitProspectDateUpdate(event)">
+            <input type="hidden" id="daEditLeadId" value="">
+            <input type="hidden" id="daEditPiId" value="">
+            
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">New Date <span style="color:#ef4444;">*</span></label>
+                <input type="date" id="daEditNewDate" style="width:100%; padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; color:#1e293b; outline:none; box-sizing:border-box;" required>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">Reason for Change <span style="color:#ef4444;">*</span></label>
+                <select id="daEditReason" style="width:100%; padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; color:#1e293b; outline:none; box-sizing:border-box; background:#fff;" onchange="toggleDateChangeRemarksVisibility()" required>
+                    <option value="">-- Select Reason --</option>
+                    <option value="Client Not Available">Client Not Available</option>
+                    <option value="Fund Issue">Fund Issue</option>
+                    <option value="Requirements Pending">Requirements Pending</option>
+                    <option value="Client Delay">Client Delay</option>
+                    <option value="Scope Revision">Scope Revision</option>
+                    <option value="Others">Others</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom: 20px;" id="daEditRemarksContainer">
+                <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">Remarks <span id="daRemarksRequiredAsterisk" style="color:#ef4444; display:none;">*</span></label>
+                <textarea id="daEditRemarks" rows="3" style="width:100%; padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; color:#1e293b; outline:none; box-sizing:border-box; resize:vertical;" placeholder="Enter remarks..."></textarea>
+            </div>
+
+            <div id="daEditDateErrorMessage" style="display:none; font-size:12px; font-weight:600; color:#dc2626; margin-bottom:12px; background:#fef2f2; padding:8px 12px; border-radius:6px; border:1px solid #fecaca;"></div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" onclick="closeEditProspectDateModal()" style="padding:10px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; font-weight:700; font-size:13px; color:#475569; cursor:pointer;">Cancel</button>
+                <button type="submit" id="daEditSaveBtn" style="padding:10px 22px; border-radius:8px; border:none; background:linear-gradient(135deg, #ea580c 0%, #f97316 100%); color:#ffffff; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 12px rgba(234, 88, 12, 0.25);">Update Date</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -6530,6 +6707,15 @@ window.renderDaySalesTrackerTable = function(items, categories) {
 
     }
 
+    // Sort date-wise descending (newest date first)
+    items.sort(function(a, b) {
+        var keyA = a.raw_date || a.date || '';
+        var keyB = b.raw_date || b.date || '';
+        if (keyA < keyB) return 1;
+        if (keyA > keyB) return -1;
+        return (b.id || 0) - (a.id || 0);
+    });
+
     // Only Company Admin can edit Category and Sale Type
 
     var canEdit = (typeof USER_ROLE_TYPE !== 'undefined' && USER_ROLE_TYPE === 'company_admin');
@@ -6678,21 +6864,52 @@ window.filterDaySalesTable = function(q) {
 
     }
 
+    var cleanQuery = query.replace(/[₹,$\s]/g, '');
+
     var filtered = window.dstData.items.filter(function(item) {
 
-        return (item.account_name && item.account_name.toLowerCase().indexOf(query) !== -1) ||
+        var textMatch = (item.account_name && item.account_name.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.branch && item.branch.toLowerCase().indexOf(query) !== -1) ||
+                       (item.branch && item.branch.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.team_leader && item.team_leader.toLowerCase().indexOf(query) !== -1) ||
+                       (item.branch_type && item.branch_type.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.team_member && item.team_member.toLowerCase().indexOf(query) !== -1) ||
+                       (item.team_leader && item.team_leader.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.category && item.category.toLowerCase().indexOf(query) !== -1) ||
+                       (item.team_member && item.team_member.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.sale_type && item.sale_type.toLowerCase().indexOf(query) !== -1) ||
+                       (item.category && item.category.toLowerCase().indexOf(query) !== -1) ||
 
-               (item.product_name && item.product_name.toLowerCase().indexOf(query) !== -1);
+                       (item.sale_type && item.sale_type.toLowerCase().indexOf(query) !== -1) ||
+
+                       (item.product_name && item.product_name.toLowerCase().indexOf(query) !== -1) ||
+
+                       (item.date && item.date.toLowerCase().indexOf(query) !== -1) ||
+
+                       (item.mon && item.mon.toLowerCase().indexOf(query) !== -1);
+
+        if (textMatch) return true;
+
+        var colVal = parseFloat(item.current_month_collection) || 0;
+        var colStr = colVal.toString();
+        var colFmt = (typeof fmt === 'function' ? fmt(colVal) : ('₹' + colVal)).toLowerCase();
+        var cleanColFmt = colFmt.replace(/[₹,$\s]/g, '');
+
+        var totalVal = parseFloat(item.total_price) || 0;
+        var totalStr = totalVal.toString();
+        var totalFmt = (typeof fmt === 'function' ? fmt(totalVal) : ('₹' + totalVal)).toLowerCase();
+        var cleanTotalFmt = totalFmt.replace(/[₹,$\s]/g, '');
+
+        var amountMatch = (colStr.indexOf(query) !== -1) ||
+                          (colFmt.indexOf(query) !== -1) ||
+                          (cleanQuery !== '' && cleanColFmt.indexOf(cleanQuery) !== -1) ||
+                          (cleanQuery !== '' && colStr.indexOf(cleanQuery) !== -1) ||
+                          (totalStr.indexOf(query) !== -1) ||
+                          (totalFmt.indexOf(query) !== -1) ||
+                          (cleanQuery !== '' && cleanTotalFmt.indexOf(cleanQuery) !== -1) ||
+                          (cleanQuery !== '' && totalStr.indexOf(cleanQuery) !== -1);
+
+        return amountMatch;
 
     });
 
@@ -8542,182 +8759,130 @@ function filterSubmodalViews() {
 
 }
 
-function renderBranchPivotTable(allLeads, searchQ) {
+function buildAccordionSubTableHtml(leads) {
+    if (!leads || leads.length === 0) {
+        return '<div style="padding:12px; text-align:center; color:#94a3b8; font-size:12px;">No leads found in this category.</div>';
+    }
 
-    var tbody = document.getElementById('daBranchPivotBody');
+    var canEditProspectDate = @json(auth()->user() ? (auth()->user()->isSuperAdmin() || auth()->user()->isCompanyAdminRole() || auth()->user()->isSystemAdmin() || auth()->user()->isCbo()) : false);
 
-    var tfoot = document.getElementById('daBranchPivotFoot');
-
-    var countBadge = document.getElementById('daSubmodalCountBranch');
-
-    // Aggregate by branch
-
-    var branchMap = {};
-
-    var totalOverallDeal = 0;
-
-    allLeads.forEach(function(l) {
-
-        var bName = (l.branch_name || 'Coimbatore (HO)').trim();
-
+    var rows = leads.map(function(l, i) {
         var dVal = parseFloat(l.deal_value) || 0;
-
         var eVal = parseFloat(l.expected_value) || 0;
 
-        totalOverallDeal += dVal;
+        var custCol = l.lead_view_url
+            ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
+            : (l.project_view_url
+                ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Project details">' + (l.customer_name || '-') + ' ↗</a>'
+                : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>');
 
-        if (!branchMap[bName]) {
+        var prodCol = l.project_view_url
+            ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:600; color:#1e40af; text-decoration:none;" title="View Project details">' + (l.product_name || '-') + ' ↗</a>'
+            : (l.product_name || '-');
 
-            branchMap[bName] = {
+        var statusIcon = (l.source_type === 'renewal' || l.status === 'Renewal') ? '🔄 ' : ((l.source_type === 'development') ? '💻 ' : '🔥 ');
+        var statusBg = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#f0fdf4' : ((l.source_type === 'development') ? '#eff6ff' : '#fef2f2');
+        var statusColor = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#16a34a' : ((l.source_type === 'development') ? '#2563eb' : '#dc2626');
+        var statusBorder = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#bbf7d0' : ((l.source_type === 'development') ? '#bfdbfe' : '#fecaca');
 
-                name: bName,
+        var salesPerson = l.sales_person_name || l.executive_name || '-';
+        var cstPerson   = l.cst_person_name || '-';
 
-                count: 0,
-
-                deal_value: 0,
-
-                expected_value: 0
-
-            };
-
+        var closureDateCell = (l.closure_date || '-');
+        if (canEditProspectDate) {
+            var safeComp = (l.company_name || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            closureDateCell = '<div style="display:inline-flex; align-items:center; justify-content:center; gap:4px;">' +
+                '<span>' + (l.closure_date || '-') + '</span>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date (Company Admin Only)">✏️</button>' +
+                '</div>';
         }
 
-        branchMap[bName].count += 1;
-
-        branchMap[bName].deal_value += dVal;
-
-        branchMap[bName].expected_value += eVal;
-
-    });
-
-    var branchList = Object.keys(branchMap).map(function(k) {
-
-        return branchMap[k];
-
-    });
-
-    // Sort descending by deal value
-
-    branchList.sort(function(a, b) {
-
-        return b.deal_value - a.deal_value;
-
-    });
-
-    if (countBadge) countBadge.textContent = branchList.length;
-
-    var filteredBranches = branchList.filter(function(b) {
-
-        if (!searchQ) return true;
-
-        return b.name.toLowerCase().indexOf(searchQ) !== -1;
-
-    });
-
-    if (!tbody) return;
-
-    if (filteredBranches.length === 0) {
-
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching branches found.' : 'No active branches found.') + '</td></tr>';
-
-        if (tfoot) tfoot.innerHTML = '';
-
-        return;
-
-    }
-
-    var rowsHtml = '';
-
-    var sumCount = 0;
-
-    var sumDeal = 0;
-
-    var sumExp = 0;
-
-    filteredBranches.forEach(function(b, i) {
-
-        sumCount += b.count;
-
-        sumDeal += b.deal_value;
-
-        sumExp += b.expected_value;
-
-        var avgVal = b.count > 0 ? (b.deal_value / b.count) : 0;
-
-        var safeBranchName = b.name.replace(/'/g, "\\'");
-
-        rowsHtml += '<tr>' +
-
-            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
-
-            '<td style="font-weight:700; color:var(--da-text);">' +
-
-                '<span onclick="filterFullByItem(\'' + safeBranchName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeBranchName + '">' +
-
-                    b.name +
-
-                '</span>' +
-
-            '</td>' +
-
+        return '<tr>' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8; font-size:11px;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:600; color:var(--da-text); font-size:12px;">' + (l.company_name || '-') + '</td>' +
+            '<td style="font-size:12px;">' + custCol + '</td>' +
+            '<td style="font-weight:600; color:#334155; font-size:12px;">' + prodCol + '</td>' +
             '<td style="text-align:center;">' +
-
-                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#e0f2fe; color:#0369a1;">' +
-
-                    b.count +
-
+                '<span style="display:inline-flex; align-items:center; gap:3px; padding:1px 6px; border-radius:10px; font-weight:700; font-size:10px; background:' + statusBg + '; color:' + statusColor + '; border:1px solid ' + statusBorder + ';">' +
+                    statusIcon + (l.status || 'Hot') +
                 '</span>' +
-
             '</td>' +
-
-            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(b.deal_value) + '</td>' +
-
-            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(b.expected_value) + '</td>' +
-
-            '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
-
-            '<td style="text-align:center;">' +
-
-                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeBranchName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
-
-                    'View Leads ↗' +
-
-                '</button>' +
-
-            '</td>' +
-
+            '<td style="text-align:right; font-weight:700; color:var(--da-text); font-size:12px;">' + fmt(dVal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669; font-size:12px;">' + fmt(eVal) + '</td>' +
+            '<td style="text-align:center; font-size:11px; color:#475569; white-space:nowrap;">' + closureDateCell + '</td>' +
+            '<td style="font-weight:600; color:#1e293b; font-size:11px;">' + salesPerson + '</td>' +
+            '<td style="font-weight:600; color:#0d9488; font-size:11px;">' + cstPerson + '</td>' +
         '</tr>';
+    }).join('');
 
-    });
-
-    tbody.innerHTML = rowsHtml;
-
-    if (tfoot) {
-
-        tfoot.innerHTML = '<tr>' +
-
-            '<td colspan="2" style="font-weight:800;">Total (' + filteredBranches.length + ' Branches)</td>' +
-
-            '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
-
-            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
-
-            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-
-            '<td colspan="2"></td>' +
-
-        '</tr>';
-
-    }
-
+    return '<div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.05); margin:4px 0;">' +
+        '<div style="padding:8px 14px; background:#f1f5f9; font-weight:700; font-size:12px; color:#334155; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">' +
+            '<span>📋 Associated Hot Prospects (' + leads.length + ')</span>' +
+            '<span style="font-size:11px; font-weight:500; color:#64748b;">Click ✏️ to update Closure Date</span>' +
+        '</div>' +
+        '<div style="overflow-x:auto;">' +
+            '<table style="width:100%; border-collapse:collapse; margin:0;" class="table table-sm table-hover">' +
+                '<thead>' +
+                    '<tr style="background:#f8fafc; font-size:11px; color:#64748b;">' +
+                        '<th style="text-align:center; width:30px; padding:6px 8px;">#</th>' +
+                        '<th style="padding:6px 8px;">Company Name</th>' +
+                        '<th style="padding:6px 8px;">Customer Name</th>' +
+                        '<th style="padding:6px 8px;">Product Name</th>' +
+                        '<th style="text-align:center; padding:6px 8px;">Status</th>' +
+                        '<th style="text-align:right; padding:6px 8px;">Deal Value</th>' +
+                        '<th style="text-align:right; padding:6px 8px;">Expected Amt</th>' +
+                        '<th style="text-align:center; padding:6px 8px;">Closure Date</th>' +
+                        '<th style="padding:6px 8px;">Sales Exec</th>' +
+                        '<th style="padding:6px 8px;">CST Person</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+        '</div>' +
+    '</div>';
 }
 
+window.togglePivotAccordion = function(pivotType, itemKey) {
+    var accordionRowId = 'da-accordion-' + pivotType + '-' + itemKey;
+    var targetRow = document.getElementById(accordionRowId);
+    var iconEl = document.getElementById('da-accordion-icon-' + pivotType + '-' + itemKey);
+    var btnIconEl = document.getElementById('da-accordion-btn-icon-' + pivotType + '-' + itemKey);
+
+    if (!targetRow) return;
+
+    var isCurrentlyOpen = (targetRow.style.display !== 'none');
+
+    // 1. Close ALL accordion rows across pivot tables ("onnu open pana another onnu close aganum")
+    var allAccordionRows = document.querySelectorAll('.da-pivot-accordion-row');
+    allAccordionRows.forEach(function(row) {
+        row.style.display = 'none';
+    });
+
+    // Reset all accordion arrow icons
+    var allIcons = document.querySelectorAll('[id^="da-accordion-icon-"]');
+    allIcons.forEach(function(ic) {
+        ic.textContent = '▶';
+    });
+    var allBtnIcons = document.querySelectorAll('[id^="da-accordion-btn-icon-"]');
+    allBtnIcons.forEach(function(bic) {
+        bic.textContent = '▼';
+    });
+
+    // 2. If target row was NOT open, expand it now!
+    if (!isCurrentlyOpen) {
+        targetRow.style.display = 'table-row';
+        if (iconEl) {
+            iconEl.textContent = '▼';
+        }
+        if (btnIconEl) {
+            btnIconEl.textContent = '▲';
+        }
+    }
+};
+
 function renderFullDetailsTable(leads) {
-
     var tbody = document.getElementById('daBranchHotLeadsBody');
-
     var tfoot = document.getElementById('daBranchHotLeadsFoot');
-
     var countBadge = document.getElementById('daSubmodalCountFull');
 
     if (countBadge) countBadge.textContent = leads.length;
@@ -8725,460 +8890,404 @@ function renderFullDetailsTable(leads) {
     if (!tbody) return;
 
     if (leads.length === 0) {
-
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:36px; color:#94a3b8;">' + (currentSubmodalSearch ? 'No matching leads found.' : 'No hot prospects found in current month.') + '</td></tr>';
-
         if (tfoot) tfoot.innerHTML = '';
-
         return;
-
     }
 
     var rowsHtml = '';
-
     var sumDeal = 0;
-
     var sumExp = 0;
 
+    var canEditProspectDate = @json(auth()->user() ? (auth()->user()->isSuperAdmin() || auth()->user()->isCompanyAdminRole() || auth()->user()->isSystemAdmin() || auth()->user()->isCbo()) : false);
+
     leads.forEach(function(l, i) {
-
         var dVal = parseFloat(l.deal_value) || 0;
-
         var eVal = parseFloat(l.expected_value) || 0;
-
         sumDeal += dVal;
-
         sumExp += eVal;
 
         var custCol = l.lead_view_url
-
             ? '<a href="' + l.lead_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Lead details">' + (l.customer_name || '-') + ' ↗</a>'
-
             : (l.project_view_url
-
                 ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:700; color:var(--da-orange); text-decoration:none;" title="View Project details">' + (l.customer_name || '-') + ' ↗</a>'
-
                 : '<span style="font-weight:700; color:var(--da-text);">' + (l.customer_name || '-') + '</span>');
 
         var prodCol = l.project_view_url
-
             ? '<a href="' + l.project_view_url + '" target="_blank" style="font-weight:600; color:#1e40af; text-decoration:none;" title="View Project details">' + (l.product_name || '-') + ' ↗</a>'
-
             : (l.product_name || '-');
 
         var statusIcon = (l.source_type === 'renewal' || l.status === 'Renewal') ? '🔄 ' : ((l.source_type === 'development') ? '💻 ' : '🔥 ');
-
         var statusBg = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#f0fdf4' : ((l.source_type === 'development') ? '#eff6ff' : '#fef2f2');
-
         var statusColor = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#16a34a' : ((l.source_type === 'development') ? '#2563eb' : '#dc2626');
-
         var statusBorder = (l.source_type === 'renewal' || l.status === 'Renewal') ? '#bbf7d0' : ((l.source_type === 'development') ? '#bfdbfe' : '#fecaca');
 
         var salesPerson = l.sales_person_name || l.executive_name || '-';
-
         var cstPerson   = l.cst_person_name || '-';
 
+        var closureDateCell = (l.closure_date || '-');
+        if (canEditProspectDate) {
+            var safeComp = (l.company_name || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            closureDateCell = '<div style="display:inline-flex; align-items:center; justify-content:center; gap:4px;">' +
+                '<span>' + (l.closure_date || '-') + '</span>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date (Company Admin Only)">✏️</button>' +
+                '</div>';
+        }
+
         rowsHtml += '<tr>' +
-
             '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
-
             '<td style="font-weight:600; color:var(--da-text);">' + (l.company_name || '-') + '</td>' +
-
             '<td>' + custCol + '</td>' +
-
             '<td style="font-weight:600; color:#334155;">' + prodCol + '</td>' +
-
             '<td style="text-align:center;">' +
-
                 '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; background:' + statusBg + '; color:' + statusColor + '; border:1px solid ' + statusBorder + ';">' +
-
                     statusIcon + (l.status || 'Hot') +
-
                 '</span>' +
-
             '</td>' +
-
             '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(dVal) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(eVal) + '</td>' +
-
-            '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + (l.closure_date || '-') + '</td>' +
-
+            '<td style="text-align:center; font-size:12px; color:#475569; white-space:nowrap;">' + closureDateCell + '</td>' +
             '<td style="font-weight:600; color:#1e293b;">' + salesPerson + '</td>' +
-
             '<td style="font-weight:600; color:#0d9488;">' + cstPerson + '</td>' +
-
         '</tr>';
-
     });
 
     tbody.innerHTML = rowsHtml;
 
     if (tfoot) {
-
         tfoot.innerHTML = '<tr>' +
-
             '<td colspan="5" style="font-weight:800;">Total (' + leads.length + ' Hot Prospects)</td>' +
-
             '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-
             '<td colspan="3"></td>' +
-
         '</tr>';
-
     }
-
 }
 
-function renderProductPivotTable(allLeads, searchQ) {
+function renderBranchPivotTable(allLeads, searchQ) {
+    var tbody = document.getElementById('daBranchPivotBody');
+    var tfoot = document.getElementById('daBranchPivotFoot');
+    var countBadge = document.getElementById('daSubmodalCountBranch');
 
-    var tbody = document.getElementById('daBranchProductPivotBody');
-
-    var tfoot = document.getElementById('daBranchProductPivotFoot');
-
-    var countBadge = document.getElementById('daSubmodalCountProduct');
-
-    // Aggregate by product
-
-    var productMap = {};
-
+    var branchMap = {};
     var totalOverallDeal = 0;
 
     allLeads.forEach(function(l) {
-
-        var pName = (l.product_name || 'Unspecified Product').trim();
-
+        var bName = (l.branch_name || 'Coimbatore (HO)').trim();
         var dVal = parseFloat(l.deal_value) || 0;
-
         var eVal = parseFloat(l.expected_value) || 0;
+        totalOverallDeal += dVal;
 
+        if (!branchMap[bName]) {
+            branchMap[bName] = {
+                name: bName,
+                count: 0,
+                deal_value: 0,
+                expected_value: 0,
+                leads: []
+            };
+        }
+        branchMap[bName].count += 1;
+        branchMap[bName].deal_value += dVal;
+        branchMap[bName].expected_value += eVal;
+        branchMap[bName].leads.push(l);
+    });
+
+    var branchList = Object.keys(branchMap).map(function(k) {
+        return branchMap[k];
+    });
+
+    branchList.sort(function(a, b) {
+        return b.deal_value - a.deal_value;
+    });
+
+    if (countBadge) countBadge.textContent = branchList.length;
+
+    var filteredBranches = branchList.filter(function(b) {
+        if (!searchQ) return true;
+        return b.name.toLowerCase().indexOf(searchQ) !== -1;
+    });
+
+    if (!tbody) return;
+
+    if (filteredBranches.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching branches found.' : 'No active branches found.') + '</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        return;
+    }
+
+    var rowsHtml = '';
+    var sumCount = 0;
+    var sumDeal = 0;
+    var sumExp = 0;
+
+    filteredBranches.forEach(function(b, i) {
+        sumCount += b.count;
+        sumDeal += b.deal_value;
+        sumExp += b.expected_value;
+        var avgVal = b.count > 0 ? (b.deal_value / b.count) : 0;
+
+        rowsHtml += '<tr style="cursor:pointer;" onclick="togglePivotAccordion(\'branch\', \'' + i + '\')">' +
+            '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
+            '<td style="font-weight:700; color:var(--da-text);">' +
+                '<span style="display:inline-flex; align-items:center; gap:6px;">' +
+                    '<span id="da-accordion-icon-branch-' + i + '" style="font-size:10px; color:var(--da-orange);">▶</span>' +
+                    '<span>' + b.name + '</span>' +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:center;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#e0f2fe; color:#0369a1;">' +
+                    b.count +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(b.deal_value) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(b.expected_value) + '</td>' +
+            '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
+            '<td style="text-align:center;">' +
+                '<button type="button" class="da-compare-btn" onclick="event.stopPropagation(); togglePivotAccordion(\'branch\', \'' + i + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads <span id="da-accordion-btn-icon-branch-' + i + '">▼</span>' +
+                '</button>' +
+            '</td>' +
+        '</tr>' +
+        '<tr id="da-accordion-branch-' + i + '" class="da-pivot-accordion-row" style="display:none; background:#f8fafc;">' +
+            '<td colspan="7" style="padding:10px 14px; border-bottom:2px solid #cbd5e1;">' +
+                buildAccordionSubTableHtml(b.leads) +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+
+    if (tfoot) {
+        tfoot.innerHTML = '<tr>' +
+            '<td colspan="2" style="font-weight:800;">Total (' + filteredBranches.length + ' Branches)</td>' +
+            '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
+            '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
+            '<td colspan="2"></td>' +
+        '</tr>';
+    }
+}
+
+function renderProductPivotTable(allLeads, searchQ) {
+    var tbody = document.getElementById('daBranchProductPivotBody');
+    var tfoot = document.getElementById('daBranchProductPivotFoot');
+    var countBadge = document.getElementById('daSubmodalCountProduct');
+
+    var productMap = {};
+    var totalOverallDeal = 0;
+
+    allLeads.forEach(function(l) {
+        var pName = (l.product_name || 'Unspecified Product').trim();
+        var dVal = parseFloat(l.deal_value) || 0;
+        var eVal = parseFloat(l.expected_value) || 0;
         totalOverallDeal += dVal;
 
         if (!productMap[pName]) {
-
             productMap[pName] = {
-
                 name: pName,
-
                 count: 0,
-
                 deal_value: 0,
-
-                expected_value: 0
-
+                expected_value: 0,
+                leads: []
             };
-
         }
-
         productMap[pName].count += 1;
-
         productMap[pName].deal_value += dVal;
-
         productMap[pName].expected_value += eVal;
-
+        productMap[pName].leads.push(l);
     });
 
     var productList = Object.keys(productMap).map(function(k) {
-
         return productMap[k];
-
     });
 
-    // Sort descending by deal value
-
     productList.sort(function(a, b) {
-
         return b.deal_value - a.deal_value;
-
     });
 
     if (countBadge) countBadge.textContent = productList.length;
 
-    // Filter by search query if in product tab or global query
-
     var filteredProducts = productList.filter(function(p) {
-
         if (!searchQ) return true;
-
         return p.name.toLowerCase().indexOf(searchQ) !== -1;
-
     });
 
     if (!tbody) return;
 
     if (filteredProducts.length === 0) {
-
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching products found.' : 'No products found.') + '</td></tr>';
-
         if (tfoot) tfoot.innerHTML = '';
-
         return;
-
     }
 
     var rowsHtml = '';
-
     var sumCount = 0;
-
     var sumDeal = 0;
-
     var sumExp = 0;
 
     filteredProducts.forEach(function(p, i) {
-
         sumCount += p.count;
-
         sumDeal += p.deal_value;
-
         sumExp += p.expected_value;
-
         var avgVal = p.count > 0 ? (p.deal_value / p.count) : 0;
 
-        var safeProdName = p.name.replace(/'/g, "\\'");
-
-        rowsHtml += '<tr>' +
-
+        rowsHtml += '<tr style="cursor:pointer;" onclick="togglePivotAccordion(\'product\', \'' + i + '\')">' +
             '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
-
             '<td style="font-weight:700; color:var(--da-text);">' +
-
-                '<span onclick="filterFullByItem(\'' + safeProdName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeProdName + '">' +
-
-                    p.name +
-
+                '<span style="display:inline-flex; align-items:center; gap:6px;">' +
+                    '<span id="da-accordion-icon-product-' + i + '" style="font-size:10px; color:var(--da-orange);">▶</span>' +
+                    '<span>' + p.name + '</span>' +
                 '</span>' +
-
             '</td>' +
-
             '<td style="text-align:center;">' +
-
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#fee2e2; color:#b91c1c;">' +
-
                     p.count +
-
                 '</span>' +
-
             '</td>' +
-
             '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(p.deal_value) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(p.expected_value) + '</td>' +
-
             '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
-
             '<td style="text-align:center;">' +
-
-                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeProdName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
-
-                    'View Leads ↗' +
-
+                '<button type="button" class="da-compare-btn" onclick="event.stopPropagation(); togglePivotAccordion(\'product\', \'' + i + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads <span id="da-accordion-btn-icon-product-' + i + '">▼</span>' +
                 '</button>' +
-
             '</td>' +
-
+        '</tr>' +
+        '<tr id="da-accordion-product-' + i + '" class="da-pivot-accordion-row" style="display:none; background:#f8fafc;">' +
+            '<td colspan="7" style="padding:10px 14px; border-bottom:2px solid #cbd5e1;">' +
+                buildAccordionSubTableHtml(p.leads) +
+            '</td>' +
         '</tr>';
-
     });
 
     tbody.innerHTML = rowsHtml;
 
     if (tfoot) {
-
         tfoot.innerHTML = '<tr>' +
-
             '<td colspan="2" style="font-weight:800;">Total (' + filteredProducts.length + ' Products)</td>' +
-
             '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
-
             '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-
             '<td colspan="2"></td>' +
-
         '</tr>';
-
     }
-
 }
 
 function renderExecutivePivotTable(allLeads, searchQ) {
-
     var tbody = document.getElementById('daBranchExecutivePivotBody');
-
     var tfoot = document.getElementById('daBranchExecutivePivotFoot');
-
     var countBadge = document.getElementById('daSubmodalCountExecutive');
 
-    // Aggregate by executive
-
     var execMap = {};
-
     var totalOverallDeal = 0;
 
     allLeads.forEach(function(l) {
-
         var eName = (l.executive_name || 'Unassigned').trim();
-
         var dVal = parseFloat(l.deal_value) || 0;
-
         var eVal = parseFloat(l.expected_value) || 0;
-
         totalOverallDeal += dVal;
 
         if (!execMap[eName]) {
-
             execMap[eName] = {
-
                 name: eName,
-
                 count: 0,
-
                 deal_value: 0,
-
-                expected_value: 0
-
+                expected_value: 0,
+                leads: []
             };
-
         }
-
         execMap[eName].count += 1;
-
         execMap[eName].deal_value += dVal;
-
         execMap[eName].expected_value += eVal;
-
+        execMap[eName].leads.push(l);
     });
 
     var execList = Object.keys(execMap).map(function(k) {
-
         return execMap[k];
-
     });
 
-    // Sort descending by deal value
-
     execList.sort(function(a, b) {
-
         return b.deal_value - a.deal_value;
-
     });
 
     if (countBadge) countBadge.textContent = execList.length;
 
-    // Filter by search query if in executive tab or global query
-
     var filteredExecs = execList.filter(function(e) {
-
         if (!searchQ) return true;
-
         return e.name.toLowerCase().indexOf(searchQ) !== -1;
-
     });
 
     if (!tbody) return;
 
     if (filteredExecs.length === 0) {
-
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:36px; color:#94a3b8;">' + (searchQ ? 'No matching executives found.' : 'No sales executives found.') + '</td></tr>';
-
         if (tfoot) tfoot.innerHTML = '';
-
         return;
-
     }
 
     var rowsHtml = '';
-
     var sumCount = 0;
-
     var sumDeal = 0;
-
     var sumExp = 0;
 
     filteredExecs.forEach(function(e, i) {
-
         sumCount += e.count;
-
         sumDeal += e.deal_value;
-
         sumExp += e.expected_value;
-
         var avgVal = e.count > 0 ? (e.deal_value / e.count) : 0;
 
-        var safeExecName = e.name.replace(/'/g, "\\'");
-
-        rowsHtml += '<tr>' +
-
+        rowsHtml += '<tr style="cursor:pointer;" onclick="togglePivotAccordion(\'executive\', \'' + i + '\')">' +
             '<td style="text-align:center; font-weight:700; color:#94a3b8;">' + (i + 1) + '</td>' +
-
             '<td style="font-weight:700; color:var(--da-text);">' +
-
-                '<span onclick="filterFullByItem(\'' + safeExecName + '\')" style="color:var(--da-orange); cursor:pointer; text-decoration:underline; text-underline-offset:2px;" title="Click to view leads for ' + safeExecName + '">' +
-
-                    e.name +
-
+                '<span style="display:inline-flex; align-items:center; gap:6px;">' +
+                    '<span id="da-accordion-icon-executive-' + i + '" style="font-size:10px; color:var(--da-orange);">▶</span>' +
+                    '<span>' + e.name + '</span>' +
                 '</span>' +
-
             '</td>' +
-
             '<td style="text-align:center;">' +
-
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:#fee2e2; color:#b91c1c;">' +
-
                     e.count +
-
                 '</span>' +
-
             '</td>' +
-
             '<td style="text-align:right; font-weight:700; color:var(--da-text);">' + fmt(e.deal_value) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(e.expected_value) + '</td>' +
-
             '<td style="text-align:right; font-weight:600; color:#475569;">' + fmt(avgVal) + '</td>' +
-
             '<td style="text-align:center;">' +
-
-                '<button type="button" class="da-compare-btn" onclick="filterFullByItem(\'' + safeExecName + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
-
-                    'View Leads ↗' +
-
+                '<button type="button" class="da-compare-btn" onclick="event.stopPropagation(); togglePivotAccordion(\'executive\', \'' + i + '\')" style="padding:3px 8px; font-size:11px; background:rgba(254,95,4,0.1); color:var(--da-orange); border:1px solid rgba(254,95,4,0.3);">' +
+                    'View Leads <span id="da-accordion-btn-icon-executive-' + i + '">▼</span>' +
                 '</button>' +
-
             '</td>' +
-
+        '</tr>' +
+        '<tr id="da-accordion-executive-' + i + '" class="da-pivot-accordion-row" style="display:none; background:#f8fafc;">' +
+            '<td colspan="7" style="padding:10px 14px; border-bottom:2px solid #cbd5e1;">' +
+                buildAccordionSubTableHtml(e.leads) +
+            '</td>' +
         '</tr>';
-
     });
 
     tbody.innerHTML = rowsHtml;
 
     if (tfoot) {
-
         tfoot.innerHTML = '<tr>' +
-
             '<td colspan="2" style="font-weight:800;">Total (' + filteredExecs.length + ' Executives)</td>' +
-
             '<td style="text-align:center; font-weight:800;">' + sumCount + '</td>' +
-
             '<td style="text-align:right; font-weight:800;">' + fmt(sumDeal) + '</td>' +
-
             '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(sumExp) + '</td>' +
-
             '<td colspan="2"></td>' +
-
         '</tr>';
-
     }
-
 }
+
+
+/* ── Branch Hot Leads Stacked Modal ── */
 
 /* ── Branch Hot Leads Stacked Modal ── */
 
 window.openBranchHotLeadsModal = function(target, targetName) {
+
+    window.currentBranchHotLeadsTarget = target;
+    window.currentBranchHotLeadsTargetName = targetName;
 
     var modal = document.getElementById('daBranchHotLeadsModal');
 
@@ -10697,6 +10806,206 @@ function renderRecentLeads(leads) {
         console.error('❌ dashboardLoad not found');
 
     }
+
+window.showToast = function(title, desc, type) {
+    type = type || 'success';
+    var container = document.getElementById('daCustomToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'daCustomToastContainer';
+        document.body.appendChild(container);
+    }
+
+    var toast = document.createElement('div');
+    toast.className = 'da-toast-alert' + (type === 'error' ? ' da-toast-error' : '');
+
+    var iconSymbol = type === 'error' ? '✕' : '✓';
+    var descHtml = desc ? ('<p class="da-toast-desc">' + escapeHtml(desc) + '</p>') : '';
+
+    toast.innerHTML = 
+        '<div class="da-toast-icon">' + iconSymbol + '</div>' +
+        '<div class="da-toast-body">' +
+            '<h4 class="da-toast-title">' + escapeHtml(title) + '</h4>' +
+            descHtml +
+        '</div>' +
+        '<button type="button" class="da-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+        toast.classList.add('hiding');
+        setTimeout(function() {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 3500);
+};
+
+window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, companyName) {
+    var leadIdEl = document.getElementById('daEditLeadId');
+    var piIdEl = document.getElementById('daEditPiId');
+    var newDateEl = document.getElementById('daEditNewDate');
+    var reasonEl = document.getElementById('daEditReason');
+    var remarksEl = document.getElementById('daEditRemarks');
+    var errorMsgEl = document.getElementById('daEditDateErrorMessage');
+    var companyNameEl = document.getElementById('daEditDateCompanyName');
+
+    if (leadIdEl) leadIdEl.value = (leadId && leadId !== 'null') ? leadId : '';
+    if (piIdEl) piIdEl.value = (piId && piId !== 'null') ? piId : '';
+    if (newDateEl) newDateEl.value = currentDateRaw || '';
+    if (reasonEl) reasonEl.value = '';
+    if (remarksEl) remarksEl.value = '';
+    if (errorMsgEl) errorMsgEl.style.display = 'none';
+    if (companyNameEl) companyNameEl.textContent = 'Company: ' + (companyName || 'Prospect Item');
+
+    if (typeof window.toggleDateChangeRemarksVisibility === 'function') {
+        window.toggleDateChangeRemarksVisibility();
+    }
+
+    var modal = document.getElementById('daEditProspectDateModal');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.closeEditProspectDateModal = function() {
+    var modal = document.getElementById('daEditProspectDateModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.toggleDateChangeRemarksVisibility = function() {
+    var reasonSelect = document.getElementById('daEditReason');
+    var remarksAsterisk = document.getElementById('daRemarksRequiredAsterisk');
+    var remarksTextarea = document.getElementById('daEditRemarks');
+
+    if (reasonSelect && reasonSelect.value === 'Others') {
+        if (remarksAsterisk) remarksAsterisk.style.display = 'inline';
+        if (remarksTextarea) remarksTextarea.required = true;
+    } else {
+        if (remarksAsterisk) remarksAsterisk.style.display = 'none';
+        if (remarksTextarea) remarksTextarea.required = false;
+    }
+};
+
+window.submitProspectDateUpdate = function(event) {
+    if (event) event.preventDefault();
+
+    var leadId = document.getElementById('daEditLeadId')?.value || '';
+    var piId = document.getElementById('daEditPiId')?.value || '';
+    var newDate = document.getElementById('daEditNewDate')?.value || '';
+    var reason = document.getElementById('daEditReason')?.value || '';
+    var remarks = document.getElementById('daEditRemarks')?.value || '';
+    var errorMsgEl = document.getElementById('daEditDateErrorMessage');
+    var saveBtn = document.getElementById('daEditSaveBtn');
+
+    if (!newDate) {
+        if (errorMsgEl) {
+            errorMsgEl.textContent = 'Please select a new date.';
+            errorMsgEl.style.display = 'block';
+        }
+        return;
+    }
+
+    if (!reason) {
+        if (errorMsgEl) {
+            errorMsgEl.textContent = 'Please select a reason for the date change.';
+            errorMsgEl.style.display = 'block';
+        }
+        return;
+    }
+
+    if (reason === 'Others' && !remarks.trim()) {
+        if (errorMsgEl) {
+            errorMsgEl.textContent = 'Remarks are required when reason is "Others".';
+            errorMsgEl.style.display = 'block';
+        }
+        return;
+    }
+
+    if (errorMsgEl) errorMsgEl.style.display = 'none';
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Updating...';
+    }
+
+    var token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    fetch('{{ url("/dashboard/update-prospect-date") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': token,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            lead_id: leadId ? parseInt(leadId) : null,
+            pi_id: piId ? parseInt(piId) : null,
+            new_date: newDate,
+            reason: reason,
+            remarks: remarks
+        })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Update Date';
+        }
+
+        if (data.success) {
+            window.closeEditProspectDateModal();
+
+            // 1. REALTIME IN-MEMORY UPDATE & DOM RE-RENDER
+            if (typeof currentLoadedLeads !== 'undefined' && Array.isArray(currentLoadedLeads)) {
+                var targetLeadId = leadId ? parseInt(leadId) : null;
+                var targetPiId = piId ? parseInt(piId) : null;
+
+                currentLoadedLeads.forEach(function(item) {
+                    var matchLead = targetLeadId && item.lead_id == targetLeadId;
+                    var matchPi = targetPiId && item.pi_id == targetPiId;
+                    if (matchLead || matchPi) {
+                        item.closure_date = data.closure_date;
+                        item.closure_date_raw = data.closure_date_raw;
+                    }
+                });
+
+                if (typeof filterSubmodalViews === 'function') {
+                    filterSubmodalViews();
+                }
+            }
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Date Updated',
+                    text: data.message || 'Date updated successfully and recorded in timeline.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } else {
+                window.showToast('Date Updated Successfully', data.message || 'Date updated & recorded in project timeline.', 'success');
+            }
+
+            // 2. BACKGROUND SERVER SYNC
+            if (window.currentBranchHotLeadsTarget && typeof window.openBranchHotLeadsModal === 'function') {
+                window.openBranchHotLeadsModal(window.currentBranchHotLeadsTarget, window.currentBranchHotLeadsTargetName);
+            }
+        } else {
+            if (errorMsgEl) {
+                errorMsgEl.textContent = data.message || 'Failed to update date.';
+                errorMsgEl.style.display = 'block';
+            }
+        }
+    })
+    .catch(function(err) {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Update Date';
+        }
+        if (errorMsgEl) {
+            errorMsgEl.textContent = 'An error occurred while updating the date.';
+            errorMsgEl.style.display = 'block';
+        }
+        console.error(err);
+    });
+};
 
 }());
 

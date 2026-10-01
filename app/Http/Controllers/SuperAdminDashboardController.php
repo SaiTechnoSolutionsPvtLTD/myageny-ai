@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Carbon\Carbon;
@@ -703,10 +704,8 @@ class SuperAdminDashboardController extends ApiController
                         });
                 });
             })
-            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+            ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId)        $lq->where('branch_id', $branchId);
-                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
             });
         $todayConvertedCount = (clone $todayConvertedQuery)->count();
         $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
@@ -1886,10 +1885,8 @@ class SuperAdminDashboardController extends ApiController
                         $sub->whereNull('converted_at')->whereDate('created_at', today());
                     });
             })
-            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
+            ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId) $lq->where('branch_id', $branchId);
-                if ($userId)   $lq->where('assigned_to', $userId);
             });
         $todayConvertedCount = (clone $todayConvertedQuery)->count();
         $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
@@ -2675,72 +2672,44 @@ class SuperAdminDashboardController extends ApiController
         $renewalPis = $renewalPisQuery->get();
 
         foreach ($renewalPis as $pi) {
-            $rDateStr = null;
-            $formData = is_array($pi->custom_form_data)
-                ? $pi->custom_form_data
-                : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+            $rDate = $this->resolveCstProspectTargetDate($pi);
 
-            foreach ($formData as $field) {
-                if (!is_array($field)) continue;
-                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
-                $fieldVal = $field['value'] ?? '';
-                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
-                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+            if ($rDate && $rDate->between($cmStart, $cmEnd)) {
+                $lead = $pi->lead;
+                $lp = $pi->leadProduct;
+                $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+                $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-                if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date'], true)) {
-                    if (!empty($val)) {
-                        try {
-                            $rDateStr = Carbon::parse($val)->toDateString();
-                            break;
-                        } catch (\Throwable $e) {
-                        }
-                    }
+                $seenPiIds[$pi->id] = true;
+                if ($pi->lead_product_id) {
+                    $seenLpIds[$pi->lead_product_id] = true;
                 }
-            }
 
-            if (!$rDateStr && $pi->project_delivery_date) {
-                $rDateStr = Carbon::parse($pi->project_delivery_date)->toDateString();
-            }
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
-            if ($rDateStr) {
-                $rDate = Carbon::parse($rDateStr);
-                if ($rDate->between($cmStart, $cmEnd)) {
-                    $lead = $pi->lead;
-                    $lp = $pi->leadProduct;
-                    $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
-                    $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
-
-                    $seenPiIds[$pi->id] = true;
-                    if ($pi->lead_product_id) {
-                        $seenLpIds[$pi->lead_product_id] = true;
-                    }
-
-                    $salesPerson = $lead?->assignedTo?->name ?: '-';
-                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
-                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
-
-                    $items->push([
-                        'pi_id'            => $pi->id,
-                        'lead_id'          => $pi->lead_id,
-                        'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
-                        'project_view_url' => url('/projects-details/' . $pi->id),
-                        'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
-                        'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
-                        'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
-                        'status'           => 'Renewal',
-                        'deal_value'       => $dealVal,
-                        'expected_value'   => $expVal,
-                        'closure_date'     => $rDate->format('d M Y'),
-                        'closure_date_raw' => $rDate->format('Y-m-d'),
-                        'sales_person_name' => $salesPerson,
-                        'cst_person_name'   => $cstPerson,
-                        'assigned_to'      => $assignedName,
-                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
-                        'branch_id'        => $lead?->branch_id,
-                        'branch_name'      => $lead?->branch?->name ?: 'General',
-                        'source_type'      => 'renewal',
-                    ]);
-                }
+                $items->push([
+                    'pi_id'            => $pi->id,
+                    'lead_id'          => $pi->lead_id,
+                    'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
+                    'project_view_url' => url('/projects-details/' . $pi->id),
+                    'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
+                    'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
+                    'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
+                    'status'           => 'Renewal',
+                    'deal_value'       => $dealVal,
+                    'expected_value'   => $expVal,
+                    'closure_date'     => $rDate->format('d M Y'),
+                    'closure_date_raw' => $rDate->format('Y-m-d'),
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'assigned_to'      => $assignedName,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
+                    'branch_id'        => $lead?->branch_id,
+                    'branch_name'      => $lead?->branch?->name ?: 'General',
+                    'source_type'      => 'renewal',
+                ]);
             }
         }
 
@@ -2762,6 +2731,7 @@ class SuperAdminDashboardController extends ApiController
             })
             ->where(function ($q) use ($cmStart, $cmEnd) {
                 $q->whereBetween('expected_date', [$cmStart, $cmEnd])
+                    ->orWhereBetween('project_delivery_date', [$cmStart, $cmEnd])
                     ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
                         $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
                     });
@@ -2789,10 +2759,9 @@ class SuperAdminDashboardController extends ApiController
 
             $lead = $pi->lead;
             $lp = $pi->leadProduct;
-            $expDate = $pi->expected_date ?? $lp?->closure_date;
-            if (!$expDate) continue;
+            $cExpDate = $this->resolveCstProspectTargetDate($pi);
+            if (!$cExpDate) continue;
 
-            $cExpDate = Carbon::parse($expDate);
             if (!$cExpDate->between($cmStart, $cmEnd)) continue;
 
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
@@ -2826,6 +2795,90 @@ class SuperAdminDashboardController extends ApiController
         }
 
         return $items;
+    }
+
+    /**
+     * Resolve target date for CST prospect item based on product and department type.
+     */
+    protected function resolveCstProspectTargetDate(ProductionInitiation $pi): ?Carbon
+    {
+        $productName = strtolower(trim((string)($pi->product_name ?: ($pi->product?->product_name ?: ($pi->leadProduct?->product_name ?: '')))));
+        $deptName = strtolower(trim((string)($pi->department?->name ?: '')));
+
+        $formData = is_array($pi->custom_form_data)
+            ? $pi->custom_form_data
+            : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+        $getFormDate = function (array $keywords) use ($formData): ?Carbon {
+            foreach ($formData as $field) {
+                if (!is_array($field)) continue;
+                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                $fieldVal = $field['value'] ?? '';
+                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+
+                foreach ($keywords as $kw) {
+                    if ($key === strtolower($kw) || str_contains($key, strtolower($kw))) {
+                        if (!empty($val)) {
+                            try {
+                                return Carbon::parse($val);
+                            } catch (\Throwable $e) {}
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
+
+        // 1. Development: Expected Date first priority, else Delivery date
+        $isDevelopment = ($pi->department_id == 1)
+            || str_contains($deptName, 'develop')
+            || str_contains($productName, 'develop')
+            || str_contains($productName, 'website')
+            || str_contains($productName, 'app')
+            || str_contains($productName, 'software');
+
+        if ($isDevelopment) {
+            return $expectedDate ?: ($deliveryDate ?: null);
+        }
+
+        // 2. Onetime design: Delivery date
+        $isOnetimeDesign = str_contains($productName, 'onetime')
+            || str_contains($productName, 'one time')
+            || str_contains($productName, 'design')
+            || str_contains($deptName, 'design');
+
+        if ($isOnetimeDesign) {
+            return $deliveryDate ?: ($expectedDate ?: null);
+        }
+
+        // 3. Renewal products - Lead Generation: Campaign expiry date
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen');
+        if ($isLeadGen) {
+            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 4. Renewal products - SMM Sheet: Expiry date
+        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
+        if ($isSmm) {
+            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 5. SEO Products: Expiry date or delivery date
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            $seoExpiry = $getFormDate(['seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $seoExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // Default fallback for any other CST / Renewal item
+        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
+        return $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
     }
 
     public function buildCstProspectMetrics(?Request $request = null): array
@@ -3446,5 +3499,157 @@ class SuperAdminDashboardController extends ApiController
             'total_expected' => (float) $rows->sum('expected_value'),
             'leads'          => $rows,
         ], 'Branch hot leads fetched.');
+    }
+
+    /**
+     * Update prospect date (Closure Date / Delivery Date / Expected Date) with reason and remarks.
+     * Only Company Admin / Super Admin / CBO users can update this.
+     */
+    public function updateProspectDate(Request $request): JsonResponse
+    {
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
+        if (!$currentUser) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        // Authorization check: Only Company Admin / Super Admin / CBO
+        $isCompanyAdmin = $currentUser->isSuperAdmin() ||
+                          $currentUser->isSystemAdmin() ||
+                          $currentUser->isCompanyAdminRole() ||
+                          $currentUser->isCbo();
+
+        if (!$isCompanyAdmin) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Company Admin can update closure dates.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'lead_id'  => ['nullable', 'integer'],
+            'pi_id'    => ['nullable', 'integer'],
+            'new_date' => ['required', 'date'],
+            'reason'   => ['required', 'string', 'max:255'],
+            'remarks'  => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $leadId  = $request->input('lead_id');
+        $piId    = $request->input('pi_id');
+        $newDate = Carbon::parse($request->input('new_date'));
+        $reason  = trim((string)$request->input('reason'));
+        $remarks = trim((string)$request->input('remarks'));
+
+        if ($reason === 'Others' && empty($remarks)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Remarks are required when reason is "Others".',
+            ], 422);
+        }
+
+        $updated = false;
+        $formattedNewDate = $newDate->format('d M Y');
+        $formattedNewDateRaw = $newDate->format('Y-m-d');
+
+        // 1. If ProductionInitiation ID (Project item)
+        if ($piId) {
+            $pi = ProductionInitiation::find($piId);
+            if ($pi) {
+                $oldDate = $pi->project_delivery_date ?: $pi->expected_date;
+                $oldDateStr = $oldDate ? Carbon::parse($oldDate)->format('d M Y') : 'None';
+
+                // Update delivery date & expected date
+                $pi->update([
+                    'project_delivery_date' => $formattedNewDateRaw,
+                    'expected_date'         => $formattedNewDateRaw,
+                ]);
+
+                // Also update associated lead product if exists
+                if ($pi->lead_product_id) {
+                    LeadProduct::where('id', $pi->lead_product_id)->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                } elseif ($pi->lead_id) {
+                    LeadProduct::where('lead_id', $pi->lead_id)->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                }
+
+                // Construct timeline content
+                $timelineContent = "Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                if (!empty($reason)) {
+                    $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
+                }
+                if (!empty($remarks)) {
+                    $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
+                }
+
+                // Record in Project Timeline (ProjectUpdate)
+                $pi->projectUpdates()->create([
+                    'type'       => 'schedule_history',
+                    'content'    => $timelineContent,
+                    'created_by' => $currentUser->id,
+                ]);
+
+                $updated = true;
+            }
+        }
+
+        // 2. If Lead ID (or fallback when piId not provided or lead needs update)
+        if ($leadId) {
+            $lead = Lead::find($leadId);
+            if ($lead) {
+                // Find or update lead products
+                $lps = LeadProduct::where('lead_id', $leadId)->get();
+                foreach ($lps as $lp) {
+                    $lp->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                }
+
+                // If lead has production initiations that weren't updated above, update them too
+                if (!$piId) {
+                    $pis = ProductionInitiation::where('lead_id', $leadId)->get();
+                    foreach ($pis as $pItem) {
+                        $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
+                        $pItem->update([
+                            'project_delivery_date' => $formattedNewDateRaw,
+                            'expected_date'         => $formattedNewDateRaw,
+                        ]);
+
+                        $timelineContent = "Closure / Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                        if (!empty($reason)) {
+                            $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
+                        }
+                        if (!empty($remarks)) {
+                            $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
+                        }
+
+                        $pItem->projectUpdates()->create([
+                            'type'       => 'schedule_history',
+                            'content'    => $timelineContent,
+                            'created_by' => $currentUser->id,
+                        ]);
+                    }
+                }
+
+                $updated = true;
+            }
+        }
+
+        if (!$updated) {
+            return response()->json(['success' => false, 'message' => 'Lead or Project record not found.'], 404);
+        }
+
+        return response()->json([
+            'success'          => true,
+            'message'          => 'Date updated successfully and recorded in project timeline.',
+            'closure_date'     => $formattedNewDate,
+            'closure_date_raw' => $formattedNewDateRaw,
+        ]);
     }
 }
