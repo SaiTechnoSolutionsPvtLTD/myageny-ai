@@ -1054,7 +1054,7 @@ class CstDailyClosingController extends Controller
         switch ($metric) {
             case 'today_revenue':
                 $title = "Today's Revenue Payment Collection";
-                $q = LeadProductPayment::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'leadProduct.product:id,name', 'recorder:id,name']);
+                $q = LeadProductPayment::with(['lead.branch', 'leadProduct.product', 'recordedBy']);
                 if (is_array($dateRangeFilter)) {
                     $q->whereBetween('payment_date', [$dateRangeFilter[0], $dateRangeFilter[1]]);
                 } else {
@@ -1083,14 +1083,14 @@ class CstDailyClosingController extends Controller
                         'amount'       => (float) $p->amount,
                         'date'         => $p->payment_date ? Carbon::parse($p->payment_date)->format('d M Y') : '—',
                         'mode'         => ucfirst($p->payment_mode ?? 'online'),
-                        'recorded_by'  => $p->recorder?->name ?: 'System',
+                        'recorded_by'  => $p->recordedBy?->name ?: 'System',
                     ];
                 }
                 break;
 
             case 'till_now_achieved':
                 $title = "Month-to-Date Achieved Revenue Collection";
-                $q = LeadProductPayment::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'leadProduct.product:id,name', 'recorder:id,name'])
+                $q = LeadProductPayment::with(['lead.branch', 'leadProduct.product', 'recordedBy'])
                     ->whereDate('payment_date', '>=', $monthStart->toDateString())
                     ->whereDate('payment_date', '<=', $parsedDate->toDateString());
                 if ($branchId) {
@@ -1107,7 +1107,7 @@ class CstDailyClosingController extends Controller
                             ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
                     });
                 }
-                $items = $q->latest('payment_date')->get();
+                $items = $q->latest('payment_date')->latest('id')->get();
                 foreach ($items as $p) {
                     $records[] = [
                         'account_name' => $p->lead?->company_name ?: ($p->lead?->name ?: 'Lead #' . $p->lead_id),
@@ -1116,15 +1116,15 @@ class CstDailyClosingController extends Controller
                         'amount'       => (float) $p->amount,
                         'date'         => $p->payment_date ? Carbon::parse($p->payment_date)->format('d M Y') : '—',
                         'mode'         => ucfirst($p->payment_mode ?? 'online'),
-                        'recorded_by'  => $p->recorder?->name ?: 'System',
+                        'recorded_by'  => $p->recordedBy?->name ?: 'System',
                     ];
                 }
                 break;
 
             case 'monthly_target':
                 $title = "Monthly Target Breakdown";
-                // Hot prospect lead products
-                $hotProds = LeadProduct::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'product:id,name'])
+                // 1. Hot prospect lead products
+                $hotProds = LeadProduct::with(['lead.branch', 'product'])
                     ->whereRaw('LOWER(product_status) = ?', ['hot'])
                     ->whereMonth('closure_date', $monthStart->month)
                     ->whereYear('closure_date', $monthStart->year);
@@ -1140,9 +1140,60 @@ class CstDailyClosingController extends Controller
                         'product_name' => $hp->product?->name ?: 'Prospect Deal',
                         'amount'       => (float) $hp->total_price,
                         'date'         => $hp->closure_date ? Carbon::parse($hp->closure_date)->format('d M Y') : '—',
-                        'mode'         => 'Prospect (Hot)',
+                        'mode'         => 'Hot Prospect',
                         'recorded_by'  => 'CST Target',
                     ];
+                }
+
+                // 2. Renewal Products
+                $renewalQuery = ProductionInitiation::with(['lead.branch', 'product', 'leadProduct'])
+                    ->whereHas('product', fn($q) => $q->where('is_this_renewal_product', true)->orWhere('count_wise_report', true));
+                if ($targetUserId) {
+                    $renewalQuery->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                } elseif (!empty($supportUserIds)) {
+                    $renewalQuery->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                }
+                foreach ($renewalQuery->get() as $ri) {
+                    $rDateStr = $this->extractRenewalDate($ri) ?: ($ri->leadProduct?->closure_date ? Carbon::parse($ri->leadProduct->closure_date)->toDateString() : null);
+                    if ($rDateStr) {
+                        $rDate = Carbon::parse($rDateStr);
+                        if ($rDate->month === $monthStart->month && $rDate->year === $monthStart->year) {
+                            $records[] = [
+                                'account_name' => $ri->lead?->company_name ?: ($ri->lead?->name ?: 'Lead #' . $ri->lead_id),
+                                'branch_name'  => $ri->lead?->branch?->name ?: '—',
+                                'product_name' => $ri->product?->name ?: 'Renewal Product',
+                                'amount'       => (float) ($ri->leadProduct?->total_price ?? 0),
+                                'date'         => $rDate->format('d M Y'),
+                                'mode'         => 'Renewal Target',
+                                'recorded_by'  => 'Renewal',
+                            ];
+                        }
+                    }
+                }
+
+                // 3. Dev > 60%
+                $devQuery = ProductionInitiation::with(['lead.branch', 'leadProduct'])
+                    ->where('department_id', 1);
+                if ($targetUserId) {
+                    $devQuery->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                } elseif (!empty($supportUserIds)) {
+                    $devQuery->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                }
+                foreach ($devQuery->get() as $di) {
+                    $tPrice = (float) ($di->leadProduct?->total_price ?? 0);
+                    $aPaid = (float) ($di->leadProduct?->amount_paid ?? 0);
+                    if ($tPrice > 0 && ($aPaid / $tPrice) >= 0.60) {
+                        $pending = max(0, $tPrice - $aPaid);
+                        $records[] = [
+                            'account_name' => $di->lead?->company_name ?: ($di->lead?->name ?: 'Lead #' . $di->lead_id),
+                            'branch_name'  => $di->lead?->branch?->name ?: '—',
+                            'product_name' => $di->product_name ?: 'Development Product',
+                            'amount'       => ($pending > 0 ? $pending : $tPrice),
+                            'date'         => $monthStart->format('M Y'),
+                            'mode'         => 'Dev Target (>60% Paid)',
+                            'recorded_by'  => 'Development',
+                        ];
+                    }
                 }
                 break;
 
@@ -1155,8 +1206,8 @@ class CstDailyClosingController extends Controller
                     'product_name' => 'Committed Target',
                     'amount'       => (float) $stats['monthly_target'],
                     'date'         => $parsedDate->format('M Y'),
-                    'mode'         => 'Target',
-                    'recorded_by'  => 'CST Team',
+                    'mode'         => 'Monthly Target',
+                    'recorded_by'  => 'CST Target',
                 ];
                 $records[] = [
                     'account_name' => 'Till Now Achieved',
@@ -1165,13 +1216,23 @@ class CstDailyClosingController extends Controller
                     'amount'       => (float) $stats['till_now_achieved'],
                     'date'         => $parsedDate->format('d M Y'),
                     'mode'         => 'Achieved (' . $stats['completed_percentage'] . '%)',
-                    'recorded_by'  => 'CST Team',
+                    'recorded_by'  => 'Collections',
+                ];
+                $rem = max(0, (float)$stats['monthly_target'] - (float)$stats['till_now_achieved']);
+                $records[] = [
+                    'account_name' => 'Balance Target Remaining',
+                    'branch_name'  => '—',
+                    'product_name' => 'Remaining to reach Target',
+                    'amount'       => $rem,
+                    'date'         => $monthEnd->format('d M Y'),
+                    'mode'         => 'Target Gap',
+                    'recorded_by'  => 'Balance',
                 ];
                 break;
 
             case 'current_week_meetings':
                 $title = "Current Week Meetings, Reviews & Updates";
-                $meetingsQ = LeadReminder::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'user:id,name'])
+                $meetingsQ = LeadReminder::with(['lead.branch', 'user'])
                     ->where(fn($q) => $q->where('type', 'meeting')->orWhere('title', 'like', '%meeting%'))
                     ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
                 if ($targetUserId) {
@@ -1191,7 +1252,7 @@ class CstDailyClosingController extends Controller
                     ];
                 }
 
-                $updatesQ = \App\Models\LeadCstUpdate::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'user:id,name'])
+                $updatesQ = \App\Models\LeadCstUpdate::with(['lead.branch', 'user'])
                     ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
                 if ($targetUserId) {
                     $updatesQ->where('user_id', $targetUserId);
@@ -1202,7 +1263,7 @@ class CstDailyClosingController extends Controller
                     $records[] = [
                         'account_name' => $u->lead?->company_name ?: ($u->lead?->name ?: 'Lead #' . $u->lead_id),
                         'branch_name'  => $u->lead?->branch?->name ?: '—',
-                        'product_name' => ucfirst(str_replace('_', ' ', $u->update_type)),
+                        'product_name' => ucfirst(str_replace('_', ' ', (string) $u->update_type)),
                         'amount'       => 0,
                         'date'         => $u->created_at ? $u->created_at->format('d M Y h:i A') : '—',
                         'mode'         => Str::limit($u->notes ?? '', 60),
@@ -1213,7 +1274,7 @@ class CstDailyClosingController extends Controller
 
             case 'total_allocated_accounts':
                 $title = "Total Active Allocated Accounts";
-                $allocQ = Lead::with(['branch:id,name', 'cstExecutive:id,name', 'products:id,lead_id,product_id,product_status', 'products.product:id,name'])
+                $allocQ = Lead::with(['branch', 'customerSupportExecutive', 'products.product'])
                     ->whereNull('deleted_at')
                     ->whereHas('products', fn($pq) => $pq->where('product_status', 'converted'));
                 if ($targetUserId) {
@@ -1229,15 +1290,15 @@ class CstDailyClosingController extends Controller
                         'product_name' => $prodNames ?: 'Converted Product',
                         'amount'       => 0,
                         'date'         => $l->customer_support_allocated_at ? Carbon::parse($l->customer_support_allocated_at)->format('d M Y') : $l->created_at?->format('d M Y'),
-                        'mode'         => 'Active Allocation',
-                        'recorded_by'  => $l->cstExecutive?->name ?: 'Unassigned',
+                        'mode'         => 'Active Account',
+                        'recorded_by'  => $l->customerSupportExecutive?->name ?: 'Unassigned',
                     ];
                 }
                 break;
 
             case 'today_added_accounts':
                 $title = "Newly Added Allocated Accounts";
-                $addedQ = Lead::with(['branch:id,name', 'cstExecutive:id,name', 'products:id,lead_id,product_id,product_status', 'products.product:id,name'])
+                $addedQ = Lead::with(['branch', 'customerSupportExecutive', 'products.product'])
                     ->whereNull('deleted_at')
                     ->whereHas('products', fn($pq) => $pq->where('product_status', 'converted'))
                     ->where(function($q) use ($dateRangeFilter, $refDateStr) {
@@ -1269,14 +1330,14 @@ class CstDailyClosingController extends Controller
                         'amount'       => 0,
                         'date'         => $l->customer_support_allocated_at ? Carbon::parse($l->customer_support_allocated_at)->format('d M Y') : $l->created_at?->format('d M Y'),
                         'mode'         => 'Newly Added Today',
-                        'recorded_by'  => $l->cstExecutive?->name ?: 'Unassigned',
+                        'recorded_by'  => $l->customerSupportExecutive?->name ?: 'Unassigned',
                     ];
                 }
                 break;
 
             case 'welcome_call_pending_count':
                 $title = "Welcome Call Pending Accounts";
-                $ovpQ = ProductionInitiation::with(['lead:id,company_name,name,branch_id', 'lead.branch:id,name', 'product:id,name', 'ovpAllocatedUser:id,name'])
+                $ovpQ = ProductionInitiation::with(['lead.branch', 'product', 'ovpAllocatedTo'])
                     ->whereIn('status', ['ovp_pending', 'initiated', 'pending']);
                 if ($targetUserId) {
                     $ovpQ->where(function($q) use ($targetUserId) {
@@ -1302,7 +1363,7 @@ class CstDailyClosingController extends Controller
                         'amount'       => 0,
                         'date'         => $pi->created_at ? $pi->created_at->format('d M Y') : '—',
                         'mode'         => $st,
-                        'recorded_by'  => $pi->ovpAllocatedUser?->name ?: 'CST Team',
+                        'recorded_by'  => $pi->ovpAllocatedTo?->name ?: 'CST Team',
                     ];
                 }
                 break;

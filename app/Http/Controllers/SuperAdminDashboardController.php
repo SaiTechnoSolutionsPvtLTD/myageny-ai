@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Carbon\Carbon;
@@ -613,10 +614,11 @@ class SuperAdminDashboardController extends ApiController
             })->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -702,10 +704,8 @@ class SuperAdminDashboardController extends ApiController
                         });
                 });
             })
-            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+            ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId)        $lq->where('branch_id', $branchId);
-                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
             });
         $todayConvertedCount = (clone $todayConvertedQuery)->count();
         $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
@@ -767,7 +767,8 @@ class SuperAdminDashboardController extends ApiController
                 'hot_products_value'         => $totalProspectsDealValue,
                 'deal_value'                 => $totalProspectsDealValue,
                 'expected_collection_value'  => $totalProspectsExpectedCollection,
-                'month_name'                 => now()->format('F Y'),
+                'month_name'                 => $parsedMonth['month_name'],
+                'target_month'               => $parsedMonth['target_month'],
                 'user_role_type'             => $userRoleType,
                 'show_nst_ho'                => (bool) $hasDefaultBranch,
                 'show_coco'                  => (bool) $hasCocoBranch,
@@ -1811,10 +1812,11 @@ class SuperAdminDashboardController extends ApiController
             })->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -1883,10 +1885,8 @@ class SuperAdminDashboardController extends ApiController
                         $sub->whereNull('converted_at')->whereDate('created_at', today());
                     });
             })
-            ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
+            ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId) $lq->where('branch_id', $branchId);
-                if ($userId)   $lq->where('assigned_to', $userId);
             });
         $todayConvertedCount = (clone $todayConvertedQuery)->count();
         $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
@@ -2314,26 +2314,43 @@ class SuperAdminDashboardController extends ApiController
         $nstHoDealValue = (float) (clone $nstHoHotQuery)->sum('total_price');
         $nstHoExpectedValue = (float) (clone $nstHoHotQuery)->sum('expected_value');
 
+        $vis = $this->resolveForecastingVisibility($request?->user());
+        $userBranchName = $vis['userBranchName'] ?? null;
+
+        $nstHoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'NST - HO'
+            : "NST ({$userBranchName})";
+
+        $nonCocoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'Channel Partner - NON COCO Model'
+            : "Channel Partner - NON COCO Model ({$userBranchName})";
+
+        $cocoHeading = ($isCompanyAdminOrCbo || empty($userBranchName))
+            ? 'Channel Partner - COCO Model'
+            : "Channel Partner - COCO Model ({$userBranchName})";
+
         return [
             'nst_ho' => [
                 'count'          => $nstHoHotCount,
                 'deal_value'     => $nstHoDealValue,
                 'expected_value' => $nstHoExpectedValue,
-                'heading'        => 'NST - HO',
+                'heading'        => $nstHoHeading,
             ],
             'non_coco' => [
                 'count'          => $nonCocoHotCount,
                 'deal_value'     => $nonCocoDealValue,
                 'expected_value' => $nonCocoExpectedValue,
                 'product_id'     => $nonCocoProduct?->id,
-                'product_name'   => $nonCocoProduct?->product_name ?? 'Channel Partner NON COCO Model',
+                'product_name'   => $nonCocoHeading,
+                'heading'        => $nonCocoHeading,
             ],
             'coco' => [
                 'count'          => $cocoHotCount,
                 'deal_value'     => $cocoDealValue,
                 'expected_value' => $cocoExpectedValue,
                 'product_id'     => $cocoProduct?->id,
-                'product_name'   => $cocoProduct?->product_name ?? 'Channel Partner COCO Model',
+                'product_name'   => $cocoHeading,
+                'heading'        => $cocoHeading,
             ],
         ];
     }
@@ -2476,6 +2493,13 @@ class SuperAdminDashboardController extends ApiController
             $userRoleType = 'nst';
         }
 
+        $userBranchName = null;
+        if (!empty($userBranchIds)) {
+            $userBranchName = Branch::whereIn('id', $userBranchIds)->value('name');
+        } elseif ($authUser->branch_id) {
+            $userBranchName = Branch::where('id', $authUser->branch_id)->value('name');
+        }
+
         return [
             'hasDefaultBranch'      => (bool) $hasDefaultBranch,
             'hasCocoBranch'         => (bool) $hasCocoBranch,
@@ -2483,6 +2507,33 @@ class SuperAdminDashboardController extends ApiController
             'canViewCst'            => (bool) $canViewCst,
             'canViewActiveBranches' => (bool) $canViewActiveBranches,
             'userRoleType'          => $userRoleType,
+            'userBranchName'        => $userBranchName,
+        ];
+    }
+
+    /**
+     * Parse target month parameter from request or default to current month.
+     */
+    private function parseTargetMonth(?Request $request): array
+    {
+        $targetDate = now();
+        if ($request && $request->filled('month')) {
+            $mStr = trim((string) $request->input('month'));
+            if (preg_match('/^(\d{4})-(\d{2})$/', $mStr, $m)) {
+                $targetDate = \Illuminate\Support\Carbon::createFromDate((int) $m[1], (int) $m[2], 1);
+            } elseif (is_numeric($mStr) && (int) $mStr >= 1 && (int) $mStr <= 12) {
+                $year = $request->filled('year') ? (int) $request->year : now()->year;
+                $targetDate = \Illuminate\Support\Carbon::createFromDate($year, (int) $mStr, 1);
+            }
+        }
+
+        return [
+            'month'        => (int) $targetDate->month,
+            'year'         => (int) $targetDate->year,
+            'month_name'   => $targetDate->format('F Y'),
+            'target_month' => $targetDate->format('Y-m'),
+            'start_date'   => (clone $targetDate)->startOfMonth(),
+            'end_date'     => (clone $targetDate)->endOfMonth(),
         ];
     }
 
@@ -2494,6 +2545,7 @@ class SuperAdminDashboardController extends ApiController
     {
         $companyId = $this->visibility->companyIdFor($request->user()) ?? ($request->user()?->company_id ?: 1);
         $visibleBranchIds = $this->visibility->visibleBranchIds($request->user());
+        $parsedMonth = $this->parseTargetMonth($request);
 
         $branches = Branch::where('is_active', true)
             ->where(function ($query) use ($companyId) {
@@ -2518,8 +2570,8 @@ class SuperAdminDashboardController extends ApiController
         $hotProductsGrouped = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
-            ->whereMonth('lead_products.closure_date', now()->month)
-            ->whereYear('lead_products.closure_date', now()->year)
+            ->whereMonth('lead_products.closure_date', $parsedMonth['month'])
+            ->whereYear('lead_products.closure_date', $parsedMonth['year'])
             ->whereIn('leads.branch_id', $branchIds)
             ->when($request->filled('user_id'), fn($q) => $q->where('leads.assigned_to', $request->user_id))
             ->select(
@@ -2574,8 +2626,9 @@ class SuperAdminDashboardController extends ApiController
     public function getCstProspectItems(?Request $request = null): Collection
     {
         $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
-        $cmStart = now()->startOfMonth();
-        $cmEnd   = now()->endOfMonth();
+        $parsedMonth = $this->parseTargetMonth($request);
+        $cmStart = $parsedMonth['start_date'];
+        $cmEnd   = $parsedMonth['end_date'];
 
         $items = collect();
         $seenPiIds = [];
@@ -2619,72 +2672,44 @@ class SuperAdminDashboardController extends ApiController
         $renewalPis = $renewalPisQuery->get();
 
         foreach ($renewalPis as $pi) {
-            $rDateStr = null;
-            $formData = is_array($pi->custom_form_data)
-                ? $pi->custom_form_data
-                : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+            $rDate = $this->resolveCstProspectTargetDate($pi);
 
-            foreach ($formData as $field) {
-                if (!is_array($field)) continue;
-                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
-                $fieldVal = $field['value'] ?? '';
-                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
-                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+            if ($rDate && $rDate->between($cmStart, $cmEnd)) {
+                $lead = $pi->lead;
+                $lp = $pi->leadProduct;
+                $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+                $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-                if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date'], true)) {
-                    if (!empty($val)) {
-                        try {
-                            $rDateStr = Carbon::parse($val)->toDateString();
-                            break;
-                        } catch (\Throwable $e) {
-                        }
-                    }
+                $seenPiIds[$pi->id] = true;
+                if ($pi->lead_product_id) {
+                    $seenLpIds[$pi->lead_product_id] = true;
                 }
-            }
 
-            if (!$rDateStr && $pi->project_delivery_date) {
-                $rDateStr = Carbon::parse($pi->project_delivery_date)->toDateString();
-            }
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
-            if ($rDateStr) {
-                $rDate = Carbon::parse($rDateStr);
-                if ($rDate->between($cmStart, $cmEnd)) {
-                    $lead = $pi->lead;
-                    $lp = $pi->leadProduct;
-                    $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
-                    $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
-
-                    $seenPiIds[$pi->id] = true;
-                    if ($pi->lead_product_id) {
-                        $seenLpIds[$pi->lead_product_id] = true;
-                    }
-
-                    $salesPerson = $lead?->assignedTo?->name ?: '-';
-                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
-                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
-
-                    $items->push([
-                        'pi_id'            => $pi->id,
-                        'lead_id'          => $pi->lead_id,
-                        'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
-                        'project_view_url' => url('/projects-details/' . $pi->id),
-                        'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
-                        'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
-                        'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
-                        'status'           => 'Renewal',
-                        'deal_value'       => $dealVal,
-                        'expected_value'   => $expVal,
-                        'closure_date'     => $rDate->format('d M Y'),
-                        'closure_date_raw' => $rDate->format('Y-m-d'),
-                        'sales_person_name' => $salesPerson,
-                        'cst_person_name'   => $cstPerson,
-                        'assigned_to'      => $assignedName,
-                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
-                        'branch_id'        => $lead?->branch_id,
-                        'branch_name'      => $lead?->branch?->name ?: 'General',
-                        'source_type'      => 'renewal',
-                    ]);
-                }
+                $items->push([
+                    'pi_id'            => $pi->id,
+                    'lead_id'          => $pi->lead_id,
+                    'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
+                    'project_view_url' => url('/projects-details/' . $pi->id),
+                    'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
+                    'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
+                    'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
+                    'status'           => 'Renewal',
+                    'deal_value'       => $dealVal,
+                    'expected_value'   => $expVal,
+                    'closure_date'     => $rDate->format('d M Y'),
+                    'closure_date_raw' => $rDate->format('Y-m-d'),
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'assigned_to'      => $assignedName,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
+                    'branch_id'        => $lead?->branch_id,
+                    'branch_name'      => $lead?->branch?->name ?: 'General',
+                    'source_type'      => 'renewal',
+                ]);
             }
         }
 
@@ -2706,6 +2731,7 @@ class SuperAdminDashboardController extends ApiController
             })
             ->where(function ($q) use ($cmStart, $cmEnd) {
                 $q->whereBetween('expected_date', [$cmStart, $cmEnd])
+                    ->orWhereBetween('project_delivery_date', [$cmStart, $cmEnd])
                     ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
                         $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
                     });
@@ -2733,10 +2759,9 @@ class SuperAdminDashboardController extends ApiController
 
             $lead = $pi->lead;
             $lp = $pi->leadProduct;
-            $expDate = $pi->expected_date ?? $lp?->closure_date;
-            if (!$expDate) continue;
+            $cExpDate = $this->resolveCstProspectTargetDate($pi);
+            if (!$cExpDate) continue;
 
-            $cExpDate = Carbon::parse($expDate);
             if (!$cExpDate->between($cmStart, $cmEnd)) continue;
 
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
@@ -2770,6 +2795,90 @@ class SuperAdminDashboardController extends ApiController
         }
 
         return $items;
+    }
+
+    /**
+     * Resolve target date for CST prospect item based on product and department type.
+     */
+    protected function resolveCstProspectTargetDate(ProductionInitiation $pi): ?Carbon
+    {
+        $productName = strtolower(trim((string)($pi->product_name ?: ($pi->product?->product_name ?: ($pi->leadProduct?->product_name ?: '')))));
+        $deptName = strtolower(trim((string)($pi->department?->name ?: '')));
+
+        $formData = is_array($pi->custom_form_data)
+            ? $pi->custom_form_data
+            : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+        $getFormDate = function (array $keywords) use ($formData): ?Carbon {
+            foreach ($formData as $field) {
+                if (!is_array($field)) continue;
+                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                $fieldVal = $field['value'] ?? '';
+                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+
+                foreach ($keywords as $kw) {
+                    if ($key === strtolower($kw) || str_contains($key, strtolower($kw))) {
+                        if (!empty($val)) {
+                            try {
+                                return Carbon::parse($val);
+                            } catch (\Throwable $e) {}
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
+
+        // 1. Development: Expected Date first priority, else Delivery date
+        $isDevelopment = ($pi->department_id == 1)
+            || str_contains($deptName, 'develop')
+            || str_contains($productName, 'develop')
+            || str_contains($productName, 'website')
+            || str_contains($productName, 'app')
+            || str_contains($productName, 'software');
+
+        if ($isDevelopment) {
+            return $expectedDate ?: ($deliveryDate ?: null);
+        }
+
+        // 2. Onetime design: Delivery date
+        $isOnetimeDesign = str_contains($productName, 'onetime')
+            || str_contains($productName, 'one time')
+            || str_contains($productName, 'design')
+            || str_contains($deptName, 'design');
+
+        if ($isOnetimeDesign) {
+            return $deliveryDate ?: ($expectedDate ?: null);
+        }
+
+        // 3. Renewal products - Lead Generation: Campaign expiry date
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen');
+        if ($isLeadGen) {
+            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 4. Renewal products - SMM Sheet: Expiry date
+        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
+        if ($isSmm) {
+            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 5. SEO Products: Expiry date or delivery date
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            $seoExpiry = $getFormDate(['seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $seoExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // Default fallback for any other CST / Renewal item
+        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
+        return $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
     }
 
     public function buildCstProspectMetrics(?Request $request = null): array
@@ -2834,13 +2943,24 @@ class SuperAdminDashboardController extends ApiController
         if ($type === 'all' && !$canViewActiveBranches) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: Active Branches.'], 403);
         }
+        if ($type === 'active_branch_coco' && !$canViewActiveBranches && !$hasCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_non_coco' && !$canViewActiveBranches && !$hasNonCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: NON COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_ho' && !$canViewActiveBranches && !$hasDefaultBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: HO Branches.'], 403);
+        }
         if ($type === 'cst' && !$canViewCst) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
         }
 
+        $parsedMonth = $this->parseTargetMonth($request);
+
         if ($type === 'all') {
             $title = 'All Active Branches Brief Report';
-            $subtitle = 'Current month closure hot prospects & branch performance summary';
+            $subtitle = 'Hot prospects & branch performance summary for ' . $parsedMonth['month_name'];
             $branchType = 'ALL';
 
             $query = LeadProduct::query()
@@ -2852,8 +2972,8 @@ class SuperAdminDashboardController extends ApiController
                     'leadStatus:id,name'
                 ])
                 ->whereRaw('LOWER(product_status) = ?', ['hot'])
-                ->whereMonth('closure_date', now()->month)
-                ->whereYear('closure_date', now()->year);
+                ->whereMonth('closure_date', $parsedMonth['month'])
+                ->whereYear('closure_date', $parsedMonth['year']);
 
             $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
@@ -2923,7 +3043,7 @@ class SuperAdminDashboardController extends ApiController
                         'subtitle'    => $subtitle,
                         'branch_type' => $branchType,
                     ],
-                    'period'         => now()->format('F Y'),
+                    'period'         => $parsedMonth['month_name'],
                     'total_count'    => $rows->count(),
                     'total_deal'     => (float) $rows->sum('deal_value'),
                     'total_expected' => (float) $rows->sum('expected_value'),
@@ -2933,7 +3053,7 @@ class SuperAdminDashboardController extends ApiController
         }
 
         if ($type === 'cst') {
-            $subtitle = 'Current Month Renewals & Development Prospects';
+            $subtitle = 'Renewals & Development Prospects for ' . $parsedMonth['month_name'];
 
             $items = $this->getCstProspectItems($request);
             $rows = $items->values()->map(function ($item, $idx) {
@@ -2960,7 +3080,7 @@ class SuperAdminDashboardController extends ApiController
 
         $branch = null;
         $title = 'Hot Prospects';
-        $subtitle = 'Current month closure hot leads';
+        $subtitle = 'Closure hot leads for ' . $parsedMonth['month_name'];
         $branchType = null;
 
         $query = LeadProduct::query()
@@ -2972,8 +3092,8 @@ class SuperAdminDashboardController extends ApiController
                 'leadStatus:id,name'
             ])
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year);
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year']);
 
         // Apply Lead Visibility
         $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
@@ -3070,7 +3190,14 @@ class SuperAdminDashboardController extends ApiController
                 }
             });
 
-            if ($isCompanyAdminOrCbo) {
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                }
+            });
+
+            $shouldExcludeCpFromHo = ($isCompanyAdminOrCbo || ($vis['hasCocoBranch'] ?? false)) && !$request->filled('user_id');
+            if ($shouldExcludeCpFromHo) {
                 $query->where(function ($q) use ($cpProductIds) {
                     if (!empty($cpProductIds)) {
                         $q->whereNotIn('product_id', $cpProductIds);
@@ -3102,7 +3229,7 @@ class SuperAdminDashboardController extends ApiController
 
             $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
             $title = 'Channel Partner - NON COCO Model';
-            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner NON COCO Hot Products & Branch Prospects' : 'NON COCO Hot Products & Branch Prospects';
+            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner NON COCO Hot Products' : 'NON COCO Hot Products & Branch Prospects';
             $branchType = 'NON COCO';
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
@@ -3114,13 +3241,11 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%NON%COCO%')
-                        ->orWhere('package_name', 'like', '%NON%COCO%');
+                       ->orWhere('package_name', 'like', '%NON%COCO%');
                 });
             })->first();
 
-            $targetBranchIds = $nonCocoBranchIds;
-
-            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -3129,17 +3254,13 @@ class SuperAdminDashboardController extends ApiController
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!empty($nonCocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                        $lq->whereIn('branch_id', $nonCocoBranchIds);
-                    });
-                } else {
+                if (!$isCompanyAdminOrCbo) {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                            ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
                     });
                 }
             });
+
         } elseif ($type === 'coco') {
             $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
             $visibleBranchIds = $this->visibility->visibleBranchIds($currentUser);
@@ -3165,7 +3286,7 @@ class SuperAdminDashboardController extends ApiController
 
             $isCompanyAdminOrCbo = $currentUser && ($currentUser->isSuperAdmin() || $currentUser->isSystemAdmin() || $currentUser->isCompanyAdminRole() || $currentUser->isCbo());
             $title = 'Channel Partner - COCO Model';
-            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner COCO Hot Products & Branch Prospects' : 'COCO Hot Products & Branch Prospects';
+            $subtitle = $isCompanyAdminOrCbo ? 'Channel Partner COCO Hot Products' : 'COCO Hot Products & Branch Prospects';
             $branchType = 'COCO';
 
             $channelPartnerCategory = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
@@ -3177,39 +3298,88 @@ class SuperAdminDashboardController extends ApiController
                 }
                 $q->where(function ($sq) {
                     $sq->where('product_name', 'like', '%COCO%')
-                        ->orWhere('package_name', 'like', '%COCO%');
+                       ->orWhere('package_name', 'like', '%COCO%');
                 });
             })->where(function ($q) {
                 $q->where('product_name', 'not like', '%NON%')
-                    ->where('package_name', 'not like', '%NON%');
+                  ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
                             $sq->where('product_id', $cocoProduct->id)
-                                ->orWhere(function ($ssq) {
-                                    $ssq->where('product_name', 'like', '%COCO%')
-                                        ->where('product_name', 'not like', '%NON%');
-                                });
+                               ->orWhere(function ($ssq) {
+                                   $ssq->where('product_name', 'like', '%COCO%')
+                                       ->where('product_name', 'not like', '%NON%');
+                               });
                         });
                     } else {
                         $sub->where('product_name', 'like', '%COCO%')
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!empty($cocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                        $lq->whereIn('branch_id', $cocoBranchIds);
-                    });
-                } else {
+                if (!$isCompanyAdminOrCbo) {
                     $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                            ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
                     });
                 }
             });
+
+        } elseif ($type === 'active_branch_coco') {
+            $title = 'COCO Branches';
+            $subtitle = 'Hot products & branch prospects for COCO model branches';
+            $branchType = 'COCO';
+
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($cocoBranchIds) {
+                if (!empty($cocoBranchIds)) {
+                    $lq->whereIn('branch_id', $cocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_non_coco') {
+            $title = 'NON COC Branches';
+            $subtitle = 'Hot products & branch prospects for NON COCO model branches';
+            $branchType = 'NON COCO';
+
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                if (!empty($nonCocoBranchIds)) {
+                    $lq->whereIn('branch_id', $nonCocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_ho') {
+            $title = 'Head Office (HO)';
+            $subtitle = 'Hot products & branch prospects for default HO branches';
+            $branchType = 'HO';
+
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            } else {
+                $defaultBranchQuery->where('company_id', 1);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
         } else {
             // By Branch ID
             $branch = Branch::find($branchId);
@@ -3258,9 +3428,32 @@ class SuperAdminDashboardController extends ApiController
         });
 
         $cstItemsToAppend = collect();
-        if (!empty($targetBranchIds)) {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($targetBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $targetBranchIds);
+        if ($branchId) {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
+                return ($cItem['branch_id'] ?? null) == $branchId;
+            });
+        } elseif ($type === 'active_branch_coco') {
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
+            });
+        } elseif ($type === 'active_branch_non_coco') {
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
+            });
+        } elseif ($type === 'active_branch_ho') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($defaultBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $defaultBranchIds);
             });
         }
 
@@ -3306,5 +3499,157 @@ class SuperAdminDashboardController extends ApiController
             'total_expected' => (float) $rows->sum('expected_value'),
             'leads'          => $rows,
         ], 'Branch hot leads fetched.');
+    }
+
+    /**
+     * Update prospect date (Closure Date / Delivery Date / Expected Date) with reason and remarks.
+     * Only Company Admin / Super Admin / CBO users can update this.
+     */
+    public function updateProspectDate(Request $request): JsonResponse
+    {
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
+        if (!$currentUser) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        // Authorization check: Only Company Admin / Super Admin / CBO
+        $isCompanyAdmin = $currentUser->isSuperAdmin() ||
+                          $currentUser->isSystemAdmin() ||
+                          $currentUser->isCompanyAdminRole() ||
+                          $currentUser->isCbo();
+
+        if (!$isCompanyAdmin) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Company Admin can update closure dates.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'lead_id'  => ['nullable', 'integer'],
+            'pi_id'    => ['nullable', 'integer'],
+            'new_date' => ['required', 'date'],
+            'reason'   => ['required', 'string', 'max:255'],
+            'remarks'  => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $leadId  = $request->input('lead_id');
+        $piId    = $request->input('pi_id');
+        $newDate = Carbon::parse($request->input('new_date'));
+        $reason  = trim((string)$request->input('reason'));
+        $remarks = trim((string)$request->input('remarks'));
+
+        if ($reason === 'Others' && empty($remarks)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Remarks are required when reason is "Others".',
+            ], 422);
+        }
+
+        $updated = false;
+        $formattedNewDate = $newDate->format('d M Y');
+        $formattedNewDateRaw = $newDate->format('Y-m-d');
+
+        // 1. If ProductionInitiation ID (Project item)
+        if ($piId) {
+            $pi = ProductionInitiation::find($piId);
+            if ($pi) {
+                $oldDate = $pi->project_delivery_date ?: $pi->expected_date;
+                $oldDateStr = $oldDate ? Carbon::parse($oldDate)->format('d M Y') : 'None';
+
+                // Update delivery date & expected date
+                $pi->update([
+                    'project_delivery_date' => $formattedNewDateRaw,
+                    'expected_date'         => $formattedNewDateRaw,
+                ]);
+
+                // Also update associated lead product if exists
+                if ($pi->lead_product_id) {
+                    LeadProduct::where('id', $pi->lead_product_id)->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                } elseif ($pi->lead_id) {
+                    LeadProduct::where('lead_id', $pi->lead_id)->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                }
+
+                // Construct timeline content
+                $timelineContent = "Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                if (!empty($reason)) {
+                    $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
+                }
+                if (!empty($remarks)) {
+                    $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
+                }
+
+                // Record in Project Timeline (ProjectUpdate)
+                $pi->projectUpdates()->create([
+                    'type'       => 'schedule_history',
+                    'content'    => $timelineContent,
+                    'created_by' => $currentUser->id,
+                ]);
+
+                $updated = true;
+            }
+        }
+
+        // 2. If Lead ID (or fallback when piId not provided or lead needs update)
+        if ($leadId) {
+            $lead = Lead::find($leadId);
+            if ($lead) {
+                // Find or update lead products
+                $lps = LeadProduct::where('lead_id', $leadId)->get();
+                foreach ($lps as $lp) {
+                    $lp->update([
+                        'closure_date' => $formattedNewDateRaw,
+                    ]);
+                }
+
+                // If lead has production initiations that weren't updated above, update them too
+                if (!$piId) {
+                    $pis = ProductionInitiation::where('lead_id', $leadId)->get();
+                    foreach ($pis as $pItem) {
+                        $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
+                        $pItem->update([
+                            'project_delivery_date' => $formattedNewDateRaw,
+                            'expected_date'         => $formattedNewDateRaw,
+                        ]);
+
+                        $timelineContent = "Closure / Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                        if (!empty($reason)) {
+                            $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
+                        }
+                        if (!empty($remarks)) {
+                            $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
+                        }
+
+                        $pItem->projectUpdates()->create([
+                            'type'       => 'schedule_history',
+                            'content'    => $timelineContent,
+                            'created_by' => $currentUser->id,
+                        ]);
+                    }
+                }
+
+                $updated = true;
+            }
+        }
+
+        if (!$updated) {
+            return response()->json(['success' => false, 'message' => 'Lead or Project record not found.'], 404);
+        }
+
+        return response()->json([
+            'success'          => true,
+            'message'          => 'Date updated successfully and recorded in project timeline.',
+            'closure_date'     => $formattedNewDate,
+            'closure_date_raw' => $formattedNewDateRaw,
+        ]);
     }
 }

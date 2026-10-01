@@ -332,7 +332,15 @@
         <div class="lpd-table-card">
             <div class="lpd-table-head">
                 <div>
-                    <div class="lpd-table-title">Lead Product Sheet</div>
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <div class="lpd-table-title">Lead Product Sheet</div>
+                        @if(!empty($isHotStatusFilter))
+                            <span style="display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:800; color:#16a34a; background:#f0fdf4; padding:3px 10px; border-radius:8px; border:1px solid #bbf7d0;">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                Total Expected Amount: Rs {{ number_format($stats['total_expected'] ?? 0, 2) }}
+                            </span>
+                        @endif
+                    </div>
                     <div class="lpd-table-sub">Client, product, lead status, and payment overview in one place</div>
                 </div>
                 <div class="lpd-result">
@@ -408,6 +416,10 @@
                                         @if($leadProduct->converted_at && strtolower($leadProduct->product_status_key) === 'converted')
                                             <div style="font-size:10px; color:#15803d; margin-top:3px; font-weight:700;">
                                                 {{ $leadProduct->converted_at->format('d M Y') }}
+                                            </div>
+                                        @elseif($leadProduct->closure_date && strtolower($leadProduct->product_status_key) === 'hot')
+                                            <div style="font-size:10px; color:#c2410c; margin-top:3px; font-weight:700;">
+                                                Exp: {{ $leadProduct->closure_date->format('d M Y') }}
                                             </div>
                                         @endif
                                     </td>

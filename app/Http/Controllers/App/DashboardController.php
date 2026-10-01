@@ -669,10 +669,11 @@ class DashboardController extends Controller
             : (clone $reminderQuery())->whereDate('remind_at', today())->count();
 
         // ── Forecasting / Total Prospects (Current Month Hot Products by Closure Date) ──
+        $parsedMonth = $this->parseTargetMonth($request);
         $currentMonthHotProductsQuery = LeadProduct::query()
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year)
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year'])
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -762,10 +763,8 @@ class DashboardController extends Controller
                         });
                 });
             })
-            ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
+            ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-                if ($branchId)        $lq->where('branch_id', $branchId);
-                if ($effectiveUserId) $lq->where('assigned_to', $effectiveUserId);
             });
         $todayConvertedCount = (clone $todayConvertedQuery)->count();
         $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
@@ -822,7 +821,8 @@ class DashboardController extends Controller
                     'hot_products_value'        => $userTotalDealValue,
                     'deal_value'                => $userTotalDealValue,
                     'expected_collection_value' => $userTotalExpectedCollection,
-                    'month_name'                => now()->format('F Y'),
+                    'month_name'                => $parsedMonth['month_name'],
+                    'target_month'              => $parsedMonth['target_month'],
                     'user_role_type'            => $userRoleType,
                     'show_nst_ho'               => (bool) $hasDefaultBranch,
                     'show_coco'                 => (bool) $hasCocoBranch,
@@ -1494,6 +1494,29 @@ class DashboardController extends Controller
         ];
     }
 
+    private function parseTargetMonth(?Request $request): array
+    {
+        $targetDate = now();
+        if ($request && $request->filled('month')) {
+            $mStr = trim((string) $request->input('month'));
+            if (preg_match('/^(\d{4})-(\d{2})$/', $mStr, $m)) {
+                $targetDate = \Illuminate\Support\Carbon::createFromDate((int) $m[1], (int) $m[2], 1);
+            } elseif (is_numeric($mStr) && (int) $mStr >= 1 && (int) $mStr <= 12) {
+                $year = $request->filled('year') ? (int) $request->year : now()->year;
+                $targetDate = \Illuminate\Support\Carbon::createFromDate($year, (int) $mStr, 1);
+            }
+        }
+
+        return [
+            'month'        => (int) $targetDate->month,
+            'year'         => (int) $targetDate->year,
+            'month_name'   => $targetDate->format('F Y'),
+            'target_month' => $targetDate->format('Y-m'),
+            'start_date'   => (clone $targetDate)->startOfMonth(),
+            'end_date'     => (clone $targetDate)->endOfMonth(),
+        ];
+    }
+
     /**
      * Build active branches current month hot prospect metrics for the Total Prospects modal.
      */
@@ -1502,6 +1525,7 @@ class DashboardController extends Controller
         $user = $request->user();
         $companyId = $user ? ($this->visibility->companyIdFor($user) ?? ($user->company_id ?: 1)) : 1;
         $visibleBranchIds = $user ? $this->visibility->visibleBranchIds($user) : collect();
+        $parsedMonth = $this->parseTargetMonth($request);
 
         $branches = Branch::where('is_active', true)
             ->where(function ($query) use ($companyId) {
@@ -1526,8 +1550,8 @@ class DashboardController extends Controller
         $hotProductsGrouped = LeadProduct::query()
             ->join('leads', 'leads.id', '=', 'lead_products.lead_id')
             ->whereRaw('LOWER(lead_products.product_status) = ?', ['hot'])
-            ->whereMonth('lead_products.closure_date', now()->month)
-            ->whereYear('lead_products.closure_date', now()->year)
+            ->whereMonth('lead_products.closure_date', $parsedMonth['month'])
+            ->whereYear('lead_products.closure_date', $parsedMonth['year'])
             ->whereIn('leads.branch_id', $branchIds)
             ->when($request->filled('user_id'), fn($q) => $q->where('leads.assigned_to', $request->user_id))
             ->select(
@@ -1582,8 +1606,9 @@ class DashboardController extends Controller
     public function getCstProspectItems(?Request $request = null): Collection
     {
         $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
-        $cmStart = now()->startOfMonth();
-        $cmEnd   = now()->endOfMonth();
+        $parsedMonth = $this->parseTargetMonth($request);
+        $cmStart = $parsedMonth['start_date'];
+        $cmEnd   = $parsedMonth['end_date'];
 
         $items = collect();
         $seenPiIds = [];
@@ -1648,71 +1673,44 @@ class DashboardController extends Controller
         $renewalPis = $renewalPisQuery->get();
 
         foreach ($renewalPis as $pi) {
-            $rDateStr = null;
-            $formData = is_array($pi->custom_form_data)
-                ? $pi->custom_form_data
-                : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
+            $rDate = $this->resolveCstProspectTargetDate($pi);
 
-            foreach ($formData as $field) {
-                if (!is_array($field)) continue;
-                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
-                $fieldVal = $field['value'] ?? '';
-                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
-                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+            if ($rDate && $rDate->between($cmStart, $cmEnd)) {
+                $lead = $pi->lead;
+                $lp = $pi->leadProduct;
+                $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+                $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
 
-                if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date'], true)) {
-                    if (!empty($val)) {
-                        try {
-                            $rDateStr = Carbon::parse($val)->toDateString();
-                            break;
-                        } catch (\Throwable $e) {}
-                    }
+                $seenPiIds[$pi->id] = true;
+                if ($pi->lead_product_id) {
+                    $seenLpIds[$pi->lead_product_id] = true;
                 }
-            }
 
-            if (!$rDateStr && $pi->project_delivery_date) {
-                $rDateStr = Carbon::parse($pi->project_delivery_date)->toDateString();
-            }
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
 
-            if ($rDateStr) {
-                $rDate = Carbon::parse($rDateStr);
-                if ($rDate->between($cmStart, $cmEnd)) {
-                    $lead = $pi->lead;
-                    $lp = $pi->leadProduct;
-                    $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
-                    $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
-
-                    $seenPiIds[$pi->id] = true;
-                    if ($pi->lead_product_id) {
-                        $seenLpIds[$pi->lead_product_id] = true;
-                    }
-
-                    $salesPerson = $lead?->assignedTo?->name ?: '-';
-                    $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
-                    $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
-
-                    $items->push([
-                        'pi_id'            => $pi->id,
-                        'lead_id'          => $pi->lead_id,
-                        'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
-                        'project_view_url' => url('/projects-details/' . $pi->id),
-                        'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
-                        'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
-                        'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
-                        'status'           => 'Renewal',
-                        'deal_value'       => $dealVal,
-                        'expected_value'   => $expVal,
-                        'closure_date'     => $rDate->format('d M Y'),
-                        'closure_date_raw' => $rDate->format('Y-m-d'),
-                        'sales_person_name' => $salesPerson,
-                        'cst_person_name'   => $cstPerson,
-                        'assigned_to'      => $assignedName,
-                        'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
-                        'branch_id'        => $lead?->branch_id,
-                        'branch_name'      => $lead?->branch?->name ?: 'General',
-                        'source_type'      => 'renewal',
-                    ]);
-                }
+                $items->push([
+                    'pi_id'            => $pi->id,
+                    'lead_id'          => $pi->lead_id,
+                    'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
+                    'project_view_url' => url('/projects-details/' . $pi->id),
+                    'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
+                    'customer_name'    => $lead?->contact_name ?: ($pi->client_name ?: '-'),
+                    'product_name'     => $pi->product_name ?: ($pi->product?->product_name ?: ($lp?->product_name ?: 'Renewal Product')),
+                    'status'           => 'Renewal',
+                    'deal_value'       => $dealVal,
+                    'expected_value'   => $expVal,
+                    'closure_date'     => $rDate->format('d M Y'),
+                    'closure_date_raw' => $rDate->format('Y-m-d'),
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'assigned_to'      => $assignedName,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : $cstPerson,
+                    'branch_id'        => $lead?->branch_id,
+                    'branch_name'      => $lead?->branch?->name ?: 'General',
+                    'source_type'      => 'renewal',
+                ]);
             }
         }
 
@@ -1734,6 +1732,7 @@ class DashboardController extends Controller
             })
             ->where(function ($q) use ($cmStart, $cmEnd) {
                 $q->whereBetween('expected_date', [$cmStart, $cmEnd])
+                  ->orWhereBetween('project_delivery_date', [$cmStart, $cmEnd])
                   ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
                       $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
                   });
@@ -1769,10 +1768,9 @@ class DashboardController extends Controller
 
             $lead = $pi->lead;
             $lp = $pi->leadProduct;
-            $expDate = $pi->expected_date ?? $lp?->closure_date;
-            if (!$expDate) continue;
+            $cExpDate = $this->resolveCstProspectTargetDate($pi);
+            if (!$cExpDate) continue;
 
-            $cExpDate = Carbon::parse($expDate);
             if (!$cExpDate->between($cmStart, $cmEnd)) continue;
 
             $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
@@ -1806,6 +1804,90 @@ class DashboardController extends Controller
         }
 
         return $items;
+    }
+
+    /**
+     * Resolve target date for CST prospect item based on product and department type.
+     */
+    protected function resolveCstProspectTargetDate(ProductionInitiation $pi): ?Carbon
+    {
+        $productName = strtolower(trim((string)($pi->product_name ?: ($pi->product?->product_name ?: ($pi->leadProduct?->product_name ?: '')))));
+        $deptName = strtolower(trim((string)($pi->department?->name ?: '')));
+
+        $formData = is_array($pi->custom_form_data)
+            ? $pi->custom_form_data
+            : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+        $getFormDate = function (array $keywords) use ($formData): ?Carbon {
+            foreach ($formData as $field) {
+                if (!is_array($field)) continue;
+                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                $fieldVal = $field['value'] ?? '';
+                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+
+                foreach ($keywords as $kw) {
+                    if ($key === strtolower($kw) || str_contains($key, strtolower($kw))) {
+                        if (!empty($val)) {
+                            try {
+                                return Carbon::parse($val);
+                            } catch (\Throwable $e) {}
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
+
+        // 1. Development: Expected Date first priority, else Delivery date
+        $isDevelopment = ($pi->department_id == 1)
+            || str_contains($deptName, 'develop')
+            || str_contains($productName, 'develop')
+            || str_contains($productName, 'website')
+            || str_contains($productName, 'app')
+            || str_contains($productName, 'software');
+
+        if ($isDevelopment) {
+            return $expectedDate ?: ($deliveryDate ?: null);
+        }
+
+        // 2. Onetime design: Delivery date
+        $isOnetimeDesign = str_contains($productName, 'onetime')
+            || str_contains($productName, 'one time')
+            || str_contains($productName, 'design')
+            || str_contains($deptName, 'design');
+
+        if ($isOnetimeDesign) {
+            return $deliveryDate ?: ($expectedDate ?: null);
+        }
+
+        // 3. Renewal products - Lead Generation: Campaign expiry date
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen');
+        if ($isLeadGen) {
+            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 4. Renewal products - SMM Sheet: Expiry date
+        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
+        if ($isSmm) {
+            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // 5. SEO Products: Expiry date or delivery date
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            $seoExpiry = $getFormDate(['seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            return $seoExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        }
+
+        // Default fallback for any other CST / Renewal item
+        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
+        return $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
     }
 
     public function buildCstProspectMetrics(?Request $request = null): array
@@ -1874,9 +1956,11 @@ class DashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
         }
 
+        $parsedMonth = $this->parseTargetMonth($request);
+
         if ($type === 'all') {
             $title = 'All Active Branches Brief Report';
-            $subtitle = 'Current month closure hot prospects & branch performance summary';
+            $subtitle = 'Hot prospects & branch performance summary for ' . $parsedMonth['month_name'];
             $branchType = 'ALL';
 
             $query = LeadProduct::query()
@@ -1888,8 +1972,8 @@ class DashboardController extends Controller
                     'leadStatus:id,name'
                 ])
                 ->whereRaw('LOWER(product_status) = ?', ['hot'])
-                ->whereMonth('closure_date', now()->month)
-                ->whereYear('closure_date', now()->year);
+                ->whereMonth('closure_date', $parsedMonth['month'])
+                ->whereYear('closure_date', $parsedMonth['year']);
 
             $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
@@ -2050,7 +2134,7 @@ class DashboardController extends Controller
                         'subtitle'    => $subtitle,
                         'branch_type' => 'CST',
                     ],
-                    'period'         => now()->format('F Y'),
+                    'period'         => $parsedMonth['month_name'],
                     'total_count'    => $totalCount,
                     'total_deal'     => $totalDeal,
                     'total_expected' => $totalExpected,
@@ -2064,7 +2148,7 @@ class DashboardController extends Controller
 
         $branch = null;
         $title = 'Hot Prospects';
-        $subtitle = 'Current month closure hot leads';
+        $subtitle = 'Closure hot leads for ' . $parsedMonth['month_name'];
         $branchType = null;
 
         $query = LeadProduct::query()
@@ -2076,8 +2160,8 @@ class DashboardController extends Controller
                 'leadStatus:id,name'
             ])
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', now()->month)
-            ->whereYear('closure_date', now()->year);
+            ->whereMonth('closure_date', $parsedMonth['month'])
+            ->whereYear('closure_date', $parsedMonth['year']);
 
         // Apply Lead Visibility
         $query->whereHas('lead', function ($lq) use ($currentUser, $request) {

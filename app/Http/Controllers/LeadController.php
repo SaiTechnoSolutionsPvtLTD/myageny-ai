@@ -532,12 +532,14 @@ class LeadController extends Controller
         }
 
         $isConvertedStatusFilter = false;
+        $isHotStatusFilter = false;
         if ($request->filled('product_status')) {
             $statusVal = $request->product_status;
             if (is_numeric($statusVal)) {
                 $statusRecord = LeadStatus::find($statusVal);
                 $statusName = $statusRecord ? strtolower(trim($statusRecord->name)) : null;
                 $isConvertedStatusFilter = in_array($statusName, ['converted', 'won']) || str_contains($statusName ?? '', 'convert');
+                $isHotStatusFilter = $statusName && ($statusName === 'hot' || str_contains($statusName, 'hot'));
                 $sameNameIds = $statusName ? LeadStatus::whereRaw('LOWER(name) = ?', [$statusName])->pluck('id')->toArray() : [(int) $statusVal];
                 $query->where(function ($q) use ($sameNameIds, $statusName) {
                     $q->whereIn('lead_status_id', $sameNameIds);
@@ -548,6 +550,7 @@ class LeadController extends Controller
             } else {
                 $statusValLower = strtolower(trim((string) $statusVal));
                 $isConvertedStatusFilter = in_array($statusValLower, ['converted', 'won']) || str_contains($statusValLower, 'convert');
+                $isHotStatusFilter = $statusValLower === 'hot' || str_contains($statusValLower, 'hot');
                 $sameNameIds = LeadStatus::whereRaw('LOWER(name) = ?', [$statusValLower])->pluck('id')->toArray();
                 $query->where(function ($q) use ($sameNameIds, $statusValLower) {
                     if (!empty($sameNameIds)) {
@@ -605,6 +608,15 @@ class LeadController extends Controller
             if ($isConvertedStatusFilter) {
                 // Converted status: filter by converted_at (converted date)
                 $query->whereDate('converted_at', '>=', $dateFrom);
+            } elseif ($isHotStatusFilter) {
+                // Hot status: filter by closure_date (expected closure date)
+                $query->where(function ($hq) use ($dateFrom) {
+                    $hq->whereDate('closure_date', '>=', $dateFrom)
+                       ->orWhere(function ($sub) use ($dateFrom) {
+                           $sub->whereNull('closure_date')
+                               ->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '>=', $dateFrom)->orWhereDate('created_at', '>=', $dateFrom));
+                       });
+                });
             } elseif ($request->filled('product_status')) {
                 // Specific non-converted status: filter by lead_date
                 $query->whereHas('lead', function ($lq) use ($dateFrom) {
@@ -641,6 +653,15 @@ class LeadController extends Controller
             if ($isConvertedStatusFilter) {
                 // Converted status: filter by converted_at (converted date)
                 $query->whereDate('converted_at', '<=', $dateTo);
+            } elseif ($isHotStatusFilter) {
+                // Hot status: filter by closure_date (expected closure date)
+                $query->where(function ($hq) use ($dateTo) {
+                    $hq->whereDate('closure_date', '<=', $dateTo)
+                       ->orWhere(function ($sub) use ($dateTo) {
+                           $sub->whereNull('closure_date')
+                               ->whereHas('lead', fn($lq) => $lq->whereDate('lead_date', '<=', $dateTo)->orWhereDate('created_at', '<=', $dateTo));
+                       });
+                });
             } elseif ($request->filled('product_status')) {
                 // Specific non-converted status: filter by lead_date
                 $query->whereHas('lead', function ($lq) use ($dateTo) {
@@ -681,12 +702,14 @@ class LeadController extends Controller
 
         $totalValue = (float) $statsRows->sum('total_price');
         $received = (float) $statsRows->sum(fn (LeadProduct $leadProduct) => $leadProduct->amount_paid);
+        $totalExpected = (float) $statsRows->sum(fn (LeadProduct $leadProduct) => (float) ($leadProduct->expected_value > 0 ? $leadProduct->expected_value : $leadProduct->total_price));
 
         $stats = [
             'total_products' => $statsRows->count(),
             'total_value' => $totalValue,
             'received' => $received,
             'pending' => max(0, $totalValue - $received),
+            'total_expected' => $totalExpected,
         ];
 
         $branches = $this->visibility->visibleBranches($request->user());
@@ -717,6 +740,7 @@ class LeadController extends Controller
             'defaultToDate' => $defaultToDate,
             'filterPanelOpen' => $filterPanelOpen,
             'statusOptions' => $statusOptions,
+            'isHotStatusFilter' => $isHotStatusFilter,
         ]);
     }
 

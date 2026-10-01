@@ -203,6 +203,7 @@ class DaySalesTrackerController extends Controller
                     'product_name'             => $lp->product_name ?: 'Product',
                     'mon'                      => $mon,
                     'date'                     => $dateFormatted,
+                    'raw_date'                 => $carbonDate->format('Y-m-d H:i:s'),
                     'branch'                   => $branch,
                     'branch_type'              => $branchType,
                     'team_leader'              => $tlName ?: '—',
@@ -215,6 +216,16 @@ class DaySalesTrackerController extends Controller
                     'lead_url'                 => url('/leads/' . $lp->lead_id),
                 ];
             }
+
+            // Sort items date-wise descending (newest date first)
+            usort($items, function ($a, $b) {
+                return strcmp($b['raw_date'], $a['raw_date']) ?: ($b['id'] <=> $a['id']);
+            });
+
+            foreach ($items as $index => &$item) {
+                $item['s_no'] = $index + 1;
+            }
+            unset($item);
 
             $companyId = $user?->company_id;
             $categoriesRecords = DaySalesTrackerCategory::query()
