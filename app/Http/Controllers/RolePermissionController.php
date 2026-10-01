@@ -206,6 +206,7 @@ class RolePermissionController extends Controller
         ]);
 
         $role->syncPermissions($data['permissions'] ?? []);
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 
         $roleLabel = $role->display_name ?: $role->name;
 

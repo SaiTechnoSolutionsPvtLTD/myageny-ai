@@ -151,22 +151,12 @@ class DataVisibilityService
             $additionalBranchIds = array_values(array_filter($allBranchIds, fn($id) => !in_array((int)$id, $defaultBranchIds)));
 
             // Mapped descendants under this manager
-            $descendants = $this->descendantUserIds($user);
-
-            // HO descendants: mapped users who are in the default branch
-            $hoDescendantIds = [];
-            if ($descendants->isNotEmpty()) {
-                $hoDescendantIds = User::withoutGlobalScope('branch')
-                    ->whereIn('id', $descendants)
-                    ->whereIn('branch_id', $defaultBranchIds)
-                    ->pluck('id')
-                    ->all();
-            }
+            $descendantIds = $this->descendantUserIds($user)->all();
 
             try {
                 return User::withoutGlobalScope('branch')
                     ->where('is_active', true)
-                    ->where(function ($query) use ($additionalBranchIds, $hoDescendantIds, $user) {
+                    ->where(function ($query) use ($additionalBranchIds, $descendantIds, $user) {
                         $query->where('id', $user->id);
 
                         if (!empty($additionalBranchIds)) {
@@ -179,8 +169,8 @@ class DataVisibilityService
                                   });
                         }
 
-                        if (!empty($hoDescendantIds)) {
-                            $query->orWhereIn('id', $hoDescendantIds);
+                        if (!empty($descendantIds)) {
+                            $query->orWhereIn('id', $descendantIds);
                         }
                     })
                     ->pluck('id')

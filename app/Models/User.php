@@ -1066,8 +1066,7 @@ class User extends Authenticatable
     {
         return $this->can('modules_menu.projects')
             || $this->isSuperAdmin()
-            || $this->isCompanyAdmin()
-            || $this->isDevelopmentTeam();
+            || $this->isCompanyAdmin();
     }
 
     public function canAccessMobileCrmModule(): bool
@@ -1079,8 +1078,7 @@ class User extends Authenticatable
     {
         return $this->can('modules_menu.cst')
             || $this->isSuperAdmin()
-            || $this->isCompanyAdmin()
-            || $this->hasCustomerSupportLikeRole();
+            || $this->isCompanyAdmin();
     }
 
     public function canAccessHrmsModule(): bool

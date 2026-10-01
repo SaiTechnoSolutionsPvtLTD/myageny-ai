@@ -37,7 +37,15 @@ class InternApiController extends Controller
 
     private function isCompanyAdmin(?User $user): bool
     {
-        return (bool) ($user && (
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isBranchAdmin() || $user->isBranchManager()) {
+            return false;
+        }
+
+        return (bool) (
             $user->isSuperAdmin()
             || $user->isSystemAdmin()
             || $user->isCompanyAdmin()
@@ -45,8 +53,7 @@ class InternApiController extends Controller
             || $user->isCbo()
             || $user->belongsToHrDepartment()
             || $user->hasHrLikeRole()
-            || $user->isHrOrAdmin()
-        ));
+        );
     }
 
     // ── GET /api/mobile/hrms/interns ──────────────────────────────────────────
@@ -62,15 +69,15 @@ class InternApiController extends Controller
 
         $actingBranchIds = [];
         if ($isCompanyAdmin) {
-            if ($request->filled('branch_id')) {
-                if ($request->branch_id !== 'all') {
-                    $actingBranchIds = [(int) $request->branch_id];
-                }
-            } elseif ($user?->branch_id) {
-                $actingBranchIds = [(int) $user->branch_id];
+            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
+                $actingBranchIds = [(int) $request->branch_id];
             }
         } else {
-            // Non-Company Admin is scoped to their own assigned branches (supports Branch Admin / Manager)
+            // Branch Admin / Manager is strictly scoped to their assigned branches
+            if (empty($userBranchIds)) {
+                $userBranchIds = [-1]; // Fail-safe to return no records if unassigned
+            }
+
             if ($request->filled('branch_id') && $request->branch_id !== 'all') {
                 $reqBranchId = (int) $request->branch_id;
                 if (in_array($reqBranchId, $userBranchIds, true)) {

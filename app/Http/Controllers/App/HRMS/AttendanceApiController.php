@@ -187,7 +187,7 @@ class AttendanceApiController extends Controller
                     return [$reqId];
                 }
             }
-            return !empty($myBranchIds) ? $myBranchIds : null;
+            return !empty($myBranchIds) ? $myBranchIds : [-1];
         }
 
         // For exempt roles (Company Admin, CBO, COO, Super Admin, System Admin)
@@ -330,6 +330,9 @@ class AttendanceApiController extends Controller
                             $q->orWhere('intern_id', 'like', $code . '%');
                         }
                     });
+                } else {
+                    $employeeQuery->whereRaw('1 = 0');
+                    $internQuery->whereRaw('1 = 0');
                 }
             } else {
                 // Roles exempt from branch restriction (Company Admin, CBO, COO, Super Admin, System Admin)

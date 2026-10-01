@@ -96,6 +96,13 @@ class ExpenseRequestApiController extends Controller
                     } else {
                         $scopedQuery->where('user_id', '!=', $user->id);
                     }
+                } elseif ($vis['is_branch_manager']) {
+                    $teamUserIds = array_diff($vis['visible_user_ids'], [$user->id]);
+                    if (empty($teamUserIds)) {
+                        $scopedQuery->whereRaw('1 = 0');
+                    } else {
+                        $scopedQuery->whereIn('user_id', $teamUserIds);
+                    }
                 } elseif ($vis['has_team_members']) {
                     $scopedQuery->whereIn('user_id', $vis['descendant_ids']);
                 } else {
@@ -106,7 +113,7 @@ class ExpenseRequestApiController extends Controller
                     $q->where('approver_id', $user->id)
                       ->orWhereIn('current_approver_role_id', $matchingRoleIds);
                 });
-            } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+            } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_branch_manager'] || $vis['is_tl_or_manager'])) {
                 if ($vis['is_admin_or_hr']) {
                     if ($vis['is_branch_admin']) {
                         $branchIds = $user->getMyBranchIds();
@@ -114,6 +121,8 @@ class ExpenseRequestApiController extends Controller
                     } elseif ($companyId && ! $vis['is_super_admin']) {
                         $scopedQuery->where('company_id', $companyId);
                     }
+                } elseif ($vis['is_branch_manager']) {
+                    $scopedQuery->whereIn('user_id', $vis['visible_user_ids']);
                 } elseif ($vis['has_team_members']) {
                     $scopedQuery->whereIn('user_id', array_merge([$user->id], $vis['descendant_ids']));
                 }
@@ -137,7 +146,12 @@ class ExpenseRequestApiController extends Controller
                 ->count();
 
             $teamTotal = 0;
-            if ($vis['has_team_members']) {
+            if ($vis['is_branch_manager']) {
+                $teamUserIds = array_diff($vis['visible_user_ids'], [$user->id]);
+                $teamTotal = ExpenseRequest::whereIn('user_id', $teamUserIds)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->count();
+            } elseif ($vis['has_team_members']) {
                 $teamTotal = ExpenseRequest::whereIn('user_id', $vis['descendant_ids'])
                     ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
                     ->count();
@@ -514,13 +528,16 @@ class ExpenseRequestApiController extends Controller
         $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
         $isCompanyAdmin = $user->isCompanyAdmin();
         $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
-        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+        $isBranchManager = $user->isBranchManager() || app(DataVisibilityService::class)->hasBranchManagerRole($user);
+        $isBranchAdmin  = ($user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user)) && ! $isBranchManager;
 
         /** @var DataVisibilityService $visibility */
         $visibility     = app(DataVisibilityService::class);
         $descendantIds  = $visibility->descendantUserIds($user);
-        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
-        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $visibleUserIds = $visibility->visibleUserIds($user) ?? [];
+        $teamUserIds    = array_diff($visibleUserIds, [$user->id]);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists() || ! empty($teamUserIds);
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole() || $isBranchManager;
         $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
 
         return [
@@ -528,10 +545,12 @@ class ExpenseRequestApiController extends Controller
             'is_company_admin' => $isCompanyAdmin,
             'is_hr'            => $isHr,
             'is_branch_admin'  => $isBranchAdmin,
+            'is_branch_manager' => $isBranchManager,
             'is_tl_or_manager' => $isTlOrManager,
             'has_team_members' => $hasTeamMembers,
             'is_admin_or_hr'   => $isAdminOrHr,
             'descendant_ids'   => $descendantIds->all(),
+            'visible_user_ids' => $visibleUserIds,
             'user_branch_ids'  => method_exists($user, 'getMyBranchIds') ? $user->getMyBranchIds() : ($user->branch_id ? [(int) $user->branch_id] : []),
         ];
     }

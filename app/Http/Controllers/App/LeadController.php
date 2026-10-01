@@ -351,15 +351,16 @@ class LeadController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'company_name'  => ['required', 'string', 'max:255'],
-            'contact_name'  => ['required', 'string', 'max:255'],
-            'lead_date'     => ['nullable', 'date'],
-            'mobile_number' => ['required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
-            'email'         => ['nullable', 'email', 'max:255'],
+            'company_name'   => ['required', 'string', 'max:255'],
+            'contact_name'   => ['required', 'string', 'max:255'],
+            'lead_date'      => ['nullable', 'date'],
+            'mobile_number'  => ['required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
+            'email'          => ['nullable', 'email', 'max:255'],
+            'lead_source'    => ['nullable', 'string', 'max:255'],
             'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
-            'lead_status'     => ['nullable', 'string'],
-            'product_id'    => ['nullable', 'integer', 'exists:products,id'],
+            'lead_status'    => ['nullable', 'string'],
+            'product_id'     => ['nullable', 'integer', 'exists:products,id'],
             // The mobile app no longer exposes a Priority field on Add Lead
             // (Lead Priority – Mobile App Changes ticket) — this stays
             // 'nullable' rather than 'required' purely so the request
@@ -405,9 +406,7 @@ class LeadController extends Controller
             abort_unless($this->isLeadSourceIdAllowedForCompany($leadData['lead_source_id'] ?? null, $request->user()), 403);
             abort_unless($this->isLeadStatusIdAllowedForCompany($leadData['lead_status_id'] ?? null, $request->user()), 403);
 
-            // Get source name from lead_source_id
-            $leadData['lead_source'] = null;
-
+            // Resolve lead_source and lead_source_id
             if (!empty($leadData['lead_source_id'])) {
                 // withoutGlobalScope: the id was just confirmed above to
                 // belong to this company OR be a shared NULL-company_id
@@ -417,7 +416,19 @@ class LeadController extends Controller
                 // find() here could wrongly drop the resolved name for a
                 // legitimate global default.
                 $leadSource = LeadSource::withoutGlobalScope('company')->find($leadData['lead_source_id']);
-                $leadData['lead_source'] = $leadSource?->name;
+                $leadData['lead_source'] = $leadSource?->name ?? ($leadData['lead_source'] ?? null);
+            } elseif (!empty($leadData['lead_source'])) {
+                $sourceName = trim((string) $leadData['lead_source']);
+                $leadSource = LeadSource::withoutGlobalScope('company')
+                    ->where('name', $sourceName)
+                    ->when($request->user()?->company_id, function ($q, $cid) {
+                        $q->where(fn ($sub) => $sub->where('company_id', $cid)->orWhereNull('company_id'));
+                    })
+                    ->first();
+                if ($leadSource) {
+                    $leadData['lead_source_id'] = $leadSource->id;
+                    $leadData['lead_source']    = $leadSource->name;
+                }
             }
 
             $assignedUser = User::find($leadData['assigned_to']);
@@ -544,19 +555,20 @@ class LeadController extends Controller
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
 
         $validated = $request->validate([
-            'company_name'  => ['sometimes', 'required', 'string', 'max:255'],
-            'contact_name'  => ['sometimes', 'required', 'string', 'max:255'],
-            'lead_date'     => ['nullable', 'date'],
-            'mobile_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
-            'email'         => ['nullable', 'email', 'max:255'],
+            'company_name'   => ['sometimes', 'required', 'string', 'max:255'],
+            'contact_name'   => ['sometimes', 'required', 'string', 'max:255'],
+            'lead_date'      => ['nullable', 'date'],
+            'mobile_number'  => ['sometimes', 'required', 'string', 'max:20', 'regex:' . Lead::MOBILE_NUMBER_REGEX],
+            'email'          => ['nullable', 'email', 'max:255'],
+            'lead_source'    => ['nullable', 'string', 'max:255'],
             'lead_source_id' => ['nullable', 'integer', 'exists:lead_sources,id'],
             'lead_status_id' => ['nullable', 'integer', 'exists:lead_statuses,id'],
-            'lead_status'     => ['nullable', 'string'],
-            'product_id'    => ['nullable', 'integer', 'exists:products,id'],
-            'priority'      => ['sometimes', 'required', 'string', 'in:' . implode(',', array_keys(Lead::PRIORITIES))],
-            'remarks'       => ['nullable', 'string'],
-            'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
-            'assigned_to'   => ['nullable', 'integer', 'exists:users,id'],
+            'lead_status'    => ['nullable', 'string'],
+            'product_id'     => ['nullable', 'integer', 'exists:products,id'],
+            'priority'       => ['sometimes', 'required', 'string', 'in:' . implode(',', array_keys(Lead::PRIORITIES))],
+            'remarks'        => ['nullable', 'string'],
+            'branch_id'      => ['nullable', 'integer', 'exists:branches,id'],
+            'assigned_to'    => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         if (array_key_exists('assigned_to', $validated) && $validated['assigned_to']) {
@@ -572,6 +584,25 @@ class LeadController extends Controller
         }
         if (array_key_exists('lead_status_id', $validated)) {
             abort_unless($this->isLeadStatusIdAllowedForCompany($validated['lead_status_id'], $request->user()), 403);
+        }
+
+        if (array_key_exists('lead_source_id', $validated) && !empty($validated['lead_source_id'])) {
+            $leadSource = LeadSource::withoutGlobalScope('company')->find($validated['lead_source_id']);
+            if ($leadSource) {
+                $validated['lead_source'] = $leadSource->name;
+            }
+        } elseif (array_key_exists('lead_source', $validated) && !empty($validated['lead_source'])) {
+            $sourceName = trim((string) $validated['lead_source']);
+            $leadSource = LeadSource::withoutGlobalScope('company')
+                ->where('name', $sourceName)
+                ->when($request->user()?->company_id, function ($q, $cid) {
+                    $q->where(fn ($sub) => $sub->where('company_id', $cid)->orWhereNull('company_id'));
+                })
+                ->first();
+            if ($leadSource) {
+                $validated['lead_source_id'] = $leadSource->id;
+                $validated['lead_source']    = $leadSource->name;
+            }
         }
 
         // Only enforce the branch guard when branch_id is actually being
@@ -812,6 +843,31 @@ class LeadController extends Controller
         $user = request()->user();
         $sourceOptions = $this->companyScopedLeadSourceOptions($user);
         $data = collect($sourceOptions)->map(fn($name, $id) => [
+            'id'   => (int) $id,
+            'name' => $name,
+        ])->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $data,
+        ]);
+    }
+
+    #[OA\Get(
+        path: "/api/mobile/leads/statuses",
+        summary: "Get company-scoped lead statuses",
+        security: [["sanctum" => []]],
+        tags: ["Leads"],
+        responses: [
+            new OA\Response(response: 200, description: "List of company-scoped lead statuses"),
+            new OA\Response(response: 401, description: "Unauthenticated"),
+        ]
+    )]
+    public function statuses(): JsonResponse
+    {
+        $user = request()->user();
+        $statusOptions = $this->companyScopedLeadStatusOptions($user);
+        $data = collect($statusOptions)->map(fn($name, $id) => [
             'id'   => (int) $id,
             'name' => $name,
         ])->values();

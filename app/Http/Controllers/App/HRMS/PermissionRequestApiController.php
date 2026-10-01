@@ -55,12 +55,19 @@ class PermissionRequestApiController extends Controller
                 } else {
                     $query->where('user_id', '!=', $user->id);
                 }
+            } elseif ($vis['is_branch_manager']) {
+                $teamUserIds = array_diff($vis['visible_user_ids'], [$user->id]);
+                if (empty($teamUserIds)) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereIn('user_id', $teamUserIds);
+                }
             } elseif ($vis['has_team_members']) {
                 $query->whereIn('user_id', $vis['descendant_ids']);
             } else {
                 $query->whereRaw('1 = 0');
             }
-        } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_tl_or_manager'])) {
+        } elseif ($scope === 'all' && ($vis['is_admin_or_hr'] || $vis['is_branch_manager'] || $vis['is_tl_or_manager'])) {
             if ($vis['is_admin_or_hr']) {
                 if ($vis['is_branch_admin']) {
                     $branchIds = $user->getMyBranchIds();
@@ -68,6 +75,8 @@ class PermissionRequestApiController extends Controller
                 } elseif ($user->company_id && ! $vis['is_super_admin']) {
                     $query->where('company_id', $user->company_id);
                 }
+            } elseif ($vis['is_branch_manager']) {
+                $query->whereIn('user_id', $vis['visible_user_ids']);
             } elseif ($vis['has_team_members']) {
                 $allowed = array_merge([$user->id], $vis['descendant_ids']);
                 $query->whereIn('user_id', $allowed);
@@ -150,7 +159,7 @@ class PermissionRequestApiController extends Controller
         ];
 
         $teamStats = null;
-        if ($vis['has_team_members'] || $vis['is_admin_or_hr']) {
+        if ($vis['has_team_members'] || $vis['is_admin_or_hr'] || $vis['is_branch_manager']) {
             $teamQuery = PermissionRequest::query();
             if ($vis['is_admin_or_hr']) {
                 if ($vis['is_branch_admin']) {
@@ -162,6 +171,13 @@ class PermissionRequestApiController extends Controller
                         ->where('user_id', '!=', $user->id);
                 } else {
                     $teamQuery->where('user_id', '!=', $user->id);
+                }
+            } elseif ($vis['is_branch_manager']) {
+                $teamUserIds = array_diff($vis['visible_user_ids'], [$user->id]);
+                if (empty($teamUserIds)) {
+                    $teamQuery->whereRaw('1 = 0');
+                } else {
+                    $teamQuery->whereIn('user_id', $teamUserIds);
                 }
             } else {
                 $teamQuery->whereIn('user_id', $vis['descendant_ids']);
@@ -446,13 +462,16 @@ class PermissionRequestApiController extends Controller
         $isSuperAdmin   = $user->isSuperAdmin() || $user->isSystemAdmin();
         $isCompanyAdmin = $user->isCompanyAdmin();
         $isHr           = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
-        $isBranchAdmin  = $user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user);
+        $isBranchManager = $user->isBranchManager() || app(DataVisibilityService::class)->hasBranchManagerRole($user);
+        $isBranchAdmin  = ($user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user)) && ! $isBranchManager;
 
         /** @var DataVisibilityService $visibility */
         $visibility     = app(DataVisibilityService::class);
         $descendantIds  = $visibility->descendantUserIds($user);
-        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists();
-        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole();
+        $visibleUserIds = $visibility->visibleUserIds($user) ?? [];
+        $teamUserIds    = array_diff($visibleUserIds, [$user->id]);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists() || ! empty($teamUserIds);
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole() || $isBranchManager;
         $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
 
         return [
@@ -460,10 +479,12 @@ class PermissionRequestApiController extends Controller
             'is_company_admin' => $isCompanyAdmin,
             'is_hr'            => $isHr,
             'is_branch_admin'  => $isBranchAdmin,
+            'is_branch_manager' => $isBranchManager,
             'is_tl_or_manager' => $isTlOrManager,
             'has_team_members' => $hasTeamMembers,
             'is_admin_or_hr'   => $isAdminOrHr,
             'descendant_ids'   => $descendantIds->all(),
+            'visible_user_ids' => $visibleUserIds,
         ];
     }
 
@@ -602,6 +623,10 @@ class PermissionRequestApiController extends Controller
         if ($vis['is_branch_admin']) {
             $branchIds = $user->getMyBranchIds();
             return in_array((int) $pr->user?->branch_id, $branchIds, true);
+        }
+
+        if ($vis['is_branch_manager']) {
+            return in_array((int) $pr->user_id, $vis['visible_user_ids'], true);
         }
 
         if ($vis['has_team_members'] && in_array((int) $pr->user_id, $vis['descendant_ids'], true)) {
