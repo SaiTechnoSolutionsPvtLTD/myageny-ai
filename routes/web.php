@@ -584,6 +584,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('recruitment.interviews.update');
     Route::patch('/recruitment/{recruitment}/status', [RecruitmentController::class, 'updateStatus'])
         ->name('recruitment.status.update');
+    Route::get('/recruitment/{recruitment}/resume/download', [RecruitmentController::class, 'downloadResume'])
+        ->name('recruitment.resume.download');
+    Route::get('/recruitment/{recruitment}/resume/view', [RecruitmentController::class, 'viewResume'])
+        ->name('recruitment.resume.view');
     Route::resource('assets', AssetEntryController::class);
     Route::get('employee-onboarding/generate-id', [EmployeeOnboardingController::class, 'getGeneratedId'])->name('employee-onboarding.generate-id');
     Route::post('employee-onboarding/{employee_onboarding}/update-photo', [EmployeeOnboardingController::class, 'updatePhoto'])->name('employee-onboarding.update-photo');

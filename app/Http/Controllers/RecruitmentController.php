@@ -329,7 +329,14 @@ class RecruitmentController extends Controller
         }
 
         if ($request->hasFile('resume')) {
-            $validated['resume_path'] = $request->file('resume')->store(self::RESUME_DIRECTORY, 'public');
+            $targetDir = public_path('uploads/recruitment/resumes');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0777, true);
+            }
+            $file = $request->file('resume');
+            $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '', str_replace(' ', '_', $file->getClientOriginalName()));
+            $file->move($targetDir, $filename);
+            $validated['resume_path'] = 'uploads/recruitment/resumes/' . $filename;
         }
 
         unset($validated['resume']);
@@ -345,6 +352,66 @@ class RecruitmentController extends Controller
         return redirect()
             ->route('recruitment.show', $candidate)
             ->with('success', "Candidate <strong>{$candidate->name}</strong> added to recruitment.");
+    }
+
+    public function downloadResume(RecruitmentCandidate $recruitment)
+    {
+        if (!$recruitment->resume_path) {
+            return back()->with('error', 'No resume file uploaded for this candidate.');
+        }
+
+        $path = $recruitment->resume_path;
+
+        // 1. Direct public folder path
+        $publicFilePath = public_path(ltrim((string) $path, '/'));
+        if (file_exists($publicFilePath) && is_file($publicFilePath)) {
+            return response()->download($publicFilePath);
+        }
+
+        // 2. Storage disk public
+        if (Storage::disk('public')->exists($path)) {
+            return Storage::disk('public')->download($path);
+        }
+
+        // 3. Public storage link path
+        $storagePublicPath = public_path('storage/' . ltrim((string) $path, '/'));
+        if (file_exists($storagePublicPath) && is_file($storagePublicPath)) {
+            return response()->download($storagePublicPath);
+        }
+
+        return back()->with('error', 'Resume file not found on server.');
+    }
+
+    public function viewResume(RecruitmentCandidate $recruitment)
+    {
+        if (!$recruitment->resume_path) {
+            abort(404, 'No resume file uploaded for this candidate.');
+        }
+
+        $path = $recruitment->resume_path;
+
+        // 1. Direct public folder path
+        $publicFilePath = public_path(ltrim((string) $path, '/'));
+        if (file_exists($publicFilePath) && is_file($publicFilePath)) {
+            $mimeType = mime_content_type($publicFilePath) ?: 'application/pdf';
+            return response()->file($publicFilePath, ['Content-Type' => $mimeType]);
+        }
+
+        // 2. Storage disk public
+        if (Storage::disk('public')->exists($path)) {
+            $fullPath = Storage::disk('public')->path($path);
+            $mimeType = mime_content_type($fullPath) ?: 'application/pdf';
+            return response()->file($fullPath, ['Content-Type' => $mimeType]);
+        }
+
+        // 3. Public storage link path
+        $storagePublicPath = public_path('storage/' . ltrim((string) $path, '/'));
+        if (file_exists($storagePublicPath) && is_file($storagePublicPath)) {
+            $mimeType = mime_content_type($storagePublicPath) ?: 'application/pdf';
+            return response()->file($storagePublicPath, ['Content-Type' => $mimeType]);
+        }
+
+        abort(404, 'Resume file not found on server.');
     }
 
     public function show(RecruitmentCandidate $recruitment): View
@@ -461,10 +528,23 @@ class RecruitmentController extends Controller
         }
 
         if ($request->hasFile('resume')) {
-            if ($recruitment->resume_path && Storage::disk('public')->exists($recruitment->resume_path)) {
-                Storage::disk('public')->delete($recruitment->resume_path);
+            $targetDir = public_path('uploads/recruitment/resumes');
+            if (!file_exists($targetDir)) {
+                mkdir($targetDir, 0777, true);
             }
-            $validated['resume_path'] = $request->file('resume')->store(self::RESUME_DIRECTORY, 'public');
+            if ($recruitment->resume_path) {
+                $oldPublicPath = public_path(ltrim((string) $recruitment->resume_path, '/'));
+                if (file_exists($oldPublicPath) && is_file($oldPublicPath)) {
+                    @unlink($oldPublicPath);
+                }
+                if (Storage::disk('public')->exists($recruitment->resume_path)) {
+                    Storage::disk('public')->delete($recruitment->resume_path);
+                }
+            }
+            $file = $request->file('resume');
+            $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '', str_replace(' ', '_', $file->getClientOriginalName()));
+            $file->move($targetDir, $filename);
+            $validated['resume_path'] = 'uploads/recruitment/resumes/' . $filename;
         }
 
         unset($validated['resume']);

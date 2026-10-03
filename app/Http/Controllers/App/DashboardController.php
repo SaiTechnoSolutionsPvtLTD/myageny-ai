@@ -742,7 +742,10 @@ class DashboardController extends Controller
 
         // ── Day Sales Tracker (Today Converted Products & Collections) ──
         $todayStr = today()->toDateString();
-        $todayConvertedQuery = LeadProduct::query()
+        $todayConvertedProducts = LeadProduct::query()
+            ->with(['payments' => function ($q) use ($todayStr) {
+                $q->whereDate('payment_date', $todayStr);
+            }])
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                   ->orWhere('lead_status_id', 5);
@@ -765,10 +768,26 @@ class DashboardController extends Controller
             })
             ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-            });
-        $todayConvertedCount = (clone $todayConvertedQuery)->count();
-        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
-        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
+            })
+            ->get();
+
+        $todayConvertedCount = $todayConvertedProducts->count();
+        $todayConvertedValue = (float) $todayConvertedProducts->sum('total_price');
+        $todayConvertedCollection = 0.0;
+
+        foreach ($todayConvertedProducts as $lp) {
+            if ($lp->payments && $lp->payments->count() > 0) {
+                $todayConvertedCollection += (float) $lp->payments->sum('amount');
+            } elseif ($lp->payment_date && Carbon::parse($lp->payment_date)->isToday()) {
+                $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+            } else {
+                $paymentDate = $lp->converted_at ?: $lp->created_at;
+                if ($paymentDate && Carbon::parse($paymentDate)->isToday()) {
+                    $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+                }
+            }
+        }
+        $todayConvertedCollection = round($todayConvertedCollection, 2);
 
         // ── Build response ────────────────────────────────────────
         return response()->json([

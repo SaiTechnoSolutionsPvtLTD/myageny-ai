@@ -2,15 +2,19 @@
 @php
     $dmc = $dmCampaignsData ?? null;
     $renewals = $dmc['renewalCampaigns'] ?? null;
+    $nextMonthRenewals = $dmc['nextMonthRenewalCampaigns'] ?? null;
     $expired = $dmc['expiredCampaigns'] ?? null;
     $summary = $dmc['summary'] ?? [
         'total_renewals' => 0,
         'due_renewals' => 0,
         'completed_renewals' => 0,
+        'next_month_renewals' => 0,
+        'next_month_due_renewals' => 0,
         'total_expired' => 0,
         'unrenewed_expired' => 0,
     ];
     $monthLabel = $dmc['current_month_label'] ?? \Illuminate\Support\Carbon::today()->format('F Y');
+    $nextMonthLabel = $dmc['next_month_label'] ?? \Illuminate\Support\Carbon::today()->addMonth()->format('F Y');
 @endphp
 
 @if($dmc)
@@ -276,6 +280,227 @@
                 <div style="font-size:28px; margin-bottom:8px;">🔄</div>
                 <div style="font-weight:700; font-size:14px; color:#1e293b;">No Renewal Campaigns Found for {{ $monthLabel }}</div>
                 <div style="font-size:12px; color:#94a3b8; margin-top:4px;">When campaigns reach their renewal window this month, they will appear here.</div>
+            </div>
+        @endif
+    </div>
+</section>
+
+{{-- 2b. Section: Next Month Renewal Campaigns --}}
+<section class="dmc-card" id="dm-next-month-renewal-campaigns-section">
+    <div class="dmc-card-head">
+        <div>
+            <div class="dmc-card-title">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:#0284c7;">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                <span>Next Month Renewal Campaigns ({{ $nextMonthLabel }})</span>
+            </div>
+            <div class="dmc-card-sub">Campaigns ending or scheduled for renewal in {{ $nextMonthLabel }}. Plan upcoming renewals in advance.</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span class="pjd-highlight" style="background:#f0f9ff; border-color:#bae6fd; color:#0284c7;">
+                {{ $nextMonthRenewals ? $nextMonthRenewals->total() : 0 }} Campaigns
+            </span>
+            <a href="{{ route('projects.campaigns.index', ['renewal_filter' => 'next_month']) }}" class="dmc-action-btn dmc-action-btn--outline">
+                <span>View in Campaigns</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </a>
+        </div>
+    </div>
+
+    <div class="dmc-card-body" style="padding:0;">
+        @if($nextMonthRenewals && $nextMonthRenewals->isNotEmpty())
+            <div class="dmc-table-wrap">
+                <table class="dmc-table">
+                    <thead>
+                        <tr>
+                            <th>Campaign</th>
+                            <th>Company / Client</th>
+                            <th>Tenure &amp; End Date</th>
+                            <th>Budget</th>
+                            <th>Renewal Status</th>
+                            <th>Status</th>
+                            <th>Assigned By</th>
+                            <th style="text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($nextMonthRenewals as $item)
+                            <tr>
+                                {{-- Campaign Column --}}
+                                <td>
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        @php
+                                            $plat = strtolower($item['platform'] ?? '');
+                                            $platClass = match(true) {
+                                                str_contains($plat, 'meta') || str_contains($plat, 'face') => 'dmc-platform-meta',
+                                                str_contains($plat, 'google') => 'dmc-platform-google',
+                                                str_contains($plat, 'insta') => 'dmc-platform-instagram',
+                                                default => 'dmc-platform-other'
+                                            };
+                                        @endphp
+                                        <span class="dmc-platform-badge {{ $platClass }}">{{ $item['platform'] }}</span>
+                                        @if($item['is_extended'])
+                                            <span class="dmc-ext-badge">Extended</span>
+                                        @endif
+                                    </div>
+                                    <div style="font-weight:800; font-size:13.5px; color:#0f172a; margin-top:4px;">
+                                        {{ $item['campaign_name'] }}
+                                    </div>
+                                </td>
+
+                                {{-- Company / Client Column --}}
+                                <td>
+                                    <div style="font-weight:800; font-size:13px; color:#1e293b;">
+                                        {{ $item['company_name'] }}
+                                    </div>
+                                    <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
+                                        {{ $item['contact_name'] }} &bull; {{ $item['mobile_number'] }}
+                                    </div>
+                                </td>
+
+                                {{-- Tenure & End Date Column --}}
+                                <td>
+                                    <div style="font-size:12.5px; font-weight:700; color:#1e293b;">
+                                        {{ $item['start_date'] }} &ndash; {{ $item['end_date'] }}
+                                    </div>
+                                    <div style="margin-top:4px;">
+                                        @if($item['days_remaining'] !== null)
+                                            @if($item['is_overdue'])
+                                                <span class="dmc-days-left dmc-days-left--overdue">{{ $item['days_remaining_text'] }}</span>
+                                            @elseif($item['days_remaining'] <= 3)
+                                                <span class="dmc-days-left dmc-days-left--urgent">{{ $item['days_remaining_text'] }}</span>
+                                            @else
+                                                <span class="dmc-days-left dmc-days-left--safe">{{ $item['days_remaining_text'] }}</span>
+                                            @endif
+                                        @endif
+                                    </div>
+                                </td>
+
+                                {{-- Budget Column --}}
+                                <td>
+                                    <div style="font-weight:800; font-size:13px; color:#0f172a;">
+                                        Rs {{ number_format($item['budget_amount'], 2) }}
+                                    </div>
+                                    <div style="font-size:11px; color:#64748b;">
+                                        {{ $item['budget_type'] }}
+                                    </div>
+                                </td>
+
+                                {{-- Renewal Status Column --}}
+                                <td>
+                                    @if($item['is_renewed'])
+                                        <span class="dmc-renewal-badge dmc-renewal-badge--renewed">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                            <span>Renewed</span>
+                                        </span>
+                                    @else
+                                        <span class="dmc-renewal-badge dmc-renewal-badge--due">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            <span>Due for Renewal</span>
+                                        </span>
+                                    @endif
+                                </td>
+
+                                {{-- Campaign Status Column --}}
+                                <td>
+                                    @php
+                                        $cStatus = $item['campaign_status'];
+                                        $cStatusClass = match($cStatus) {
+                                            'active' => 'dmc-status-pill--active',
+                                            'paused' => 'dmc-status-pill--paused',
+                                            'expired' => 'dmc-status-pill--expired',
+                                            default => 'dmc-status-pill--stopped',
+                                        };
+                                    @endphp
+                                    <span class="dmc-status-pill {{ $cStatusClass }}">{{ $cStatus }}</span>
+                                </td>
+
+                                {{-- Assigned By Column --}}
+                                <td>
+                                    <div style="font-weight:600; font-size:12px; color:#475569;">
+                                        {{ $item['created_by_name'] }}
+                                    </div>
+                                </td>
+
+                                {{-- Action Column --}}
+                                <td style="text-align:right;">
+                                    @if($item['lead_url'])
+                                        <a href="{{ $item['lead_url'] }}" class="dmc-action-btn dmc-action-btn--primary">
+                                            <span>View / Extend</span>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                        </a>
+                                    @else
+                                        <span style="font-size:11px; color:#94a3b8;">&mdash;</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            {{-- Pagination Footer for Next Month Renewal Campaigns --}}
+            @if($nextMonthRenewals->hasPages())
+                <div class="pjd-pagination-footer">
+                    <div class="pjd-pagination-info">
+                        {{ $nextMonthRenewals->firstItem() }}-{{ $nextMonthRenewals->lastItem() }} of {{ $nextMonthRenewals->total() }} campaigns
+                    </div>
+                    <nav class="pjd-pagination-nav">
+                        {{-- Prev Page Link --}}
+                        @if($nextMonthRenewals->onFirstPage())
+                            <span class="pjd-page-btn is-disabled" title="Previous Page">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </span>
+                        @else
+                            <a href="{{ $nextMonthRenewals->previousPageUrl() }}" class="pjd-page-btn" title="Previous Page">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </a>
+                        @endif
+
+                        @php
+                            $nmCur = $nextMonthRenewals->currentPage();
+                            $nmLast = $nextMonthRenewals->lastPage();
+                            $nmStartP = max(1, $nmCur - 2);
+                            $nmEndP = min($nmLast, $nmCur + 2);
+                        @endphp
+
+                        @if($nmStartP > 1)
+                            <a href="{{ $nextMonthRenewals->url(1) }}" class="pjd-page-btn {{ $nmCur == 1 ? 'is-active' : '' }}">1</a>
+                            @if($nmStartP > 2)
+                                <span class="pjd-page-ellipsis">...</span>
+                            @endif
+                        @endif
+
+                        @for($i = $nmStartP; $i <= $nmEndP; $i++)
+                            <a href="{{ $nextMonthRenewals->url($i) }}" class="pjd-page-btn {{ $nmCur == $i ? 'is-active' : '' }}">{{ $i }}</a>
+                        @endfor
+
+                        @if($nmEndP < $nmLast)
+                            @if($nmEndP < $nmLast - 1)
+                                <span class="pjd-page-ellipsis">...</span>
+                            @endif
+                            <a href="{{ $nextMonthRenewals->url($nmLast) }}" class="pjd-page-btn {{ $nmCur == $nmLast ? 'is-active' : '' }}">{{ $nmLast }}</a>
+                        @endif
+
+                        {{-- Next Page Link --}}
+                        @if($nextMonthRenewals->hasMorePages())
+                            <a href="{{ $nextMonthRenewals->nextPageUrl() }}" class="pjd-page-btn" title="Next Page">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </a>
+                        @else
+                            <span class="pjd-page-btn is-disabled" title="Next Page">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </span>
+                        @endif
+                    </nav>
+                </div>
+            @endif
+        @else
+            <div class="pjd-empty" style="padding:32px 20px; text-align:center; color:#64748b;">
+                <div style="font-size:28px; margin-bottom:8px;">📅</div>
+                <div style="font-weight:700; font-size:14px; color:#1e293b;">No Next Month Renewal Campaigns Found for {{ $nextMonthLabel }}</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">When campaigns are scheduled for renewal next month, they will appear here.</div>
             </div>
         @endif
     </div>

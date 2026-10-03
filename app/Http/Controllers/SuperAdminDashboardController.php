@@ -8,6 +8,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
+use App\Models\CustomerCampaign;
 use App\Models\Lead;
 use App\Models\LeadCallUpdate;
 use App\Models\LeadProduct;
@@ -18,6 +19,7 @@ use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductionInitiation;
+use App\Models\SmmSheet;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Illuminate\Http\JsonResponse;
@@ -681,9 +683,12 @@ class SuperAdminDashboardController extends ApiController
             $totalProspectsExpectedCollection = (float) array_sum(array_column($activeBranchesMetrics, 'expected_value'));
         }
 
-        // ── Day Sales Tracker (Current Date Converted Products) ──
+        // ── Day Sales Tracker (Current Date Converted Products & Payments) ──
         $todayStr = today()->toDateString();
-        $todayConvertedQuery = LeadProduct::query()
+        $todayConvertedProducts = LeadProduct::query()
+            ->with(['payments' => function ($q) use ($todayStr) {
+                $q->whereDate('payment_date', $todayStr);
+            }])
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                     ->orWhere('lead_status_id', 5);
@@ -706,10 +711,26 @@ class SuperAdminDashboardController extends ApiController
             })
             ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-            });
-        $todayConvertedCount = (clone $todayConvertedQuery)->count();
-        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
-        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
+            })
+            ->get();
+
+        $todayConvertedCount = $todayConvertedProducts->count();
+        $todayConvertedValue = (float) $todayConvertedProducts->sum('total_price');
+        $todayConvertedCollection = 0.0;
+
+        foreach ($todayConvertedProducts as $lp) {
+            if ($lp->payments && $lp->payments->count() > 0) {
+                $todayConvertedCollection += (float) $lp->payments->sum('amount');
+            } elseif ($lp->payment_date && Carbon::parse($lp->payment_date)->isToday()) {
+                $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+            } else {
+                $paymentDate = $lp->converted_at ?: $lp->created_at;
+                if ($paymentDate && Carbon::parse($paymentDate)->isToday()) {
+                    $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+                }
+            }
+        }
+        $todayConvertedCollection = round($todayConvertedCollection, 2);
 
         // ── Build response ────────────────────────────────────────
         return $this->success([
@@ -1873,24 +1894,54 @@ class SuperAdminDashboardController extends ApiController
             ? (float) collect($activeBranchesMetrics)->sum('expected_value')
             : $userTotalExpectedCollection;
 
-        // ── Day Sales Tracker (Current Date Converted Products) ──
-        $todayConvertedQuery = LeadProduct::query()
+        // ── Day Sales Tracker (Current Date Converted Products & Payments) ──
+        $todayStr = today()->toDateString();
+        $todayConvertedProducts = LeadProduct::query()
+            ->with(['payments' => function ($q) use ($todayStr) {
+                $q->whereDate('payment_date', $todayStr);
+            }])
             ->where(function ($q) {
                 $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                     ->orWhere('lead_status_id', 5);
             })
-            ->where(function ($q) {
-                $q->whereDate('converted_at', today())
-                    ->orWhere(function ($sub) {
-                        $sub->whereNull('converted_at')->whereDate('created_at', today());
-                    });
+            ->where(function ($q) use ($todayStr) {
+                $q->whereHas('payments', function ($pq) use ($todayStr) {
+                    $pq->whereDate('payment_date', $todayStr);
+                })
+                ->orWhereDate('payment_date', $todayStr)
+                ->orWhere(function ($sub) use ($todayStr) {
+                    $sub->whereNull('payment_date')
+                        ->whereDoesntHave('payments')
+                        ->where(function ($dateSub) use ($todayStr) {
+                            $dateSub->whereDate('converted_at', $todayStr)
+                                    ->orWhere(function ($cSub) use ($todayStr) {
+                                        $cSub->whereNull('converted_at')->whereDate('created_at', $todayStr);
+                                    });
+                        });
+                });
             })
             ->whereHas('lead', function ($lq) use ($request) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
-            });
-        $todayConvertedCount = (clone $todayConvertedQuery)->count();
-        $todayConvertedValue = (float) (clone $todayConvertedQuery)->sum('total_price');
-        $todayConvertedCollection = (float) (clone $todayConvertedQuery)->sum('amount_paid');
+            })
+            ->get();
+
+        $todayConvertedCount = $todayConvertedProducts->count();
+        $todayConvertedValue = (float) $todayConvertedProducts->sum('total_price');
+        $todayConvertedCollection = 0.0;
+
+        foreach ($todayConvertedProducts as $lp) {
+            if ($lp->payments && $lp->payments->count() > 0) {
+                $todayConvertedCollection += (float) $lp->payments->sum('amount');
+            } elseif ($lp->payment_date && Carbon::parse($lp->payment_date)->isToday()) {
+                $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+            } else {
+                $paymentDate = $lp->converted_at ?: $lp->created_at;
+                if ($paymentDate && Carbon::parse($paymentDate)->isToday()) {
+                    $todayConvertedCollection += (float) ($lp->amount_paid ?: 0);
+                }
+            }
+        }
+        $todayConvertedCollection = round($todayConvertedCollection, 2);
 
         // ── Build response ────────────────────────────────────────
         return $this->success([
@@ -2798,7 +2849,11 @@ class SuperAdminDashboardController extends ApiController
     }
 
     /**
-     * Resolve target date for CST prospect item based on product and department type.
+     * Resolve target date for CST prospect item based on standardized business rules across dashboards:
+     * - Technical SEO & Local SEO: Delivery Date (project_delivery_date).
+     * - Development Projects: Expected Date first priority, fallback to Delivery Date.
+     * - LG (Lead Generation): Renewal Date (Expiry date in custom_form_data).
+     * - SMM (Social Media Marketing): Renewal Date (Expiry date in custom_form_data).
      */
     protected function resolveCstProspectTargetDate(ProductionInitiation $pi): ?Carbon
     {
@@ -2833,7 +2888,13 @@ class SuperAdminDashboardController extends ApiController
         $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
         $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
 
-        // 1. Development: Expected Date first priority, else Delivery date
+        // 1. Technical SEO & Local SEO: Delivery Date based
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            return $deliveryDate ?: ($expectedDate ?: null);
+        }
+
+        // 2. Development Projects: Expected Date (Priority) & Delivery Date
         $isDevelopment = ($pi->department_id == 1)
             || str_contains($deptName, 'develop')
             || str_contains($productName, 'develop')
@@ -2845,35 +2906,18 @@ class SuperAdminDashboardController extends ApiController
             return $expectedDate ?: ($deliveryDate ?: null);
         }
 
-        // 2. Onetime design: Delivery date
-        $isOnetimeDesign = str_contains($productName, 'onetime')
-            || str_contains($productName, 'one time')
-            || str_contains($productName, 'design')
-            || str_contains($deptName, 'design');
-
-        if ($isOnetimeDesign) {
-            return $deliveryDate ?: ($expectedDate ?: null);
-        }
-
-        // 3. Renewal products - Lead Generation: Campaign expiry date
-        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen');
+        // 3. LG (Lead Generation): Renewal Date (Expiry date in form data)
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen') || str_contains($productName, 'lg');
         if ($isLeadGen) {
             $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
             return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
         }
 
-        // 4. Renewal products - SMM Sheet: Expiry date
+        // 4. SMM (Social Media Marketing): Renewal Date (Expiry date in form data)
         $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
         if ($isSmm) {
             $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
             return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
-        }
-
-        // 5. SEO Products: Expiry date or delivery date
-        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
-        if ($isSeo) {
-            $seoExpiry = $getFormDate(['seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            return $seoExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
         }
 
         // Default fallback for any other CST / Renewal item
@@ -3555,6 +3599,67 @@ class SuperAdminDashboardController extends ApiController
         $formattedNewDate = $newDate->format('d M Y');
         $formattedNewDateRaw = $newDate->format('Y-m-d');
 
+        $expiryKeys = [
+            'end_date', 'enddate', 'end date', 
+            'campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 
+            'smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 
+            'seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 
+            'expiry_date', 'expiry date', 'ovp_end_date', 'expiry'
+        ];
+
+        $applyInitiationDateUpdates = function (ProductionInitiation $pi) use ($formattedNewDateRaw, $expiryKeys) {
+            $pi->project_delivery_date = $formattedNewDateRaw;
+            $pi->expected_date         = $formattedNewDateRaw;
+
+            $formData = is_array($pi->custom_form_data)
+                ? $pi->custom_form_data
+                : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+            $formUpdated = false;
+            if (is_array($formData)) {
+                foreach ($formData as $idx => $field) {
+                    if (!is_array($field)) continue;
+                    $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                    $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+
+                    foreach ($expiryKeys as $expKey) {
+                        if ($key === $expKey || str_contains($key, $expKey)) {
+                            $formData[$idx]['value'] = $formattedNewDateRaw;
+                            $formUpdated = true;
+                            break;
+                        }
+                    }
+                }
+                if ($formUpdated) {
+                    $pi->custom_form_data = $formData;
+                }
+            }
+            $pi->save();
+
+            // Update associated CustomerCampaign end_date
+            CustomerCampaign::where(function($q) use ($pi) {
+                $q->where('production_initiation_id', $pi->id);
+                if ($pi->lead_product_id) {
+                    $q->orWhere('lead_product_id', $pi->lead_product_id);
+                }
+            })->update(['end_date' => $formattedNewDateRaw]);
+
+            // Update associated SmmSheet end_date
+            SmmSheet::where(function($q) use ($pi) {
+                $q->where('production_initiation_id', $pi->id);
+                if ($pi->lead_product_id) {
+                    $q->orWhere('lead_product_id', $pi->lead_product_id);
+                }
+            })->update(['end_date' => $formattedNewDateRaw]);
+
+            // Update associated LeadProduct closure_date
+            if ($pi->lead_product_id) {
+                LeadProduct::where('id', $pi->lead_product_id)->update(['closure_date' => $formattedNewDateRaw]);
+            } elseif ($pi->lead_id) {
+                LeadProduct::where('lead_id', $pi->lead_id)->update(['closure_date' => $formattedNewDateRaw]);
+            }
+        };
+
         // 1. If ProductionInitiation ID (Project item)
         if ($piId) {
             $pi = ProductionInitiation::find($piId);
@@ -3562,25 +3667,11 @@ class SuperAdminDashboardController extends ApiController
                 $oldDate = $pi->project_delivery_date ?: $pi->expected_date;
                 $oldDateStr = $oldDate ? Carbon::parse($oldDate)->format('d M Y') : 'None';
 
-                // Update delivery date & expected date
-                $pi->update([
-                    'project_delivery_date' => $formattedNewDateRaw,
-                    'expected_date'         => $formattedNewDateRaw,
-                ]);
-
-                // Also update associated lead product if exists
-                if ($pi->lead_product_id) {
-                    LeadProduct::where('id', $pi->lead_product_id)->update([
-                        'closure_date' => $formattedNewDateRaw,
-                    ]);
-                } elseif ($pi->lead_id) {
-                    LeadProduct::where('lead_id', $pi->lead_id)->update([
-                        'closure_date' => $formattedNewDateRaw,
-                    ]);
-                }
+                // Update delivery date, expected date, custom_form_data, campaigns, smm_sheets & lead_products
+                $applyInitiationDateUpdates($pi);
 
                 // Construct timeline content
-                $timelineContent = "Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
                 if (!empty($reason)) {
                     $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
                 }
@@ -3611,17 +3702,21 @@ class SuperAdminDashboardController extends ApiController
                     ]);
                 }
 
+                // Update associated CustomerCampaign records by lead_id
+                CustomerCampaign::where('lead_id', $leadId)->update(['end_date' => $formattedNewDateRaw]);
+
+                // Update associated SmmSheet records by lead_id
+                SmmSheet::where('lead_id', $leadId)->update(['end_date' => $formattedNewDateRaw]);
+
                 // If lead has production initiations that weren't updated above, update them too
                 if (!$piId) {
                     $pis = ProductionInitiation::where('lead_id', $leadId)->get();
                     foreach ($pis as $pItem) {
                         $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
-                        $pItem->update([
-                            'project_delivery_date' => $formattedNewDateRaw,
-                            'expected_date'         => $formattedNewDateRaw,
-                        ]);
 
-                        $timelineContent = "Closure / Delivery Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                        $applyInitiationDateUpdates($pItem);
+
+                        $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
                         if (!empty($reason)) {
                             $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
                         }

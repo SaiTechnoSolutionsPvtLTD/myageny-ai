@@ -132,38 +132,90 @@ class CustomerSuccessDashboardController extends Controller
     }
 
     /**
-     * Helper to retrieve the expiry date of a count_wise production initiation.
+     * Helper to retrieve the target / renewal date of a production initiation item
+     * based on standardized business rules across dashboards:
+     * - LG & SMM: Renewal Date (Expiry date in custom_form_data).
+     * - Technical SEO & Local SEO: Delivery Date (project_delivery_date).
+     * - Development Projects: Expected Date first priority, fallback to Delivery Date.
      */
     private function getRenewalDate($pi): ?string
     {
-        $formData = is_array($pi->custom_form_data) 
-            ? $pi->custom_form_data 
-            : json_decode($pi->custom_form_data ?? '[]', true) ?? [];
-            
-        foreach ($formData as $field) {
-            if (!is_array($field)) {
-                continue;
-            }
-            $fieldKey = $field['field_name'] ?? '';
-            $fieldVal = $field['value'] ?? '';
+        $productName = strtolower(trim((string) (
+            $pi->product_name 
+            ?? ($pi->catalog_product_name ?? ($pi->product?->product_name ?? ($pi->leadProduct?->product_name ?? '')))
+        )));
+        $deptName = strtolower(trim((string) (
+            $pi->department_name ?? ($pi->department?->name ?? '')
+        )));
 
-            $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
-            if (is_array($fieldVal)) {
-                $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $fieldVal)));
-            } else {
-                $value = trim((string) $fieldVal);
-            }
-            
-            if (in_array($key, ['end_date', 'enddate', 'end date', 'smm_end_date', 'End Date', 'ovp_end_date'])) {
-                if (!empty($value)) {
-                    try {
-                        return Carbon::parse($value)->toDateString();
-                    } catch (\Exception $e) {}
+        $formData = is_array($pi->custom_form_data)
+            ? $pi->custom_form_data
+            : (json_decode($pi->custom_form_data ?? '[]', true) ?? []);
+
+        $getFormDate = function (array $keywords) use ($formData): ?Carbon {
+            foreach ($formData as $field) {
+                if (!is_array($field)) continue;
+                $fieldKey = $field['field_name'] ?? ($field['label'] ?? ($field['key'] ?? ''));
+                $fieldVal = $field['value'] ?? '';
+                $key = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string)$fieldKey));
+                $val = is_array($fieldVal) ? implode(', ', array_filter(array_map('strval', $fieldVal))) : trim((string)$fieldVal);
+
+                foreach ($keywords as $kw) {
+                    if ($key === strtolower($kw) || str_contains($key, strtolower($kw))) {
+                        if (!empty($val)) {
+                            try {
+                                return Carbon::parse($val);
+                            } catch (\Throwable $e) {}
+                        }
+                    }
                 }
             }
+            return null;
+        };
+
+        $expectedDate = !empty($pi->expected_date) ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $deliveryDate = !empty($pi->project_delivery_date) ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
+
+        // 1. Technical SEO & Local SEO: Delivery Date based
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            $date = $deliveryDate ?: ($expectedDate ?: null);
+            return $date ? $date->toDateString() : null;
         }
-        
-        return $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date)->toDateString() : null;
+
+        // 2. Development Projects: Expected Date (Priority) & Delivery Date
+        $isDevelopment = (($pi->department_id ?? 0) == 1)
+            || str_contains($deptName, 'develop')
+            || str_contains($productName, 'develop')
+            || str_contains($productName, 'website')
+            || str_contains($productName, 'app')
+            || str_contains($productName, 'software');
+
+        if ($isDevelopment) {
+            $date = $expectedDate ?: ($deliveryDate ?: null);
+            return $date ? $date->toDateString() : null;
+        }
+
+        // 3. LG (Lead Generation): Renewal Date (Expiry date in form data)
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen') || str_contains($productName, 'lg');
+        if ($isLeadGen) {
+            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            $date = $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+            return $date ? $date->toDateString() : null;
+        }
+
+        // 4. SMM (Social Media Marketing): Renewal Date (Expiry date in form data)
+        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
+        if ($isSmm) {
+            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
+            $date = $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+            return $date ? $date->toDateString() : null;
+        }
+
+        // Default Fallback for any other items: Check Form Expiry -> Delivery Date -> Expected Date
+        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
+        $date = $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        return $date ? $date->toDateString() : null;
     }
 
     /**
@@ -276,13 +328,18 @@ class CustomerSuccessDashboardController extends Controller
                 ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
                 ->join('products', 'products.id', '=', 'production_initiations.product_id')
                 ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->leftJoin('departments', 'departments.id', '=', 'production_initiations.department_id')
                 ->select([
                     'production_initiations.id',
                     'production_initiations.lead_id',
                     'production_initiations.lead_product_id',
                     'production_initiations.project_delivery_date',
+                    'production_initiations.expected_date',
+                    'production_initiations.department_id',
                     'production_initiations.custom_form_data',
                     'production_initiations.product_name',
+                    'products.product_name as catalog_product_name',
+                    'departments.name as department_name',
                     'lead_products.total_price',
                     'lead_products.amount_paid',
                     'lead_products.payment_status',
