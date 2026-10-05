@@ -116,6 +116,13 @@
 .select2-container--default .select2-selection--single.pts-select2-selection { height:44px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; }
 .select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__rendered { line-height:42px; padding-left:12px; padding-right:34px; font-size:13px; color:#111827; }
 .select2-container--default .select2-selection--single.pts-select2-selection .select2-selection__arrow { height:42px; right:8px; }
+.select2-container--default .select2-selection--multiple { min-height:44px; border:1px solid #dbe2ea; border-radius:10px; background:#fff; padding:3px 8px; }
+.select2-container--default.select2-container--focus .select2-selection--multiple { border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.12); }
+.select2-container--default .select2-selection--multiple .select2-selection__choice { background:#fff7ed; border:1px solid #fed7aa; color:#ea580c; border-radius:6px; padding:3px 8px; font-size:12px; font-weight:700; }
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove { color:#ea580c; margin-right:5px; }
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover { color:#9a3412; }
+.pts-textarea { width:100%; border:1px solid #dbe2ea; border-radius:10px; background:#fff; padding:12px 14px; font-size:13px; color:#111827; resize:vertical; line-height:1.55; }
+.pts-textarea:focus { outline:none; border-color:#ea580c; box-shadow:0 0 0 4px rgba(234,88,12,.12); }
 .select2-dropdown { border:1px solid #dbe2ea; border-radius:10px; overflow:hidden; box-shadow:0 16px 36px rgba(15,23,42,.12); }
 .select2-results__option { font-size:13px; padding:8px 12px; }
 
@@ -196,10 +203,14 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         <span>Add Task</span>
                     </a>
+                    <button type="button" class="pts-btn pts-btn-outline" onclick="openSupportTaskModal()" title="Add Support Task for team members">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>+ Support Task</span>
+                    </button>
                 @else
-                    <button type="button" class="pts-btn is-disabled" id="ptsAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                        <span>Add Task (Closed)</span>
+                    <button type="button" class="pts-btn pts-btn-primary" id="ptsAddTaskBtn" onclick="openSupportTaskModal()" title="Add Support Task (Daily task creation closed at 11:00 AM)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>Add Support Task</span>
                     </button>
                 @endif
             @endcan
@@ -238,19 +249,29 @@
                         @if($isTaskCreationAllowed)
                             Daily tasks must be added and updated before <strong>11:00 AM</strong>. After 11:00 AM, task creation is closed for the day.
                         @else
-                            Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.
+                            Daily task creation closed at <strong>11:00 AM</strong>. You can still add <strong>Support Tasks</strong> for your team members anytime.
                         @endif
                     </div>
                 </div>
             </div>
-            <div class="pts-notice-pill" id="ptsNoticePill">
-                @if($isTaskCreationAllowed)
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    <span id="ptsCountdownLabel">Window open until 11:00 AM ({{ $cutoffInfo['formatted_remaining'] ?? '' }} remaining)</span>
-                @else
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    <span>Closed at 11:00 AM IST</span>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                @if(!$isTaskCreationAllowed)
+                    @can('tasks.create')
+                        <button type="button" class="pts-btn pts-btn-primary" onclick="openSupportTaskModal()" style="padding:6px 14px; font-size:12px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            <span>Add Support Task</span>
+                        </button>
+                    @endcan
                 @endif
+                <div class="pts-notice-pill" id="ptsNoticePill">
+                    @if($isTaskCreationAllowed)
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span id="ptsCountdownLabel">Window open until 11:00 AM ({{ $cutoffInfo['formatted_remaining'] ?? '' }} remaining)</span>
+                    @else
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <span>Closed at 11:00 AM IST</span>
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -522,6 +543,7 @@
                                                 'task_description' => $t->task_description,
                                                 'attachments' => $t->attachment_list,
                                                 'status' => $t->status,
+                                                'task_type' => $t->task_type ?? 'daily',
                                                 'can_delete' => auth()->user()?->hasAdminLikeRole() || auth()->user()?->can('tasks.delete') || $t->created_by === auth()->id(),
                                                 'delete_url' => route('projects.tasks.destroy', $t->id),
                                             ];
@@ -534,6 +556,8 @@
                                         $groupAttachmentCount = $group->sum(function ($task) {
                                             return is_array($task->attachments) ? count($task->attachments) : 0;
                                         });
+
+                                        $hasSupportTask = $group->contains(fn($t) => ($t->task_type ?? '') === 'support');
                                     @endphp
                                     <tr data-group-row>
                                         <!-- Date -->
@@ -586,6 +610,11 @@
                                                     <span>View Tasks</span>
                                                     <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalTasks }}</span>
                                                 </button>
+                                                @if($hasSupportTask)
+                                                    <span class="pts-badge" style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-size:10.5px; padding:3px 8px;" title="Includes Support Task allocated by TL">
+                                                        Support
+                                                    </span>
+                                                @endif
                                                 @if($groupAttachmentCount > 0)
                                                     <span class="pts-badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:10.5px; padding:3px 8px;" title="{{ $groupAttachmentCount }} file attachment(s) available">
                                                         📎 {{ $groupAttachmentCount }}
@@ -637,9 +666,9 @@
                                     <span>Add Task</span>
                                 </a>
                             @else
-                                <button type="button" class="pts-btn is-disabled" id="ptsEmptyAddTaskBtn" title="Task creation closed at 11:00 AM" data-time-closed="true">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                                    <span>Add Task (Closed after 11:00 AM)</span>
+                                <button type="button" class="pts-btn pts-btn-primary" id="ptsEmptyAddTaskBtn" onclick="openSupportTaskModal()" title="Add Support Task">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <span>Add Support Task</span>
                                 </button>
                             @endif
                         </div>
@@ -688,6 +717,127 @@
     </div>
 </div>
 
+<!-- Support Task Modal Popup -->
+<div class="pts-modal-overlay" id="ptsSupportTaskOverlay" style="display:none; z-index:1300;"></div>
+<div class="pts-modal" id="ptsSupportTaskModal" style="display:none; max-width:680px; width:min(680px, calc(100vw - 32px)); z-index:1310;">
+    <div class="pts-modal-head">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; display:flex; align-items:center; justify-content:center; color:#ea580c; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </div>
+            <div>
+                <div class="pts-card-title" style="font-size:17px; font-weight:900; color:#111827;">Add Support Task</div>
+                <div class="pts-card-sub" style="margin-top:2px;">
+                    @if(!empty($userDepartmentName))
+                        Allocate {{ $userDepartmentName }} support task to team members mapped under your supervision.
+                    @else
+                        Allocate support task to team members mapped under your supervision.
+                    @endif
+                </div>
+            </div>
+        </div>
+        <button type="button" class="pts-modal-close" onclick="closeSupportTaskModal()" aria-label="Close modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+    </div>
+    <form action="{{ route('projects.tasks.support-task.store') }}" method="POST" enctype="multipart/form-data" id="ptsSupportTaskForm" onsubmit="return validateSupportTaskForm(event)">
+        @csrf
+        <div class="pts-modal-body" style="padding:22px 24px; display:grid; gap:16px;">
+            <div id="st_client_error" class="pts-flash error" style="display:none;"></div>
+
+            <!-- Project Name -->
+            <div>
+                <label class="pts-label" for="st_production_initiation_id">
+                    Project Name <span class="req" style="color:#ef4444;">*</span>
+                </label>
+                <select name="production_initiation_id" id="st_production_initiation_id" class="pts-select pts-modal-select2" required data-placeholder="Choose project...">
+                    <option value="">-- Select Project --</option>
+                    @foreach($supportTaskProjects ?? [] as $proj)
+                        <option value="{{ $proj->id }}">
+                            {{ $proj->resolved_company_name ?? 'Client' }} — {{ $proj->resolved_product_name ?? 'Project' }}
+                        </option>
+                    @endforeach
+                </select>
+                <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
+                    @if(!empty($userDepartmentName))
+                        Showing approved {{ $userDepartmentName }} projects.
+                    @else
+                        Select the approved production project requiring support.
+                    @endif
+                </div>
+            </div>
+
+            <!-- Allocation (Team Members) -->
+            <div>
+                <label class="pts-label" for="st_assigned_to_user_ids">
+                    Allocation (Team Members) <span class="req" style="color:#ef4444;">*</span>
+                </label>
+                <select name="assigned_to_user_ids[]" id="st_assigned_to_user_ids" class="pts-select pts-modal-select2" multiple required data-placeholder="Select team members under your supervision...">
+                    @foreach($supportTaskTeamMembers ?? [] as $member)
+                        <option value="{{ $member->id }}">
+                            {{ $member->name }} ({{ $member->role_display_name ?: 'Team Member' }})
+                        </option>
+                    @endforeach
+                </select>
+                <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
+                    Select one or more team members mapped under your supervision.
+                </div>
+            </div>
+
+            <!-- Description (Minimum 40 Characters) -->
+            <div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <label class="pts-label" for="st_task_description" style="margin-bottom:0;">
+                        Description (Minimum 40 Characters) <span class="req" style="color:#ef4444;">*</span>
+                    </label>
+                    <span id="st_char_counter" style="font-size:12px; font-weight:800; color:#ef4444;">0 / 40 min characters</span>
+                </div>
+                <textarea name="task_description" 
+                          id="st_task_description" 
+                          class="pts-textarea" 
+                          rows="4" 
+                          minlength="40" 
+                          required 
+                          placeholder="Provide clear details, instructions, deliverables, or objectives (at least 40 characters required)..." 
+                          style="min-height:96px; font-size:13px;"></textarea>
+                <div id="st_desc_feedback" class="pts-help" style="font-size:12px; color:#dc2626; margin-top:4px;">
+                    Minimum 40 characters required.
+                </div>
+            </div>
+
+            <!-- Attachment -->
+            <div>
+                <label class="pts-label" for="st_attachments">
+                    Attachments (Optional)
+                </label>
+                <input type="file" 
+                       name="attachments[]" 
+                       id="st_attachments" 
+                       multiple 
+                       class="pts-input" 
+                       style="padding:9px 12px; font-size:13px;"
+                       accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.zip">
+                <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
+                    Attach files, screenshots, references or specifications (Max 25MB per file).
+                </div>
+            </div>
+        </div>
+
+        <div class="pts-modal-foot" style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:16px 24px; border-top:1px solid #edf2f7; background:#fbfdff; border-radius:0 0 16px 16px;">
+            <button type="button" class="pts-btn" onclick="closeSupportTaskModal()">Cancel</button>
+            <button type="submit" class="pts-btn pts-btn-primary" id="st_submit_btn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Allocate Support Task</span>
+            </button>
+        </div>
+    </form>
+</div>
+
 <!-- Daily Task Policy Notification Modal Popup -->
 <div class="pts-modal-overlay" id="ptsPolicyModalOverlay" style="display:none; z-index:1300;"></div>
 <div class="pts-modal" id="ptsPolicyModal" style="display:none; max-width:540px; z-index:1310;">
@@ -711,18 +861,25 @@
             <ul style="margin:0; padding-left:18px; font-size:13px; color:#334155; line-height:1.7;">
                 <li>Daily tasks must be added and allocated <strong>before 11:00 AM</strong> every day.</li>
                 <li>The <strong>Add Task</strong> button is enabled until <strong>11:00 AM IST</strong>.</li>
-                <li>After <strong>11:00 AM</strong>, new task creation is closed for the day.</li>
+                <li>After <strong>11:00 AM</strong>, daily task creation is closed for the day.</li>
+                <li><strong>Support Tasks</strong> can still be added and allocated to team members at any time.</li>
                 <li>Existing task status updates (Pending, In Progress, Completed) remain accessible.</li>
             </ul>
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:{{ $isTaskCreationAllowed ? '#f0fdf4' : '#fff7ed' }}; border:1px solid {{ $isTaskCreationAllowed ? '#bbf7d0' : '#fed7aa' }}; border-radius:10px; font-size:13px; font-weight:700;">
             <span style="color:#475569;">Current Status:</span>
             <span id="ptsModalStatusBadge" style="color:{{ $isTaskCreationAllowed ? '#15803d' : '#c2410c' }}; font-weight:800;">
-                {{ $isTaskCreationAllowed ? 'Open (Until 11:00 AM IST)' : 'Closed for Today' }}
+                {{ $isTaskCreationAllowed ? 'Open (Until 11:00 AM IST)' : 'Closed for Today (Support Tasks Allowed)' }}
             </span>
         </div>
-        <div style="text-align:right;">
-            <button type="button" class="pts-btn pts-btn-primary" id="ptsAcknowledgePolicyBtn" style="padding:8px 20px;">I Understand</button>
+        <div style="display:flex; justify-content:flex-end; gap:10px; align-items:center;">
+            <button type="button" class="pts-btn" id="ptsAcknowledgePolicyBtn" style="padding:8px 18px;">Close</button>
+            @can('tasks.create')
+                <button type="button" class="pts-btn pts-btn-primary" onclick="hidePolicyModal(); openSupportTaskModal();" style="padding:8px 18px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Add Support Task</span>
+                </button>
+            @endcan
         </div>
     </div>
 </div>
@@ -929,7 +1086,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div class="pts-meta">${escapeHtml(task.lead_id)}</div>
                 </td>
                 <td>
-                    <div style="font-weight:800; color:#ea580c;">${escapeHtml(task.product_name)}</div>
+                    <div style="font-weight:800; color:#ea580c; display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <span>${escapeHtml(task.product_name)}</span>
+                        ${task.task_type === 'support' ? '<span class="pts-badge" style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-size:10px; padding:2px 7px;">Support Task</span>' : ''}
+                    </div>
                 </td>
                 <td>
                     <div style="white-space:pre-wrap; line-height:1.55; color:#334155; font-size:13px;">${escapeHtml(task.task_description)}</div>
@@ -1011,13 +1171,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (ackPolicyBtn) ackPolicyBtn.addEventListener('click', hidePolicyModal);
     if (policyOverlay) policyOverlay.addEventListener('click', hidePolicyModal);
 
-    // Intercept clicks on disabled Add Task buttons to show notification policy modal
+    // Intercept clicks on disabled Add Task buttons to show Support Task modal
     document.addEventListener('click', function(e) {
         const disabledBtn = e.target.closest('[data-time-closed="true"]');
         if (disabledBtn) {
             e.preventDefault();
             e.stopPropagation();
-            showPolicyModal();
+            openSupportTaskModal();
         }
     });
 
@@ -1044,24 +1204,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function applyCutoffClosed() {
-        // 1. Update Topbar Add Task button
+        // 1. Update Topbar Add Task button to Add Support Task
         const topBtn = document.getElementById('ptsAddTaskBtn');
         if (topBtn) {
-            topBtn.className = 'pts-btn is-disabled';
-            topBtn.setAttribute('data-time-closed', 'true');
-            topBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            topBtn.className = 'pts-btn pts-btn-primary';
+            topBtn.removeAttribute('data-time-closed');
+            topBtn.setAttribute('title', 'Add Support Task (Daily task creation closed at 11:00 AM)');
             topBtn.removeAttribute('href');
-            topBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed)</span>`;
+            topBtn.onclick = openSupportTaskModal;
+            topBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Support Task</span>`;
         }
 
         // 2. Update Empty State Add Task button
         const emptyBtn = document.getElementById('ptsEmptyAddTaskBtn');
         if (emptyBtn) {
-            emptyBtn.className = 'pts-btn is-disabled';
-            emptyBtn.setAttribute('data-time-closed', 'true');
-            emptyBtn.setAttribute('title', 'Task creation closed at 11:00 AM');
+            emptyBtn.className = 'pts-btn pts-btn-primary';
+            emptyBtn.removeAttribute('data-time-closed');
+            emptyBtn.setAttribute('title', 'Add Support Task');
             emptyBtn.removeAttribute('href');
-            emptyBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Add Task (Closed after 11:00 AM)</span>`;
+            emptyBtn.onclick = openSupportTaskModal;
+            emptyBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Support Task</span>`;
         }
 
         // 3. Update Banner State
@@ -1079,7 +1241,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         const desc = document.getElementById('ptsNoticeDesc');
         if (desc) {
-            desc.innerHTML = `Daily task creation closed at <strong>11:00 AM</strong>. As per policy, tasks can only be added before 11:00 AM. Existing tasks can still be updated.`;
+            desc.innerHTML = `Daily task creation closed at <strong>11:00 AM</strong>. You can still add <strong>Support Tasks</strong> for your team members anytime.`;
         }
         const pill = document.getElementById('ptsNoticePill');
         if (pill) {
@@ -1088,12 +1250,155 @@ document.addEventListener('DOMContentLoaded', function () {
         const modalStatus = document.getElementById('ptsModalStatusBadge');
         if (modalStatus) {
             modalStatus.style.color = '#c2410c';
-            modalStatus.textContent = 'Closed for Today';
+            modalStatus.textContent = 'Closed for Today (Support Tasks Allowed)';
         }
     }
 
     if (isAllowed && secondsRemaining > 0) {
         setInterval(updateCountdown, 1000);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Support Task Modal Functions & Live Validation
+    // ─────────────────────────────────────────────────────────────
+    window.openSupportTaskModal = function() {
+        const modal = document.getElementById('ptsSupportTaskModal');
+        const overlay = document.getElementById('ptsSupportTaskOverlay');
+        if (!modal || !overlay) return;
+
+        modal.style.display = 'block';
+        overlay.style.display = 'block';
+        modal.classList.add('is-open');
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+
+        if (window.jQuery && window.jQuery.fn.select2) {
+            window.jQuery('.pts-modal-select2').each(function() {
+                const $el = window.jQuery(this);
+                if (!$el.hasClass('select2-hidden-accessible')) {
+                    $el.select2({
+                        dropdownParent: window.jQuery('#ptsSupportTaskModal'),
+                        width: '100%',
+                        placeholder: $el.data('placeholder') || 'Select option',
+                        allowClear: !$el.prop('multiple')
+                    });
+                }
+            });
+        }
+
+        updateSupportTaskCharCount();
+    };
+
+    window.closeSupportTaskModal = function() {
+        const modal = document.getElementById('ptsSupportTaskModal');
+        const overlay = document.getElementById('ptsSupportTaskOverlay');
+        if (!modal || !overlay) return;
+
+        modal.style.display = 'none';
+        overlay.style.display = 'none';
+        modal.classList.remove('is-open');
+        overlay.classList.remove('is-open');
+        document.body.style.overflow = '';
+
+        const errBox = document.getElementById('st_client_error');
+        if (errBox) errBox.style.display = 'none';
+    };
+
+    const stOverlay = document.getElementById('ptsSupportTaskOverlay');
+    if (stOverlay) {
+        stOverlay.addEventListener('click', closeSupportTaskModal);
+    }
+
+    window.updateSupportTaskCharCount = function() {
+        const desc = document.getElementById('st_task_description');
+        const counter = document.getElementById('st_char_counter');
+        const feedback = document.getElementById('st_desc_feedback');
+        if (!desc || !counter) return;
+
+        const val = desc.value.trim();
+        const len = val.length;
+
+        if (len < 40) {
+            counter.textContent = `${len} / 40 min characters`;
+            counter.style.color = '#ef4444';
+            if (feedback) {
+                feedback.textContent = `Need ${40 - len} more character${40 - len === 1 ? '' : 's'}. Minimum 40 characters required.`;
+                feedback.style.color = '#dc2626';
+            }
+        } else {
+            counter.textContent = `${len} characters (✓ Minimum 40 met)`;
+            counter.style.color = '#15803d';
+            if (feedback) {
+                feedback.textContent = `Description meets the minimum length requirement.`;
+                feedback.style.color = '#15803d';
+            }
+        }
+    };
+
+    const stDescInput = document.getElementById('st_task_description');
+    if (stDescInput) {
+        stDescInput.addEventListener('input', updateSupportTaskCharCount);
+        stDescInput.addEventListener('change', updateSupportTaskCharCount);
+    }
+
+    window.validateSupportTaskForm = function(e) {
+        const errBox = document.getElementById('st_client_error');
+        if (errBox) errBox.style.display = 'none';
+
+        const proj = document.getElementById('st_production_initiation_id');
+        const desc = document.getElementById('st_task_description');
+        const usersSelect = document.getElementById('st_assigned_to_user_ids');
+
+        let selectedUsers = [];
+        if (window.jQuery && window.jQuery(usersSelect).data('select2')) {
+            selectedUsers = window.jQuery(usersSelect).val() || [];
+        } else if (usersSelect) {
+            selectedUsers = Array.from(usersSelect.selectedOptions).map(o => o.value);
+        }
+
+        if (!proj || !proj.value) {
+            e.preventDefault();
+            showStModalError('Please select a project for this support task.');
+            return false;
+        }
+
+        if (!selectedUsers || selectedUsers.length === 0) {
+            e.preventDefault();
+            showStModalError('Please select at least one team member in Allocation.');
+            return false;
+        }
+
+        const descText = desc ? desc.value.trim() : '';
+        if (descText.length < 40) {
+            e.preventDefault();
+            showStModalError(`Task Description must be at least 40 characters. (Current length: ${descText.length})`);
+            if (desc) desc.focus();
+            return false;
+        }
+
+        const submitBtn = document.getElementById('st_submit_btn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span>Saving...</span>`;
+        }
+        return true;
+    };
+
+    function showStModalError(msg) {
+        const errBox = document.getElementById('st_client_error');
+        if (errBox) {
+            errBox.textContent = msg;
+            errBox.style.display = 'block';
+            errBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            alert(msg);
+        }
+    }
+
+    // Auto-open Support Task modal if query parameter open_support_task=1 is present
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('open_support_task') === '1' || @json(session('open_support_task') ? true : false)) {
+        setTimeout(openSupportTaskModal, 300);
     }
 });
 </script>

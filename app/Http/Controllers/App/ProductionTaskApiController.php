@@ -446,6 +446,146 @@ class ProductionTaskApiController extends Controller
         ], 201);
     }
 
+    public function storeSupportTask(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'department_id' => ['nullable', 'integer'],
+            'production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
+            'task_description' => ['required', 'string', 'min:40'],
+            'assigned_to_user_ids' => ['required', 'array', 'min:1'],
+            'assigned_to_user_ids.*' => ['required', 'integer', 'exists:users,id'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => ['nullable', 'file', 'max:25600'],
+        ], [
+            'production_initiation_id.required' => 'Project Name is mandatory.',
+            'production_initiation_id.exists' => 'Selected project does not exist.',
+            'task_description.required' => 'Task description is mandatory.',
+            'task_description.min' => 'Task description must be at least 40 characters.',
+            'assigned_to_user_ids.required' => 'Please select at least one team member to allocate.',
+            'assigned_to_user_ids.min' => 'Please select at least one team member to allocate.',
+            'attachments.*.max' => 'Each attached file must not exceed 25MB.',
+        ]);
+
+        $allowedMembers = $this->getSupportTaskTeamMembers($user);
+        $allowedUserIds = $allowedMembers->pluck('id')->all();
+
+        if (! $user->hasAdminLikeRole()) {
+            foreach ($validated['assigned_to_user_ids'] as $uid) {
+                if (! in_array((int) $uid, $allowedUserIds, true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are only allowed to assign support tasks to team members reporting under you.',
+                    ], 403);
+                }
+            }
+        }
+
+        $project = ProductionInitiation::with(['lead', 'leadProduct'])->findOrFail($validated['production_initiation_id']);
+        $productName = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Support Task');
+        $leadId = $project->lead_id;
+        $taskDate = Carbon::today('Asia/Kolkata')->toDateString();
+        $taskDesc = trim((string) $validated['task_description']);
+        $assignedUserIds = array_unique(array_map('intval', $validated['assigned_to_user_ids']));
+
+        // Handle file attachments
+        $storedAttachments = [];
+        $files = $request->file('attachments');
+        if ($files) {
+            if (! is_array($files)) {
+                $files = [$files];
+            }
+            $targetDir = public_path('uploads/tasks');
+            if (! file_exists($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            foreach ($files as $file) {
+                if ($file && $file->isValid()) {
+                    $origName = $file->getClientOriginalName();
+                    $fileSize = $file->getSize();
+                    $mimeType = $file->getClientMimeType();
+                    $ext = $file->getClientOriginalExtension() ?: pathinfo($origName, PATHINFO_EXTENSION);
+                    $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . strtolower($ext) : '');
+                    $file->move($targetDir, $fileName);
+                    $relPath = 'uploads/tasks/' . $fileName;
+
+                    $storedAttachments[] = [
+                        'path' => $relPath,
+                        'name' => $origName,
+                        'size' => $fileSize ?: (file_exists($targetDir . '/' . $fileName) ? filesize($targetDir . '/' . $fileName) : 0),
+                        'mime_type' => $mimeType,
+                    ];
+                }
+            }
+        }
+
+        $deliveryDate = $project->project_delivery_date?->toDateString();
+        $createdIds = [];
+
+        DB::transaction(function () use ($user, $project, $productName, $leadId, $taskDate, $taskDesc, $storedAttachments, $assignedUserIds, $deliveryDate, &$createdIds) {
+            foreach ($assignedUserIds as $assigneeId) {
+                // 1. Create ProductionTask
+                $task = ProductionTask::create([
+                    'company_id' => $user->company_id,
+                    'created_by' => $user->id,
+                    'assigned_to' => $assigneeId,
+                    'task_date' => $taskDate,
+                    'lead_id' => $leadId,
+                    'production_initiation_id' => $project->id,
+                    'product_name' => $productName,
+                    'task_description' => $taskDesc,
+                    'attachments' => ! empty($storedAttachments) ? $storedAttachments : null,
+                    'status' => 'pending',
+                    'task_type' => 'support',
+                ]);
+                $createdIds[] = $task->id;
+
+                // 2. Auto-create or sync ProjectTimesheet for the assigned team member
+                $existingTimesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
+                    ->where('user_id', $assigneeId)
+                    ->whereDate('timesheet_date', $taskDate)
+                    ->first();
+
+                if (! $existingTimesheet) {
+                    ProjectTimesheet::create([
+                        'company_id' => $project->company_id ?? $user->company_id,
+                        'production_initiation_id' => $project->id,
+                        'user_id' => $assigneeId,
+                        'timesheet_date' => $taskDate,
+                        'project_delivery_date' => $deliveryDate,
+                        'status' => 'pending',
+                        'project_type' => 'recurring',
+                        'poster_count' => 0,
+                        'video_count' => 0,
+                        'committed_posters' => 0,
+                        'committed_videos' => 0,
+                        'waiting_posters' => 0,
+                        'waiting_videos' => 0,
+                        'day_closing_update' => "Assigned Support Task:\n" . $taskDesc,
+                    ]);
+                } else {
+                    $currClosing = trim((string) $existingTimesheet->day_closing_update);
+                    if (empty($currClosing)) {
+                        $existingTimesheet->update([
+                            'day_closing_update' => "Assigned Support Task:\n" . $taskDesc,
+                        ]);
+                    } else {
+                        $existingTimesheet->update([
+                            'day_closing_update' => $currClosing . "\n\n[Assigned Support Task]:\n" . $taskDesc,
+                        ]);
+                    }
+                }
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Support task created and allocated to ' . count($assignedUserIds) . ' team member(s) successfully.',
+            'data' => ['created_task_ids' => $createdIds],
+        ], 201);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  PATCH /mobile/projects/tasks/{task}/status
     // ─────────────────────────────────────────────────────────────────────────
@@ -634,6 +774,71 @@ class ProductionTaskApiController extends Controller
             ->where('is_active', true)
             ->where('user_status', 'active')
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+    }
+
+    public function resolveUserDepartment(User $user): array
+    {
+        $dept = $user->roles->map(fn($r) => $r->department)->filter()->first() 
+            ?? ($user->employeeOnboarding?->department 
+            ?? ($user->internJoiningForm?->department ?? null));
+        
+        if ($dept) {
+            return ['id' => (int) $dept->id, 'name' => (string) $dept->name];
+        }
+
+        if ($user->belongsToDevelopmentDepartment()) {
+            return ['id' => 1, 'name' => 'Development'];
+        }
+        if ($user->belongsToDesigningDepartment()) {
+            return ['id' => 2, 'name' => 'Designing'];
+        }
+        if ($user->belongsToDigitalMarketingDepartment()) {
+            return ['id' => 3, 'name' => 'Digital Marketing'];
+        }
+        if ($user->belongsToSalesDepartment()) {
+            return ['id' => 4, 'name' => 'Sales'];
+        }
+        if ($user->belongsToCustomerSupportDepartment()) {
+            return ['id' => 5, 'name' => 'Customer Success Team'];
+        }
+        if ($user->belongsToTestingDepartment()) {
+            return ['id' => 6, 'name' => 'Testing'];
+        }
+
+        return ['id' => null, 'name' => null];
+    }
+
+    public function getSupportTaskTeamMembers(User $user): Collection
+    {
+        $visibility = app(DataVisibilityService::class);
+        $mappedIds = $visibility->descendantUserIds($user);
+        $directManagedIds = $user->managedUsers()->pluck('users.id');
+
+        $subordinateIds = $mappedIds
+            ->merge($directManagedIds)
+            ->reject(fn ($id) => (int) $id === (int) $user->id)
+            ->unique()
+            ->filter()
+            ->values();
+
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
+            if ($subordinateIds->isEmpty()) {
+                return User::where('is_active', true)
+                    ->where('user_status', 'active')
+                    ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                    ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'email']);
+            }
+        }
+
+        return User::whereIn('id', $subordinateIds)
+            ->where('is_active', true)
+            ->where('user_status', 'active')
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
     }

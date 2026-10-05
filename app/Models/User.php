@@ -600,6 +600,27 @@ class User extends Authenticatable
         ]));
     }
 
+    public function canViewAllSmmData(): bool
+    {
+        if ($this->hasAdminLikeRole() || $this->hasTlLikeRole() || $this->canViewProjectsDashboardSwitcher()) {
+            return true;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+
+        return $keys->contains(fn($key) => Str::contains($key, [
+            'admin',
+            'director',
+            'coo',
+            'cbo',
+            'coordinator',
+            'manager',
+            'lead',
+            'leader',
+            'tl',
+        ]));
+    }
+
     public function hasAdminLikeRole(): bool
     {
         return collect($this->roleKeys()->all())->intersect([

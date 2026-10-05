@@ -2080,6 +2080,9 @@ class ProjectApiController extends Controller
             'committed_videos'         => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_posters'          => ['nullable', 'integer', 'min:0', 'max:100000'],
             'waiting_videos'           => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'attachments'              => ['nullable', 'array'],
+            'attachments.*'            => ['nullable', 'file', 'max:25600'],
+            'removed_attachments'      => ['nullable', 'array'],
             'day_closing_update'       => ['required', 'string'],
         ], [
             'timesheet_date.after_or_equal' => 'Past dates cannot be selected for timesheets.',
@@ -2111,6 +2114,35 @@ class ProjectApiController extends Controller
         }
         $validated['day_closing_update'] = $closingUpdate;
 
+        $newAttachments = [];
+        if ($request->hasFile('attachments')) {
+            $files = $request->file('attachments');
+            if (! is_array($files)) {
+                $files = [$files];
+            }
+            $targetDir = public_path('uploads/timesheets');
+            if (! file_exists($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            foreach ($files as $file) {
+                if ($file && $file->isValid()) {
+                    $origName = $file->getClientOriginalName();
+                    $fileSize = $file->getSize();
+                    $mimeType = $file->getClientMimeType();
+                    $ext = $file->getClientOriginalExtension() ?: pathinfo($origName, PATHINFO_EXTENSION);
+                    $fileName = time() . '_' . Str::random(8) . ($ext ? '.' . strtolower($ext) : '');
+                    $file->move($targetDir, $fileName);
+
+                    $newAttachments[] = [
+                        'path' => 'uploads/timesheets/' . $fileName,
+                        'name' => $origName,
+                        'size' => $fileSize ?: (file_exists($targetDir . '/' . $fileName) ? filesize($targetDir . '/' . $fileName) : 0),
+                        'mime_type' => $mimeType,
+                    ];
+                }
+            }
+        }
+
         $payload = [
             'status'             => $validated['status'],
             'project_type'       => $validated['project_type'] ?? null,
@@ -2123,6 +2155,8 @@ class ProjectApiController extends Controller
             'day_closing_update' => $validated['day_closing_update'] ?? '',
         ];
 
+        $isDesignOrDm = $user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment();
+
         // Upsert — matches web (edit today's entry instead of hard-rejecting).
         $timesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
             ->where('user_id', $user->id)
@@ -2130,9 +2164,55 @@ class ProjectApiController extends Controller
             ->first();
 
         if ($timesheet) {
+            $existing = is_array($timesheet->attachments) ? $timesheet->attachments : [];
+            $removed = (array) ($request->input('removed_attachments') ?? []);
+            if (!empty($removed)) {
+                $existing = array_values(array_filter($existing, function ($item) use ($removed) {
+                    $p = is_array($item) ? ($item['path'] ?? '') : (string) $item;
+                    return !in_array($p, $removed, true);
+                }));
+            }
+            $merged = array_merge($existing, $newAttachments);
+
+            if ($isDesignOrDm && empty($merged)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attachments are mandatory for Designing and Digital Marketing team members.',
+                    'errors'  => ['attachments' => ['Attachments are mandatory for Designing and Digital Marketing team members.']],
+                ], 422);
+            }
+
+            $payload['attachments'] = $merged;
+            if ($user->belongsToDesigningDepartment() && !empty($newAttachments)) {
+                $payload['poster_approval_status'] = 'pending';
+                $payload['smm_synced'] = false;
+            }
+
             $timesheet->update($payload);
             $statusCode = 200;
         } else {
+            if ($isDesignOrDm && empty($newAttachments)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attachments are mandatory for Designing and Digital Marketing team members.',
+                    'errors'  => ['attachments' => ['Attachments are mandatory for Designing and Digital Marketing team members.']],
+                ], 422);
+            }
+
+            $posterApprovalStatus = null;
+            if ($user->belongsToDesigningDepartment() && !empty($newAttachments)) {
+                $posterApprovalStatus = 'pending';
+            }
+
+            $posterCountVal = $payload['poster_count'];
+            if ($user->belongsToDesigningDepartment() && $posterCountVal <= 0 && !empty($newAttachments)) {
+                $posterCountVal = count($newAttachments);
+                $payload['poster_count'] = $posterCountVal;
+            }
+
+            $payload['attachments'] = $newAttachments;
+            $payload['poster_approval_status'] = $posterApprovalStatus;
+
             $timesheet = ProjectTimesheet::create(array_merge($payload, [
                 'company_id'               => $project->company_id,
                 'production_initiation_id' => $project->id,
@@ -2388,8 +2468,12 @@ class ProjectApiController extends Controller
             'is_design_dm'          => $isDesignOrDm,
             'submitted_at'          => $ts->created_at?->toDateTimeString(),
             // Fixed: read the real status column instead of comparing dates.
-            'is_completed'          => $ts->status === 'completed',
             'attachments'           => $ts->attachment_list,
+            'poster_approval_status' => $ts->poster_approval_status,
+            'poster_approval_remarks' => $ts->poster_approval_remarks,
+            'poster_approved_by' => $ts->posterApprovedBy?->name,
+            'poster_approved_at' => optional($ts->poster_approved_at)->toDateTimeString(),
+            'dm_proofs' => $ts->dm_post_proof_list,
         ];
     }
 

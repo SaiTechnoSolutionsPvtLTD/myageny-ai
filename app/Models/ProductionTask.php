@@ -22,6 +22,7 @@ class ProductionTask extends Model
         'task_description',
         'attachments',
         'status',
+        'task_type',
     ];
 
     protected $casts = [
