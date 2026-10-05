@@ -113,6 +113,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('dashboard.branch-hot-leads');
     Route::post('/dashboard/update-prospect-date', [SuperAdminDashboardController::class, 'updateProspectDate'])
         ->name('dashboard.update-prospect-date');
+    Route::post('/dashboard/update-lead-assignee', [SuperAdminDashboardController::class, 'updateLeadAssignee'])
+        ->name('dashboard.update-lead-assignee');
+    Route::get('/dashboard/lead-assignees-list', [SuperAdminDashboardController::class, 'getLeadAssigneesList'])
+        ->name('dashboard.lead-assignees-list');
 
     Route::get('/product-dashboard/admin', [SuperAdminDashboardController::class, 'adminProductindex'])
         ->middleware('can:dashboard.view');

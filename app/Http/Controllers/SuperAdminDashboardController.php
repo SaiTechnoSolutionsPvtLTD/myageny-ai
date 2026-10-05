@@ -2929,6 +2929,26 @@ class SuperAdminDashboardController extends ApiController
     {
         $items = $this->getCstProspectItems($request);
 
+        // Filter to HO / default branch only — mirrors the branchHotLeads type=cst filter
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
+        if ($currentUser) {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            if (!empty($defaultBranchIds)) {
+                $items = $items->filter(function ($item) use ($defaultBranchIds) {
+                    return in_array($item['branch_id'] ?? null, $defaultBranchIds);
+                });
+            }
+        }
+
         return [
             'count'          => $items->count(),
             'deal_value'     => (float) $items->sum('deal_value'),
@@ -2949,6 +2969,7 @@ class SuperAdminDashboardController extends ApiController
 
         $type = $request->input('type');
         $branchId = (int) $request->input('branch_id');
+        $subtype  = $request->input('subtype'); // 'nst' | 'cst' | null (both)
 
         if (!$type && !$branchId) {
             return $this->error('Type or Branch ID is required.', 422);
@@ -3100,6 +3121,24 @@ class SuperAdminDashboardController extends ApiController
             $subtitle = 'Renewals & Development Prospects for ' . $parsedMonth['month_name'];
 
             $items = $this->getCstProspectItems($request);
+
+            // Filter to HO / default branch only — other branches' CST items belong to those branches
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            if (!empty($defaultBranchIds)) {
+                $items = $items->filter(function ($item) use ($defaultBranchIds) {
+                    return in_array($item['branch_id'] ?? null, $defaultBranchIds);
+                });
+            }
+
             $rows = $items->values()->map(function ($item, $idx) {
                 $item['index'] = $idx + 1;
                 $item['branch_name'] = $item['branch_name'] ?? 'CST';
@@ -3446,33 +3485,41 @@ class SuperAdminDashboardController extends ApiController
             });
         }
 
-        $hotProducts = $query->orderByDesc('closure_date')->get();
-
-        $rows = $hotProducts->map(function ($item, $idx) {
-            $lead = $item->lead;
-            $salesPerson = $lead?->assignedTo?->name ?: '-';
-            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
-            return [
-                'index'            => $idx + 1,
-                'lead_id'          => $lead?->id,
-                'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
-                'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
-                'customer_name'    => $lead?->contact_name ?: '-',
-                'product_name'     => $item->product_name ?: ($item->product?->product_name ?: '-'),
-                'status'           => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
-                'deal_value'       => (float) $item->total_price,
-                'expected_value'   => (float) ($item->expected_value ?? 0),
-                'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
-                'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                'sales_person_name' => $salesPerson,
-                'cst_person_name'   => $cstPerson,
-                'executive_name'   => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
-                'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
-            ];
-        });
+        // --- NST-only or CST-only filtering when subtype is set ---
+        if ($branchId && $subtype === 'cst') {
+            // Only CST items for this branch — skip NST hot products entirely
+            $rows = collect();
+        } else {
+            $hotProducts = $query->orderByDesc('closure_date')->get();
+            $rows = $hotProducts->map(function ($item, $idx) {
+                $lead = $item->lead;
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                return [
+                    'index'            => $idx + 1,
+                    'lead_id'          => $lead?->id,
+                    'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
+                    'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
+                    'customer_name'    => $lead?->contact_name ?: '-',
+                    'product_name'     => $item->product_name ?: ($item->product?->product_name ?: '-'),
+                    'status'           => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
+                    'deal_value'       => (float) $item->total_price,
+                    'expected_value'   => (float) ($item->expected_value ?? 0),
+                    'closure_date'     => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
+                    'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
+                    'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
+                ];
+            });
+        }
 
         $cstItemsToAppend = collect();
-        if ($branchId) {
+        // Skip CST append when subtype is 'nst'
+        if ($subtype === 'nst') {
+            $cstItemsToAppend = collect();
+        } elseif ($branchId) {
             $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
                 return ($cItem['branch_id'] ?? null) == $branchId;
             });
@@ -3542,6 +3589,8 @@ class SuperAdminDashboardController extends ApiController
             'total_deal'     => (float) $rows->sum('deal_value'),
             'total_expected' => (float) $rows->sum('expected_value'),
             'leads'          => $rows,
+            'cst_users'      => self::getActiveCstUsers(),
+            'sales_users'    => self::getActiveSalesUsers(),
         ], 'Branch hot leads fetched.');
     }
 
@@ -3745,6 +3794,137 @@ class SuperAdminDashboardController extends ApiController
             'message'          => 'Date updated successfully and recorded in project timeline.',
             'closure_date'     => $formattedNewDate,
             'closure_date_raw' => $formattedNewDateRaw,
+        ]);
+    }
+
+    /**
+     * Get active CST Department users.
+     */
+    public static function getActiveCstUsers(): array
+    {
+        $users = User::where('user_status', 'active')
+            ->where(function ($query) {
+                $query->whereHas('roles.department', function ($q) {
+                    $q->where('name', 'like', '%customer support%')
+                      ->orWhere('name', 'like', '%customer success%')
+                      ->orWhere('name', 'like', '%cst%')
+                      ->orWhere('id', 5);
+                })->orWhereHas('roles', function ($q) {
+                    $q->where('name', 'like', '%support%')
+                      ->orWhere('name', 'like', '%cst%')
+                      ->orWhere('name', 'like', '%success%');
+                })->orWhereHas('employeeOnboarding', function ($q) {
+                    $q->where('department_id', 5);
+                });
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        if ($users->isEmpty()) {
+            $users = User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']);
+        }
+
+        return $users->map(fn($u) => ['id' => $u->id, 'name' => $u->name])->values()->all();
+    }
+
+    /**
+     * Get active Sales Department users.
+     */
+    public static function getActiveSalesUsers(): array
+    {
+        $users = User::where('user_status', 'active')
+            ->where(function ($query) {
+                $query->whereHas('roles.department', function ($q) {
+                    $q->where('name', 'like', '%sales%')
+                      ->orWhere('name', 'like', '%crm%')
+                      ->orWhere('name', 'like', '%business development%')
+                      ->orWhere('name', 'like', '%pre-sales%')
+                      ->orWhere('name', 'like', '%presales%');
+                })->orWhereHas('roles', function ($q) {
+                    $q->where('name', 'like', '%sales%')
+                      ->orWhere('name', 'like', '%bde%')
+                      ->orWhere('name', 'like', '%business_development%')
+                      ->orWhere('name', 'like', '%telecaller%');
+                });
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        if ($users->isEmpty()) {
+            $users = User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']);
+        }
+
+        return $users->map(fn($u) => ['id' => $u->id, 'name' => $u->name])->values()->all();
+    }
+
+    /**
+     * Get active assignees list endpoint.
+     */
+    public function getLeadAssigneesList(Request $request): JsonResponse
+    {
+        return response()->json([
+            'success'     => true,
+            'cst_users'   => self::getActiveCstUsers(),
+            'sales_users' => self::getActiveSalesUsers(),
+        ]);
+    }
+
+    /**
+     * Update lead assignee (Sales Person or CST Person).
+     */
+    public function updateLeadAssignee(Request $request): JsonResponse
+    {
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
+        if (!$currentUser) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'lead_id' => ['required', 'integer', 'exists:leads,id'],
+            'type'    => ['required', 'string', 'in:sales,cst'],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $leadId  = (int) $request->input('lead_id');
+        $type    = $request->input('type');
+        $userId  = (int) $request->input('user_id');
+
+        $lead = Lead::find($leadId);
+        if (!$lead) {
+            return response()->json(['success' => false, 'message' => 'Lead not found.'], 404);
+        }
+
+        $assigneeUser = User::find($userId);
+        if (!$assigneeUser) {
+            return response()->json(['success' => false, 'message' => 'Selected user not found.'], 404);
+        }
+
+        if ($type === 'sales') {
+            $lead->assigned_to = $assigneeUser->id;
+            $lead->save();
+        } elseif ($type === 'cst') {
+            $lead->customer_support_executive_id = $assigneeUser->id;
+            if (!$lead->customer_support_allocated_at) {
+                $lead->customer_support_allocated_at = now();
+            }
+            $lead->save();
+        }
+
+        return response()->json([
+            'success'   => true,
+            'message'   => ($type === 'sales' ? 'Sales Person' : 'CST Person') . ' assigned successfully.',
+            'lead_id'   => $lead->id,
+            'type'      => $type,
+            'user_id'   => $assigneeUser->id,
+            'user_name' => $assigneeUser->name,
         ]);
     }
 }
