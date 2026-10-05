@@ -547,7 +547,7 @@ class LeadShowController extends Controller
         $data['lead_id']          = $lead->id;
         $data['discount_percent'] = $data['discount_percent'] ?? 0;
         $data['payment_status']   = 'pending';
-        $data['company_id']   = $request->company_id;
+        $data['company_id']       = $lead->company_id ?: ($request->user()?->company_id ?: $request->company_id);
 
         $product = LeadProduct::create($data);
 
@@ -742,6 +742,7 @@ class LeadShowController extends Controller
         // Reused, not duplicated — identical helper the web edit form uses to
         // derive the display name from the selected catalog product/category.
         $catalogProduct = Product::with('category')->findOrFail($data['product_id']);
+        abort_unless($this->visibility->canAccessProduct($catalogProduct, $request->user()), 403);
         $data['product_name']     = $this->leadProductName($catalogProduct);
         $data['discount_percent'] = $data['discount_percent'] ?? 0;
         $data['gst_percent']      = $data['gst_percent'] ?? 0;
@@ -1161,9 +1162,11 @@ class LeadShowController extends Controller
 
         $creator = auth()->user() ?: $request->user();
         $autoApprove = (bool) ($creator?->canAutoApproveQuotation());
+        $companyId = $lead->company_id ?? $request->user()?->company_id ?? auth()->user()?->company_id;
 
         $quotation = Quotation::create([
             'lead_id'          => $lead->id,
+            'company_id'       => $companyId,
             'created_by'       => $creator?->id ?? auth()->id(),
             'is_approved'      => $autoApprove,
             'approved_by'      => $autoApprove ? $creator->id : null,
@@ -1183,6 +1186,7 @@ class LeadShowController extends Controller
         foreach ($data['items'] as $i => $item) {
             QuotationItem::create([
                 'quotation_id'     => $quotation->id,
+                'company_id'       => $quotation->company_id,
                 'product_name'     => $item['product_name'],
                 'description'      => $item['description'] ?? null,
                 'quantity'         => $item['quantity'],

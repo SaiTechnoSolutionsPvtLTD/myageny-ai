@@ -17,9 +17,19 @@ use Illuminate\Support\Str;
 
 class DataVisibilityService
 {
+    public function resolveUser(?User $user = null): ?User
+    {
+        return $user
+            ?: (request()?->user('sanctum')
+            ?: (request()?->user()
+            ?: (auth('sanctum')->user()
+            ?: (auth('web')->user()
+            ?: auth()->user()))));
+    }
+
     public function companyIdFor(?User $user = null): ?int
     {
-        $user ??= auth()->user();
+        $user = $this->resolveUser($user);
 
         return $user?->company_id ? (int) $user->company_id : null;
     }
@@ -134,7 +144,7 @@ class DataVisibilityService
 
     public function visibleUserIds(?User $user = null): ?array
     {
-        $user ??= auth()->user();
+        $user = $this->resolveUser($user);
 
         if (! $user) {
             return null;
