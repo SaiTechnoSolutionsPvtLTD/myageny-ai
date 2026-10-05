@@ -3934,10 +3934,24 @@ class ProjectController extends Controller
                     ->toArray();
 
                 if (!empty($tlProjectMemberIds)) {
-                    $additionalMembers = User::whereIn('id', $tlProjectMemberIds)
+                    $additionalMembersQuery = User::whereIn('id', $tlProjectMemberIds)
                         ->where('is_active', true)
-                        ->where('company_id', $viewer->company_id)
-                        ->get();
+                        ->where('company_id', $viewer->company_id);
+
+                    if (in_array($deptType, ['dm', 'digital_marketing'], true)) {
+                        $additionalMembersQuery->where(function ($q) use ($deptIds) {
+                            $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                              ->orWhereHas('roles', function ($rq) {
+                                  $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                                     ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                                     ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                              })
+                              ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $deptIds))
+                              ->orWhereHas('internJoiningForm.department', fn ($dq) => $dq->whereIn('id', $deptIds));
+                        });
+                    }
+
+                    $additionalMembers = $additionalMembersQuery->get();
                     $scopedEmployees = $scopedEmployees->concat($additionalMembers);
                 }
 
@@ -3946,9 +3960,18 @@ class ProjectController extends Controller
                 }
             }
 
-            // Exclude admins (other than viewer) from team employee listing
-            $scopedEmployees = $scopedEmployees->reject(function ($e) use ($viewer) {
-                return (int)$e->id !== (int)$viewer->id && ($e->hasAdminLikeRole() || $e->isCompanyAdmin() || $e->hasRole('super_admin'));
+            // Exclude admins (other than viewer) and design department members (when in DM dashboard) from team employee listing
+            $scopedEmployees = $scopedEmployees->reject(function ($e) use ($viewer, $deptType) {
+                if ((int)$e->id === (int)$viewer->id) {
+                    return false;
+                }
+                if ($e->hasAdminLikeRole() || $e->isCompanyAdmin() || $e->hasRole('super_admin')) {
+                    return true;
+                }
+                if (in_array($deptType, ['dm', 'digital_marketing'], true) && $e->belongsToDesigningDepartment()) {
+                    return true;
+                }
+                return false;
             });
 
             $scopedEmployees = $scopedEmployees->unique('id')->sortBy('name')->values();
@@ -4144,6 +4167,8 @@ class ProjectController extends Controller
     {
         $cmStart = Carbon::today()->startOfMonth()->toDateString();
         $cmEnd = Carbon::today()->endOfMonth()->toDateString();
+        $nmStart = Carbon::today()->addMonth()->startOfMonth()->toDateString();
+        $nmEnd = Carbon::today()->addMonth()->endOfMonth()->toDateString();
         $today = Carbon::today()->startOfDay();
 
         $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')
@@ -4303,7 +4328,71 @@ class ProjectController extends Controller
             return ($item['is_renewed'] ? 1 : 0) . '_' . ($item['raw_end_date'] ?: '9999-99-99');
         })->values();
 
-        // 2. Current Expired Campaigns
+        // 2. Next Month Renewal Campaigns
+        $nextMonthRenewalItems = $allCampaigns->filter(function (CustomerCampaign $c) use ($nmStart, $nmEnd) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $endsInNm = ($endDate && $endDate >= $nmStart && $endDate <= $nmEnd);
+            $extendedInNm = (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $nmStart && $createdAtDate <= $nmEnd);
+
+            return $endsInNm || $extendedInNm;
+        })->map(function (CustomerCampaign $c) use ($nmStart, $nmEnd, $today, $extendedParentIds) {
+            $endDate = $c->end_date ? $c->end_date->toDateString() : null;
+            $createdAtDate = $c->created_at ? Carbon::parse($c->created_at)->toDateString() : null;
+
+            $isRenewed = in_array($c->id, $extendedParentIds, true)
+                || (!empty($c->extended_from_id) && $createdAtDate && $createdAtDate >= $nmStart && $createdAtDate <= $nmEnd);
+
+            $daysRemaining = null;
+            $daysRemainingText = '—';
+            $isOverdue = false;
+            if ($c->end_date) {
+                $endCarbon = Carbon::parse($c->end_date)->startOfDay();
+                if ($endCarbon->isPast() && ! $endCarbon->isToday()) {
+                    $diff = $endCarbon->diffInDays($today);
+                    $daysRemaining = -$diff;
+                    $daysRemainingText = $diff . 'd ago';
+                    $isOverdue = true;
+                } elseif ($endCarbon->isToday()) {
+                    $daysRemaining = 0;
+                    $daysRemainingText = 'Today';
+                } else {
+                    $diff = $today->diffInDays($endCarbon);
+                    $daysRemaining = $diff;
+                    $daysRemainingText = $diff . 'd left';
+                }
+            }
+
+            return [
+                'id' => $c->id,
+                'campaign_name' => $c->campaign_name ?: 'Campaign #' . $c->id,
+                'platform' => $c->platform ?: 'meta',
+                'lead_id' => $c->lead_id,
+                'company_name' => $c->lead?->company_name ?: ($c->productionInitiation?->company_name ?: '—'),
+                'contact_name' => $c->lead?->contact_name ?: '—',
+                'mobile_number' => $c->lead?->mobile_number ?: '—',
+                'start_date' => $c->start_date ? $c->start_date->format('d M Y') : '—',
+                'end_date' => $c->end_date ? $c->end_date->format('d M Y') : '—',
+                'raw_end_date' => $endDate,
+                'days_remaining' => $daysRemaining,
+                'days_remaining_text' => $daysRemainingText,
+                'is_overdue' => $isOverdue,
+                'budget_amount' => (float) ($c->budget_amount ?? 0),
+                'budget_type' => ucfirst(strtolower($c->budget_type ?: 'monthly')),
+                'is_extended' => !empty($c->extended_from_id),
+                'is_renewed' => $isRenewed,
+                'renewal_status' => $isRenewed ? 'renewed' : 'due',
+                'renewal_badge_label' => $isRenewed ? 'Renewed' : 'Due for Renewal',
+                'campaign_status' => strtolower((string) ($c->status ?: 'active')),
+                'created_by_name' => $c->creator?->name ?: 'DM Team',
+                'lead_url' => $c->lead_id ? route('projects.campaigns.show', $c->lead_id) : null,
+            ];
+        })->sortBy(function ($item) {
+            return ($item['is_renewed'] ? 1 : 0) . '_' . ($item['raw_end_date'] ?: '9999-99-99');
+        })->values();
+
+        // 3. Current Expired Campaigns
         $expiredItems = $allCampaigns->filter(function (CustomerCampaign $c) {
             return $c->isExpired();
         })->map(function (CustomerCampaign $c) use ($today, $extendedParentIds) {
@@ -4358,6 +4447,21 @@ class ProjectController extends Controller
             ]
         );
 
+        // Paginate Next Month Renewal Campaigns
+        $nextMonthRenewalPage = max(1, (int) $request->query('next_month_renewal_page', 1));
+        $nextMonthRenewalPerPage = 10;
+        $paginatedNextMonthRenewals = new LengthAwarePaginator(
+            $nextMonthRenewalItems->slice(($nextMonthRenewalPage - 1) * $nextMonthRenewalPerPage, $nextMonthRenewalPerPage)->values(),
+            $nextMonthRenewalItems->count(),
+            $nextMonthRenewalPerPage,
+            $nextMonthRenewalPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'next_month_renewal_page',
+            ]
+        );
+
         // Paginate Current Expired Campaigns
         $expiredPage = max(1, (int) $request->query('expired_page', 1));
         $expiredPerPage = 10;
@@ -4375,15 +4479,19 @@ class ProjectController extends Controller
 
         return [
             'renewalCampaigns' => $paginatedRenewals,
+            'nextMonthRenewalCampaigns' => $paginatedNextMonthRenewals,
             'expiredCampaigns' => $paginatedExpired,
             'summary' => [
                 'total_renewals' => $renewalItems->count(),
                 'due_renewals' => $renewalItems->where('is_renewed', false)->count(),
                 'completed_renewals' => $renewalItems->where('is_renewed', true)->count(),
+                'next_month_renewals' => $nextMonthRenewalItems->count(),
+                'next_month_due_renewals' => $nextMonthRenewalItems->where('is_renewed', false)->count(),
                 'total_expired' => $expiredItems->count(),
                 'unrenewed_expired' => $expiredItems->where('is_renewed', false)->count(),
             ],
             'current_month_label' => Carbon::today()->format('F Y'),
+            'next_month_label' => Carbon::today()->addMonth()->format('F Y'),
         ];
     }
 

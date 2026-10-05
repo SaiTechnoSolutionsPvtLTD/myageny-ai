@@ -67,6 +67,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard-data', [SuperAdminDashboardController::class, 'dashboardData']);
     Route::get('/dashboard/branch-hot-leads', [SuperAdminDashboardController::class, 'branchHotLeads']);
     Route::post('/dashboard/update-prospect-date', [SuperAdminDashboardController::class, 'updateProspectDate']);
+    Route::post('/dashboard/update-lead-assignee', [SuperAdminDashboardController::class, 'updateLeadAssignee']);
+    Route::get('/dashboard/lead-assignees-list', [SuperAdminDashboardController::class, 'getLeadAssigneesList']);
     Route::get('/product-dashboard-data', [AdminDashboardProductController::class, 'index']);
     Route::get('/product-dashboard-data/filters', [AdminDashboardProductController::class, 'filterOptions']);
     Route::get('/day-sales-tracker/data', [\App\Http\Controllers\DaySalesTrackerController::class, 'data']);

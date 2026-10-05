@@ -56,7 +56,8 @@
         <div class="lsp-topbar-right">
             <a href="{{ route('recruitment.edit', $candidate) }}" class="lsp-btn lsp-btn-outline"><i class="bi bi-pencil"></i> Edit Candidate</a>
             @if($candidate->resume_path)
-                <a href="{{ asset('storage/' . $candidate->resume_path) }}" target="_blank" class="lsp-btn lsp-btn-primary">View Resume</a>
+                <a href="{{ route('recruitment.resume.view', $candidate) }}" target="_blank" class="lsp-btn lsp-btn-outline"><i class="bi bi-eye"></i> View Resume</a>
+                <a href="{{ route('recruitment.resume.download', $candidate) }}" class="lsp-btn lsp-btn-primary"><i class="bi bi-download"></i> Download Resume</a>
             @endif
             <a href="{{ route('recruitment.index') }}" class="lsp-btn lsp-btn-outline">Back</a>
         </div>
@@ -151,6 +152,20 @@
                                     </div>
                                 </div>
                                 <div class="lsp-info-item"><div class="lsp-il">Expected CTC</div><div class="lsp-iv">{{ $candidate->expected_ctc !== null ? '₹ ' . number_format((float) $candidate->expected_ctc, 2) : 'N/A' }}</div></div>
+                                <div class="lsp-info-item">
+                                    <div class="lsp-il">Resume File</div>
+                                    <div class="lsp-iv">
+                                        @if($candidate->resume_path)
+                                            <div style="display:inline-flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                                <a href="{{ route('recruitment.resume.view', $candidate) }}" target="_blank" style="color:#fe5f04; font-weight:700; text-decoration:none;"><i class="bi bi-eye"></i> View Resume</a>
+                                                <span style="color:#cbd5e1;">|</span>
+                                                <a href="{{ route('recruitment.resume.download', $candidate) }}" style="color:#2563eb; font-weight:700; text-decoration:none;"><i class="bi bi-download"></i> Download Resume</a>
+                                            </div>
+                                        @else
+                                            <span style="color:#94a3b8;">No resume uploaded</span>
+                                        @endif
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

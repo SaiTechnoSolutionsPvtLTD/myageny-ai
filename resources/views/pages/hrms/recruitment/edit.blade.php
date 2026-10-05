@@ -344,7 +344,10 @@
                             <label class="eob-label">Resume Attachment</label>
                             @if($candidate->resume_path)
                                 <div style="margin-bottom:8px; font-size:13px; font-weight:600; color:#444;">
-                                    Current Resume: <a href="{{ asset('storage/' . $candidate->resume_path) }}" target="_blank" style="color:#fe5f04; text-decoration:underline;">View Attached Resume</a>
+                                    Current Resume: 
+                                    <a href="{{ route('recruitment.resume.view', $candidate) }}" target="_blank" style="color:#fe5f04; text-decoration:underline; margin-right:8px;"><i class="bi bi-eye"></i> View Attached Resume</a>
+                                    |
+                                    <a href="{{ route('recruitment.resume.download', $candidate) }}" style="color:#2563eb; text-decoration:underline; margin-left:8px;"><i class="bi bi-download"></i> Download Resume</a>
                                 </div>
                             @endif
                             <input type="file" name="resume" class="eob-input @error('resume') is-invalid @enderror" accept=".pdf,.doc,.docx">

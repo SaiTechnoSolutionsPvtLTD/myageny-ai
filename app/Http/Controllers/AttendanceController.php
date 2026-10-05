@@ -422,6 +422,17 @@ class AttendanceController extends Controller
                 ->values();
         }
 
+        if ($employeeNameFilter !== '') {
+            $normalizedSearch = $this->normalizeValue($employeeNameFilter);
+            $accessibleAttendees = $accessibleAttendees
+                ->filter(function (array $att) use ($normalizedSearch) {
+                    $nameMatch = str_contains($this->normalizeValue($att['name'] ?? ''), $normalizedSearch);
+                    $idMatch = str_contains($this->normalizeValue($att['display_id'] ?? ''), $normalizedSearch);
+                    return $nameMatch || $idMatch;
+                })
+                ->values();
+        }
+
         $selectedDates = collect(CarbonPeriod::create($selectedFromDate, $selectedToDate))
             ->map(fn (Carbon $date) => $date->format('Y-m-d'))
             ->values();
@@ -441,6 +452,7 @@ class AttendanceController extends Controller
                     'early_count' => 0,
                     'employee_count' => 0,
                     'intern_count' => 0,
+                    'od_count' => 0,
                 ],
             ];
         }
@@ -533,6 +545,28 @@ class AttendanceController extends Controller
             ];
         });
 
+        // Filter attendance records by branch, department, attendee_type, and employee_name
+        $attendanceRecords = $attendanceRecords->filter(function (array $record) use ($branchIdFilter, $departmentIdFilter, $attendeeTypeFilter, $employeeNameFilter) {
+            if ($branchIdFilter > 0 && (int) ($record['branch_id'] ?? 0) !== $branchIdFilter) {
+                return false;
+            }
+            if ($departmentIdFilter > 0 && (int) ($record['department_id'] ?? 0) !== $departmentIdFilter) {
+                return false;
+            }
+            if ($attendeeTypeFilter !== '' && ($record['attendee_type'] ?? '') !== $attendeeTypeFilter) {
+                return false;
+            }
+            if ($employeeNameFilter !== '') {
+                $normalizedSearch = $this->normalizeValue($employeeNameFilter);
+                $nameMatch = str_contains($this->normalizeValue($record['employee_name'] ?? ''), $normalizedSearch);
+                $idMatch = str_contains($this->normalizeValue($record['employee_id'] ?? ''), $normalizedSearch);
+                if (!$nameMatch && !$idMatch) {
+                    return false;
+                }
+            }
+            return true;
+        })->values();
+
         $presentAttendeeKeys = $attendanceRecords
             ->map(fn (array $record) => implode(':', [
                 $record['attendee_type'],
@@ -554,34 +588,34 @@ class AttendanceController extends Controller
                         ]));
                     })
                     ->map(function (array $attendee) use ($attendanceDate) {
-                    return [
-                        'employee_id' => $attendee['display_id'],
-                        'employee_name' => $attendee['name'],
-                        'attendee_type' => $attendee['attendee_type'],
-                        'branch_id' => $attendee['branch_id'] ?? null,
-                        'branch_name' => $attendee['branch_name'] ?? null,
-                        'department_id' => $attendee['department_id'],
-                        'department_name' => $attendee['department_name'],
-                        'attendance_date' => $attendanceDate,
-                        'attendance_status' => 'absent',
-                        'leave_category' => null,
-                        'leave_session' => null,
-                        'leave_category_label' => null,
-                        'leave_session_label' => null,
-                        'leave_label' => null,
-                        'login_time' => null,
-                        'logout_time' => null,
-                        'overall_working_hours' => null,
-                        'login_location' => null,
-                        'logout_location' => null,
-                        'remarks' => 'No check-in record found for the selected date.',
-                        'profile_photo_url' => $attendee['photo_url'],
-                        'attendance_photo_url' => $attendee['photo_url'],
-                        'logout_photo_url' => null,
-                        'login_timing' => null,
-                        'is_derived' => true,
-                    ];
-                });
+                        return [
+                            'employee_id' => $attendee['display_id'],
+                            'employee_name' => $attendee['name'],
+                            'attendee_type' => $attendee['attendee_type'],
+                            'branch_id' => $attendee['branch_id'] ?? null,
+                            'branch_name' => $attendee['branch_name'] ?? null,
+                            'department_id' => $attendee['department_id'],
+                            'department_name' => $attendee['department_name'],
+                            'attendance_date' => $attendanceDate,
+                            'attendance_status' => 'absent',
+                            'leave_category' => null,
+                            'leave_session' => null,
+                            'leave_category_label' => null,
+                            'leave_session_label' => null,
+                            'leave_label' => null,
+                            'login_time' => null,
+                            'logout_time' => null,
+                            'overall_working_hours' => null,
+                            'login_location' => null,
+                            'logout_location' => null,
+                            'remarks' => 'No check-in record found for the selected date.',
+                            'profile_photo_url' => $attendee['photo_url'],
+                            'attendance_photo_url' => $attendee['photo_url'],
+                            'logout_photo_url' => null,
+                            'login_timing' => null,
+                            'is_derived' => true,
+                        ];
+                    });
             })
             ->values();
 
@@ -604,30 +638,11 @@ class AttendanceController extends Controller
             default => $attendanceRecords->concat($absentRecords),
         };
 
+        if ($loginTimingFilter !== '') {
+            $records = $records->filter(fn (array $record) => ($record['login_timing'] ?? null) === $loginTimingFilter)->values();
+        }
+
         $records = $records
-            ->filter(function (array $record) use ($employeeNameFilter, $branchIdFilter, $departmentIdFilter, $loginTimingFilter, $attendeeTypeFilter) {
-                if ($employeeNameFilter !== '' && ! str_contains($this->normalizeValue($record['employee_name']), $this->normalizeValue($employeeNameFilter))) {
-                    return false;
-                }
-
-                if ($branchIdFilter > 0 && (int) ($record['branch_id'] ?? 0) !== $branchIdFilter) {
-                    return false;
-                }
-
-                if ($departmentIdFilter > 0 && (int) ($record['department_id'] ?? 0) !== $departmentIdFilter) {
-                    return false;
-                }
-
-                if ($loginTimingFilter !== '' && ($record['login_timing'] ?? null) !== $loginTimingFilter) {
-                    return false;
-                }
-
-                if ($attendeeTypeFilter !== '' && $record['attendee_type'] !== $attendeeTypeFilter) {
-                    return false;
-                }
-
-                return true;
-            })
             ->sortBy(
                 fn (array $record) => $this->attendanceSortValue($record, $sortBy),
                 options: SORT_NATURAL,
