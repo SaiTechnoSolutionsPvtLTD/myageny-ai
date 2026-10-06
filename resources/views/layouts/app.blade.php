@@ -1059,17 +1059,28 @@ table td:last-child,
             top: 0;
             right: 0;
             z-index: 100001 !important;
-            width: min(380px, calc(100vw - 24px));
+            width: min(360px, calc(100vw - 20px));
             height: 100vh;
-            padding: 24px;
+            padding: 16px 16px 24px 16px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
+            gap: 12px;
             background: linear-gradient(180deg, #fff8f4 0%, #ffffff 100%);
             border-left: 1px solid rgba(254, 95, 4, 0.12);
             box-shadow: -24px 0 60px rgba(18, 18, 18, 0.18);
             transform: translateX(108%);
             transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(254, 95, 4, 0.25) transparent;
+        }
+        .module-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        .module-panel::-webkit-scrollbar-thumb {
+            background: rgba(254, 95, 4, 0.25);
+            border-radius: 8px;
         }
         .module-panel.is-open {
             transform: translateX(0);
@@ -1078,42 +1089,49 @@ table td:last-child,
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 16px;
+            gap: 12px;
         }
         .module-panel__eyebrow {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 7px 12px;
+            gap: 6px;
+            padding: 4px 9px;
             border-radius: 999px;
             background: rgba(254, 95, 4, 0.10);
             color: #d35400;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
             letter-spacing: .08em;
             text-transform: uppercase;
         }
         .module-panel__title {
-            margin-top: 12px;
-            font-size: 24px;
+            margin-top: 4px;
+            font-size: 18px;
             font-weight: 800;
             color: #121212;
+            line-height: 1.2;
         }
         .module-panel__text {
-            margin-top: 8px;
-            color: #6d6d6d;
-            font-size: 14px;
-            line-height: 1.55;
+            margin-top: 2px;
+            color: #737373;
+            font-size: 12px;
+            line-height: 1.35;
         }
         .module-panel__close {
-            width: 42px;
-            height: 42px;
-            border-radius: 14px;
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
             background: #fff;
             color: #444;
             border: 1px solid #f1dfd4;
-            box-shadow: 0 8px 20px rgba(18, 18, 18, 0.05);
+            box-shadow: 0 4px 12px rgba(18, 18, 18, 0.05);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
             transition: transform .2s ease, background-color .2s ease;
+            cursor: pointer;
+            flex-shrink: 0;
         }
         .module-panel__close:hover {
             transform: rotate(90deg);
@@ -1122,19 +1140,20 @@ table td:last-child,
         .module-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
+            gap: 8px;
         }
         .module-card {
             position: relative;
-            min-height: 152px;
-            padding: 18px;
-            border-radius: 24px;
+            min-height: unset;
+            padding: 10px;
+            border-radius: 12px;
             background: #fff;
             border: 1px solid #f2e7df;
-            box-shadow: 0 12px 28px rgba(18, 18, 18, 0.05);
+            box-shadow: 0 4px 12px rgba(18, 18, 18, 0.04);
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 6px;
+            text-decoration: none;
             transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
         }
         .module-card--button {
@@ -1142,30 +1161,49 @@ table td:last-child,
             text-align: left;
         }
         .module-card:hover {
-            transform: translateY(-4px);
+            transform: translateY(-2px);
             border-color: #ffc9aa;
-            box-shadow: 0 16px 34px rgba(254, 95, 4, 0.12);
+            box-shadow: 0 8px 18px rgba(254, 95, 4, 0.12);
         }
         .module-card__icon {
-            width: 54px;
-            height: 54px;
-            border-radius: 18px;
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 15px;
             color: #fff;
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+            flex-shrink: 0;
+        }
+        .module-card__body {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
         }
         .module-card__title {
-            font-size: 17px;
-            font-weight: 800;
+            font-size: 13px;
+            font-weight: 700;
             color: #121212;
+            line-height: 1.2;
         }
         .module-card__desc {
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: 11px;
+            line-height: 1.3;
             color: #7a7a7a;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .module-grid .module-card:last-child:nth-child(odd) {
+            grid-column: span 2;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
         }
         .module-card--crm .module-card__icon {
             background: linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%);
@@ -1212,10 +1250,19 @@ table td:last-child,
             }
             .module-panel {
                 width: min(100vw, 100%);
-                padding: 20px 16px 24px;
+                padding: 16px 14px 20px;
             }
             .module-grid {
                 grid-template-columns: 1fr;
+            }
+            .module-grid .module-card:last-child:nth-child(odd) {
+                grid-column: auto;
+            }
+            .module-card {
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
+                padding: 9px 12px;
             }
             .module-fab {
                 right: 14px;
