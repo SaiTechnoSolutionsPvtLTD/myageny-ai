@@ -545,6 +545,8 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('mobile.projects.tasks.index');
         Route::post('tasks', [ProductionTaskApiController::class, 'store'])
             ->name('mobile.projects.tasks.store');
+        Route::post('tasks/support-task', [ProductionTaskApiController::class, 'storeSupportTask'])
+            ->name('mobile.projects.tasks.support-task.store');
         Route::patch('tasks/{task}/status', [ProductionTaskApiController::class, 'updateStatus'])
             ->name('mobile.projects.tasks.update-status');
         Route::delete('tasks/{task}', [ProductionTaskApiController::class, 'destroy'])

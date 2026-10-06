@@ -341,6 +341,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/projects/tasks', [ProductionTaskController::class, 'store'])
             ->middleware('can:tasks.create')
             ->name('projects.tasks.store');
+        Route::post('/projects/tasks/support-task', [ProductionTaskController::class, 'storeSupportTask'])
+            ->middleware('can:tasks.create')
+            ->name('projects.tasks.support-task.store');
         Route::patch('/projects/tasks/{task}/status', [ProductionTaskController::class, 'updateStatus'])
             ->middleware('can:tasks.edit')
             ->name('projects.tasks.update-status');
@@ -357,6 +360,10 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/projects/timesheets/{timesheet}/status', [ProjectController::class, 'updateTimesheetStatus'])
             ->middleware('can:timesheets.edit')
             ->name('projects.timesheets.update-status');
+        Route::post('/projects/timesheets/{timesheet}/review-poster', [ProjectController::class, 'reviewPosterTimesheet'])
+            ->name('projects.timesheets.review-poster');
+        Route::post('/projects/timesheets/{timesheet}/dm-post-proof', [ProjectController::class, 'uploadDmPostProof'])
+            ->name('projects.timesheets.dm-post-proof');
         Route::get('/projects-details', [ProjectController::class, 'index'])
             ->name('projects.index');
         Route::post('/projects-details/bulk-allocate', [ProjectController::class, 'bulkAllocate'])

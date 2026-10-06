@@ -13,6 +13,8 @@ use App\Models\ProductionInitiation;
 use App\Models\ProductionTask;
 use App\Models\ProjectTestingDetail;
 use App\Models\ProjectTimesheet;
+use App\Models\SmmSheet;
+use App\Models\SmmSheetLog;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -1141,6 +1143,67 @@ class ProjectController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
+        $isDesignUser = (bool) $user?->belongsToDesigningDepartment();
+        $isDmUser     = (bool) $user?->belongsToDigitalMarketingDepartment();
+        $isDesignTl   = (bool) $user?->isDesigningTl();
+        $canApprovePosters = $isAdminLike || $isDesignTl;
+
+        $pendingPosterApprovals = collect();
+        if ($canApprovePosters) {
+            $pendingQuery = ProjectTimesheet::query()
+                ->with([
+                    'project.lead',
+                    'user.roles.department',
+                    'user.employeeOnboarding.department',
+                ])
+                ->whereNotNull('attachments')
+                ->where('poster_approval_status', 'pending')
+                ->latest('timesheet_date');
+
+            if (! $isAdminLike && $user) {
+                $mappedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
+                $pendingQuery->whereIn('user_id', $mappedUserIds);
+            }
+            $pendingPosterApprovals = $pendingQuery->get();
+        }
+
+        $approvedPostersQuery = ProjectTimesheet::query()
+            ->with([
+                'project.lead',
+                'project.smmSheet',
+                'user.roles.department',
+                'posterApprovedBy',
+                'dmPublishedBy',
+            ])
+            ->whereNotNull('attachments')
+            ->where('poster_approval_status', 'approved')
+            ->latest('poster_approved_at');
+
+        if (! $isAdminLike && ! $isDmUser && ! $isDesignTl && $user) {
+            $approvedPostersQuery->where('user_id', $user->id);
+        }
+
+        $approvedPosters = $approvedPostersQuery->take(100)->get();
+
+        // Query all design poster deliverables (pending, approved, rejected) for the Poster Approvals tab
+        $posterDeliverablesQuery = ProjectTimesheet::query()
+            ->with([
+                'project.lead',
+                'user.roles.department',
+                'posterApprovedBy',
+            ])
+            ->whereNotNull('attachments')
+            ->whereNotNull('poster_approval_status')
+            ->latest('timesheet_date');
+
+        if (! $isAdminLike && ! $isDesignTl && $user) {
+            $posterDeliverablesQuery->where('user_id', $user->id);
+        } elseif ($isDesignTl && ! $isAdminLike && $user) {
+            $mappedUserIds = $user->managedUsers()->pluck('users.id')->push($user->id)->all();
+            $posterDeliverablesQuery->whereIn('user_id', $mappedUserIds);
+        }
+        $allPosterDeliverables = $posterDeliverablesQuery->take(150)->get();
+
         return view('pages.projects.timesheets', [
             'assignedProjects' => $assignedProjects,
             'uniqueLeads' => $uniqueLeads,
@@ -1154,6 +1217,13 @@ class ProjectController extends Controller
             'canViewTeamTimesheets' => $canViewTeamTimesheets,
             'allUsers' => $allUsers,
             'departments' => $departments,
+            'isDesignUser' => $isDesignUser,
+            'isDmUser' => $isDmUser,
+            'isDesignTl' => $isDesignTl,
+            'canApprovePosters' => $canApprovePosters,
+            'pendingPosterApprovals' => $pendingPosterApprovals,
+            'approvedPosters' => $approvedPosters,
+            'allPosterDeliverables' => $allPosterDeliverables,
         ]);
     }
 
@@ -1246,6 +1316,25 @@ class ProjectController extends Controller
             }
         }
 
+        $isDesignOrDm = $user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment();
+
+        // Validation for DM team: Poster count cannot exceed Design team completed count
+        if ($user->belongsToDigitalMarketingDepartment() && !$isOnetime) {
+            $dmPosterCount = (int) ($validated['poster_count'] ?? 0);
+            if ($dmPosterCount > 0) {
+                $smmSheet = SmmSheet::where('production_initiation_id', $project->id)->first();
+                if (!$smmSheet && $project->lead_id) {
+                    $smmSheet = SmmSheet::where('lead_id', $project->lead_id)->latest()->first();
+                }
+                $designCompleted = $smmSheet ? (int) $smmSheet->design_completed_posters : 0;
+                if ($dmPosterCount > $designCompleted) {
+                    return back()->withInput()->withErrors([
+                        'poster_count' => "Cannot set poster completed count to {$dmPosterCount}. Design team has only completed/approved {$designCompleted} poster(s) for this project."
+                    ]);
+                }
+            }
+        }
+
         if ($timesheet) {
             $existing = is_array($timesheet->attachments) ? $timesheet->attachments : [];
             $removed = (array) ($validated['removed_attachments'] ?? []);
@@ -1256,7 +1345,14 @@ class ProjectController extends Controller
                 }));
             }
             $merged = array_merge($existing, $newAttachments);
-            $timesheet->update([
+
+            if ($isDesignOrDm && empty($merged)) {
+                return back()->withInput()->withErrors([
+                    'attachments' => 'Attachments are mandatory for Designing and Digital Marketing team members.'
+                ]);
+            }
+
+            $updateData = [
                 'status' => $validated['status'],
                 'project_type' => $validated['project_type'] ?? null,
                 'poster_count' => $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0),
@@ -1267,8 +1363,31 @@ class ProjectController extends Controller
                 'waiting_videos' => $isOnetime ? 0 : (int) ($validated['waiting_videos'] ?? 0),
                 'day_closing_update' => $validated['day_closing_update'] ?? '',
                 'attachments' => $merged,
-            ]);
+            ];
+
+            if ($user->belongsToDesigningDepartment() && !empty($newAttachments)) {
+                $updateData['poster_approval_status'] = 'pending';
+                $updateData['smm_synced'] = false;
+            }
+
+            $timesheet->update($updateData);
         } else {
+            if ($isDesignOrDm && empty($newAttachments)) {
+                return back()->withInput()->withErrors([
+                    'attachments' => 'Attachments are mandatory for Designing and Digital Marketing team members.'
+                ]);
+            }
+
+            $posterApprovalStatus = null;
+            if ($user->belongsToDesigningDepartment() && !empty($newAttachments)) {
+                $posterApprovalStatus = 'pending';
+            }
+
+            $posterCountVal = $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0);
+            if ($user->belongsToDesigningDepartment() && $posterCountVal <= 0 && !empty($newAttachments)) {
+                $posterCountVal = count($newAttachments);
+            }
+
             ProjectTimesheet::create([
                 'company_id' => $project->company_id,
                 'production_initiation_id' => $project->id,
@@ -1277,7 +1396,7 @@ class ProjectController extends Controller
                 'project_delivery_date' => $this->projectDeliveryDate($project)?->toDateString(),
                 'status' => $validated['status'],
                 'project_type' => $validated['project_type'] ?? null,
-                'poster_count' => $isOnetime ? 0 : (int) ($validated['poster_count'] ?? 0),
+                'poster_count' => $posterCountVal,
                 'video_count' => $isOnetime ? 0 : (int) ($validated['video_count'] ?? 0),
                 'committed_posters' => $isOnetime ? 0 : (int) ($validated['committed_posters'] ?? 0),
                 'committed_videos' => $isOnetime ? 0 : (int) ($validated['committed_videos'] ?? 0),
@@ -1285,6 +1404,7 @@ class ProjectController extends Controller
                 'waiting_videos' => $isOnetime ? 0 : (int) ($validated['waiting_videos'] ?? 0),
                 'day_closing_update' => $validated['day_closing_update'] ?? '',
                 'attachments' => $newAttachments,
+                'poster_approval_status' => $posterApprovalStatus,
             ]);
         }
 
@@ -1316,6 +1436,16 @@ class ProjectController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid date.']);
         }
 
+        $smmSheet = SmmSheet::where('production_initiation_id', $projectId)->first();
+        if (!$smmSheet) {
+            $proj = ProductionInitiation::find($projectId);
+            if ($proj?->lead_id) {
+                $smmSheet = SmmSheet::where('lead_id', $proj->lead_id)->latest()->first();
+            }
+        }
+        $designCompleted = $smmSheet ? (int) $smmSheet->design_completed_posters : 0;
+        $dmCompleted = $smmSheet ? (int) $smmSheet->dm_completed_posters : 0;
+
         $timesheet = ProjectTimesheet::where('production_initiation_id', $projectId)
             ->where('user_id', $user->id)
             ->whereDate('timesheet_date', $timesheetDate)
@@ -1336,6 +1466,13 @@ class ProjectController extends Controller
                     'video_count' => (int) $timesheet->video_count,
                     'day_closing_update' => $timesheet->day_closing_update ?: '',
                     'attachments' => $timesheet->attachment_list,
+                    'poster_approval_status' => $timesheet->poster_approval_status,
+                    'poster_approval_remarks' => $timesheet->poster_approval_remarks,
+                    'poster_approved_by' => $timesheet->posterApprovedBy?->name,
+                    'poster_approved_at' => optional($timesheet->poster_approved_at)->format('d M Y, h:i A'),
+                    'dm_proofs' => $timesheet->dm_post_proof_list,
+                    'design_completed_posters' => $designCompleted,
+                    'dm_completed_posters' => $dmCompleted,
                 ]
             ]);
         }
@@ -1343,7 +1480,10 @@ class ProjectController extends Controller
         return response()->json([
             'success' => true,
             'exists' => false,
-            'data' => null
+            'data' => [
+                'design_completed_posters' => $designCompleted,
+                'dm_completed_posters' => $dmCompleted,
+            ]
         ]);
     }
 
@@ -1391,7 +1531,23 @@ class ProjectController extends Controller
             $updateData['day_closing_update'] = $validated['day_closing_update'];
         }
         if (isset($validated['poster_count'])) {
-            $updateData['poster_count'] = (int) $validated['poster_count'];
+            $requestedPosterCount = (int) $validated['poster_count'];
+            $timesheetUser = $timesheet->user ?: User::find($timesheet->user_id);
+            if (($timesheetUser?->belongsToDigitalMarketingDepartment() || $user->belongsToDigitalMarketingDepartment()) && $requestedPosterCount > 0) {
+                $smmSheet = SmmSheet::where('production_initiation_id', $timesheet->production_initiation_id)->first();
+                if (!$smmSheet && $timesheet->project?->lead_id) {
+                    $smmSheet = SmmSheet::where('lead_id', $timesheet->project->lead_id)->latest()->first();
+                }
+                $designCompleted = $smmSheet ? (int) $smmSheet->design_completed_posters : 0;
+                if ($requestedPosterCount > $designCompleted) {
+                    $errorMsg = "Cannot set poster completed count to {$requestedPosterCount}. Design team has only completed/approved {$designCompleted} poster(s) for this project.";
+                    if ($request->wantsJson()) {
+                        return response()->json(['success' => false, 'message' => $errorMsg], 422);
+                    }
+                    return back()->with('error', $errorMsg);
+                }
+            }
+            $updateData['poster_count'] = $requestedPosterCount;
         }
         if (isset($validated['video_count'])) {
             $updateData['video_count'] = (int) $validated['video_count'];
@@ -1440,7 +1596,26 @@ class ProjectController extends Controller
         }
 
         if ($attachmentsModified) {
+            $timesheetUser = $timesheet->user ?: User::find($timesheet->user_id);
+            $isDesignOrDm = ($timesheetUser?->belongsToDesigningDepartment() || $timesheetUser?->belongsToDigitalMarketingDepartment())
+                || ($user->belongsToDesigningDepartment() || $user->belongsToDigitalMarketingDepartment());
+
+            if ($isDesignOrDm && empty($existing)) {
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attachments are mandatory for Designing and Digital Marketing team members.'
+                    ], 422);
+                }
+                return back()->with('error', 'Attachments are mandatory for Designing and Digital Marketing team members.');
+            }
+
             $updateData['attachments'] = $existing;
+
+            if ($timesheetUser?->belongsToDesigningDepartment() && $request->hasFile('attachments')) {
+                $updateData['poster_approval_status'] = 'pending';
+                $updateData['smm_synced'] = false;
+            }
         }
 
         if (!empty($updateData)) {
@@ -1463,10 +1638,336 @@ class ProjectController extends Controller
                 'status' => $timesheet->status,
                 'day_closing_update' => $timesheet->day_closing_update,
                 'attachments' => $timesheet->attachment_list,
+                'poster_approval_status' => $timesheet->poster_approval_status,
+                'poster_approval_remarks' => $timesheet->poster_approval_remarks,
+                'dm_proofs' => $timesheet->dm_post_proof_list,
             ]);
         }
 
         return back()->with('success', 'Timesheet updated successfully.');
+    }
+
+    public function reviewPosterTimesheet(Request $request, ProjectTimesheet $timesheet): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        // Check authorization: must be Design TL, Admin, Company Admin, Super Admin, or mapped manager
+        $isAdminLike = $user->hasAdminLikeRole() || $user->isCompanyAdmin() || $user->isSuperAdmin();
+        $isDesignTl = $user->isDesigningTl();
+        $isMappedManager = $user->managedUsers()->where('users.id', $timesheet->user_id)->exists();
+
+        if (!$isAdminLike && !$isDesignTl && !$isMappedManager) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized: Only Design Team Leads and Admins can review posters.'], 403);
+            }
+            abort(403, 'Unauthorized: Only Design Team Leads and Admins can review posters.');
+        }
+
+        $validated = $request->validate([
+            'status'  => ['required', 'string', 'in:approved,rejected'],
+            'remarks' => ['required', 'string', 'min:3', 'max:2000'],
+        ], [
+            'status.required'  => 'Please select either Approve or Reject.',
+            'remarks.required' => 'Remarks are mandatory for both approval and rejection.',
+            'remarks.min'      => 'Remarks must be at least 3 characters.',
+        ]);
+
+        $newStatus = $validated['status'];
+        $remarks   = trim($validated['remarks']);
+        $posterCount = (int) $timesheet->poster_count;
+        if ($posterCount <= 0) {
+            $posterCount = count($timesheet->poster_attachments) ?: (count($timesheet->attachment_list) ?: 1);
+        }
+
+        \DB::transaction(function () use ($timesheet, $user, $newStatus, $remarks, $posterCount) {
+            if ($newStatus === 'approved') {
+                if (!$timesheet->smm_synced) {
+                    $smmSheet = SmmSheet::where('production_initiation_id', $timesheet->production_initiation_id)->first();
+                    if (!$smmSheet && $timesheet->project) {
+                        $smmSheet = SmmSheet::syncFromInitiation($timesheet->project);
+                    }
+                    if (!$smmSheet && $timesheet->project?->lead_id) {
+                        $smmSheet = SmmSheet::where('lead_id', $timesheet->project->lead_id)->latest()->first();
+                    }
+                    if (!$smmSheet && $timesheet->project) {
+                        $smmSheet = SmmSheet::create([
+                            'company_id'               => $timesheet->project->company_id,
+                            'lead_id'                  => $timesheet->project->lead_id,
+                            'lead_product_id'          => $timesheet->project->lead_product_id,
+                            'production_initiation_id' => $timesheet->project->id,
+                            'product_id'               => $timesheet->project->product_id,
+                            'department_id'            => $timesheet->project->department_id,
+                            'start_date'               => now()->toDateString(),
+                            'delivery_date'            => $timesheet->project->project_delivery_date,
+                            'committed_posters'        => 0,
+                            'committed_videos'         => 0,
+                            'design_completed_posters' => 0,
+                            'design_completed_videos'  => 0,
+                            'dm_completed_posters'     => 0,
+                            'dm_completed_videos'      => 0,
+                            'status'                   => 'active',
+                        ]);
+                    }
+
+                    if ($smmSheet) {
+                        $before = (int) $smmSheet->design_completed_posters;
+                        $smmSheet->design_completed_posters += $posterCount;
+                        $smmSheet->recalculateStatus();
+                        $smmSheet->save();
+
+                        SmmSheetLog::create([
+                            'smm_sheet_id'          => $smmSheet->id,
+                            'user_id'               => $user->id,
+                            'department'            => 'design',
+                            'action'                => 'poster_approved',
+                            'posters_added'         => $posterCount,
+                            'videos_added'          => 0,
+                            'design_posters_before' => $before,
+                            'design_posters_after'  => $smmSheet->design_completed_posters,
+                            'design_videos_before'  => (int) $smmSheet->design_completed_videos,
+                            'design_videos_after'   => (int) $smmSheet->design_completed_videos,
+                            'dm_posters_before'     => (int) $smmSheet->dm_completed_posters,
+                            'dm_posters_after'      => (int) $smmSheet->dm_completed_posters,
+                            'dm_videos_before'      => (int) $smmSheet->dm_completed_videos,
+                            'dm_videos_after'       => (int) $smmSheet->dm_completed_videos,
+                            'remarks'               => "TL {$user->name} approved {$posterCount} poster(s) from Timesheet #{$timesheet->id} ({$timesheet->user?->name}). Remarks: {$remarks}",
+                        ]);
+
+                        $timesheet->smm_synced = true;
+                        $timesheet->smm_synced_count = $posterCount;
+                    }
+                }
+
+                $timesheet->poster_approval_status = 'approved';
+                $timesheet->poster_approved_by = $user->id;
+                $timesheet->poster_approved_at = now();
+                $timesheet->poster_approval_remarks = $remarks;
+                $timesheet->save();
+
+            } else {
+                if ($timesheet->smm_synced && $timesheet->smm_synced_count > 0) {
+                    $smmSheet = SmmSheet::where('production_initiation_id', $timesheet->production_initiation_id)->first();
+                    if (!$smmSheet && $timesheet->project?->lead_id) {
+                        $smmSheet = SmmSheet::where('lead_id', $timesheet->project->lead_id)->latest()->first();
+                    }
+                    if ($smmSheet) {
+                        $before = (int) $smmSheet->design_completed_posters;
+                        $revertCount = (int) $timesheet->smm_synced_count;
+                        $smmSheet->design_completed_posters = max(0, $before - $revertCount);
+                        $smmSheet->recalculateStatus();
+                        $smmSheet->save();
+
+                        SmmSheetLog::create([
+                            'smm_sheet_id'          => $smmSheet->id,
+                            'user_id'               => $user->id,
+                            'department'            => 'design',
+                            'action'                => 'poster_rejected_reversal',
+                            'posters_added'         => -$revertCount,
+                            'videos_added'          => 0,
+                            'design_posters_before' => $before,
+                            'design_posters_after'  => $smmSheet->design_completed_posters,
+                            'design_videos_before'  => (int) $smmSheet->design_completed_videos,
+                            'design_videos_after'   => (int) $smmSheet->design_completed_videos,
+                            'dm_posters_before'     => (int) $smmSheet->dm_completed_posters,
+                            'dm_posters_after'      => (int) $smmSheet->dm_completed_posters,
+                            'dm_videos_before'      => (int) $smmSheet->dm_completed_videos,
+                            'dm_videos_after'       => (int) $smmSheet->dm_completed_videos,
+                            'remarks'               => "TL {$user->name} rejected previously approved poster(s) from Timesheet #{$timesheet->id} ({$timesheet->user?->name}). Remarks: {$remarks}",
+                        ]);
+                    }
+                    $timesheet->smm_synced = false;
+                    $timesheet->smm_synced_count = 0;
+                }
+
+                $timesheet->poster_approval_status = 'rejected';
+                $timesheet->poster_approved_by = $user->id;
+                $timesheet->poster_approved_at = now();
+                $timesheet->poster_approval_remarks = $remarks;
+                $timesheet->save();
+            }
+        });
+
+        $message = $newStatus === 'approved'
+            ? "Poster approved successfully! {$posterCount} poster(s) added to SMM Sheet Done Count."
+            : "Poster deliverable has been rejected with remarks.";
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'id' => $timesheet->id,
+                    'status' => $timesheet->poster_approval_status,
+                    'approved_by' => $user->name,
+                    'approved_at' => optional($timesheet->poster_approved_at)->format('d M Y, h:i A'),
+                    'remarks' => $timesheet->poster_approval_remarks,
+                    'smm_synced' => $timesheet->smm_synced,
+                    'smm_synced_count' => $timesheet->smm_synced_count,
+                ]
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    public function uploadDmPostProof(Request $request, ProjectTimesheet $timesheet): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'screenshot'    => ['nullable', 'file', 'image', 'max:25600'],
+            'proof_image'   => ['nullable', 'file', 'image', 'max:25600'],
+            'poster_count'  => ['nullable', 'integer', 'min:1'],
+            'platform'      => ['nullable', 'string', 'max:100'],
+            'post_url'      => ['nullable', 'url', 'max:500'],
+            'posted_date'   => ['nullable', 'date'],
+            'remarks'       => ['nullable', 'string', 'max:1000'],
+        ], [
+            'screenshot.max'  => 'The screenshot file size must not exceed 25MB.',
+            'proof_image.max' => 'The screenshot file size must not exceed 25MB.',
+        ]);
+
+        $timesheetPosterCount = (int) $timesheet->poster_count ?: (count($timesheet->poster_attachments) ?: 1);
+        $alreadyPublishedForTimesheet = (int) ($timesheet->dm_published_count ?? 0);
+        $requestedCount = $request->filled('poster_count')
+            ? (int) $validated['poster_count']
+            : max(1, $timesheetPosterCount - $alreadyPublishedForTimesheet);
+
+        // Fetch or find SMM Sheet
+        $smmSheet = SmmSheet::where('production_initiation_id', $timesheet->production_initiation_id)->first();
+        if (!$smmSheet && $timesheet->project) {
+            $smmSheet = SmmSheet::syncFromInitiation($timesheet->project);
+        }
+        if (!$smmSheet && $timesheet->project?->lead_id) {
+            $smmSheet = SmmSheet::where('lead_id', $timesheet->project->lead_id)->latest()->first();
+        }
+
+        $designCompleted = $smmSheet ? (int) $smmSheet->design_completed_posters : $timesheetPosterCount;
+        $dmCompleted = $smmSheet ? (int) $smmSheet->dm_completed_posters : $alreadyPublishedForTimesheet;
+
+        // Validation 1: DM completed cannot exceed Design completed posters
+        if (($dmCompleted + $requestedCount) > $designCompleted) {
+            $remainingAllowed = max(0, $designCompleted - $dmCompleted);
+            $message = "Cannot publish {$requestedCount} poster(s). Design team has only completed/approved {$designCompleted} poster(s) (DM already published: {$dmCompleted}). You cannot publish more than what Design team has completed (remaining allowed: {$remainingAllowed}).";
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+            return back()->withInput()->withErrors(['poster_count' => $message]);
+        }
+
+        // Validation 2: Single timesheet publish count cannot exceed timesheet approved poster count
+        if ($requestedCount > $timesheetPosterCount) {
+            $message = "Cannot publish {$requestedCount} poster(s). This timesheet only has {$timesheetPosterCount} approved poster(s) from the Design team.";
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+            return back()->withInput()->withErrors(['poster_count' => $message]);
+        }
+
+        $file = $request->file('proof_image') ?: $request->file('screenshot');
+        if (! $file || ! $file->isValid()) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Facebook post screenshot proof is mandatory.'], 422);
+            }
+            return back()->withErrors(['proof_image' => 'Facebook post screenshot proof is mandatory.']);
+        }
+        $targetDir = public_path('uploads/timesheets/dm_proofs');
+        if (! file_exists($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        $origName = $file->getClientOriginalName();
+        $fileSize = $file->getSize();
+        $mimeType = $file->getClientMimeType();
+        $ext = $file->getClientOriginalExtension() ?: pathinfo($origName, PATHINFO_EXTENSION);
+        $fileName = time() . '_' . \Illuminate\Support\Str::random(8) . ($ext ? '.' . strtolower($ext) : '');
+        $file->move($targetDir, $fileName);
+
+        $platform = $validated['platform'] ?? 'Facebook';
+        $proofs = is_array($timesheet->dm_post_proofs) ? $timesheet->dm_post_proofs : [];
+        $proofs[] = [
+            'path'              => 'uploads/timesheets/dm_proofs/' . $fileName,
+            'name'              => $origName,
+            'size'              => $fileSize ?: (file_exists($targetDir . '/' . $fileName) ? filesize($targetDir . '/' . $fileName) : 0),
+            'mime_type'         => $mimeType,
+            'platform'          => $platform,
+            'post_url'          => $validated['post_url'] ?? null,
+            'posted_date'       => $validated['posted_date'] ?? now()->toDateString(),
+            'posters_published' => $requestedCount,
+            'uploaded_by'       => $user->id,
+            'uploaded_by_name'  => $user->name,
+            'remarks'           => $validated['remarks'] ?? null,
+            'created_at'        => now()->toIso8601String(),
+        ];
+
+        $timesheet->dm_post_proofs = $proofs;
+        $timesheet->dm_published_count = $alreadyPublishedForTimesheet + $requestedCount;
+        $timesheet->dm_published_at = now();
+        $timesheet->dm_published_by = $user->id;
+        $timesheet->save();
+
+        // Create or update SMM Sheet
+        if (!$smmSheet && $timesheet->project) {
+            $smmSheet = SmmSheet::create([
+                'company_id'               => $timesheet->project->company_id,
+                'lead_id'                  => $timesheet->project->lead_id,
+                'lead_product_id'          => $timesheet->project->lead_product_id,
+                'production_initiation_id' => $timesheet->project->id,
+                'product_id'               => $timesheet->project->product_id,
+                'department_id'            => $timesheet->project->department_id,
+                'start_date'               => now()->toDateString(),
+                'delivery_date'            => $timesheet->project->project_delivery_date,
+                'committed_posters'        => 0,
+                'committed_videos'         => 0,
+                'design_completed_posters' => $designCompleted,
+                'design_completed_videos'  => 0,
+                'dm_completed_posters'     => 0,
+                'dm_completed_videos'      => 0,
+                'status'                   => 'active',
+            ]);
+        }
+
+        if ($smmSheet) {
+            $beforeDm = (int) $smmSheet->dm_completed_posters;
+            $smmSheet->dm_completed_posters += $requestedCount;
+            $smmSheet->recalculateStatus();
+            $smmSheet->save();
+
+            $clientName = $timesheet->project?->company_name ?: ($timesheet->project?->lead?->company_name ?: 'Client');
+            SmmSheetLog::create([
+                'smm_sheet_id'          => $smmSheet->id,
+                'user_id'               => $user->id,
+                'department'            => 'dm',
+                'action'                => 'poster_published',
+                'posters_added'         => $requestedCount,
+                'videos_added'          => 0,
+                'design_posters_before' => (int) $smmSheet->design_completed_posters,
+                'design_posters_after'  => (int) $smmSheet->design_completed_posters,
+                'design_videos_before'  => (int) $smmSheet->design_completed_videos,
+                'design_videos_after'   => (int) $smmSheet->design_completed_videos,
+                'dm_posters_before'     => $beforeDm,
+                'dm_posters_after'      => $smmSheet->dm_completed_posters,
+                'dm_videos_before'      => (int) $smmSheet->dm_completed_videos,
+                'dm_videos_after'       => (int) $smmSheet->dm_completed_videos,
+                'remarks'               => "DM {$user->name} published {$requestedCount} poster(s) from Timesheet #{$timesheet->id} ({$clientName}). Platform: {$platform}. Remarks: " . ($validated['remarks'] ?? 'None'),
+            ]);
+        }
+
+        $message = "Facebook post screenshot proof uploaded successfully! {$requestedCount} poster(s) published and added to DM SMM Sheet Done Count.";
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data'    => [
+                    'proofs'             => $timesheet->dm_post_proof_list,
+                    'dm_published_count' => $timesheet->dm_published_count,
+                    'dm_smm_done'        => $smmSheet?->dm_completed_posters,
+                ],
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
     }
 
     public function updatePlannedTask(Request $request): RedirectResponse

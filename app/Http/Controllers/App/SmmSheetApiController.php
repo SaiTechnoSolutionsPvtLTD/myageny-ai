@@ -31,7 +31,8 @@ class SmmSheetApiController extends Controller
             $user->belongsToDesigningDepartment() ||
             $user->belongsToDigitalMarketingDepartment() ||
             $user->hasAdminLikeRole() ||
-            $user->canViewProjectsDashboardSwitcher(),
+            $user->canViewProjectsDashboardSwitcher() ||
+            $user->canViewAllSmmData(),
             403,
             'Unauthorized access to Organic Campaigns.'
         );
@@ -74,22 +75,25 @@ class SmmSheetApiController extends Controller
         $this->ensureInitiationsSynced($companyId);
 
         // Department & Role detection
-        $isDesignUser = (bool) $user->belongsToDesigningDepartment();
-        $isDmUser     = (bool) $user->belongsToDigitalMarketingDepartment();
-        $isAdminLike  = (bool) $user->hasAdminLikeRole() || (bool) $user->canViewProjectsDashboardSwitcher();
+        $isDesignUser     = (bool) $user->belongsToDesigningDepartment();
+        $isDmUser         = (bool) $user->belongsToDigitalMarketingDepartment();
+        $isAdminLike      = (bool) $user->hasAdminLikeRole() || (bool) $user->canViewProjectsDashboardSwitcher();
+        $canViewAllSmmData = (bool) $user->canViewAllSmmData();
 
-        if ($isDesignUser && ! $isAdminLike) {
-            $teamView = 'design';
-        } elseif ($isDmUser && ! $isAdminLike) {
-            $teamView = 'dm';
-        } else {
+        if ($canViewAllSmmData) {
             $teamView = (string) $request->input('team_view', 'all');
             if (! in_array($teamView, ['all', 'design', 'dm'])) {
                 $teamView = 'all';
             }
+        } elseif ($isDesignUser) {
+            $teamView = 'design';
+        } elseif ($isDmUser) {
+            $teamView = 'dm';
+        } else {
+            $teamView = 'all';
         }
 
-        // Fetch allocated lead IDs
+        // Fetch allocated lead IDs (or all for TL/Manager/Admin)
         $allocatedLeadIdsQuery = DB::table('smm_sheets as s')
             ->join('products as p', 'p.id', '=', 's.product_id')
             ->leftJoin('production_initiations as pi', 'pi.id', '=', 's.production_initiation_id')
@@ -99,18 +103,8 @@ class SmmSheetApiController extends Controller
             ->whereNull('s.deleted_at')
             ->when($companyId, fn ($q) => $q->where('s.company_id', $companyId));
 
-        if (! $isAdminLike && $user) {
-            $allocatedLeadIdsQuery->where(function ($q) use ($user, $isDesignUser, $isDmUser) {
-                $q->whereJsonContains('pi.project_allocated_employee_user_ids', $user->id)
-                  ->orWhereJsonContains('pi.project_allocated_tl_user_ids', $user->id);
-
-                if ($isDesignUser) {
-                    $q->orWhere('d.name', 'like', '%design%');
-                } elseif ($isDmUser) {
-                    $q->orWhere('d.name', 'like', '%marketing%')
-                      ->orWhere('d.name', 'like', '%digital%');
-                }
-            });
+        if (! $canViewAllSmmData && $user) {
+            $this->applyAllocationScopeToQuery($allocatedLeadIdsQuery, $user, 'pi');
         }
 
         $allocatedLeadIds = $allocatedLeadIdsQuery->distinct()->pluck('s.lead_id')->filter()->unique()->toArray();
@@ -189,18 +183,8 @@ class SmmSheetApiController extends Controller
             ->where('p.is_this_renewal_product', true)
             ->when($leadId, fn ($q) => $q->where('s.lead_id', $leadId));
 
-        if (! $isAdminLike && $user) {
-            $query->where(function ($q) use ($user, $isDesignUser, $isDmUser) {
-                $q->whereJsonContains('pi.project_allocated_employee_user_ids', $user->id)
-                  ->orWhereJsonContains('pi.project_allocated_tl_user_ids', $user->id);
-
-                if ($isDesignUser) {
-                    $q->orWhere('d.name', 'like', '%design%');
-                } elseif ($isDmUser) {
-                    $q->orWhere('d.name', 'like', '%marketing%')
-                      ->orWhere('d.name', 'like', '%digital%');
-                }
-            });
+        if (! $canViewAllSmmData && $user) {
+            $this->applyAllocationScopeToQuery($query, $user, 'pi');
         }
 
         if ($dateFrom) {
@@ -491,13 +475,21 @@ class SmmSheetApiController extends Controller
         }
 
         // Active accounts for entry modal dropdown
-        $activeAccounts = SmmSheet::with(['lead', 'product'])
+        $activeAccountsQuery = SmmSheet::with(['lead', 'product'])
             ->whereHas('product', function ($q) {
                 $q->where('count_wise_report', true)
                   ->where('is_this_renewal_product', true);
             })
             ->whereNull('deleted_at')
-            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
+
+        if (! $canViewAllSmmData && $user) {
+            $activeAccountsQuery->whereHas('productionInitiation', function ($piQuery) use ($user) {
+                $this->applyAllocationScopeToQuery($piQuery, $user, '');
+            });
+        }
+
+        $activeAccounts = $activeAccountsQuery
             ->get()
             ->map(function ($s) {
                 $accountName = trim(($s->lead?->company_name ?? '') ?: ($s->lead?->contact_name ?? 'N/A'));
@@ -534,11 +526,12 @@ class SmmSheetApiController extends Controller
             'leads'   => $leads,
             'active_accounts' => $activeAccounts,
             'user_context' => [
-                'is_design_user' => $isDesignUser,
-                'is_dm_user'     => $isDmUser,
-                'is_admin_like'  => $isAdminLike,
-                'team_view'      => $teamView,
-                'default_team'   => ($isDmUser && ! $isDesignUser) ? 'dm' : 'design',
+                'is_design_user'       => $isDesignUser,
+                'is_dm_user'           => $isDmUser,
+                'is_admin_like'        => $isAdminLike,
+                'can_view_all_smm_data'=> $canViewAllSmmData,
+                'team_view'            => $teamView,
+                'default_team'         => ($isDmUser && ! $isDesignUser) ? 'dm' : 'design',
             ],
             'pagination' => [
                 'current_page' => $page,
@@ -571,6 +564,7 @@ class SmmSheetApiController extends Controller
 
         $isDesignUser = (bool) $user->belongsToDesigningDepartment();
         $isDmUser     = (bool) $user->belongsToDigitalMarketingDepartment();
+        $canViewAllSmmData = (bool) $user->canViewAllSmmData();
 
         $team = $validated['team'] ?? null;
         if (! $team) {
@@ -584,7 +578,14 @@ class SmmSheetApiController extends Controller
         $postersAdded = (int) $validated['done_posters'];
         $videosAdded  = (int) $validated['done_videos'];
 
-        $smmSheet = SmmSheet::findOrFail($validated['smm_sheet_id']);
+        $smmSheet = SmmSheet::with('productionInitiation')->findOrFail($validated['smm_sheet_id']);
+
+        if (! $canViewAllSmmData && ! $this->isUserAllocatedToSmmSheet($smmSheet, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are only permitted to update deliverables for accounts allocated to you.',
+            ], 403);
+        }
 
         if (! empty($validated['start_date'])) {
             $smmSheet->start_date = $validated['start_date'];
@@ -597,6 +598,18 @@ class SmmSheetApiController extends Controller
         $designVideosBefore  = (int) $smmSheet->design_completed_videos;
         $dmPostersBefore     = (int) $smmSheet->dm_completed_posters;
         $dmVideosBefore      = (int) $smmSheet->dm_completed_videos;
+
+        if ($team === 'dm' && $postersAdded > 0) {
+            $designCompleted = (int) $smmSheet->design_completed_posters;
+            $currentDm = (int) $smmSheet->dm_completed_posters;
+            if (($currentDm + $postersAdded) > $designCompleted) {
+                $remainingAllowed = max(0, $designCompleted - $currentDm);
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot add {$postersAdded} poster(s). Design team has only completed/approved {$designCompleted} poster(s), and DM has already completed {$currentDm}. Maximum additional posters that can be updated is {$remainingAllowed}.",
+                ], 422);
+            }
+        }
 
         if ($team === 'design') {
             $smmSheet->design_completed_posters += $postersAdded;
@@ -659,7 +672,16 @@ class SmmSheetApiController extends Controller
         $user = $request->user();
         $this->authorizeSmmAccess($user);
 
-        $smmSheet = SmmSheet::with(['lead', 'product', 'logs.user'])->findOrFail($id);
+        $smmSheet = SmmSheet::with(['lead', 'product', 'productionInitiation', 'logs.user'])->findOrFail($id);
+
+        $canViewAllSmmData = (bool) $user->canViewAllSmmData();
+        if (! $canViewAllSmmData && ! $this->isUserAllocatedToSmmSheet($smmSheet, $user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access to this account history.',
+            ], 403);
+        }
+
         $accountName = trim(($smmSheet->lead?->company_name ?? '') ?: ($smmSheet->lead?->contact_name ?? 'N/A'));
 
         $logs = $smmSheet->logs->map(function ($log) {
@@ -726,15 +748,23 @@ class SmmSheetApiController extends Controller
         $user = $request->user();
         $this->authorizeSmmAccess($user);
         $companyId = $this->visibility->companyIdFor($user);
+        $canViewAllSmmData = (bool) $user->canViewAllSmmData();
 
-        $sheets = SmmSheet::with(['lead', 'product'])
+        $sheetsQuery = SmmSheet::with(['lead', 'product'])
             ->whereHas('product', function ($q) {
                 $q->where('count_wise_report', true)
                   ->where('is_this_renewal_product', true);
             })
             ->whereNull('deleted_at')
-            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
-            ->get()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
+
+        if (! $canViewAllSmmData && $user) {
+            $sheetsQuery->whereHas('productionInitiation', function ($piQuery) use ($user) {
+                $this->applyAllocationScopeToQuery($piQuery, $user, '');
+            });
+        }
+
+        $sheets = $sheetsQuery->get()
             ->map(function ($s) {
                 $accountName = trim(($s->lead?->company_name ?? '') ?: ($s->lead?->contact_name ?? 'N/A'));
                 return [
@@ -761,5 +791,86 @@ class SmmSheetApiController extends Controller
             'success'  => true,
             'accounts' => $sheets,
         ]);
+    }
+
+    /**
+     * Apply allocation scope to query on production initiations for regular team members.
+     */
+    private function applyAllocationScopeToQuery($query, User $user, string $alias = 'pi'): void
+    {
+        $prefix = $alias ? "{$alias}." : '';
+        $uIdStr = (string) $user->id;
+        $uIdInt = (int) $user->id;
+
+        $query->where(function ($q) use ($user, $prefix, $uIdStr, $uIdInt) {
+            $q->whereJsonContains("{$prefix}project_allocated_employee_user_ids", $uIdInt)
+              ->orWhereJsonContains("{$prefix}project_allocated_employee_user_ids", $uIdStr)
+              ->orWhereJsonContains("{$prefix}project_allocated_tl_user_ids", $uIdInt)
+              ->orWhereJsonContains("{$prefix}project_allocated_tl_user_ids", $uIdStr)
+              ->orWhere("{$prefix}tl_employee_allocations", 'LIKE', '%"' . $uIdStr . '"%')
+              ->orWhere("{$prefix}tl_employee_allocations", 'LIKE', '%[' . $uIdStr . ',%')
+              ->orWhere("{$prefix}tl_employee_allocations", 'LIKE', '%,' . $uIdStr . ',%')
+              ->orWhere("{$prefix}tl_employee_allocations", 'LIKE', '%,' . $uIdStr . ']%')
+              ->orWhere("{$prefix}tl_employee_allocations", 'LIKE', '%[' . $uIdStr . ']%')
+              ->orWhereExists(function ($sq) use ($user, $prefix) {
+                  $sq->select(DB::raw(1))
+                     ->from('project_timesheets as pt')
+                     ->whereColumn('pt.production_initiation_id', "{$prefix}id")
+                     ->where('pt.user_id', $user->id);
+              })
+              ->orWhereExists(function ($sq) use ($user, $prefix) {
+                  $sq->select(DB::raw(1))
+                     ->from('production_tasks as pt_task')
+                     ->whereColumn('pt_task.production_initiation_id', "{$prefix}id")
+                     ->where('pt_task.assigned_to', $user->id);
+              });
+        });
+    }
+
+    /**
+     * Check if a specific SmmSheet is allocated to the given user.
+     */
+    private function isUserAllocatedToSmmSheet(SmmSheet $smmSheet, User $user): bool
+    {
+        $pi = $smmSheet->productionInitiation;
+        if (! $pi) {
+            return false;
+        }
+
+        $uIdStr = (string) $user->id;
+        $uIdInt = (int) $user->id;
+
+        $empIds = is_array($pi->project_allocated_employee_user_ids)
+            ? $pi->project_allocated_employee_user_ids
+            : (json_decode($pi->project_allocated_employee_user_ids ?? '[]', true) ?? []);
+
+        $tlIds = is_array($pi->project_allocated_tl_user_ids)
+            ? $pi->project_allocated_tl_user_ids
+            : (json_decode($pi->project_allocated_tl_user_ids ?? '[]', true) ?? []);
+
+        if (in_array($uIdInt, $empIds) || in_array($uIdStr, $empIds) || in_array($uIdInt, $tlIds) || in_array($uIdStr, $tlIds)) {
+            return true;
+        }
+
+        $allocStr = is_string($pi->tl_employee_allocations) ? $pi->tl_employee_allocations : json_encode($pi->tl_employee_allocations ?? []);
+        if (
+            str_contains($allocStr, '"' . $uIdStr . '"') ||
+            str_contains($allocStr, '[' . $uIdStr . ',') ||
+            str_contains($allocStr, ',' . $uIdStr . ',') ||
+            str_contains($allocStr, ',' . $uIdStr . ']') ||
+            str_contains($allocStr, '[' . $uIdStr . ']')
+        ) {
+            return true;
+        }
+
+        if (DB::table('project_timesheets')->where('production_initiation_id', $pi->id)->where('user_id', $user->id)->exists()) {
+            return true;
+        }
+
+        if (DB::table('production_tasks')->where('production_initiation_id', $pi->id)->where('assigned_to', $user->id)->exists()) {
+            return true;
+        }
+
+        return false;
     }
 }
