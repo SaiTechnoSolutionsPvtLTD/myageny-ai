@@ -184,6 +184,14 @@
             <div class="usr-page-title">User Management</div>
             <div class="usr-breadcrumb">Admin › <span>Users</span></div>
         </div>
+        <div class="usr-topbar-right">
+            @canany(['users.manage', 'users.create'])
+            <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Add User</span>
+            </a>
+            @endcanany
+        </div>
     </div>
 
     {{-- Filter Bar --}}
@@ -328,9 +336,17 @@
                     <div class="usr-table-title">All Users</div>
                     <div class="usr-table-sub">Manage team members, roles & access</div>
                 </div>
-                <div class="usr-results-count">
-                    Showing <strong>{{ $query->firstItem() ?? 0 }}–{{ $query->lastItem() ?? 0 }}</strong>
-                    of <strong>{{ $query->total() }}</strong> users
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="usr-results-count">
+                        Showing <strong>{{ $query->firstItem() ?? 0 }}–{{ $query->lastItem() ?? 0 }}</strong>
+                        of <strong>{{ $query->total() }}</strong> users
+                    </div>
+                    @canany(['users.manage', 'users.create'])
+                    <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary" style="padding:6px 14px; font-size:12px; border-radius:8px;">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>Add User</span>
+                    </a>
+                    @endcanany
                 </div>
             </div>
 
@@ -339,6 +355,14 @@
                 <div class="usr-empty-icon">👥</div>
                 <div class="usr-empty-title">No users found</div>
                 <div class="usr-empty-sub">Try adjusting your filters or add a new user.</div>
+                @canany(['users.manage', 'users.create'])
+                <div style="margin-top:14px;">
+                    <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary" style="display:inline-flex;">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>Add User</span>
+                    </a>
+                </div>
+                @endcanany
             </div>
             @else
             <div style="overflow-x:auto;">
@@ -470,6 +494,11 @@
                                     <a href="{{ route('users.show', $user) }}" class="usr-action-btn" title="View">
                                         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                     </a>
+                                    @canany(['users.manage', 'users.edit'])
+                                    <a href="{{ route('users.edit', $user) }}" class="usr-action-btn edit" title="Edit">
+                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                    </a>
+                                    @endcanany
                                 </div>
                             </td>
                         </tr>

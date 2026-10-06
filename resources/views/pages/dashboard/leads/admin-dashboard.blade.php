@@ -7644,10 +7644,19 @@
                                 <table class="table table-sm table-hover" style="width:100%; border-collapse:collapse; font-size:12px; margin:0;">
                                     <thead>
                                         <tr style="background:#f8fafc; font-size:11px; color:#64748b;">
-                                            <th style="padding:8px 10px; text-align:left;">Branch Name</th>
-                                            <th style="padding:8px 10px; text-align:right;">Hot Prospects</th>
-                                            <th style="padding:8px 10px; text-align:right;">Total Deal Value</th>
-                                            <th style="padding:8px 10px; text-align:right;">Expected Value</th>
+                                            <th rowspan="2" style="padding:10px 12px; text-align:left; vertical-align:middle; border-bottom:2px solid #e2e8f0; background:#f8fafc;">BRANCH NAME</th>
+                                            <th colspan="2" style="padding:7px 10px; text-align:center; background:#e0e7ff; color:#3730a3; font-weight:800; border-right:1px solid #cbd5e1; border-top-left-radius:6px; border-top-right-radius:6px;">NST HOT PROSPECTS</th>
+                                            <th colspan="2" style="padding:7px 10px; text-align:center; background:#ccfbf1; color:#115e59; font-weight:800; border-right:1px solid #cbd5e1; border-top-left-radius:6px; border-top-right-radius:6px;">CST HOT PROSPECTS</th>
+                                            <th colspan="3" style="padding:7px 10px; text-align:center; background:#f1f5f9; color:#334155; font-weight:800; border-top-left-radius:6px; border-top-right-radius:6px;">OVERALL TOTALS</th>
+                                        </tr>
+                                        <tr style="background:#f8fafc; font-size:10.5px; color:#64748b; border-bottom:2px solid #e2e8f0;">
+                                            <th style="padding:6px 10px; text-align:center; background:#eef2ff; color:#4338ca;">Count</th>
+                                            <th style="padding:6px 10px; text-align:right; background:#eef2ff; color:#4338ca; border-right:1px solid #cbd5e1;">Deal Value</th>
+                                            <th style="padding:6px 10px; text-align:center; background:#f0fdf4; color:#047857;">Count</th>
+                                            <th style="padding:6px 10px; text-align:right; background:#f0fdf4; color:#047857; border-right:1px solid #cbd5e1;">Deal Value</th>
+                                            <th style="padding:6px 10px; text-align:center;">Prospects</th>
+                                            <th style="padding:6px 10px; text-align:right;">Deal Value</th>
+                                            <th style="padding:6px 10px; text-align:right; color:#059669;">Expected Value</th>
                                         </tr>
                                     </thead>
                                     <tbody id="daModalBranchesTableBody">
@@ -8191,7 +8200,7 @@
 
 
 
-                    <div style="font-size:11px; color:#64748b; margin-top:2px;">Converted products category pivot count &amp; collection summary</div>
+                    <div id="daDstReportSubtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Converted products category pivot count &amp; collection summary</div>
 
 
 
@@ -8215,7 +8224,7 @@
 
 
 
-                    <select id="daDstReportMonthPicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:150px;" onchange="loadDaySalesPivotReportData(this.value)">
+                    <select id="daDstReportMonthPicker" class="form-control" style="font-size:12px; height:34px; padding:4px 8px; border-radius:8px; border:1px solid #cbd5e1; width:150px;" onchange="loadDaySalesPivotReportData(this.value, null, null)">
 
 
 
@@ -8251,7 +8260,7 @@
 
 
 
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px;">
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:16px;">
 
 
 
@@ -8275,7 +8284,7 @@
 
 
 
-                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">81 Collection</div>
+                <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">Converted Products</div>
 
 
 
@@ -8296,6 +8305,22 @@
 
 
                 <div style="font-size:18px; font-weight:800; color:#92400e;" id="daDstReportCollectionVal">₹0.00</div>
+
+
+
+            </div>
+
+
+
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px; text-align:center;">
+
+
+
+                <div style="font-size:11px; font-weight:700; color:#1d4ed8; text-transform:uppercase;">Total Deal Value</div>
+
+
+
+                <div style="font-size:18px; font-weight:800; color:#1e40af;" id="daDstReportDealVal">₹0.00</div>
 
 
 
@@ -12588,7 +12613,11 @@ window.openTotalProspectsModal = function() {
     window.activeBranchesList = m.activeBranches || [];
     activeBranchesList = window.activeBranchesList;
 
+    var hoBranch = (activeBranchesList || []).find(function(b) {
+        return b.is_default || (b.name && (b.name.toLowerCase().includes('coimbatore') || b.name.toLowerCase().includes('ho'))) || (b.branch_type && b.branch_type.toUpperCase().includes('HO'));
+    });
 
+    var defaultBranchVal = hoBranch ? String(hoBranch.id) : '';
 
     // Populate the branch dropdown
     var branchDropdown = document.getElementById('daModalBranchDropdown');
@@ -12599,10 +12628,15 @@ window.openTotalProspectsModal = function() {
             var opt = document.createElement('option');
             opt.value = b.id;
             opt.textContent = label;
+            if (hoBranch && String(b.id) === String(hoBranch.id)) {
+                opt.selected = true;
+            }
             branchDropdown.appendChild(opt);
         });
-        branchDropdown.value = '';
+        branchDropdown.value = defaultBranchVal;
     }
+
+    window.currentCustomBranchSelectedVal = defaultBranchVal;
 
     // Render custom UI branch dropdown list
     if (window.renderCustomBranchOptions) {
@@ -12610,7 +12644,21 @@ window.openTotalProspectsModal = function() {
     }
     var customLabel = document.getElementById('daCustomBranchLabel');
     if (customLabel) {
-        customLabel.textContent = 'All Branches (HO View)';
+        if (hoBranch) {
+            var displayLabel = hoBranch.name + (hoBranch.code ? ' (' + hoBranch.code + ')' : '');
+            if (hoBranch.is_default) {
+                displayLabel += ' — HO';
+            } else if (hoBranch.branch_type) {
+                displayLabel += ' — ' + hoBranch.branch_type;
+            }
+            customLabel.textContent = displayLabel;
+        } else {
+            customLabel.textContent = 'All Branches (HO View)';
+        }
+    }
+
+    if (window.onKeyMetricsBranchChange && defaultBranchVal) {
+        window.onKeyMetricsBranchChange(defaultBranchVal);
     }
 
 
@@ -15088,11 +15136,43 @@ window.openDaySalesPivotReportModal = function() {
 
 
 
-    var currentMonthStr = new Date().toISOString().slice(0, 7);
+    var fromPicker = document.getElementById('daDstFromDatePicker');
 
 
 
-    loadDaySalesPivotReportData(currentMonthStr);
+    var toPicker = document.getElementById('daDstToDatePicker');
+
+
+
+    var fromVal = fromPicker ? fromPicker.value : '';
+
+
+
+    var toVal = toPicker ? toPicker.value : '';
+
+
+
+    if (fromVal || toVal) {
+
+
+
+        loadDaySalesPivotReportData(null, fromVal, toVal);
+
+
+
+    } else {
+
+
+
+        var currentMonthStr = new Date().toISOString().slice(0, 7);
+
+
+
+        loadDaySalesPivotReportData(currentMonthStr, null, null);
+
+
+
+    }
 
 
 
@@ -15120,7 +15200,7 @@ window.closeDaySalesPivotReportModal = function() {
 
 
 
-window.loadDaySalesPivotReportData = function(selectedMonth) {
+window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
 
 
@@ -15156,11 +15236,39 @@ window.loadDaySalesPivotReportData = function(selectedMonth) {
 
 
 
-    if (selectedMonth) {
+    var params = [];
 
 
 
-        url += '?month=' + encodeURIComponent(selectedMonth);
+    if (dateFrom || dateTo) {
+
+
+
+        if (dateFrom) params.push('date_from=' + encodeURIComponent(dateFrom));
+
+
+
+        if (dateTo) params.push('date_to=' + encodeURIComponent(dateTo));
+
+
+
+    } else if (selectedMonth) {
+
+
+
+        params.push('month=' + encodeURIComponent(selectedMonth));
+
+
+
+    }
+
+
+
+    if (params.length > 0) {
+
+
+
+        url += '?' + params.join('&');
 
 
 
@@ -15228,7 +15336,23 @@ window.loadDaySalesPivotReportData = function(selectedMonth) {
 
 
 
-            window.dstReportMonthLabel = data.formatted_month || 'Selected Month';
+            window.dstReportMonthLabel = data.date_label || data.formatted_month || 'Selected Period';
+
+
+
+            var subtitleEl = document.getElementById('daDstReportSubtitle');
+
+
+
+            if (subtitleEl) {
+
+
+
+                subtitleEl.textContent = 'Converted products category pivot (' + (data.date_label || data.formatted_month) + ')';
+
+
+
+            }
 
 
 
@@ -15264,6 +15388,10 @@ window.loadDaySalesPivotReportData = function(selectedMonth) {
 
 
 
+            var dealValEl = document.getElementById('daDstReportDealVal');
+
+
+
             if (catCountEl) catCountEl.textContent = data.total_categories || 0;
 
 
@@ -15276,11 +15404,15 @@ window.loadDaySalesPivotReportData = function(selectedMonth) {
 
 
 
+            if (dealValEl) dealValEl.textContent = fmt(data.total_value || 0);
+
+
+
             if (items.length === 0) {
 
 
 
-                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#94a3b8;">No converted sales found for ' + (data.formatted_month || 'selected month') + '.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px; color:#94a3b8;">No converted sales found for ' + (data.date_label || data.formatted_month || 'selected period') + '.</td></tr>';
 
 
 
@@ -16344,7 +16476,7 @@ function renderActiveBranchesTable(filterType) {
 
     if (filtered.length === 0) {
         var catLabel = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO' : (filterType === 'non_coco' ? 'NON COCO' : 'selected category'));
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + catLabel + '.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + catLabel + '.</td></tr>';
         if (tfoot) tfoot.innerHTML = '';
         return;
     }
@@ -16353,15 +16485,27 @@ function renderActiveBranchesTable(filterType) {
     var totalProspectsSum = 0;
     var totalDealSum = 0;
     var totalExpSum = 0;
+    var totalNstCountSum = 0;
+    var totalNstDealSum = 0;
+    var totalCstCountSum = 0;
+    var totalCstDealSum = 0;
 
     filtered.forEach(function(b) {
-        var pCount = parseInt(b.prospect_count) || 0;
-        var dVal = parseFloat(b.deal_value) || 0;
-        var eVal = parseFloat(b.expected_value) || 0;
+        var nstCount = parseInt(b.nst_count) || 0;
+        var nstDeal  = parseFloat(b.nst_deal) || 0;
+        var cstCount = parseInt(b.cst_count) || 0;
+        var cstDeal  = parseFloat(b.cst_deal) || 0;
+        var pCount   = parseInt(b.prospect_count) || (nstCount + cstCount);
+        var dVal     = parseFloat(b.deal_value) || (nstDeal + cstDeal);
+        var eVal     = parseFloat(b.expected_value) || 0;
 
+        totalNstCountSum += nstCount;
+        totalNstDealSum  += nstDeal;
+        totalCstCountSum += cstCount;
+        totalCstDealSum  += cstDeal;
         totalProspectsSum += pCount;
-        totalDealSum += dVal;
-        totalExpSum += eVal;
+        totalDealSum     += dVal;
+        totalExpSum      += eVal;
 
         var badgesHtml = '';
         if (b.is_default) {
@@ -16375,10 +16519,6 @@ function renderActiveBranchesTable(filterType) {
 
         var safeName = (b.name ? b.name.replace(/'/g, "\\'") : '');
         var clickAction = 'openBranchHotLeadsModal(' + b.id + ', \'' + safeName + '\')';
-        var cstBreakdown = '';
-        if (b.cst_count > 0) {
-            cstBreakdown = '<div style="font-size:10px; color:#64748b; margin-top:2px;" title="NST: ' + (b.nst_count || 0) + ' | CST: ' + b.cst_count + '">NST: ' + (b.nst_count || 0) + ' • CST: ' + b.cst_count + '</div>';
-        }
 
         rowsHtml += '<tr onclick="' + clickAction + '" style="cursor:pointer;" title="Click to view hot prospects for ' + (b.name || '') + '">' +
             '<td>' +
@@ -16388,11 +16528,26 @@ function renderActiveBranchesTable(filterType) {
                 '</div>' +
                 (b.code ? '<div style="font-size:10px; color:#94a3b8;">' + b.code + '</div>' : '') +
             '</td>' +
-            '<td style="text-align:center;">' +
+            '<td style="text-align:center; background:#f8fafc;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (nstCount > 0 ? '#e0e7ff; color:#3730a3;' : '#f1f5f9; color:#94a3b8;') + '">' +
+                    nstCount +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:' + (nstDeal > 0 ? '#4338ca' : '#94a3b8') + '; background:#f8fafc; border-right:1px solid #e2e8f0;">' +
+                fmt(nstDeal) +
+            '</td>' +
+            '<td style="text-align:center; background:#f0fdf4;">' +
+                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (cstCount > 0 ? '#ccfbf1; color:#115e59;' : '#f1f5f9; color:#94a3b8;') + '">' +
+                    cstCount +
+                '</span>' +
+            '</td>' +
+            '<td style="text-align:right; font-weight:700; color:' + (cstDeal > 0 ? '#047857' : '#94a3b8') + '; background:#f0fdf4; border-right:1px solid #e2e8f0;">' +
+                fmt(cstDeal) +
+            '</td>' +
+            '<td style="text-align:center; font-weight:800;">' +
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
                     pCount +
                 '</span>' +
-                cstBreakdown +
             '</td>' +
             '<td style="text-align:right; font-weight:700; color:' + (dVal > 0 ? 'var(--da-text)' : '#94a3b8') + ';">' +
                 fmt(dVal) +
@@ -16407,11 +16562,15 @@ function renderActiveBranchesTable(filterType) {
 
     if (tfoot) {
         var label = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO Branches' : (filterType === 'non_coco' ? 'NON COCO Branches' : 'All Branches'));
-        tfoot.innerHTML = '<tr>' +
-            '<td>Total (' + filtered.length + ' ' + label + ')</td>' +
-            '<td style="text-align:center; font-weight:800;">' + totalProspectsSum + '</td>' +
-            '<td style="text-align:right; font-weight:800;">' + fmt(totalDealSum) + '</td>' +
-            '<td style="text-align:right; font-weight:800; color:#059669;">' + fmt(totalExpSum) + '</td>' +
+        tfoot.innerHTML = '<tr style="font-weight:800; background:#f1f5f9; border-top:2px solid #cbd5e1;">' +
+            '<td style="padding:10px 12px;">Total (' + filtered.length + ' ' + label + ')</td>' +
+            '<td style="padding:10px; text-align:center; color:#3730a3; background:#eef2ff;">' + totalNstCountSum + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#3730a3; background:#eef2ff; border-right:1px solid #cbd5e1;">' + fmt(totalNstDealSum) + '</td>' +
+            '<td style="padding:10px; text-align:center; color:#115e59; background:#f0fdf4;">' + totalCstCountSum + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#115e59; background:#f0fdf4; border-right:1px solid #cbd5e1;">' + fmt(totalCstDealSum) + '</td>' +
+            '<td style="padding:10px; text-align:center; color:#0f172a;">' + totalProspectsSum + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#0f172a;">' + fmt(totalDealSum) + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#059669;">' + fmt(totalExpSum) + '</td>' +
         '</tr>';
     }
 }

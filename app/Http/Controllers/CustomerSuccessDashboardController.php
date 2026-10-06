@@ -1212,6 +1212,105 @@ class CustomerSuccessDashboardController extends Controller
                 ];
             }
 
+            // 11. Technical SEO Projects (Current Month / Date Filtered)
+            $techSeoQuery = ProductionInitiation::query()
+                ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+                ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+                ->leftJoin('departments', 'departments.id', '=', 'production_initiations.department_id')
+                ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+                ->select([
+                    'production_initiations.id',
+                    'production_initiations.lead_id',
+                    'production_initiations.product_name',
+                    'production_initiations.project_delivery_date',
+                    'production_initiations.project_execution_status',
+                    'production_initiations.project_allocated_employee_user_ids',
+                    'production_initiations.project_allocated_tl_user_ids',
+                    'production_initiations.created_at as initiation_created_at',
+                    'lead_products.total_price',
+                    'lead_products.amount_paid',
+                    'lead_products.payment_status',
+                    'leads.company_name',
+                    'leads.contact_name',
+                    'leads.mobile_number',
+                    'leads.branch_id',
+                    'branches.name as branch_name',
+                    'departments.name as department_name'
+                ])
+                ->whereIn('production_initiations.production_approval_status', ['approval', 'approved'])
+                ->where(function ($q) {
+                    $q->where('production_initiations.product_name', 'Technical SEO')
+                      ->orWhere('production_initiations.product_name', 'LIKE', '%Technical SEO%');
+                })
+                ->whereNotIn('production_initiations.project_execution_status', ['cancelled'])
+                ->where($applySupportScope)
+                ->tap(fn($q) => $applyBranchScope($q, 'leads.branch_id'))
+                ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+                ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+                ->orderByDesc('production_initiations.id')
+                ->get();
+
+            $techSeoItems = [];
+            $techSeoTotalValue = 0;
+            $techSeoTotalReceived = 0;
+            $techSeoTotalPending = 0;
+
+            $fromDateStr = $fromDate ? $fromDate->toDateString() : null;
+            $toDateStr = $toDate ? $toDate->toDateString() : null;
+
+            foreach ($techSeoQuery as $tp) {
+                $deliveryDateStr = $tp->project_delivery_date ? Carbon::parse($tp->project_delivery_date)->toDateString() : null;
+                $createdAtStr = $tp->initiation_created_at ? Carbon::parse($tp->initiation_created_at)->toDateString() : null;
+
+                if ($fromDateStr && $toDateStr) {
+                    $inRange = ($deliveryDateStr && $deliveryDateStr >= $fromDateStr && $deliveryDateStr <= $toDateStr)
+                        || ($createdAtStr && $createdAtStr >= $fromDateStr && $createdAtStr <= $toDateStr);
+                    if (!$inRange) {
+                        continue;
+                    }
+                }
+
+                $price = (float) $tp->total_price;
+                $paid  = (float) $tp->amount_paid;
+                $pending = max(0, $price - $paid);
+
+                $techSeoTotalValue += $price;
+                $techSeoTotalReceived += $paid;
+                $techSeoTotalPending += $pending;
+
+                $rawStatus = strtolower(trim((string) ($tp->project_execution_status ?: 'ontrack')));
+                $statusLabels = [
+                    'ontrack'     => 'Onboard',
+                    'onboard'     => 'Onboard',
+                    'hold'        => 'Hold',
+                    'in_progress' => 'In Progress',
+                    'in progress' => 'In Progress',
+                    'delivered'   => 'Delivered',
+                    'completed'   => 'Delivered',
+                ];
+                $statusLabel = $statusLabels[$rawStatus] ?? ucfirst($rawStatus);
+
+                $compName = $tp->company_name ?: ($tp->contact_name ?: 'N/A');
+
+                $techSeoItems[] = [
+                    'id'                     => $tp->id,
+                    'lead_id'                => $tp->lead_id,
+                    'company_name'           => $compName,
+                    'contact_name'           => $tp->contact_name ?: '',
+                    'mobile_number'          => $tp->mobile_number ?: '—',
+                    'product_name'           => $tp->product_name ?: 'Technical SEO',
+                    'branch_name'            => $tp->branch_name ?: 'General',
+                    'delivery_date'          => $deliveryDateStr ? Carbon::parse($deliveryDateStr)->format('d M Y') : '—',
+                    'status'                 => $rawStatus,
+                    'status_label'           => $statusLabel,
+                    'total_value'            => $price,
+                    'received_amount'        => $paid,
+                    'pending_amount'         => $pending,
+                    'lead_url'               => $tp->lead_id ? url('/projects/technicalseo/' . $tp->lead_id) : url('/projects-details/' . $tp->id),
+                    'project_url'            => url('/projects-details/' . $tp->id),
+                ];
+            }
+
             return response()->json([
                 'status' => true,
                 'data'   => [
@@ -1295,6 +1394,13 @@ class CustomerSuccessDashboardController extends Controller
                         'hold_count'    => $devOngoingHoldCount,
                         'items'         => $devOngoingItems,
                     ],
+                    'technical_seo' => [
+                        'count'    => count($techSeoItems),
+                        'value'    => round($techSeoTotalValue, 2),
+                        'received' => round($techSeoTotalReceived, 2),
+                        'pending'  => round($techSeoTotalPending, 2),
+                        'items'    => $techSeoItems,
+                    ],
                 ]
             ]);
 
@@ -1343,6 +1449,13 @@ class CustomerSuccessDashboardController extends Controller
                 'pending'       => 0,
                 'ontrack_count' => 0,
                 'hold_count'    => 0,
+                'items'         => [],
+            ],
+            'technical_seo'        => [
+                'count'         => 0,
+                'value'         => 0,
+                'received'      => 0,
+                'pending'       => 0,
                 'items'         => [],
             ],
         ];

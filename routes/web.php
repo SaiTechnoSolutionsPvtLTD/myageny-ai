@@ -311,6 +311,10 @@ Route::middleware(['auth'])->group(function () {
             ->name('projects.campaigns.index');
         Route::get('/projects/campaigns/{lead}', [CustomerCampaignController::class, 'show'])
             ->name('projects.campaigns.show');
+        Route::get('/projects/technicalseo', [ProjectController::class, 'indexTechnicalSeo'])
+            ->name('projects.technicalseo.index');
+        Route::get('/projects/technicalseo/{lead}', [ProjectController::class, 'showTechnicalSeo'])
+            ->name('projects.technicalseo.show');
         Route::post('/projects/campaigns/{lead}', [CustomerCampaignController::class, 'store'])
             ->name('projects.campaigns.store');
         Route::put('/projects/campaigns/{campaign}', [CustomerCampaignController::class, 'update'])

@@ -88,7 +88,17 @@ class CrmTaskController extends Controller
         }
 
         $branches = Branch::orderBy('name')->get();
-        $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+
+        $currentUser = $request->user() ?: auth()->user();
+        $visibleUserIds = $this->visibility->visibleUserIds($currentUser);
+
+        $usersQuery = User::where('is_active', true);
+        if ($visibleUserIds !== null) {
+            $usersQuery->whereIn('id', $visibleUserIds);
+        } else {
+            $this->visibility->applyCompanyVisibility($usersQuery, $currentUser);
+        }
+        $users = $usersQuery->orderBy('name')->get(['id', 'name']);
 
         return view('pages.crm_tasks.index', compact(
             'tasks',

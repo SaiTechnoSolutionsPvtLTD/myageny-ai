@@ -435,16 +435,30 @@ class DaySalesTrackerController extends Controller
     {
         try {
             $user = $request->user() ?: auth()->user();
-            $monthInput = $request->input('month', now()->format('Y-m'));
+            $dateFrom = $request->input('date_from');
+            $dateTo   = $request->input('date_to');
 
-            try {
-                $carbonMonth = Carbon::parse($monthInput . '-01');
-            } catch (\Throwable $e) {
-                $carbonMonth = now();
+            if ($request->filled('date_from') || $request->filled('date_to')) {
+                $startDateStr = Carbon::parse($dateFrom ?: $dateTo)->toDateString();
+                $endDateStr   = Carbon::parse($dateTo ?: $dateFrom)->toDateString();
+                if ($startDateStr > $endDateStr) {
+                    [$startDateStr, $endDateStr] = [$endDateStr, $startDateStr];
+                }
+                $carbonMonth = Carbon::parse($startDateStr);
+                $formattedDateLabel = ($startDateStr === $endDateStr)
+                    ? Carbon::parse($startDateStr)->format('d M Y')
+                    : (Carbon::parse($startDateStr)->format('d M Y') . ' to ' . Carbon::parse($endDateStr)->format('d M Y'));
+            } else {
+                $monthInput = $request->input('month', now()->format('Y-m'));
+                try {
+                    $carbonMonth = Carbon::parse($monthInput . '-01');
+                } catch (\Throwable $e) {
+                    $carbonMonth = now();
+                }
+                $startDateStr = $carbonMonth->copy()->startOfMonth()->toDateString();
+                $endDateStr   = $carbonMonth->copy()->endOfMonth()->toDateString();
+                $formattedDateLabel = $carbonMonth->format('F Y');
             }
-
-            $monthStart = $carbonMonth->copy()->startOfMonth();
-            $monthEnd   = $carbonMonth->copy()->endOfMonth();
 
             $convertedProducts = LeadProduct::query()
                 ->with([
@@ -453,20 +467,30 @@ class DaySalesTrackerController extends Controller
                     'lead.assignedTo.employeeOnboarding.department',
                     'lead.assignedTo.mappedManagers',
                     'lead.customerSupportTl',
-                    'payments' => function ($q) use ($carbonMonth) {
-                        $q->whereMonth('payment_date', $carbonMonth->month)
-                          ->whereYear('payment_date', $carbonMonth->year);
+                    'payments' => function ($q) use ($startDateStr, $endDateStr) {
+                        $q->whereBetween('payment_date', [$startDateStr, $endDateStr]);
                     }
                 ])
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                       ->orWhere('lead_status_id', 5);
                 })
-                ->where(function ($q) use ($monthStart, $monthEnd) {
-                    $q->whereBetween('converted_at', [$monthStart, $monthEnd])
-                      ->orWhere(function ($sub) use ($monthStart, $monthEnd) {
-                          $sub->whereNull('converted_at')->whereBetween('created_at', [$monthStart, $monthEnd]);
-                      });
+                ->where(function ($q) use ($startDateStr, $endDateStr) {
+                    $q->whereHas('payments', function ($pq) use ($startDateStr, $endDateStr) {
+                        $pq->whereBetween('payment_date', [$startDateStr, $endDateStr]);
+                    })
+                    ->orWhereBetween('payment_date', [$startDateStr, $endDateStr])
+                    ->orWhere(function ($sub) use ($startDateStr, $endDateStr) {
+                        $sub->whereNull('payment_date')
+                            ->whereDoesntHave('payments')
+                            ->where(function ($dateSub) use ($startDateStr, $endDateStr) {
+                                $dateSub->whereBetween('converted_at', [$startDateStr, $endDateStr])
+                                        ->orWhere(function ($cSub) use ($startDateStr, $endDateStr) {
+                                            $cSub->whereNull('converted_at')
+                                                 ->whereBetween('created_at', [$startDateStr, $endDateStr]);
+                                        });
+                            });
+                    });
                 })
                 ->whereHas('lead', function ($lq) use ($user) {
                     if ($user) {
@@ -489,9 +513,23 @@ class DaySalesTrackerController extends Controller
                 }
 
                 $lead = $lp->lead;
-                $convDate = $lp->converted_at ?: $lp->created_at;
-                $carbonDate = $convDate ? Carbon::parse($convDate) : $carbonMonth;
 
+                // Determine payment received date & collection amount in selected range (identically to data method)
+                $paymentDate = null;
+                $receivedAmount = 0.0;
+
+                if ($lp->payments && $lp->payments->count() > 0) {
+                    $paymentDate = $lp->payments->first()->payment_date;
+                    $receivedAmount = (float) $lp->payments->sum('amount');
+                } elseif ($lp->payment_date) {
+                    $paymentDate = $lp->payment_date;
+                    $receivedAmount = (float) ($lp->amount_paid ?: 0);
+                } else {
+                    $paymentDate = $lp->converted_at ?: $lp->created_at;
+                    $receivedAmount = (float) ($lp->amount_paid ?: 0);
+                }
+
+                $carbonDate = $paymentDate ? Carbon::parse($paymentDate) : Carbon::parse($startDateStr);
                 $mon = $carbonDate->format('M');
                 $dateFormatted = $carbonDate->format('d-m-Y');
                 $branch = $lead?->branch?->name ?: 'Coimbatore (HO)';
@@ -575,9 +613,6 @@ class DaySalesTrackerController extends Controller
                     $accountName = $compName ?: ($contactName ?: 'N/A');
                 }
 
-                $monthPayments = (float) $lp->payments->sum('amount');
-                $receivedAmount = $monthPayments > 0 ? $monthPayments : (float) ($lp->amount_paid ?: 0);
-
                 $categoriesMap[$catName]['count'] += 1;
                 $categoriesMap[$catName]['total_value'] += (float) $lp->total_price;
                 $categoriesMap[$catName]['total_collection'] += $receivedAmount;
@@ -615,6 +650,9 @@ class DaySalesTrackerController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
+                    'date_from'        => $startDateStr,
+                    'date_to'          => $endDateStr,
+                    'date_label'       => $formattedDateLabel,
                     'month'            => $carbonMonth->format('Y-m'),
                     'formatted_month'  => $carbonMonth->format('F Y'),
                     'months_list'      => $monthsList,

@@ -868,8 +868,10 @@ class ProjectController extends Controller
             'employeeTimesheetTasks' => $employeeTimesheetTasks,
             'dmCampaignsData' => $dmCampaignsData,
             'activeTechnicalSeoCount' => $technicalSeoData['count'],
-            'technicalSeoProjects' => $technicalSeoData['paginated'],
-            'allTechnicalSeoProjects' => $technicalSeoData['all'] ?? collect(),
+            'technicalSeoAccountsCount' => $technicalSeoData['accounts_count'] ?? $technicalSeoData['count'],
+            'technicalSeoProjects' => $technicalSeoData['paginated_accounts'] ?? $technicalSeoData['paginated'],
+            'allTechnicalSeoProjects' => $technicalSeoData['grouped_accounts'] ?? ($technicalSeoData['all'] ?? collect()),
+            'allTechnicalSeoProjectsFlat' => $technicalSeoData['all'] ?? collect(),
             'isTlScopedView' => $this->shouldLimitToAssignedProjects($user),
             'isContributorScopedView' => $this->shouldLimitToEmployeeProjects($user),
             'canQuickAddProductionUpdate' => $canQuickAddProductionUpdate,
@@ -5005,7 +5007,7 @@ class ProjectController extends Controller
                 $q->where('product_name', 'Technical SEO')
                   ->orWhere('product_name', 'LIKE', '%Technical SEO%');
             })
-            ->whereNotIn('project_execution_status', ['delivered', 'cancelled', 'completed']);
+            ->whereNotIn('project_execution_status', ['cancelled']);
 
         if ($user->company_id) {
             $query->where('company_id', $user->company_id);
@@ -5029,6 +5031,41 @@ class ProjectController extends Controller
             });
         }
 
+        if (!empty($dashboardFilters['from_date'])) {
+            $fromDate = $dashboardFilters['from_date'];
+            $query->where(function ($dq) use ($fromDate) {
+                $dq->whereDate('created_at', '>=', $fromDate)
+                   ->orWhereDate('project_delivery_date', '>=', $fromDate);
+            });
+        }
+
+        if (!empty($dashboardFilters['to_date'])) {
+            $toDate = $dashboardFilters['to_date'];
+            $query->where(function ($dq) use ($toDate) {
+                $dq->whereDate('created_at', '<=', $toDate)
+                   ->orWhereDate('project_delivery_date', '<=', $toDate);
+            });
+        }
+
+        if (!empty($dashboardFilters['lead_id'])) {
+            $query->where('lead_id', $dashboardFilters['lead_id']);
+        }
+
+        if (!empty($dashboardFilters['status'])) {
+            $st = strtolower($dashboardFilters['status']);
+            if ($st === 'ontrack' || $st === 'onboard') {
+                $query->whereIn('project_execution_status', ['ontrack', 'onboard']);
+            } elseif ($st === 'in_progress' || $st === 'in progress') {
+                $query->whereIn('project_execution_status', ['in_progress', 'in progress']);
+            } elseif ($st === 'hold') {
+                $query->where('project_execution_status', 'hold');
+            } elseif ($st === 'delivered' || $st === 'completed') {
+                $query->whereIn('project_execution_status', ['delivered', 'completed']);
+            } else {
+                $query->where('project_execution_status', $st);
+            }
+        }
+
         $allProjects = $query->latest('id')->get()->map(function (ProductionInitiation $project) use ($user) {
             $project = $this->decorateProjectForUser($project, $user);
             $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
@@ -5039,10 +5076,106 @@ class ProjectController extends Controller
             return $project;
         });
 
+        // Batch pre-fetch user names for all allocated TLs and Employees
+        $allUserIds = $allProjects->flatMap(function (ProductionInitiation $project) {
+            $tlIds = Arr::wrap($project->project_allocated_tl_user_ids ?? []);
+            $empIds = Arr::wrap($project->project_allocated_employee_user_ids ?? []);
+            if ($project->ovp_allocated_to) {
+                $empIds[] = $project->ovp_allocated_to;
+            }
+            return array_merge($tlIds, $empIds);
+        })->filter()->unique()->values();
+
+        $userNamesMap = User::whereIn('id', $allUserIds)->pluck('name', 'id');
+
+        $allProjects->transform(function (ProductionInitiation $project) use ($userNamesMap) {
+            $tlIds = Arr::wrap($project->project_allocated_tl_user_ids ?? []);
+            $empIds = Arr::wrap($project->project_allocated_employee_user_ids ?? []);
+            if ($project->ovp_allocated_to && !in_array($project->ovp_allocated_to, $empIds)) {
+                $empIds[] = $project->ovp_allocated_to;
+            }
+
+            $tlNames = collect($tlIds)->map(fn ($id) => $userNamesMap[$id] ?? null)->filter()->unique()->values();
+            $empNames = collect($empIds)->map(fn ($id) => $userNamesMap[$id] ?? null)->filter()->unique()->values();
+
+            $project->allocated_tl_names = $tlNames;
+            $project->allocated_employee_names = $empNames;
+
+            if ($tlNames->isNotEmpty() && $empNames->isNotEmpty()) {
+                $project->allocated_person_label = 'TL: ' . $tlNames->implode(', ') . ' | Team: ' . $empNames->implode(', ');
+            } elseif ($empNames->isNotEmpty()) {
+                $project->allocated_person_label = 'Team: ' . $empNames->implode(', ');
+            } elseif ($tlNames->isNotEmpty()) {
+                $project->allocated_person_label = 'TL: ' . $tlNames->implode(', ');
+            } else {
+                $project->allocated_person_label = 'Unassigned';
+            }
+
+            return $project;
+        });
+
         $count = $allProjects->count();
+
+        // Group by Account / Lead
+        $groupedAccounts = $allProjects->groupBy(function ($project) {
+            return $project->lead_id ? 'lead_' . $project->lead_id : 'name_' . strtolower(trim((string) ($project->company_name ?: $project->client_name)));
+        })->map(function ($projects) {
+            $first = $projects->first();
+            $companyName = trim((string) ($first->company_name ?: ($first->lead?->company_name ?: 'No Company')));
+            $clientName  = trim((string) ($first->client_name ?: ($first->lead?->contact_name ?: 'N/A')));
+            $mobile      = $first->lead?->mobile_number;
+            $leadId      = $first->lead_id;
+
+            $totalValue    = (float) $projects->sum('project_value');
+            $totalReceived = (float) $projects->sum('received_amount');
+            $totalBalance  = (float) $projects->sum('balance_amount');
+
+            $allTls  = $projects->pluck('allocated_tl_names')->flatten()->filter()->unique()->values();
+            $allEmps = $projects->pluck('allocated_employee_names')->flatten()->filter()->unique()->values();
+
+            $activeProj = $projects->first(function ($p) {
+                return !in_array(strtolower((string) $p->project_execution_status), ['delivered', 'completed', 'cancelled'], true);
+            });
+            $repProj = $activeProj ?: $first;
+            $latestStatus = $repProj ? ($repProj->project_execution_status ?: 'ontrack') : 'ontrack';
+
+            return (object) [
+                'lead_id'             => $leadId,
+                'company_name'        => $companyName,
+                'client_name'         => $clientName,
+                'mobile_number'       => $mobile,
+                'project_count'       => $projects->count(),
+                'projects'            => $projects,
+                'first_project'       => $first,
+                'product_name'        => $first->product_name ?: 'Technical SEO',
+                'allocated_tls'       => $allTls,
+                'allocated_employees' => $allEmps,
+                'allocated_team'      => $projects->pluck('allocated_person_label')->filter(fn ($l) => $l !== 'Unassigned')->unique()->implode('; ') ?: 'Unassigned',
+                'status'              => $latestStatus,
+                'project_value'       => $totalValue,
+                'received_amount'     => $totalReceived,
+                'balance_amount'      => $totalBalance,
+                'campaign_url'        => $leadId ? route('projects.technicalseo.show', $leadId) : route('projects.show', $first->id),
+            ];
+        })->values();
+
+        $accountsCount = $groupedAccounts->count();
 
         $page = max(1, (int) $request->query('seo_page', 1));
         $perPage = 10;
+
+        $paginatedAccounts = new LengthAwarePaginator(
+            $groupedAccounts->slice(($page - 1) * $perPage, $perPage)->values(),
+            $accountsCount,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+                'pageName' => 'seo_page',
+            ]
+        );
+
         $paginated = new LengthAwarePaginator(
             $allProjects->slice(($page - 1) * $perPage, $perPage)->values(),
             $count,
@@ -5056,9 +5189,12 @@ class ProjectController extends Controller
         );
 
         return [
-            'count' => $count,
-            'all' => $allProjects,
-            'paginated' => $paginated,
+            'count'              => $count,
+            'accounts_count'     => $accountsCount,
+            'all'                => $allProjects,
+            'grouped_accounts'   => $groupedAccounts,
+            'paginated_accounts' => $paginatedAccounts,
+            'paginated'          => $paginated,
         ];
     }
 
@@ -6176,5 +6312,165 @@ class ProjectController extends Controller
         }
 
         return 'other';
+    }
+
+    public function indexTechnicalSeo(Request $request): View
+    {
+        $user = auth()->user();
+        abort_unless(
+            $user->belongsToDigitalMarketingDepartment() || $user->hasAdminLikeRole() || $user->canAccessProjectsModule(),
+            403,
+            'Unauthorized access to Technical SEO module.'
+        );
+
+        $filters = [
+            'search'    => trim((string) $request->query('search', '')),
+            'from_date' => trim((string) $request->query('from_date', '')),
+            'to_date'   => trim((string) $request->query('to_date', '')),
+            'lead_id'   => trim((string) $request->query('lead_id', '')),
+            'status'    => trim((string) $request->query('status', '')),
+        ];
+
+        $seoData = $this->getActiveTechnicalSeoProjectsData($user, $filters, $request);
+
+        $totalValue = (float) $seoData['grouped_accounts']->sum('project_value');
+        $totalReceived = (float) $seoData['grouped_accounts']->sum('received_amount');
+        $totalBalance = (float) $seoData['grouped_accounts']->sum('balance_amount');
+        $totalProjects = (int) $seoData['count'];
+
+        // Get unique Technical SEO accounts for filter dropdown
+        $allAccounts = ProductionInitiation::query()
+            ->whereIn('production_approval_status', ['approval', 'approved'])
+            ->where(function ($q) {
+                $q->where('product_name', 'Technical SEO')
+                  ->orWhere('product_name', 'LIKE', '%Technical SEO%');
+            })
+            ->whereNotIn('project_execution_status', ['cancelled'])
+            ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+            ->with('lead')
+            ->get()
+            ->map(function ($p) {
+                $leadId = $p->lead_id;
+                $name = trim((string) ($p->company_name ?: ($p->lead?->company_name ?: $p->client_name)));
+                return (object) [
+                    'lead_id'      => $leadId,
+                    'company_name' => $name ?: ('Lead #' . $leadId),
+                ];
+            })
+            ->filter(fn($acc) => !empty($acc->lead_id))
+            ->unique('lead_id')
+            ->sortBy('company_name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        $viewMode = strtolower(trim((string) $request->query('view_mode', 'account')));
+        if (!in_array($viewMode, ['account', 'project'], true)) {
+            $viewMode = 'account';
+        }
+        $filters['view_mode'] = $viewMode;
+
+        return view('pages.projects.technicalseo.index', [
+            'accounts'    => $seoData['paginated_accounts'],
+            'projects'    => $seoData['paginated'],
+            'filters'     => $filters,
+            'viewMode'    => $viewMode,
+            'allAccounts' => $allAccounts,
+            'stats'       => [
+                'total_accounts' => $seoData['accounts_count'],
+                'total_projects' => $totalProjects,
+                'total_value'    => $totalValue,
+                'total_received' => $totalReceived,
+                'total_balance'  => $totalBalance,
+            ],
+        ]);
+    }
+
+    public function showTechnicalSeo(Lead $lead): View
+    {
+        $user = auth()->user();
+        abort_unless(
+            $user->belongsToDigitalMarketingDepartment() || $user->hasAdminLikeRole() || $user->canAccessProjectsModule(),
+            403,
+            'Unauthorized access to Technical SEO page.'
+        );
+
+        $projects = ProductionInitiation::query()
+            ->with($this->projectRelations())
+            ->where('lead_id', $lead->id)
+            ->where(function ($q) {
+                $q->where('product_name', 'Technical SEO')
+                  ->orWhere('product_name', 'LIKE', '%Technical SEO%');
+            })
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function (ProductionInitiation $project) use ($user) {
+                $project = $this->decorateProjectForUser($project, $user);
+                $received = (float) ($project->leadProduct?->payments?->sum('amount') ?? $project->leadProduct?->amount_paid ?? 0);
+                $project->project_value = (float) ($project->leadProduct?->total_price ?? 0);
+                $project->received_amount = $received;
+                $project->balance_amount = max(0, $project->project_value - $received);
+                $project->project_delivery_date = $this->projectDeliveryDate($project);
+                return $project;
+            });
+
+        // Batch resolve user names for allocated TLs and Employees
+        $allUserIds = $projects->flatMap(function (ProductionInitiation $project) {
+            $tlIds = Arr::wrap($project->project_allocated_tl_user_ids ?? []);
+            $empIds = Arr::wrap($project->project_allocated_employee_user_ids ?? []);
+            if ($project->ovp_allocated_to) {
+                $empIds[] = $project->ovp_allocated_to;
+            }
+            return array_merge($tlIds, $empIds);
+        })->filter()->unique()->values();
+
+        $userNamesMap = User::whereIn('id', $allUserIds)->pluck('name', 'id');
+
+        $projects->transform(function (ProductionInitiation $project) use ($userNamesMap) {
+            $tlIds = Arr::wrap($project->project_allocated_tl_user_ids ?? []);
+            $empIds = Arr::wrap($project->project_allocated_employee_user_ids ?? []);
+            if ($project->ovp_allocated_to && !in_array($project->ovp_allocated_to, $empIds)) {
+                $empIds[] = $project->ovp_allocated_to;
+            }
+
+            $tlNames = collect($tlIds)->map(fn ($id) => $userNamesMap[$id] ?? null)->filter()->unique()->values();
+            $empNames = collect($empIds)->map(fn ($id) => $userNamesMap[$id] ?? null)->filter()->unique()->values();
+
+            if ($tlNames->isEmpty() && $empNames->isEmpty()) {
+                if ($project->ovpAllocatedTo?->name) {
+                    $empNames->push($project->ovpAllocatedTo->name);
+                } elseif ($project->lead?->assignedTo?->name) {
+                    $empNames->push($project->lead->assignedTo->name);
+                }
+            }
+
+            $project->allocated_tl_names = $tlNames;
+            $project->allocated_employee_names = $empNames;
+
+            if ($tlNames->isNotEmpty() && $empNames->isNotEmpty()) {
+                $project->allocated_person_label = 'TL: ' . $tlNames->implode(', ') . ' | Team: ' . $empNames->implode(', ');
+            } elseif ($empNames->isNotEmpty()) {
+                $project->allocated_person_label = 'Team: ' . $empNames->implode(', ');
+            } elseif ($tlNames->isNotEmpty()) {
+                $project->allocated_person_label = 'TL: ' . $tlNames->implode(', ');
+            } else {
+                $project->allocated_person_label = 'Not Allocated';
+            }
+
+            return $project;
+        });
+
+        $totalValue = (float) $projects->sum('project_value');
+        $totalReceived = (float) $projects->sum('received_amount');
+        $totalBalance = (float) $projects->sum('balance_amount');
+
+        return view('pages.projects.technicalseo.show', [
+            'lead' => $lead,
+            'projects' => $projects,
+            'stats' => [
+                'total_renewals' => $projects->count(),
+                'total_value' => $totalValue,
+                'total_received' => $totalReceived,
+                'total_balance' => $totalBalance,
+            ],
+        ]);
     }
 }
