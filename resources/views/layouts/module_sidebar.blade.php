@@ -32,6 +32,14 @@
              'permission' => 'modules_menu.cst',
             'url' => route('dashboard.customer-success'),
         ],
+        [
+            'key' => 'accounts',
+            'title' => 'Accounts',
+            'description' => 'Payment collection, customer receipts, invoices, and financial reports.',
+            'icon' => 'bi-wallet2',
+            'permission' => 'modules_menu.accounts',
+            'url' => route('accounts.dashboard'),
+        ],
     ];
 @endphp
 

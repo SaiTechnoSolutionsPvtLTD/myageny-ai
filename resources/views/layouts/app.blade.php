@@ -1174,7 +1174,7 @@ table td:last-child,
             background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
         }
         .module-card--accounts .module-card__icon {
-            background: linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%);
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
         }
         .module-card--production .module-card__icon {
             background: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%);
