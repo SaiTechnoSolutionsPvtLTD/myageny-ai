@@ -80,6 +80,7 @@ class DashboardController extends Controller
             'date_to'    => ['nullable', 'date', 'after_or_equal:date_from'],
             'quick_date' => ['nullable', 'in:all,today,yesterday,week,month,quarter,year,custom'],
             'year'       => ['nullable', 'integer', 'min:2000', 'max:' . (now()->year + 1)],
+            'month'      => ['nullable', 'string'],
         ]);
 
         // ── Resolve dates ──────────────────────────────────────────
@@ -1933,6 +1934,7 @@ class DashboardController extends Controller
 
         $type = $request->input('type');
         $branchId = (int) $request->input('branch_id');
+        $subtype  = $request->input('subtype'); // 'nst' | 'cst' | null (both)
 
         if (!$type && !$branchId) {
             return response()->json(['success' => false, 'message' => 'Type or Branch ID is required.'], 422);
@@ -1970,6 +1972,15 @@ class DashboardController extends Controller
         }
         if ($type === 'all' && !$canViewActiveBranches) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: Active Branches.'], 403);
+        }
+        if ($type === 'active_branch_coco' && !$canViewActiveBranches && !$hasCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_non_coco' && !$canViewActiveBranches && !$hasNonCocoBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: NON COCO Branches.'], 403);
+        }
+        if ($type === 'active_branch_ho' && !$canViewActiveBranches && !$hasDefaultBranch) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized section access: HO Branches.'], 403);
         }
         if ($type === 'cst' && !$canViewCst) {
             return response()->json(['success' => false, 'message' => 'Unauthorized section access: CST.'], 403);
@@ -2021,7 +2032,7 @@ class DashboardController extends Controller
                     'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
                     'sales_person_name' => $salesPerson,
                     'cst_person_name'   => $cstPerson,
-                    'executive_name'   => $salesPerson,
+                    'executive_name'   => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
                     'branch_name'      => $lead?->branch?->name ?: 'Coimbatore (HO)',
                 ];
             });
@@ -2043,7 +2054,7 @@ class DashboardController extends Controller
                     'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
                     'sales_person_name' => $cItem['sales_person_name'] ?? '-',
                     'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
-                    'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
+                    'executive_name'   => $cItem['sales_person_name'] ?? ($cItem['executive_name'] ?? '-'),
                     'branch_name'      => $cItem['branch_name'] ?? 'CST',
                 ]);
             }
@@ -2092,7 +2103,7 @@ class DashboardController extends Controller
                         'subtitle'    => $subtitle,
                         'branch_type' => $branchType,
                     ],
-                    'period'         => now()->format('F Y'),
+                    'period'         => $parsedMonth['month_name'],
                     'total_count'    => $totalCount,
                     'total_deal'     => $totalDeal,
                     'total_expected' => $totalExpected,
@@ -2100,16 +2111,37 @@ class DashboardController extends Controller
                     'per_page'       => $perPage,
                     'has_more'       => $hasMore,
                     'leads'          => $paginatedRows,
+                    'cst_users'      => \App\Http\Controllers\SuperAdminDashboardController::getActiveCstUsers(),
+                    'sales_users'    => \App\Http\Controllers\SuperAdminDashboardController::getActiveSalesUsers(),
                 ],
             ]);
         }
 
         if ($type === 'cst') {
-            $subtitle = 'Current Month Renewals & Development Prospects';
+            $subtitle = 'Renewals & Development Prospects for ' . $parsedMonth['month_name'];
 
             $items = $this->getCstProspectItems($request);
+
+            // Filter to HO / default branch only — other branches' CST items belong to those branches
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            if (!empty($defaultBranchIds)) {
+                $items = $items->filter(function ($item) use ($defaultBranchIds) {
+                    return in_array($item['branch_id'] ?? null, $defaultBranchIds);
+                });
+            }
+
             $rows = $items->values()->map(function ($item, $idx) {
                 $item['index'] = $idx + 1;
+                $item['branch_name'] = $item['branch_name'] ?? 'CST';
                 return $item;
             });
 
@@ -2161,6 +2193,8 @@ class DashboardController extends Controller
                     'per_page'       => $perPage,
                     'has_more'       => $hasMore,
                     'leads'          => $paginatedRows,
+                    'cst_users'      => \App\Http\Controllers\SuperAdminDashboardController::getActiveCstUsers(),
+                    'sales_users'    => \App\Http\Controllers\SuperAdminDashboardController::getActiveSalesUsers(),
                 ],
             ]);
         }
@@ -2438,6 +2472,59 @@ class DashboardController extends Controller
                 }
             });
 
+        } elseif ($type === 'active_branch_coco') {
+            $title = 'COCO Branches';
+            $subtitle = 'Hot products & branch prospects for COCO model branches';
+            $branchType = 'COCO';
+
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($cocoBranchIds) {
+                if (!empty($cocoBranchIds)) {
+                    $lq->whereIn('branch_id', $cocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_non_coco') {
+            $title = 'NON COC Branches';
+            $subtitle = 'Hot products & branch prospects for NON COCO model branches';
+            $branchType = 'NON COCO';
+
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $query->whereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                if (!empty($nonCocoBranchIds)) {
+                    $lq->whereIn('branch_id', $nonCocoBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
+        } elseif ($type === 'active_branch_ho') {
+            $title = 'Head Office (HO)';
+            $subtitle = 'Hot products & branch prospects for default HO branches';
+            $branchType = 'HO';
+
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            } else {
+                $defaultBranchQuery->where('company_id', 1);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            $query->whereHas('lead', function ($lq) use ($defaultBranchIds) {
+                if (!empty($defaultBranchIds)) {
+                    $lq->whereIn('branch_id', $defaultBranchIds);
+                } else {
+                    $lq->whereRaw('1 = 0');
+                }
+            });
+
         } else {
             // By Branch ID
             $branch = Branch::find($branchId);
@@ -2466,57 +2553,88 @@ class DashboardController extends Controller
             });
         }
 
-        $hotProducts = $query->orderByDesc('closure_date')->get();
-
-        $rows = $hotProducts->map(function ($item, $idx) use ($branch) {
-            $lead = $item->lead;
-            $salesPerson = $lead?->assignedTo?->name ?: '-';
-            $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
-            return [
-                'index'          => $idx + 1,
-                'lead_id'        => $lead?->id,
-                'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
-                'company_name'   => $lead?->company_name ?: ($lead?->business_name ?: '-'),
-                'customer_name'  => $lead?->contact_name ?: '-',
-                'product_name'   => $item->product_name ?: ($item->product?->product_name ?: '-'),
-                'status'         => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
-                'deal_value'     => (float) $item->total_price,
-                'expected_value' => (float) ($item->expected_value ?? 0),
-                'closure_date'   => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
-                'closure_date_raw' => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
-                'sales_person_name' => $salesPerson,
-                'cst_person_name'   => $cstPerson,
-                'executive_name' => $salesPerson,
-                'branch_name'    => $lead?->branch?->name ?: ($branch?->name ?: 'Coimbatore (HO)'),
-            ];
-        });
+        // --- NST-only or CST-only filtering when subtype is set ---
+        if ($branchId && $subtype === 'cst') {
+            // Only CST items for this branch — skip NST hot products entirely
+            $rows = collect();
+        } else {
+            $hotProducts = $query->orderByDesc('closure_date')->get();
+            $rows = $hotProducts->map(function ($item, $idx) use ($branch) {
+                $lead = $item->lead;
+                $salesPerson = $lead?->assignedTo?->name ?: '-';
+                $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
+                return [
+                    'index'             => $idx + 1,
+                    'lead_id'           => $lead?->id,
+                    'lead_view_url'     => $lead ? route('leads.show', $lead->id) : null,
+                    'project_view_url'  => null,
+                    'company_name'      => $lead?->company_name ?: ($lead?->business_name ?: '-'),
+                    'customer_name'     => $lead?->contact_name ?: '-',
+                    'product_name'      => $item->product_name ?: ($item->product?->product_name ?: '-'),
+                    'status'            => $item->product_status ? ucfirst($item->product_status) : ($item->leadStatus?->name ?? 'Hot'),
+                    'deal_value'        => (float) $item->total_price,
+                    'expected_value'    => (float) ($item->expected_value ?? 0),
+                    'closure_date'      => $item->closure_date ? $item->closure_date->format('d M Y') : '-',
+                    'closure_date_raw'  => $item->closure_date ? $item->closure_date->format('Y-m-d') : null,
+                    'sales_person_name' => $salesPerson,
+                    'cst_person_name'   => $cstPerson,
+                    'executive_name'    => $salesPerson !== '-' ? $salesPerson : ($cstPerson !== '-' ? $cstPerson : '-'),
+                    'branch_name'       => $lead?->branch?->name ?: ($branch?->name ?: 'Coimbatore (HO)'),
+                ];
+            });
+        }
 
         $cstItemsToAppend = collect();
-        if (!empty($targetBranchIds)) {
-            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($targetBranchIds) {
-                return in_array($cItem['branch_id'] ?? null, $targetBranchIds);
+        if ($subtype === 'nst') {
+            $cstItemsToAppend = collect();
+        } elseif ($branchId) {
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($branchId) {
+                return ($cItem['branch_id'] ?? null) == $branchId;
+            });
+        } elseif ($type === 'active_branch_coco') {
+            $cocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) = 'COCO'")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($cocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $cocoBranchIds);
+            });
+        } elseif ($type === 'active_branch_non_coco') {
+            $nonCocoBranchIds = Branch::whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')")->pluck('id')->toArray();
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($nonCocoBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $nonCocoBranchIds);
+            });
+        } elseif ($type === 'active_branch_ho') {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? $currentUser?->company_id;
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+            $cstItemsToAppend = $this->getCstProspectItems($request)->filter(function ($cItem) use ($defaultBranchIds) {
+                return in_array($cItem['branch_id'] ?? null, $defaultBranchIds);
             });
         }
 
         if ($cstItemsToAppend->isNotEmpty()) {
             foreach ($cstItemsToAppend as $cItem) {
                 $rows->push([
-                    'index'            => $rows->count() + 1,
-                    'lead_id'          => $cItem['lead_id'],
-                    'lead_view_url'    => $cItem['lead_view_url'],
-                    'project_view_url' => $cItem['project_view_url'] ?? null,
-                    'company_name'     => $cItem['company_name'],
-                    'customer_name'    => $cItem['customer_name'],
-                    'product_name'     => $cItem['product_name'],
-                    'status'           => $cItem['status'] ?? 'Renewal',
-                    'deal_value'       => (float) $cItem['deal_value'],
-                    'expected_value'   => (float) $cItem['expected_value'],
-                    'closure_date'     => $cItem['closure_date'],
-                    'closure_date_raw' => $cItem['closure_date_raw'] ?? null,
+                    'index'             => $rows->count() + 1,
+                    'lead_id'           => $cItem['lead_id'],
+                    'lead_view_url'     => $cItem['lead_view_url'],
+                    'project_view_url'  => $cItem['project_view_url'] ?? null,
+                    'company_name'      => $cItem['company_name'],
+                    'customer_name'     => $cItem['customer_name'],
+                    'product_name'      => $cItem['product_name'],
+                    'status'            => $cItem['status'] ?? 'Renewal',
+                    'deal_value'        => (float) $cItem['deal_value'],
+                    'expected_value'    => (float) $cItem['expected_value'],
+                    'closure_date'      => $cItem['closure_date'],
+                    'closure_date_raw'  => $cItem['closure_date_raw'] ?? null,
                     'sales_person_name' => $cItem['sales_person_name'] ?? '-',
                     'cst_person_name'   => $cItem['cst_person_name'] ?? '-',
-                    'executive_name'   => $cItem['executive_name'] ?? ($cItem['assigned_to'] ?? '-'),
-                    'branch_name'      => $cItem['branch_name'] ?? 'CST',
+                    'executive_name'    => $cItem['sales_person_name'] ?? ($cItem['executive_name'] ?? '-'),
+                    'branch_name'       => $cItem['branch_name'] ?? 'CST',
                 ]);
             }
             $rows = $rows->values()->map(function ($r, $i) {
@@ -2566,7 +2684,7 @@ class DashboardController extends Controller
                     'branch_type' => $branchType,
                     'subtitle'    => $subtitle,
                 ],
-                'period'         => now()->format('F Y'),
+                'period'         => $parsedMonth['month_name'],
                 'total_count'    => $totalCount,
                 'total_deal'     => $totalDeal,
                 'total_expected' => $totalExpected,
@@ -2574,6 +2692,8 @@ class DashboardController extends Controller
                 'per_page'       => $perPage,
                 'has_more'       => $hasMore,
                 'leads'          => $paginatedRows,
+                'cst_users'      => \App\Http\Controllers\SuperAdminDashboardController::getActiveCstUsers(),
+                'sales_users'    => \App\Http\Controllers\SuperAdminDashboardController::getActiveSalesUsers(),
             ],
         ]);
     }

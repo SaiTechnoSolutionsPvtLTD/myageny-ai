@@ -19,12 +19,29 @@ class DataVisibilityService
 {
     public function resolveUser(?User $user = null): ?User
     {
-        return $user
-            ?: (request()?->user('sanctum')
+        if ($user) {
+            return $user;
+        }
+
+        $resolved = request()?->user('sanctum')
             ?: (request()?->user()
             ?: (auth('sanctum')->user()
             ?: (auth('web')->user()
-            ?: auth()->user()))));
+            ?: auth()->user())));
+
+        if ($resolved) {
+            return $resolved;
+        }
+
+        $bearer = request()?->bearerToken();
+        if ($bearer) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($bearer);
+            if ($token && (! $token->expires_at || ! $token->expires_at->isPast())) {
+                return $token->tokenable;
+            }
+        }
+
+        return null;
     }
 
     public function companyIdFor(?User $user = null): ?int

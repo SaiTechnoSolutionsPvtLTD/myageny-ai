@@ -178,6 +178,9 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(function () {
     Route::get('dashboard', [MobileDashboardController::class, 'index'])->name('dashboard');
     Route::get('dashboard/branch-hot-leads', [MobileDashboardController::class, 'branchHotLeads'])->name('dashboard.branch-hot-leads');
+    Route::post('dashboard/update-prospect-date', [SuperAdminDashboardController::class, 'updateProspectDate'])->name('dashboard.update-prospect-date');
+    Route::post('dashboard/update-lead-assignee', [SuperAdminDashboardController::class, 'updateLeadAssignee'])->name('dashboard.update-lead-assignee');
+    Route::get('dashboard/lead-assignees-list', [SuperAdminDashboardController::class, 'getLeadAssigneesList'])->name('dashboard.lead-assignees-list');
     Route::get('menu', [AppMenuController::class, 'index'])->name('menu');
     Route::get('modules', [AppMenuController::class, 'modules'])->name('modules');
     Route::get('hrms/pending-counts', [AppMenuController::class, 'hrmsPendingCounts'])->name('hrms.pending-counts');
