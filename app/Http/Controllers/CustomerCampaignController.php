@@ -538,9 +538,9 @@ class CustomerCampaignController extends Controller
             ->pluck('id')
             ->toArray();
 
-        // Load DM Production Initiations for this Lead
+        // Load DM Production Initiations for this Lead (Technical SEO & DM Renewal Projects)
         $dmInitiations = ProductionInitiation::query()
-            ->with(['product', 'leadProduct.product', 'department'])
+            ->with(['product', 'leadProduct.product', 'leadProduct.payments', 'department', 'timesheets'])
             ->where('lead_id', $resolvedLead->id)
             ->where(function ($q) use ($dmDepartmentIds) {
                 $q->whereIn('department_id', $dmDepartmentIds)
@@ -550,15 +550,34 @@ class CustomerCampaignController extends Controller
                             ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
                     });
             })
-            ->where(function ($q) {
-                $q->whereHas('product', function ($pq) {
-                    $pq->where('is_budget_approval_needed', true);
-                })->orWhereHas('leadProduct.product', function ($pq) {
-                    $pq->where('is_budget_approval_needed', true);
-                });
-            })
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($proj) {
+                $received = (float) ($proj->leadProduct?->payments?->sum('amount') ?? $proj->leadProduct?->amount_paid ?? 0);
+                $proj->project_value = (float) ($proj->leadProduct?->total_price ?? 0);
+                $proj->received_amount = $received;
+                $proj->balance_amount = max(0, $proj->project_value - $received);
+
+                $endDateCustom = null;
+                if (is_array($proj->custom_form_data)) {
+                    foreach ($proj->custom_form_data as $field) {
+                        $label = strtolower(trim((string) ($field['label'] ?? ($field['key'] ?? ''))));
+                        if ($label === 'end date' && !empty($field['value'])) {
+                            $endDateCustom = $field['value'];
+                        }
+                    }
+                }
+                $proj->delivery_date = $endDateCustom ? Carbon::parse($endDateCustom)->startOfDay() : ($proj->project_delivery_date ? Carbon::parse($proj->project_delivery_date)->startOfDay() : null);
+
+                $empUserIds = Arr::wrap($proj->project_allocated_employee_user_ids);
+                $tlUserIds = Arr::wrap($proj->project_allocated_tl_user_ids);
+                $allIds = collect($empUserIds)->concat($tlUserIds)->map(fn($id) => (int)$id)->filter()->unique()->values();
+                $proj->allocated_person_label = $allIds->isNotEmpty()
+                    ? User::whereIn('id', $allIds)->pluck('name')->implode(', ')
+                    : 'Not Allocated';
+
+                return $proj;
+            });
 
         // Extract allocated team members
         $allAllocatedUserIds = collect();

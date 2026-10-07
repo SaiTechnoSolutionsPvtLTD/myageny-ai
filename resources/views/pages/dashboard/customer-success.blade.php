@@ -946,6 +946,41 @@
                 </div>
                 <div id="smmPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
             </div>
+
+            {{-- Active Technical SEO Projects Panel --}}
+            <div class="dashboard-panel dashboard-grid-full" id="technicalSeoPanel">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <h4 style="margin:0;">🔍 Technical SEO Projects</h4>
+                        <div style="font-size:12px;color:var(--cs-muted);margin-top:2px;">Technical SEO client projects &amp; renewals active in the selected period (default: Current Month).</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <input type="text" id="technicalSeoSearch" class="lpd-input" placeholder="Search company, client, mobile..." style="padding:6px 12px;font-size:12px;width:220px;" oninput="onTechnicalSeoSearch(this.value)">
+                        <span id="technicalSeoCountBadge" class="cs-badge cs-badge-paid" style="font-size:12px;padding:4px 10px;border-radius:12px;">0 Projects</span>
+                        <a href="{{ route('projects.technicalseo.index') }}" class="lpd-btn lpd-btn-ghost" style="padding:5px 12px;font-size:11px;text-decoration:none;" title="View all Technical SEO projects page">View All Accounts &rarr;</a>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th>Account / Client</th>
+                                <th>Product</th>
+                                <th style="text-align:center;">Delivery / Expiry Date</th>
+                                <th style="text-align:center;">Status</th>
+                                <th style="text-align:right;">Project Value</th>
+                                <th style="text-align:right;">Collected</th>
+                                <th style="text-align:right;">Pending</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="technicalSeoTableBody">
+                            <tr><td colspan="8" style="text-align:center;color:var(--cs-muted);padding:20px;">Loading Technical SEO projects...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="technicalSeoPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -1665,6 +1700,12 @@ function renderDashboard(data) {
             <div class="sc-label">SMM Expiring (Next Month)</div>
             <div class="sc-sub">Accounts expiring next month</div>
         </div>
+        <div class="summary-card sc-purple" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;" onclick="document.getElementById('technicalSeoPanel')?.scrollIntoView({behavior: 'smooth'})" title="Click to view Active Technical SEO Projects">
+            <div class="sc-icon">🔍</div>
+            <div class="sc-value">${data.technical_seo?.count ?? 0}</div>
+            <div class="sc-label">Technical SEO Projects</div>
+            <div class="sc-sub">${fmt(data.technical_seo?.value ?? 0)} total &bull; Default: Current Month</div>
+        </div>
     `;
 
     // 2. Department Pending Table
@@ -1750,6 +1791,9 @@ function renderDashboard(data) {
     if (elSmmLast) elSmmLast.textContent = data.smm_sheet?.last_month?.count ?? 0;
     if (elSmmNext) elSmmNext.textContent = data.smm_sheet?.next_month?.count ?? 0;
     renderSmmSheetTable();
+
+    // 10. Technical SEO Projects
+    renderTechnicalSeoProjects();
 }
 
 let activeCampaignTab = 'cm_not_renewed';
@@ -2320,6 +2364,146 @@ function changeSmmPage(page) {
     smmCurrentPage = page;
     renderSmmSheetTable();
 }
+
+let technicalSeoCurrentPage = 1;
+const technicalSeoPageSize = 10;
+let technicalSeoSearchTerm = '';
+
+function onTechnicalSeoSearch(val) {
+    technicalSeoSearchTerm = (val || '').toLowerCase().trim();
+    technicalSeoCurrentPage = 1;
+    renderTechnicalSeoProjects();
+}
+
+function renderTechnicalSeoProjects() {
+    if (!dashboardDataRaw || !dashboardDataRaw.technical_seo) return;
+    const allItems = dashboardDataRaw.technical_seo.items || [];
+
+    let items = allItems;
+    if (technicalSeoSearchTerm) {
+        items = allItems.filter(item => {
+            const str = `${item.company_name} ${item.contact_name} ${item.mobile_number} ${item.product_name} ${item.status}`.toLowerCase();
+            return str.includes(technicalSeoSearchTerm);
+        });
+    }
+
+    const badge = document.getElementById('technicalSeoCountBadge');
+    if (badge) {
+        badge.textContent = `${items.length} Projects`;
+    }
+
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / technicalSeoPageSize));
+    if (technicalSeoCurrentPage > totalPages) technicalSeoCurrentPage = totalPages;
+    if (technicalSeoCurrentPage < 1) technicalSeoCurrentPage = 1;
+
+    const startIdx = (technicalSeoCurrentPage - 1) * technicalSeoPageSize;
+    const endIdx = Math.min(startIdx + technicalSeoPageSize, total);
+    const pageItems = items.slice(startIdx, endIdx);
+
+    const tbody = document.getElementById('technicalSeoTableBody');
+    const paginationEl = document.getElementById('technicalSeoPagination');
+
+    if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--cs-muted);padding:24px;">No Technical SEO projects found in this period.</td></tr>`;
+        if (paginationEl) paginationEl.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = pageItems.map(row => {
+        let statusClass = 'cs-badge-onboard';
+        const s = (row.status || '').toLowerCase();
+        if (s === 'delivered') statusClass = 'cs-badge-delivered';
+        else if (s === 'hold') statusClass = 'cs-badge-hold';
+
+        const dateDisplay = row.expiry_date ? row.expiry_date : (row.delivery_date || '—');
+
+        return `
+            <tr>
+                <td>
+                    <strong style="color:var(--cs-text);">${row.company_name}</strong>
+                    <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">
+                        👤 ${row.contact_name || 'N/A'} · 📞 ${row.mobile_number || 'N/A'}
+                    </div>
+                </td>
+                <td>
+                    <span style="font-weight:600;">${row.product_name}</span>
+                </td>
+                <td style="text-align:center;font-size:12px;font-weight:600;">
+                    ${dateDisplay}
+                </td>
+                <td style="text-align:center;">
+                    <span class="cs-badge ${statusClass}">${row.status}</span>
+                </td>
+                <td style="text-align:right;font-weight:700;">${fmt(row.project_value)}</td>
+                <td style="text-align:right;color:var(--cs-emerald);font-weight:700;">${fmt(row.received_amount)}</td>
+                <td style="text-align:right;color:var(--cs-rose);font-weight:700;">${fmt(row.pending_amount)}</td>
+                <td style="text-align:center;">
+                    <a href="${row.action_url}" class="lpd-btn lpd-btn-ghost" style="padding:4px 10px;font-size:11px;text-decoration:none;display:inline-flex;">
+                        View Project
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (paginationEl) {
+        if (totalPages <= 1 && total <= technicalSeoPageSize) {
+            paginationEl.style.display = total > 0 ? 'flex' : 'none';
+            paginationEl.innerHTML = `
+                <div class="app-pagination__info">
+                    Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> projects
+                </div>
+                <div class="app-pagination__links">
+                    <span class="app-pagination__link is-active">1</span>
+                </div>
+            `;
+            return;
+        }
+
+        paginationEl.style.display = 'flex';
+        let linksHtml = '';
+
+        if (technicalSeoCurrentPage > 1) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeTechnicalSeoPage(${technicalSeoCurrentPage - 1})">Prev</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Prev</span>`;
+        }
+
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= technicalSeoCurrentPage - 1 && p <= technicalSeoCurrentPage + 1)) {
+                if (p === technicalSeoCurrentPage) {
+                    linksHtml += `<span class="app-pagination__link is-active">${p}</span>`;
+                } else {
+                    linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeTechnicalSeoPage(${p})">${p}</a>`;
+                }
+            } else if (p === technicalSeoCurrentPage - 2 || p === technicalSeoCurrentPage + 2) {
+                linksHtml += `<span class="app-pagination__ellipsis">...</span>`;
+            }
+        }
+
+        if (technicalSeoCurrentPage < totalPages) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeTechnicalSeoPage(${technicalSeoCurrentPage + 1})">Next</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Next</span>`;
+        }
+
+        paginationEl.innerHTML = `
+            <div class="app-pagination__info">
+                Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> projects
+            </div>
+            <div class="app-pagination__links">
+                ${linksHtml}
+            </div>
+        `;
+    }
+}
+
+function changeTechnicalSeoPage(page) {
+    technicalSeoCurrentPage = page;
+    renderTechnicalSeoProjects();
+}
+
 
 function switchRenewalTab(tab) {
     activeRenewalTab = tab;

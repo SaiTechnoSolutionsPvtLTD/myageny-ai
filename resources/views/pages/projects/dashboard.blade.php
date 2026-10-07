@@ -995,9 +995,9 @@
                             <span class="pjd-stat-icon"><i class="bi bi-search"></i></span>
                         </div>
                         <div class="pjd-stat-value">
-                            <span>{{ number_format($activeTechnicalSeoCount ?? 0) }}</span>
+                            <span>{{ number_format($technicalSeoAccountsCount ?? ($activeTechnicalSeoCount ?? 0)) }}</span>
                         </div>
-                        <div class="pjd-stat-sub">Active Technical SEO accounts. Click to view details.</div>
+                        <div class="pjd-stat-sub">{{ number_format($activeTechnicalSeoCount ?? 0) }} active Technical SEO renewals. Click to view details.</div>
                     </div>
 
                     {{-- 5. Pending Welcome Calls --}}
@@ -1206,13 +1206,16 @@
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
-                            <span>Active Technical SEO Projects</span>
+                            <a href="{{ route('projects.technicalseo.index') }}" style="color:#111827; text-decoration:none;">Active Technical SEO Projects</a>
                         </div>
                         <div class="pjd-card-sub">Active Technical SEO client projects, allocated resources, and execution status.</div>
                     </div>
-                    <span class="pjd-highlight" style="background:#eef2ff; border-color:#c7d2fe; color:#4338ca;">
-                        {{ $technicalSeoProjects->total() }} Active Projects
-                    </span>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span class="pjd-highlight" style="background:#eef2ff; border-color:#c7d2fe; color:#4338ca;">
+                            {{ $technicalSeoProjects->total() }} Active Projects
+                        </span>
+                        <a href="{{ route('projects.technicalseo.index') }}" class="pjd-link" style="font-weight:800;">View All Accounts &rarr;</a>
+                    </div>
                 </div>
                 <div class="pjd-card-body" style="padding:0;">
                     @if($technicalSeoProjects->isNotEmpty())
@@ -1220,66 +1223,85 @@
                             <table class="pjd-table">
                                 <thead>
                                     <tr>
-                                        <th>Project / Client</th>
+                                        <th>Account Name / Client</th>
                                         <th>Product</th>
+                                        <th>Renewals</th>
                                         <th>Allocated Team</th>
                                         <th>Status</th>
-                                        <th>Project Value</th>
+                                        <th>Total Value</th>
                                         <th>Received</th>
                                         <th>Balance</th>
-                                        <th>Action</th>
+                                        <th style="text-align:right;">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($technicalSeoProjects as $project)
-                                        <tr>
+                                    @foreach($technicalSeoProjects as $account)
+                                        @php
+                                            $compName = is_object($account) ? $account->company_name : ($account['company_name'] ?? 'No company');
+                                            $clientName = is_object($account) ? $account->client_name : ($account['client_name'] ?? 'N/A');
+                                            $mobile = is_object($account) ? $account->mobile_number : ($account['mobile_number'] ?? null);
+                                            $prodName = is_object($account) ? $account->product_name : ($account['product_name'] ?? 'Technical SEO');
+                                            $projCount = is_object($account) ? $account->project_count : ($account['project_count'] ?? 1);
+                                            $execTeam = is_object($account) ? $account->allocated_team : ($account['allocated_team'] ?? 'Not Allocated');
+                                            $statusVal = strtolower((string) (is_object($account) ? $account->status : ($account['status'] ?? 'ontrack')));
+                                            $projValue = (float) (is_object($account) ? $account->project_value : ($account['project_value'] ?? 0));
+                                            $received = (float) (is_object($account) ? $account->received_amount : ($account['received_amount'] ?? 0));
+                                            $balance = (float) (is_object($account) ? $account->balance_amount : ($account['balance_amount'] ?? 0));
+                                            $campaignUrl = is_object($account) ? $account->campaign_url : ($account['campaign_url'] ?? '#');
+
+                                            $statusLabels = [
+                                                'ontrack' => 'Onboard',
+                                                'hold' => 'Hold',
+                                                'delivered' => 'Delivered',
+                                                'in progress' => 'In Progress',
+                                                'new' => 'New',
+                                            ];
+                                            $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
+                                            $statusClass = match($statusVal) {
+                                                'ontrack' => 'status-ontrack',
+                                                'hold' => 'status-hold',
+                                                'delivered' => 'status-delivered',
+                                                'in progress', 'inprogress' => 'status-in-progress',
+                                                'new' => 'status-new',
+                                                default => 'status-ontrack',
+                                            };
+                                        @endphp
+                                        <tr style="cursor:pointer;" onclick="window.location.href='{{ $campaignUrl }}'">
                                             <td>
-                                                <div class="pjd-product">{{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}</div>
+                                                <div class="pjd-product">{{ $compName }}</div>
                                                 <div class="pjd-meta">
-                                                    {{ $project->client_name ?: ($project->lead?->contact_name ?: 'N/A') }}
-                                                    @if($project->lead?->mobile_number)
-                                                        &bull; {{ $project->lead->mobile_number }}
+                                                    {{ $clientName }}
+                                                    @if($mobile)
+                                                        &bull; {{ $mobile }}
                                                     @endif
                                                 </div>
                                             </td>
                                             <td>
                                                 <span class="pjd-pill" style="background:#e0e7ff; color:#3730a3; font-weight:700;">
-                                                    {{ $project->product_name }}
+                                                    {{ $prodName }}
                                                 </span>
                                             </td>
                                             <td>
-                                                <div style="font-weight:600; color:#1e293b;">
-                                                    {{ $project->allocated_person_label ?: 'Not Allocated' }}
-                                                </div>
-                                                <div class="pjd-meta">{{ $project->department?->name ?: 'Development' }}</div>
+                                                <a href="{{ $campaignUrl }}" style="text-decoration:none;">
+                                                    <span class="pjd-pill" style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:800;" title="View renewals page for {{ $compName }}">
+                                                        {{ $projCount }} {{ Str::plural('Renewal', $projCount) }}
+                                                    </span>
+                                                </a>
                                             </td>
                                             <td>
-                                                @php
-                                                    $statusVal = strtolower((string) ($project->project_execution_status ?: 'ontrack'));
-                                                    $statusLabels = [
-                                                        'ontrack' => 'Onboard',
-                                                        'hold' => 'Hold',
-                                                        'delivered' => 'Delivered',
-                                                        'in progress' => 'In Progress',
-                                                        'new' => 'New',
-                                                    ];
-                                                    $statusLabel = $statusLabels[$statusVal] ?? ucfirst($statusVal);
-                                                    $statusClass = match($statusVal) {
-                                                        'ontrack' => 'status-ontrack',
-                                                        'hold' => 'status-hold',
-                                                        'delivered' => 'status-delivered',
-                                                        'in progress', 'inprogress' => 'status-in-progress',
-                                                        'new' => 'status-new',
-                                                        default => 'status-ontrack',
-                                                    };
-                                                @endphp
+                                                <div style="font-weight:600; color:#1e293b;">
+                                                    {{ $execTeam }}
+                                                </div>
+                                                <div class="pjd-meta">Digital Marketing</div>
+                                            </td>
+                                            <td>
                                                 <span class="pjd-pill {{ $statusClass }}">{{ $statusLabel }}</span>
                                             </td>
-                                            <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
-                                            <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
-                                            <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
-                                            <td>
-                                                <a href="{{ route('projects.show', $project) }}" class="pjd-link">View &rarr;</a>
+                                            <td><span class="pjd-money">{{ $currency($projValue) }}</span></td>
+                                            <td><span class="pjd-money received">{{ $currency($received) }}</span></td>
+                                            <td><span class="pjd-money balance">{{ $currency($balance) }}</span></td>
+                                            <td style="text-align:right;" onclick="event.stopPropagation();">
+                                                <a href="{{ $campaignUrl }}" class="pjd-link" title="View renewals page for {{ $compName }}">View Renewals &rarr;</a>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -1770,7 +1792,7 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span class="pjd-highlight" style="background: #e0e7ff; border-color: #c7d2fe; color: #3730a3;">
-                        {{ number_format($activeTechnicalSeoCount ?? 0) }} Active Projects
+                        {{ number_format($technicalSeoAccountsCount ?? 0) }} Active Accounts ({{ number_format($activeTechnicalSeoCount ?? 0) }} Renewals)
                     </span>
                     <button type="button" class="pjd-update-modal-close" onclick="closeTechnicalSeoModal()" aria-label="Close modal" style="border-color: #c7d2fe;">
                         <i class="bi bi-x-lg"></i>
@@ -1779,13 +1801,13 @@
             </div>
             <div class="pjd-update-modal-body" style="padding: 20px;">
                 @php
-                    $seoModalProjects = $allTechnicalSeoProjects ?? ($technicalSeoProjects?->items() ?? []);
+                    $seoModalAccounts = $allTechnicalSeoProjects ?? ($technicalSeoProjects?->items() ?? []);
                 @endphp
-                @if(!empty($seoModalProjects) && count($seoModalProjects) > 0)
+                @if(!empty($seoModalAccounts) && count($seoModalAccounts) > 0)
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; flex-wrap: wrap;">
                         <input type="text" id="techSeoSearchInput" onkeyup="filterTechSeoTable()" placeholder="Search company, client, product, status..." class="ps-input" style="max-width: 320px; min-height: 38px; padding: 8px 12px; font-size: 13px; border-radius: 10px;">
                         <span style="font-size: 12px; color: #64748b; font-weight: 700;">
-                            Showing <span id="techSeoShowingCount">{{ count($seoModalProjects) }}</span> of {{ number_format($activeTechnicalSeoCount ?? 0) }} projects
+                            Showing <span id="techSeoShowingCount">{{ count($seoModalAccounts) }}</span> of {{ number_format($technicalSeoAccountsCount ?? count($seoModalAccounts)) }} accounts
                         </span>
                     </div>
                     <div class="pjd-table-wrap" style="max-height: 520px; overflow-y: auto;">
@@ -1793,8 +1815,9 @@
                             <thead style="position: sticky; top: 0; z-index: 5; background: #f8fafc;">
                                 <tr>
                                     <th style="width: 40px;">#</th>
-                                    <th>Project / Client</th>
+                                    <th>Account / Client</th>
                                     <th>Product</th>
+                                    <th>Renewals</th>
                                     <th>Allocated Team</th>
                                     <th>Status</th>
                                     <th>Project Value</th>
@@ -1804,13 +1827,20 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($seoModalProjects as $idx => $project)
+                                @foreach($seoModalAccounts as $idx => $account)
                                     @php
-                                        $compName = $project->company_name ?: ($project->lead?->company_name ?: 'No company');
-                                        $clientName = $project->client_name ?: ($project->lead?->contact_name ?: 'N/A');
-                                        $prodName = $project->product_name;
-                                        $execTeam = $project->allocated_person_label ?: 'Not Allocated';
-                                        $statusVal = strtolower((string) ($project->project_execution_status ?: 'ontrack'));
+                                        $compName = is_object($account) ? $account->company_name : ($account['company_name'] ?? 'No company');
+                                        $clientName = is_object($account) ? $account->client_name : ($account['client_name'] ?? 'N/A');
+                                        $mobile = is_object($account) ? $account->mobile_number : ($account['mobile_number'] ?? null);
+                                        $prodName = is_object($account) ? $account->product_name : ($account['product_name'] ?? 'Technical SEO');
+                                        $projCount = is_object($account) ? $account->project_count : ($account['project_count'] ?? 1);
+                                        $execTeam = is_object($account) ? $account->allocated_team : ($account['allocated_team'] ?? 'Not Allocated');
+                                        $statusVal = strtolower((string) (is_object($account) ? $account->status : ($account['status'] ?? 'ontrack')));
+                                        $projValue = (float) (is_object($account) ? $account->project_value : ($account['project_value'] ?? 0));
+                                        $received = (float) (is_object($account) ? $account->received_amount : ($account['received_amount'] ?? 0));
+                                        $balance = (float) (is_object($account) ? $account->balance_amount : ($account['balance_amount'] ?? 0));
+                                        $campaignUrl = is_object($account) ? $account->campaign_url : ($account['campaign_url'] ?? '#');
+
                                         $statusLabels = [
                                             'ontrack' => 'Onboard',
                                             'hold' => 'Hold',
@@ -1827,7 +1857,7 @@
                                             'new' => 'status-new',
                                             default => 'status-ontrack',
                                         };
-                                        $searchText = strtolower($compName . ' ' . $clientName . ' ' . $prodName . ' ' . $execTeam . ' ' . $statusLabel);
+                                        $searchText = strtolower($compName . ' ' . $clientName . ' ' . $prodName . ' ' . $execTeam . ' ' . $statusLabel . ' ' . $projCount . ' renewal renewals');
                                     @endphp
                                     <tr class="tech-seo-row" data-search-text="{{ $searchText }}">
                                         <td>{{ $idx + 1 }}</td>
@@ -1835,8 +1865,8 @@
                                             <div class="pjd-product">{{ $compName }}</div>
                                             <div class="pjd-meta">
                                                 {{ $clientName }}
-                                                @if($project->lead?->mobile_number)
-                                                    &bull; {{ $project->lead->mobile_number }}
+                                                @if($mobile)
+                                                    &bull; {{ $mobile }}
                                                 @endif
                                             </div>
                                         </td>
@@ -1846,19 +1876,26 @@
                                             </span>
                                         </td>
                                         <td>
+                                            <a href="{{ $campaignUrl }}" target="_blank" style="text-decoration:none;">
+                                                <span class="pjd-pill" style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:800;" title="View renewals page for {{ $compName }}">
+                                                    {{ $projCount }} {{ Str::plural('Renewal', $projCount) }}
+                                                </span>
+                                            </a>
+                                        </td>
+                                        <td>
                                             <div style="font-weight:600; color:#1e293b;">
                                                 {{ $execTeam }}
                                             </div>
-                                            <div class="pjd-meta">{{ $project->department?->name ?: 'Digital Marketing' }}</div>
+                                            <div class="pjd-meta">Digital Marketing</div>
                                         </td>
                                         <td>
                                             <span class="pjd-pill {{ $statusClass }}">{{ $statusLabel }}</span>
                                         </td>
-                                        <td><span class="pjd-money">{{ $currency($project->project_value) }}</span></td>
-                                        <td><span class="pjd-money received">{{ $currency($project->received_amount) }}</span></td>
-                                        <td><span class="pjd-money balance">{{ $currency($project->balance_amount) }}</span></td>
+                                        <td><span class="pjd-money">{{ $currency($projValue) }}</span></td>
+                                        <td><span class="pjd-money received">{{ $currency($received) }}</span></td>
+                                        <td><span class="pjd-money balance">{{ $currency($balance) }}</span></td>
                                         <td style="text-align: right;">
-                                            <a href="{{ route('projects.show', $project) }}" class="pjd-link" target="_blank">View &rarr;</a>
+                                            <a href="{{ $campaignUrl }}" class="pjd-link" target="_blank" title="View renewals page for {{ $compName }}">View Renewals &rarr;</a>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -1876,6 +1913,7 @@
                 <button type="button" class="pjd-btn" onclick="closeTechnicalSeoModal()">Close</button>
             </div>
         </div>
+
         @endif
     </div>
 @endif

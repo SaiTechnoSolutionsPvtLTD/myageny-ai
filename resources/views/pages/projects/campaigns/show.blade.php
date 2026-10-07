@@ -247,6 +247,8 @@
             </div>
         </section>
 
+
+
         {{-- Campaigns List Table --}}
         <section class="cmp-card">
             <div class="cmp-card-head">
