@@ -264,6 +264,7 @@ return [
                     'hasHrLikeRole',
                     'isCompanyAdmin',
                     'isBranchAdmin',
+                    'isBranchManager',
                 ],
             ],
             // HR/Admin-only, same gate pattern as outside_office_approval

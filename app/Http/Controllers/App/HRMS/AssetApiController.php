@@ -105,7 +105,7 @@ class AssetApiController extends Controller
             'location'               => $a->location               ?? '',
             'assigned_employee_name' => optional($a->assignedEmployee)->name,
             'assigned_employee_id'   => optional($a->assignedEmployee)->employee_id,
-            'avatar_initial'         => strtoupper(substr($a->asset_name ?? 'A', 0, 1)),
+            'avatar_initial'         => avatar_initial($a->asset_name, 'A'),
             'created_at'             => optional($a->created_at)->format('d M Y'),
         ];
     }
@@ -123,7 +123,7 @@ class AssetApiController extends Controller
             'serial_number'          => $a->serial_number          ?? '',
             'asset_status'           => $a->asset_status           ?? 'available',
             'location'               => $a->location               ?? '',
-            'avatar_initial'         => strtoupper(substr($a->asset_name ?? 'A', 0, 1)),
+            'avatar_initial'         => avatar_initial($a->asset_name, 'A'),
 
             // Purchase
             'purchase_date'          => optional($a->purchase_date)->format('d M Y') ?? '',

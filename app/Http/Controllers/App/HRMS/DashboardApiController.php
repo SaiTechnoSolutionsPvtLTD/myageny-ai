@@ -191,7 +191,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         // ── Today's work anniversaries ────────────────────────────────────────
@@ -203,7 +203,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
             ]);
@@ -217,7 +217,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         // ── Holiday filter (mirrors web resolveHolidayFilter) ─────────────────
@@ -305,7 +305,7 @@ class DashboardApiController extends Controller
                 ->map(fn ($er) => [
                     'id'             => $er->id,
                     'employee_name'  => optional($er->employee)->name,
-                    'avatar_initial' => strtoupper(substr(optional($er->employee)->name ?? '?', 0, 1)),
+                    'avatar_initial' => $this->avatarInitial(optional($er->employee)->name),
                     'exit_date'      => optional($er->exit_date)->toDateString(),
                     'exit_status'    => $er->exit_status,
                     'revoke_status'  => $er->revoke_status,
@@ -318,7 +318,7 @@ class DashboardApiController extends Controller
         $isAnniversaryToday     = $this->isAnniversaryToday($currentEmployee, $today);
         $isWorkAnniversaryToday = $this->isWorkAnniversaryToday($currentEmployee, $today);
 
-        return response()->json([
+        return $this->utf8JsonResponse([
             'success' => true,
             'mode'    => 'organization',
             'data'    => [
@@ -501,7 +501,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         $today_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_marriage', $today->month)
@@ -512,7 +512,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         $today_work_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('joining_date', $today->month)
@@ -523,12 +523,12 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
             ]);
 
-        return response()->json([
+        return $this->utf8JsonResponse([
             'success' => true,
             'mode'    => 'self_service',
             'data'    => [
@@ -753,7 +753,7 @@ class DashboardApiController extends Controller
             ->map(fn ($lr) => [
                 'id'             => $lr->id,
                 'employee_name'  => optional($lr->employee)->name,
-                'avatar_initial' => strtoupper(substr(optional($lr->employee)->name ?? '?', 0, 1)),
+                'avatar_initial' => $this->avatarInitial(optional($lr->employee)->name),
                 'role'           => optional($lr->employee?->role)->display_name,
                 'department'     => optional($lr->employee?->department)->name,
                 'start_date'     => optional($lr->start_date)->toDateString(),
@@ -800,7 +800,7 @@ class DashboardApiController extends Controller
             ->map(fn ($pr) => [
                 'id'             => $pr->id,
                 'employee_name'  => optional($pr->employee)->name,
-                'avatar_initial' => strtoupper(substr(optional($pr->employee)->name ?? '?', 0, 1)),
+                'avatar_initial' => $this->avatarInitial(optional($pr->employee)->name),
                 'role'           => optional($pr->employee?->role)->display_name,
                 'department'     => optional($pr->employee?->department)->name,
                 'from_time'      => $pr->from_time,
@@ -879,7 +879,7 @@ class DashboardApiController extends Controller
                 'candidate_name'           => $interview->candidate?->name,
                 'candidate_no'             => $interview->candidate?->candidate_no,
                 'job_title'                => $interview->candidate?->job_title,
-                'avatar_initial'           => strtoupper(substr($interview->candidate?->name ?: 'C', 0, 1)),
+                'avatar_initial'           => $this->avatarInitial($interview->candidate?->name, 'C'),
                 'scheduled_at'             => optional($interview->scheduled_at)->format('Y-m-d H:i:s'),
                 'scheduled_at_formatted'   => optional($interview->scheduled_at)->format('d M Y, h:i A'),
                 'interviewer_name'         => $interview->interviewer_name,
@@ -965,8 +965,9 @@ class DashboardApiController extends Controller
         return $query->get(['id', 'name']);
     }
 
-    private function resolveActingBranchIds(Request $request): ?array
+    private function resolveActingBranchIds(?Request $request = null): ?array
     {
+        $request = $request ?? request();
         $user = auth()->user();
         if (! $user) {
             return null;
@@ -1012,6 +1013,13 @@ class DashboardApiController extends Controller
         }
 
         return $user->branch_id ? [(int) $user->branch_id] : null;
+    }
+
+    private function resolveActingBranchId(?Request $request = null): ?int
+    {
+        $ids = $this->resolveActingBranchIds($request);
+
+        return (! empty($ids) && ! in_array(-1, $ids, true)) ? (int) $ids[0] : null;
     }
 
     private function currentEmployee(): ?EmployeeOnboarding
@@ -1493,4 +1501,56 @@ class DashboardApiController extends Controller
             'rejected_at'        => $od->rejected_at?->format('Y-m-d H:i:s'),
         ];
     }
+
+    private function avatarInitial(?string $name, string $fallback = '?'): string
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return $fallback;
+        }
+
+        return mb_strtoupper(mb_substr($name, 0, 1, 'UTF-8'), 'UTF-8');
+    }
+
+    private function ensureUtf8(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            if (mb_check_encoding($value, 'UTF-8')) {
+                return $value;
+            }
+
+            // Convert Windows-1252 / ISO-8859-1 strings (e.g. smart quotes, em-dashes, bullets)
+            $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+            if (mb_check_encoding($converted, 'UTF-8')) {
+                return $converted;
+            }
+
+            // Fallback transcode/scrub invalid bytes
+            return mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        }
+
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $k => $v) {
+                $cleanKey = is_string($k) ? $this->ensureUtf8($k) : $k;
+                $clean[$cleanKey] = $this->ensureUtf8($v);
+            }
+            return $clean;
+        }
+
+        return $value;
+    }
+
+    private function utf8JsonResponse(array $payload, int $status = 200): JsonResponse
+    {
+        $cleanPayload = $this->ensureUtf8($payload);
+
+        return response()->json(
+            $cleanPayload,
+            $status,
+            ['Content-Type' => 'application/json; charset=UTF-8'],
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+    }
 }
+

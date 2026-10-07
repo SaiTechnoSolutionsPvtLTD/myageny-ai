@@ -263,7 +263,7 @@ class TimesheetLopApiController extends Controller
                     'employee_id'    => $employee->employee_id ?: 'N/A',
                     'department'     => $employee->department?->name ?: '—',
                     'designation'    => $employee->role?->display_name ?: ($employee->role?->name ?: 'Employee'),
-                    'avatar_initial' => strtoupper($initials ?: '?'),
+                    'avatar_initial' => mb_strtoupper($initials ?: '?', 'UTF-8'),
                     'photograph_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 ],
                 'present_days'             => $presentCount,
@@ -338,7 +338,7 @@ class TimesheetLopApiController extends Controller
                     'employee_id'    => $employee->employee_id ?: 'N/A',
                     'department'     => $employee->department?->name ?: '—',
                     'designation'    => $employee->role?->display_name ?: ($employee->role?->name ?: 'Employee'),
-                    'avatar_initial' => strtoupper($initials ?: '?'),
+                    'avatar_initial' => mb_strtoupper($initials ?: '?', 'UTF-8'),
                     'photograph_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 ],
                 'period' => [

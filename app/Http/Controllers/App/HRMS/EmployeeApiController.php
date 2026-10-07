@@ -322,7 +322,7 @@ class EmployeeApiController extends Controller
             'department'     => optional($e->department)->name,
             'branch_name'    => $e->portalUser?->branch?->name ?? '',
             'status'         => $e->status,
-            'avatar_initial' => strtoupper(substr($e->name, 0, 1)),
+            'avatar_initial' => avatar_initial($e->name),
             'created_at'     => optional($e->created_at)->format('d M Y'),
 
             // Mirrors the remaining employee-index.blade.php table columns
@@ -357,7 +357,7 @@ class EmployeeApiController extends Controller
             'department'               => optional($e->department)->name,
             'status'                   => $e->status,
             'employee_type'            => $e->employee_type === 'non_billable' ? 'non_billable' : 'billable',
-            'avatar_initial'           => strtoupper(substr($e->name, 0, 1)),
+            'avatar_initial'           => avatar_initial($e->name),
             'photograph_url'           => $e->getFileUrl('photograph'),
             'profile_completion_percentage' => (int) $e->profile_completion_percentage,
 

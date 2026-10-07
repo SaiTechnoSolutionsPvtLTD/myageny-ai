@@ -459,7 +459,10 @@ class CampaignApiController extends Controller
                 ->forPage($currentPage, $perPage)
                 ->get();
 
-            $formattedCampaigns = $paginatedCampaigns->map(function (CustomerCampaign $c) use ($extendedParentIds, $cmStart, $cmEnd) {
+            $user = $request->user() ?? auth('sanctum')->user() ?? auth()->user();
+            $canViewDailyBudget = $user ? $user->canViewCampaignDailyBudget() : false;
+
+            $formattedCampaigns = $paginatedCampaigns->map(function (CustomerCampaign $c) use ($extendedParentIds, $cmStart, $cmEnd, $canViewDailyBudget) {
                 $lead = $c->lead;
                 $renewalStatus = 'Ongoing';
                 $cEndDate = $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null;
@@ -491,7 +494,8 @@ class CampaignApiController extends Controller
                     'is_stopped'         => $c->isStopped(),
                     'budget_amount'      => (float) ($c->budget_amount ?? 0),
                     'budget_type'        => $c->budget_type ?? 'Monthly',
-                    'daily_budget'       => (float) ($c->daily_budget ?? 0),
+                    'daily_budget'       => $canViewDailyBudget ? (float) ($c->daily_budget ?? 0) : null,
+                    'can_view_daily_budget' => $canViewDailyBudget,
                     'start_date'         => $c->start_date ? Carbon::parse($c->start_date)->toDateString() : null,
                     'end_date'           => $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null,
                     'run_days'           => (int) ($c->run_days ?? 0),
@@ -647,7 +651,8 @@ class CampaignApiController extends Controller
             ];
         })->all();
 
-        $formattedCampaigns = $campaigns->map(fn (CustomerCampaign $c) => $this->formatCampaignItem($c))->all();
+        $canViewDailyBudget = $user ? $user->canViewCampaignDailyBudget() : false;
+        $formattedCampaigns = $campaigns->map(fn (CustomerCampaign $c) => $this->formatCampaignItem($c, $canViewDailyBudget))->all();
 
         $budgetAmounts = $dmInitiations->pluck('lead_budget_amount')->filter(fn ($b) => (float) $b > 0);
         $leadBudget = $budgetAmounts->first() ? (float) $budgetAmounts->first() : null;
@@ -677,8 +682,13 @@ class CampaignApiController extends Controller
     /**
      * Format a single CustomerCampaign model into API JSON structure.
      */
-    private function formatCampaignItem(CustomerCampaign $c): array
+    private function formatCampaignItem(CustomerCampaign $c, ?bool $canViewDailyBudget = null): array
     {
+        if ($canViewDailyBudget === null) {
+            $user = request()->user() ?? auth('sanctum')->user() ?? auth()->user();
+            $canViewDailyBudget = $user ? $user->canViewCampaignDailyBudget() : false;
+        }
+
         $prodName = $c->productionInitiation?->product?->name
             ?: ($c->productionInitiation?->leadProduct?->product?->name ?: null);
 
@@ -695,7 +705,8 @@ class CampaignApiController extends Controller
             'is_stopped'               => $c->isStopped(),
             'budget_amount'            => $c->budget_amount !== null ? (float) $c->budget_amount : null,
             'budget_type'              => $c->budget_type,
-            'daily_budget'             => $c->calculateDailyBudget(),
+            'daily_budget'             => $canViewDailyBudget ? $c->calculateDailyBudget() : null,
+            'can_view_daily_budget'    => $canViewDailyBudget,
             'start_date'               => $c->start_date ? $c->start_date->format('Y-m-d') : null,
             'end_date'                 => $c->end_date ? $c->end_date->format('Y-m-d') : null,
             'run_days'                 => $c->calculateRunDays(),

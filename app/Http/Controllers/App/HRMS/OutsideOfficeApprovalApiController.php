@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\OutsideOfficeAttendanceRequest;
 use App\Models\User;
+use App\Services\DataVisibilityService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,39 +30,295 @@ class OutsideOfficeApprovalApiController extends Controller
     {
     }
 
-    // Same permission definition as AttendanceApiController::canViewAllAttendance()
-    // — duplicated rather than shared since these are separate, self-contained
-    // mobile controllers (matches the existing CstAllocationApiController /
-    // PreSalesApiController convention of not cross-depending on each other).
-    private function canManage(): bool
+    /**
+     * Resolves role hierarchy visibility flags, descendant user IDs, and assigned branches.
+     * Mirrors LeaveRequestApiController::resolveVisibility() and DataVisibilityService conventions.
+     */
+    private function resolveVisibility(User $user): array
     {
-        $user = auth()->user();
-        return (bool) ($user && (
-            $user->isSystemAdmin()
-            || $user->belongsToHrDepartment()
-            || $user->hasHrLikeRole()
-            || $user->isCompanyAdmin()
-            || $user->isBranchAdmin()
-        ));
+        $isSuperAdmin    = $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCompanyAdmin  = $user->isCompanyAdmin();
+        $isHr            = $user->isHrOrAdmin() || $user->belongsToHrDepartment() || $user->hasHrLikeRole();
+        $isBranchManager = $user->isBranchManager() || app(DataVisibilityService::class)->hasBranchManagerRole($user);
+        $isBranchAdmin   = ($user->isBranchAdmin() || app(DataVisibilityService::class)->hasBranchAdminRole($user)) && ! $isBranchManager;
+
+        /** @var DataVisibilityService $visibility */
+        $visibility     = app(DataVisibilityService::class);
+        $descendantIds  = $visibility->descendantUserIds($user);
+        $visibleUserIds = $visibility->visibleUserIds($user) ?? [];
+        $teamUserIds    = array_diff($visibleUserIds, [$user->id]);
+        $hasTeamMembers = $descendantIds->isNotEmpty() || $user->managedUsers()->exists() || ! empty($teamUserIds);
+        $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole() || $isBranchManager;
+        $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
+
+        // Assigned branches for branch manager — excludes the default main branch
+        // unless explicitly assigned via branch_user or branches.manager_id
+        $assignedBranchIds = [];
+        if ($isBranchManager) {
+            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->map(fn ($id) => (int) $id)->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = [1];
+            }
+
+            $buBranchIds = DB::table('branch_user')
+                ->where('user_id', $user->id)
+                ->pluck('branch_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $mgrBranchIds = DB::table('branches')
+                ->where('manager_id', $user->id)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $explicitBranchIds = array_values(array_unique(array_merge($buBranchIds, $mgrBranchIds)));
+
+            $uBranchId = $user->branch_id ? (int) $user->branch_id : null;
+            $nonDefaultBranch = ($uBranchId && ! in_array($uBranchId, $defaultBranchIds, true)) ? [$uBranchId] : [];
+
+            $assignedBranchIds = array_values(array_unique(array_merge($explicitBranchIds, $nonDefaultBranch)));
+        }
+
+        return [
+            'is_super_admin'      => $isSuperAdmin,
+            'is_company_admin'    => $isCompanyAdmin,
+            'is_hr'               => $isHr,
+            'is_branch_admin'     => $isBranchAdmin,
+            'is_branch_manager'   => $isBranchManager,
+            'is_tl_or_manager'    => $isTlOrManager,
+            'has_team_members'    => $hasTeamMembers,
+            'is_admin_or_hr'      => $isAdminOrHr,
+            'descendant_ids'      => $descendantIds->all(),
+            'visible_user_ids'    => $visibleUserIds,
+            'assigned_branch_ids' => $assignedBranchIds,
+        ];
     }
 
-    private function isCompanyAdmin(?User $user): bool
+    private function canManage(?User $user, ?array $vis = null): bool
     {
-        return (bool) ($user && (
-            $user->isSuperAdmin()
-            || $user->isSystemAdmin()
-            || $user->isCompanyAdmin()
-            || $user->hasRole('company_admin')
-            || $user->isCbo()
-            || $user->belongsToHrDepartment()
-            || $user->hasHrLikeRole()
-            || $user->isHrOrAdmin()
-        ));
+        if (! $user) {
+            return false;
+        }
+
+        $vis ??= $this->resolveVisibility($user);
+
+        return $vis['is_admin_or_hr']
+            || $vis['is_branch_manager']
+            || $vis['is_tl_or_manager'];
     }
 
-    private function requestBelongsToBranch(OutsideOfficeAttendanceRequest $request, ?int $branchId): bool
+    private function isCompanyAdmin(?User $user, ?array $vis = null): bool
     {
-        if (! $branchId) {
+        if (! $user) {
+            return false;
+        }
+
+        $vis ??= $this->resolveVisibility($user);
+
+        return $vis['is_super_admin'] || $vis['is_company_admin'] || $vis['is_hr'];
+    }
+
+    /**
+     * Applies role-aware visibility and branch isolation to the OutsideOfficeAttendanceRequest query.
+     */
+    private function applyVisibilityScope(Builder $query, User $user, array $vis, ?string $requestedBranchId = null): void
+    {
+        if ($vis['is_super_admin']) {
+            if ($requestedBranchId && $requestedBranchId !== 'all') {
+                $this->filterByBranchIds($query, [(int) $requestedBranchId]);
+            }
+            return;
+        }
+
+        if ($vis['is_company_admin'] || $vis['is_hr']) {
+            if ($user->company_id) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('company_id', $user->company_id)
+                      ->orWhereNull('company_id');
+                });
+            }
+
+            if ($requestedBranchId && $requestedBranchId !== 'all') {
+                $this->filterByBranchIds($query, [(int) $requestedBranchId]);
+            }
+            return;
+        }
+
+        if ($vis['is_branch_manager']) {
+            $assignedBranchIds = $vis['assigned_branch_ids'];
+            $visibleUserIds    = $vis['visible_user_ids'];
+
+            // Security: branch manager cannot access an unauthorized branch via parameter
+            if ($requestedBranchId && $requestedBranchId !== 'all') {
+                $reqId = (int) $requestedBranchId;
+                if (in_array($reqId, $assignedBranchIds, true)) {
+                    $assignedBranchIds = [$reqId];
+                } else {
+                    $query->whereRaw('1 = 0');
+                    return;
+                }
+            }
+
+            if (empty($assignedBranchIds) && empty($visibleUserIds)) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $query->where(function (Builder $q) use ($assignedBranchIds, $visibleUserIds) {
+                $q->whereHas('employee', function (Builder $eq) use ($assignedBranchIds, $visibleUserIds) {
+                    $eq->where(function (Builder $eqSub) use ($assignedBranchIds, $visibleUserIds) {
+                        $eqSub->whereHas('portalUser', function (Builder $pu) use ($assignedBranchIds, $visibleUserIds) {
+                            $pu->where(function (Builder $puSub) use ($assignedBranchIds, $visibleUserIds) {
+                                if (! empty($visibleUserIds)) {
+                                    $puSub->whereIn('id', $visibleUserIds);
+                                }
+                                if (! empty($assignedBranchIds)) {
+                                    $puSub->orWhereIn('branch_id', $assignedBranchIds)
+                                          ->orWhereExists(function ($sub) use ($assignedBranchIds) {
+                                              $sub->select(DB::raw(1))
+                                                  ->from('branch_user')
+                                                  ->whereColumn('branch_user.user_id', 'users.id')
+                                                  ->whereIn('branch_user.branch_id', $assignedBranchIds);
+                                          });
+                                }
+                            });
+                        });
+
+                        if (! empty($assignedBranchIds)) {
+                            $branchCodes = Branch::whereIn('id', $assignedBranchIds)->whereNotNull('code')->pluck('code')->all();
+                            foreach ($branchCodes as $code) {
+                                if ($code && $code !== 'STS') {
+                                    $eqSub->orWhere(function ($q2) use ($code) {
+                                        $q2->whereNull('portal_user_id')->where('employee_id', 'like', $code . '%');
+                                    });
+                                }
+                            }
+                        }
+                    });
+                })->orWhereHas('intern', function (Builder $iq) use ($assignedBranchIds, $visibleUserIds) {
+                    $iq->where(function (Builder $iqSub) use ($assignedBranchIds, $visibleUserIds) {
+                        $iqSub->whereHas('portalUser', function (Builder $pu) use ($assignedBranchIds, $visibleUserIds) {
+                            $pu->where(function (Builder $puSub) use ($assignedBranchIds, $visibleUserIds) {
+                                if (! empty($visibleUserIds)) {
+                                    $puSub->whereIn('id', $visibleUserIds);
+                                }
+                                if (! empty($assignedBranchIds)) {
+                                    $puSub->orWhereIn('branch_id', $assignedBranchIds)
+                                          ->orWhereExists(function ($sub) use ($assignedBranchIds) {
+                                              $sub->select(DB::raw(1))
+                                                  ->from('branch_user')
+                                                  ->whereColumn('branch_user.user_id', 'users.id')
+                                                  ->whereIn('branch_user.branch_id', $assignedBranchIds);
+                                          });
+                                }
+                            });
+                        });
+
+                        if (! empty($assignedBranchIds)) {
+                            $branchCodes = Branch::whereIn('id', $assignedBranchIds)->whereNotNull('code')->pluck('code')->all();
+                            foreach ($branchCodes as $code) {
+                                if ($code && $code !== 'STS') {
+                                    $iqSub->orWhere(function ($q2) use ($code) {
+                                        $q2->whereNull('portal_user_id')->where('intern_id', 'like', $code . '%');
+                                    });
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+
+            return;
+        }
+
+        if ($vis['is_branch_admin']) {
+            $branchIds = $user->getMyBranchIds();
+            if ($requestedBranchId && $requestedBranchId !== 'all') {
+                $reqId = (int) $requestedBranchId;
+                if (in_array($reqId, $branchIds, true)) {
+                    $branchIds = [$reqId];
+                } else {
+                    $query->whereRaw('1 = 0');
+                    return;
+                }
+            }
+
+            if (empty($branchIds)) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $this->filterByBranchIds($query, $branchIds);
+            return;
+        }
+
+        if ($vis['has_team_members']) {
+            $allowedUserIds = array_merge([$user->id], $vis['descendant_ids']);
+            $query->where(function (Builder $q) use ($allowedUserIds) {
+                $q->whereHas('employee.portalUser', fn ($pu) => $pu->whereIn('id', $allowedUserIds))
+                  ->orWhereHas('intern.portalUser', fn ($pu) => $pu->whereIn('id', $allowedUserIds));
+            });
+            return;
+        }
+
+        // Default: strictly own requests
+        $query->where(function (Builder $q) use ($user) {
+            $q->whereHas('employee.portalUser', fn ($pu) => $pu->where('id', $user->id))
+              ->orWhereHas('intern.portalUser', fn ($pu) => $pu->where('id', $user->id));
+        });
+    }
+
+    private function filterByBranchIds(Builder $query, array $branchIds): void
+    {
+        $branchCodes = Branch::whereIn('id', $branchIds)->whereNotNull('code')->pluck('code')->all();
+
+        $query->where(function (Builder $sub) use ($branchIds, $branchCodes) {
+            $sub->whereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
+                $eq->where(function ($eqSub) use ($branchIds, $branchCodes) {
+                    $eqSub->whereHas('portalUser', function ($pu) use ($branchIds) {
+                        $pu->whereIn('branch_id', $branchIds)
+                           ->orWhereExists(function ($bSub) use ($branchIds) {
+                               $bSub->select(DB::raw(1))
+                                    ->from('branch_user')
+                                    ->whereColumn('branch_user.user_id', 'users.id')
+                                    ->whereIn('branch_user.branch_id', $branchIds);
+                           });
+                    });
+                    foreach ($branchCodes as $branchCode) {
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $eqSub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    }
+                });
+            })->orWhereHas('intern', function ($iq) use ($branchIds, $branchCodes) {
+                $iq->where(function ($iqSub) use ($branchIds, $branchCodes) {
+                    $iqSub->whereHas('portalUser', function ($pu) use ($branchIds) {
+                        $pu->whereIn('branch_id', $branchIds)
+                           ->orWhereExists(function ($bSub) use ($branchIds) {
+                               $bSub->select(DB::raw(1))
+                                    ->from('branch_user')
+                                    ->whereColumn('branch_user.user_id', 'users.id')
+                                    ->whereIn('branch_user.branch_id', $branchIds);
+                           });
+                    });
+                    foreach ($branchCodes as $branchCode) {
+                        if ($branchCode && $branchCode !== 'STS') {
+                            $iqSub->orWhere(function ($q2) use ($branchCode) {
+                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
+                            });
+                        }
+                    }
+                });
+            });
+        });
+    }
+
+    private function requestBelongsToBranches(OutsideOfficeAttendanceRequest $request, array $branchIds): bool
+    {
+        if (empty($branchIds)) {
             return false;
         }
 
@@ -70,96 +327,108 @@ class OutsideOfficeApprovalApiController extends Controller
             ? $request->intern?->portalUser
             : $request->employee?->portalUser;
 
-        if ($portalUser && $portalUser->branch_id === $branchId) {
-            return true;
+        if ($portalUser) {
+            if (in_array((int) $portalUser->branch_id, $branchIds, true)) {
+                return true;
+            }
+
+            $hasPivot = DB::table('branch_user')
+                ->where('user_id', $portalUser->id)
+                ->whereIn('branch_id', $branchIds)
+                ->exists();
+            if ($hasPivot) {
+                return true;
+            }
         }
 
-        $branch = Branch::find($branchId);
-        $branchCode = $branch?->code;
-        if ($branchCode && $branchCode !== 'STS' && ! $portalUser) {
-            $identifier = $request->attendee_type === 'intern'
-                ? $request->intern?->intern_id
-                : $request->employee?->employee_id;
-            if ($identifier && str_starts_with((string) $identifier, $branchCode)) {
-                return true;
+        $branches = Branch::whereIn('id', $branchIds)->get();
+        foreach ($branches as $branch) {
+            $branchCode = $branch->code;
+            if ($branchCode && $branchCode !== 'STS' && ! $portalUser) {
+                $identifier = $request->attendee_type === 'intern'
+                    ? $request->intern?->intern_id
+                    : $request->employee?->employee_id;
+                if ($identifier && str_starts_with((string) $identifier, $branchCode)) {
+                    return true;
+                }
             }
         }
 
         return false;
     }
 
+    private function canAccessRequest(OutsideOfficeAttendanceRequest $request, User $user, array $vis): bool
+    {
+        if ($user->isSystemAdmin() || $vis['is_super_admin']) {
+            return true;
+        }
+
+        if ($vis['is_company_admin'] || $vis['is_hr']) {
+            return ! $user->company_id || ! $request->company_id || (int) $request->company_id === (int) $user->company_id;
+        }
+
+        $request->loadMissing(['employee.portalUser', 'intern.portalUser']);
+        $portalUser = $request->attendee_type === 'intern'
+            ? $request->intern?->portalUser
+            : $request->employee?->portalUser;
+
+        if ($vis['is_branch_manager']) {
+            $assignedBranchIds = $vis['assigned_branch_ids'];
+            $visibleUserIds    = $vis['visible_user_ids'];
+
+            if ($portalUser && in_array((int) $portalUser->id, $visibleUserIds, true)) {
+                return true;
+            }
+
+            if ($this->requestBelongsToBranches($request, $assignedBranchIds)) {
+                return true;
+            }
+
+            return false;
+        }
+
+        if ($vis['is_branch_admin']) {
+            $branchIds = $user->getMyBranchIds();
+            return $this->requestBelongsToBranches($request, $branchIds);
+        }
+
+        if ($vis['has_team_members']) {
+            return $portalUser && in_array((int) $portalUser->id, $vis['descendant_ids'], true);
+        }
+
+        return $portalUser && (int) $portalUser->id === (int) $user->id;
+    }
+
     public function index(Request $request): JsonResponse
     {
-        if (! $this->canManage()) {
+        $user = $request->user() ?: auth()->user();
+        if (! $user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $vis = $this->resolveVisibility($user);
+        if (! $this->canManage($user, $vis)) {
             return response()->json(['status' => false, 'message' => 'You are not authorized to view outside-office requests.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
-            'status'       => ['nullable', 'in:pending,approved,rejected,all'],
-            'request_type' => ['nullable', 'in:checkin,checkout,any'],
+            'status'        => ['nullable', 'in:pending,approved,rejected,all'],
+            'request_type'  => ['nullable', 'in:checkin,checkout,any'],
             'employee_name' => ['nullable', 'string', 'max:255'],
-            'from_date'    => ['nullable', 'date'],
-            'to_date'      => ['nullable', 'date', 'after_or_equal:from_date'],
-            'per_page'     => ['nullable', 'integer', 'min:1', 'max:100'],
+            'from_date'     => ['nullable', 'date'],
+            'to_date'       => ['nullable', 'date', 'after_or_equal:from_date'],
+            'per_page'      => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => false, 'message' => 'Validation failed.', 'errors' => $validator->errors()], 422);
         }
 
-        $user = auth()->user();
-        $isCompanyAdmin = $this->isCompanyAdmin($user);
+        $status            = $request->input('status', 'pending');
+        $requestedBranchId = $request->input('branch_id');
 
-        $actingBranchId = null;
-        if ($isCompanyAdmin) {
-            if ($request->filled('branch_id') && $request->branch_id !== 'all') {
-                $actingBranchId = (int) $request->branch_id;
-            }
-        } else {
-            // Non-Company Admin is strictly scoped to their own branch_id
-            $actingBranchId = $user?->branch_id;
-        }
-
-        $branchScope = function (Builder $q) use ($actingBranchId) {
-            if (! $actingBranchId) {
-                return;
-            }
-            $branch = Branch::find($actingBranchId);
-            $branchCode = $branch?->code;
-            $q->where(function (Builder $sub) use ($actingBranchId, $branchCode) {
-                $sub->whereHas('employee', function ($eq) use ($actingBranchId, $branchCode) {
-                    $eq->where(function ($eqSub) use ($actingBranchId, $branchCode) {
-                        $eqSub->whereHas('portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
-                        if ($branchCode && $branchCode !== 'STS') {
-                            $eqSub->orWhere(function ($q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('employee_id', 'like', $branchCode . '%');
-                            });
-                        }
-                    });
-                })->orWhereHas('intern', function ($iq) use ($actingBranchId, $branchCode) {
-                    $iq->where(function ($iqSub) use ($actingBranchId, $branchCode) {
-                        $iqSub->whereHas('portalUser', fn ($pu) => $pu->where('branch_id', $actingBranchId));
-                        if ($branchCode && $branchCode !== 'STS') {
-                            $iqSub->orWhere(function ($q2) use ($branchCode) {
-                                $q2->whereNull('portal_user_id')->where('intern_id', 'like', $branchCode . '%');
-                            });
-                        }
-                    });
-                });
-            });
-        };
-
-        // Defaults to 'pending' — this is the queue HR/Admin lands on from the
-        // dashboard's "Outside Office Attendance" count, and the primary
-        // working view for this screen; 'all'/'approved'/'rejected' are for
-        // the history/audit-trail view.
-        $status = $request->input('status', 'pending');
-
-        $query = OutsideOfficeAttendanceRequest::query()->latest('created_at');
-
-        if ($actingBranchId) {
-            $query->where($branchScope);
-        }
+        $query = OutsideOfficeAttendanceRequest::withoutGlobalScope('branch')->latest('created_at');
+        $this->applyVisibilityScope($query, $user, $vis, $requestedBranchId);
 
         if ($status !== 'all') {
             $query->where('status', $status);
@@ -185,10 +454,8 @@ class OutsideOfficeApprovalApiController extends Controller
         $paginated = $query->paginate($request->integer('per_page', 20));
         $paginated->getCollection()->transform(fn(OutsideOfficeAttendanceRequest $r) => $this->formatRequest($r));
 
-        $pendingBase = OutsideOfficeAttendanceRequest::query()->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING);
-        if ($actingBranchId) {
-            $pendingBase->where($branchScope);
-        }
+        $pendingBase = OutsideOfficeAttendanceRequest::withoutGlobalScope('branch')->where('status', OutsideOfficeAttendanceRequest::STATUS_PENDING);
+        $this->applyVisibilityScope($pendingBase, $user, $vis, $requestedBranchId);
 
         $stats = [
             'pending_checkins'  => (clone $pendingBase)->where('request_type', OutsideOfficeAttendanceRequest::TYPE_CHECKIN)->count(),
@@ -206,12 +473,17 @@ class OutsideOfficeApprovalApiController extends Controller
 
     public function approve(Request $request, OutsideOfficeAttendanceRequest $outsideOfficeRequest): JsonResponse
     {
-        if (! $this->canManage()) {
+        $user = $request->user() ?: auth()->user();
+        if (! $user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $vis = $this->resolveVisibility($user);
+        if (! $this->canManage($user, $vis)) {
             return response()->json(['status' => false, 'message' => 'You are not authorized to approve outside-office requests.'], 403);
         }
 
-        $user = auth()->user();
-        if (! $this->isCompanyAdmin($user) && ! $this->requestBelongsToBranch($outsideOfficeRequest, $user?->branch_id)) {
+        if (! $this->canAccessRequest($outsideOfficeRequest, $user, $vis)) {
             return response()->json(['status' => false, 'message' => 'You do not have permission to approve outside-office requests for another branch.'], 403);
         }
 
@@ -313,12 +585,17 @@ class OutsideOfficeApprovalApiController extends Controller
 
     public function reject(Request $request, OutsideOfficeAttendanceRequest $outsideOfficeRequest): JsonResponse
     {
-        if (! $this->canManage()) {
+        $user = $request->user() ?: auth()->user();
+        if (! $user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $vis = $this->resolveVisibility($user);
+        if (! $this->canManage($user, $vis)) {
             return response()->json(['status' => false, 'message' => 'You are not authorized to reject outside-office requests.'], 403);
         }
 
-        $user = auth()->user();
-        if (! $this->isCompanyAdmin($user) && ! $this->requestBelongsToBranch($outsideOfficeRequest, $user?->branch_id)) {
+        if (! $this->canAccessRequest($outsideOfficeRequest, $user, $vis)) {
             return response()->json(['status' => false, 'message' => 'You do not have permission to reject outside-office requests for another branch.'], 403);
         }
 
