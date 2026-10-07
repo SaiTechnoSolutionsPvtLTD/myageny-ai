@@ -92,6 +92,9 @@
                         <div class="module-card__title">{{ $module['title'] }}</div>
                         <div class="module-card__desc">{{ $module['description'] }}</div>
                     </div>
+                    <div class="module-card__arrow" aria-hidden="true">
+                        <i class="bi bi-chevron-right"></i>
+                    </div>
                 </a>
             @endif
         @endforeach

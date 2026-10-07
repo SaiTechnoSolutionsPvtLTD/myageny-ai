@@ -252,8 +252,29 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/reports/crm/revenue-comparison/export', [CrmReportController::class, 'exportRevenueComparison'])
         ->name('reports.crm.revenue-comparison.export');
     // Accounts Module
-    Route::get('/accounts', fn() => redirect()->route('reports.crm.payment-collection'))
-        ->name('accounts.dashboard');
+    Route::get('/accounts', [App\Http\Controllers\AccountsDashboardController::class, 'index']);
+    Route::prefix('accounts')->name('accounts.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\AccountsDashboardController::class, 'index'])->name('dashboard');
+
+        // Ad Budget routes
+        Route::prefix('ad-budget')->name('ad-budget.')->group(function () {
+            Route::get('/clients', [App\Http\Controllers\AdBudgetController::class, 'clients'])->name('clients');
+            Route::post('/clients/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storeClientRequest'])->name('clients.raise-request');
+            Route::get('/partners', [App\Http\Controllers\AdBudgetController::class, 'partners'])->name('partners');
+            Route::post('/partners/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storePartnerRequest'])->name('partners.raise-request');
+            Route::post('/{adBudgetRequest}/tl-approve', [App\Http\Controllers\AdBudgetController::class, 'tlApprove'])->name('tl-approve');
+            Route::post('/{adBudgetRequest}/accounts-approve', [App\Http\Controllers\AdBudgetController::class, 'accountsApprove'])->name('accounts-approve');
+        });
+
+        // Ad Accounts Master CRUD
+        Route::prefix('ad-accounts-master')->name('ad-accounts-master.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdAccountMasterController::class, 'index'])->name('index');
+            Route::post('/', [App\Http\Controllers\AdAccountMasterController::class, 'store'])->name('store');
+            Route::put('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'update'])->name('update');
+            Route::patch('/{adAccount}/toggle-status', [App\Http\Controllers\AdAccountMasterController::class, 'toggleStatus'])->name('toggle-status');
+            Route::delete('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'destroy'])->name('destroy');
+        });
+    });
 
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
         ->name('reports.crm.payment-collection');

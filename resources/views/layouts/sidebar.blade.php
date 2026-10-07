@@ -1,5 +1,6 @@
 {{-- Sidebar - matches exact design from static HTML --}}
 @php
+    $isAccountsModule = request()->routeIs('accounts.*');
     $isProjectsModule = request()->routeIs('projects.*');
     $isHrmsModule = request()->routeIs('hrms.dashboard')
         || request()->routeIs('hrms.calendar.*')
@@ -122,7 +123,64 @@
     </div>
 
     <nav class="sidebar-nav">
-        @if($isProjectsModule)
+        @if($isAccountsModule)
+        <div class="nav-section">
+            <div class="nav-title">ACCOUNTS MODULE</div>
+            <div class="nav-items">
+                <a href="{{ route('accounts.dashboard') }}" class="nav-item {{ request()->routeIs('accounts.dashboard') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.dashboard'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        <span>Dashboard</span>
+                    </div>
+                </a>
+
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('accounts.ad-budget.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->routeIs('accounts.ad-budget.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                        <span>Ad Budget</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+
+                <!-- Submenu -->
+                <div class="submenu {{ request()->routeIs('accounts.ad-budget.*') ? 'show' : '' }}">
+                    <a href="{{ route('accounts.ad-budget.clients') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.clients') ? 'active' : '' }}">
+                        For Clients
+                    </a>
+                    <a href="{{ route('accounts.ad-budget.partners') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.partners') ? 'active' : '' }}">
+                        For Partners
+                    </a>
+                </div>
+
+                <a href="{{ route('accounts.ad-accounts-master.index') }}" class="nav-item {{ request()->routeIs('accounts.ad-accounts-master.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.ad-accounts-master.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 7h-7L10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z"></path>
+                        </svg>
+                        <span>Ad Accounts Master</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+        @elseif($isProjectsModule)
         <div class="nav-section">
             <div class="nav-title">PROJECTS</div>
             <div class="nav-items">
