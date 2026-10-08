@@ -251,6 +251,53 @@ Route::middleware(['auth'])->group(function () {
         ->name('reports.crm.revenue-comparison');
     Route::get('/reports/crm/revenue-comparison/export', [CrmReportController::class, 'exportRevenueComparison'])
         ->name('reports.crm.revenue-comparison.export');
+    // Accounts Module
+    Route::get('/accounts', [App\Http\Controllers\AccountsDashboardController::class, 'index']);
+    Route::prefix('accounts')->name('accounts.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\AccountsDashboardController::class, 'index'])->name('dashboard');
+
+        // Ad Budget routes
+        Route::prefix('ad-budget')->name('ad-budget.')->group(function () {
+            Route::get('/clients', [App\Http\Controllers\AdBudgetController::class, 'clients'])->name('clients');
+            Route::post('/clients/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storeClientRequest'])->name('clients.raise-request');
+            Route::get('/partners', [App\Http\Controllers\AdBudgetController::class, 'partners'])->name('partners');
+            Route::post('/partners/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storePartnerRequest'])->name('partners.raise-request');
+            Route::post('/{adBudgetRequest}/tl-approve', [App\Http\Controllers\AdBudgetController::class, 'tlApprove'])->name('tl-approve');
+            Route::post('/{adBudgetRequest}/accounts-approve', [App\Http\Controllers\AdBudgetController::class, 'accountsApprove'])->name('accounts-approve');
+
+            // Ad Spend routes
+            Route::get('/spend', [App\Http\Controllers\AdSpendController::class, 'index'])->name('spend');
+            Route::post('/spend', [App\Http\Controllers\AdSpendController::class, 'store'])->name('spend.store');
+            Route::put('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'update'])->name('spend.update');
+            Route::delete('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'destroy'])->name('spend.destroy');
+
+            // Ad Budget Allocation Vs Spent Report route
+            Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->name('allocation-vs-spent');
+        });
+
+        // Domains & Hosting routes
+        Route::prefix('domains-hosting')->name('domains-hosting.')->group(function () {
+            Route::get('/', [App\Http\Controllers\DomainsHostingController::class, 'index'])->name('index');
+            Route::post('/domains', [App\Http\Controllers\DomainsHostingController::class, 'storeDomain'])->name('domains.store');
+            Route::put('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'updateDomain'])->name('domains.update');
+            Route::delete('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'destroyDomain'])->name('domains.destroy');
+            Route::post('/domains/sync-godaddy', [App\Http\Controllers\DomainsHostingController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
+
+            Route::post('/hostings', [App\Http\Controllers\DomainsHostingController::class, 'storeHosting'])->name('hostings.store');
+            Route::put('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'updateHosting'])->name('hostings.update');
+            Route::delete('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHosting'])->name('hostings.destroy');
+        });
+
+        // Ad Accounts Master CRUD
+        Route::prefix('ad-accounts-master')->name('ad-accounts-master.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdAccountMasterController::class, 'index'])->name('index');
+            Route::post('/', [App\Http\Controllers\AdAccountMasterController::class, 'store'])->name('store');
+            Route::put('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'update'])->name('update');
+            Route::patch('/{adAccount}/toggle-status', [App\Http\Controllers\AdAccountMasterController::class, 'toggleStatus'])->name('toggle-status');
+            Route::delete('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'destroy'])->name('destroy');
+        });
+    });
+
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
         ->name('reports.crm.payment-collection');
     Route::post('/reports/crm/payment-collection/{payment}/update', [CrmReportController::class, 'updatePaymentCollection'])

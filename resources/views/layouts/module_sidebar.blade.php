@@ -3,15 +3,15 @@
         [
             'key' => 'crm',
             'title' => 'CRM',
-            'description' => 'Leads, quotations, products, settings, and customer workflows.',
+            'description' => 'Leads, deals & sales pipeline.',
             'icon' => 'bi-briefcase-fill',
-           'permission' => 'modules_menu.crm',
+            'permission' => 'modules_menu.crm',
             'url' => route('dashboard.admin'),
         ],
         [
             'key' => 'hrms',
             'title' => 'HRMS',
-            'description' => 'Employees, attendance, payroll, and team workflows.',
+            'description' => 'Staff, attendance, payroll & leave.',
             'icon' => 'bi-people-fill',
             'permission' => 'modules_menu.hrms',
             'url' => route('hrms.dashboard'),
@@ -19,7 +19,7 @@
         [
             'key' => 'projects',
             'title' => 'Production',
-            'description' => 'Projects, tasks, time tracking, and project workflows.',
+            'description' => 'Projects, tasks & time tracking.',
             'icon' => 'bi-diagram-3-fill',
             'permission' => 'modules_menu.projects',
             'url' => route('projects.dashboard'),
@@ -27,10 +27,18 @@
         [
             'key' => 'cst',
             'title' => 'CST',
-            'description' => 'Customer Success Team dashboard, metrics, and renewals.',
+            'description' => 'Customer success & renewals.',
             'icon' => 'bi-chat-left-heart-fill',
-             'permission' => 'modules_menu.cst',
+            'permission' => 'modules_menu.cst',
             'url' => route('dashboard.customer-success'),
+        ],
+        [
+            'key' => 'accounts',
+            'title' => 'Accounts',
+            'description' => 'Payments, receipts & collections.',
+            'icon' => 'bi-wallet2',
+            'permission' => 'modules_menu.accounts',
+            'url' => route('accounts.dashboard'),
         ],
     ];
 @endphp
@@ -59,7 +67,7 @@
                 Modules
             </div>
             <div class="module-panel__title">Quick module access</div>
-            <div class="module-panel__text">Open your main workspace areas from one floating shortcut on every page.</div>
+            <div class="module-panel__text">Quick workspace navigation across all modules.</div>
         </div>
 
         <button type="button" class="module-panel__close" id="moduleClose" aria-label="Close modules sidebar">
@@ -80,8 +88,13 @@
                     <span class="module-card__icon" aria-hidden="true">
                         <i class="bi {{ $module['icon'] }}"></i>
                     </span>
-                    <div class="module-card__title">{{ $module['title'] }}</div>
-                    <div class="module-card__desc">{{ $module['description'] }}</div>
+                    <div class="module-card__body">
+                        <div class="module-card__title">{{ $module['title'] }}</div>
+                        <div class="module-card__desc">{{ $module['description'] }}</div>
+                    </div>
+                    <div class="module-card__arrow" aria-hidden="true">
+                        <i class="bi bi-chevron-right"></i>
+                    </div>
                 </a>
             @endif
         @endforeach
