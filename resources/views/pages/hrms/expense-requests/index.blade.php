@@ -795,6 +795,10 @@ select.exp-filter-input {
                                     'branch' => $req->user?->branch?->name ?? 'Main Branch',
                                     'category' => $req->category?->name ?? 'General',
                                     'amount' => number_format($req->amount, 2),
+                                    'paid_amount' => $req->paid_amount ? number_format($req->paid_amount, 2) : null,
+                                    'paid_date' => $req->paid_date ? \Carbon\Carbon::parse($req->paid_date)->format('d M Y') : null,
+                                    'approver_name' => $req->approver?->name,
+                                    'actioned_at' => $req->actioned_at ? $req->actioned_at->format('d M Y, h:i A') : null,
                                     'description' => $req->description,
                                     'status' => $req->status,
                                     'history' => $req->stage_history ?? [],
@@ -893,10 +897,13 @@ select.exp-filter-input {
                     </td>
                     <td style="text-align:right;">
                         @if($canAction)
+                            @php
+                                $isReqFinalStage = (empty($stages) || count($stages) <= 1 || $req->current_step >= count($stages));
+                            @endphp
                             <div style="display:inline-flex; gap:6px;">
                                 <form id="approveForm_{{ $req->id }}" method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}">
                                     @csrf
-                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:6px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}')">
+                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:6px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}', {{ $isReqFinalStage ? 'true' : 'false' }}, {{ (float) $req->amount }})">
                                         Approve (Stage {{ $req->current_step }})
                                     </button>
                                 </form>
@@ -1057,6 +1064,29 @@ select.exp-filter-input {
                 </div>
             </div>
 
+            {{-- Final Approval Payment Details Box --}}
+            <div id="detailPaymentSection" style="display:none; padding:14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; flex-direction:column; gap:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:800; color:#166534; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+                        💳 Final Payment & Approval Details
+                    </span>
+                    <span id="detailPaymentBadge" style="font-size:11px; font-weight:700; background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:6px;">
+                        ✓ Approved & Paid
+                    </span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:2px;">
+                    <div style="background:#ffffff; padding:10px 12px; border-radius:8px; border:1px solid #dcfce7;">
+                        <span style="font-size:11px; color:#15803d; font-weight:600; display:block; text-transform:uppercase;">Paid Amount</span>
+                        <div id="detailPaidAmount" style="font-size:16px; font-weight:800; color:#166534; margin-top:2px;"></div>
+                    </div>
+                    <div style="background:#ffffff; padding:10px 12px; border-radius:8px; border:1px solid #dcfce7;">
+                        <span style="font-size:11px; color:#15803d; font-weight:600; display:block; text-transform:uppercase;">Payment Date</span>
+                        <div id="detailPaidDate" style="font-size:14px; font-weight:700; color:#166534; margin-top:2px;"></div>
+                    </div>
+                </div>
+                <div style="font-size:11px; color:#166534; border-top:1px dashed #bbf7d0; padding-top:6px; margin-top:2px;" id="detailApprovedByText"></div>
+            </div>
+
             {{-- Approval History / Remarks --}}
             <div id="detailHistorySection" style="display: none; flex-direction: column; gap: 6px;">
                 <label class="exp-form-label" style="color: #374151; margin-bottom: 0;">Approval & Stage History</label>
@@ -1105,8 +1135,27 @@ select.exp-filter-input {
             <button class="exp-modal-close" onclick="closeConfirmApproveModal()">✕</button>
         </div>
         <div class="exp-confirm-body" style="padding: 20px 24px; text-align: left;">
-            <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:6px;">Are you sure you want to approve this expense request?</p>
-            <p style="font-size:13px; color:#6b7280; line-height:1.5; margin-bottom:14px;">An email notification will be sent to the next stage approver (or applicant if final stage).</p>
+            <p id="approveModalTitleText" style="font-size:15px; font-weight:800; color:#111827; margin-bottom:6px;">Are you sure you want to approve this expense request?</p>
+            <p id="approveModalSubtext" style="font-size:13px; color:#6b7280; line-height:1.5; margin-bottom:14px;">An email notification will be sent to the next stage approver.</p>
+
+            {{-- Final Approval Payment Details Form Section --}}
+            <div id="finalApprovalPaymentFields" style="display:none; flex-direction:column; gap:12px; margin-bottom:16px; padding:14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px;">
+                <div style="font-size:12px; font-weight:800; color:#166534; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+                    💳 Final Approval Payment Details
+                </div>
+                
+                <div class="exp-form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+                    <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Amount (₹) <span style="color:#dc2626;">*</span></label>
+                    <input type="number" step="0.01" min="0.01" id="approvePaidAmountInput" class="exp-input" placeholder="0.00">
+                    <div id="approvePaidAmountError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Amount is required and must be greater than 0.</div>
+                </div>
+
+                <div class="exp-form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+                    <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Date <span style="color:#dc2626;">*</span></label>
+                    <input type="date" id="approvePaidDateInput" class="exp-input" value="{{ date('Y-m-d') }}">
+                    <div id="approvePaidDateError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Date is required.</div>
+                </div>
+            </div>
 
             <div class="exp-form-group" style="display:flex; flex-direction:column; gap:6px;">
                 <label class="exp-form-label" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0;">
@@ -1176,6 +1225,7 @@ select.exp-filter-input {
 @push('scripts')
 <script>
 let pendingApproveFormId = null;
+let isFinalApprovalStage = false;
 
 $(document).ready(function() {
     if (window.jQuery && window.jQuery.fn.select2) {
@@ -1270,6 +1320,37 @@ function openExpenseDetailModal(btn) {
             container.innerHTML = html;
         }
 
+        // Final Payment Details Section
+        let paidAmt = data.paid_amount;
+        let paidDt = data.paid_date;
+        let approverName = data.approver_name;
+        let actionedAt = data.actioned_at;
+
+        if (!paidAmt && data.history && data.history.length > 0) {
+            const lastApprove = data.history.slice().reverse().find(h => h.action === 'approved' && (h.paid_amount || h.remarks));
+            if (lastApprove && lastApprove.paid_amount) {
+                paidAmt = lastApprove.paid_amount;
+                paidDt = lastApprove.paid_date;
+                approverName = lastApprove.user_name || approverName;
+            }
+        }
+
+        const paymentSection = document.getElementById('detailPaymentSection');
+        if (paymentSection) {
+            if (data.status === 'approved' || paidAmt || paidDt) {
+                document.getElementById('detailPaidAmount').textContent = '₹' + (paidAmt || data.amount);
+                document.getElementById('detailPaidDate').textContent = paidDt || '-';
+                let approvedText = 'Approved by ' + (approverName || 'Approver');
+                if (actionedAt) {
+                    approvedText += ' on ' + actionedAt;
+                }
+                document.getElementById('detailApprovedByText').textContent = approvedText;
+                paymentSection.style.display = 'flex';
+            } else {
+                paymentSection.style.display = 'none';
+            }
+        }
+
         // Approval History
         const history = data.history || [];
         const historySection = document.getElementById('detailHistorySection');
@@ -1293,6 +1374,11 @@ function openExpenseDetailModal(btn) {
                             <div style="color:#64748b; font-size:11px; margin-bottom:4px;">
                                 By <strong>${h.user_name || 'User'}</strong> on ${h.actioned_at || '-'}
                             </div>
+                            ${h.paid_amount ? `
+                                <div style="margin-top:4px; font-size:11px; color:#166534; font-weight:700;">
+                                    💰 Paid Amount: ₹${h.paid_amount} ${h.paid_date ? (' | Paid Date: ' + h.paid_date) : ''}
+                                </div>
+                            ` : ''}
                             ${h.remarks ? `
                                 <div style="margin-top:4px; padding:6px 10px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; color:#334155;">
                                     💬 <strong>Remarks:</strong> ${h.remarks}
@@ -1331,31 +1417,75 @@ function closeConfirmSendModal() {
     document.getElementById('confirmSendModal').classList.remove('show');
 }
 
-function showConfirmApproveModal(formId) {
+function showConfirmApproveModal(formId, isFinal, reqAmount) {
     pendingApproveFormId = formId;
+    isFinalApprovalStage = !!isFinal;
+
     const rInput = document.getElementById('approveRemarksInput');
     const rError = document.getElementById('approveRemarksError');
+    const amtInput = document.getElementById('approvePaidAmountInput');
+    const amtError = document.getElementById('approvePaidAmountError');
+    const dateInput = document.getElementById('approvePaidDateInput');
+    const dateError = document.getElementById('approvePaidDateError');
+    const paymentFields = document.getElementById('finalApprovalPaymentFields');
+    const titleText = document.getElementById('approveModalTitleText');
+    const subtext = document.getElementById('approveModalSubtext');
+
     if (rInput) {
         rInput.value = '';
         rInput.style.borderColor = '';
         rInput.style.boxShadow = '';
     }
     if (rError) rError.style.display = 'none';
+
+    if (isFinalApprovalStage) {
+        if (titleText) titleText.textContent = 'Final Approval & Payment Entry';
+        if (subtext) subtext.textContent = 'Please confirm the payment amount, date, and mandatory remarks to complete final approval.';
+        if (paymentFields) paymentFields.style.display = 'flex';
+
+        if (amtInput) {
+            amtInput.value = reqAmount || '';
+            amtInput.style.borderColor = '';
+        }
+        if (amtError) amtError.style.display = 'none';
+
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+            dateInput.style.borderColor = '';
+        }
+        if (dateError) dateError.style.display = 'none';
+    } else {
+        if (titleText) titleText.textContent = 'Are you sure you want to approve this expense request?';
+        if (subtext) subtext.textContent = 'An email notification will be sent to the next stage approver.';
+        if (paymentFields) paymentFields.style.display = 'none';
+    }
+
     document.getElementById('confirmApproveModal').classList.add('show');
-    if (rInput) {
+    if (isFinalApprovalStage && amtInput) {
+        setTimeout(() => amtInput.focus(), 150);
+    } else if (rInput) {
         setTimeout(() => rInput.focus(), 150);
     }
 }
 function closeConfirmApproveModal() {
     pendingApproveFormId = null;
+    isFinalApprovalStage = false;
+
     const rInput = document.getElementById('approveRemarksInput');
     const rError = document.getElementById('approveRemarksError');
+    const amtError = document.getElementById('approvePaidAmountError');
+    const dateError = document.getElementById('approvePaidDateError');
+
     if (rInput) {
         rInput.value = '';
         rInput.style.borderColor = '';
         rInput.style.boxShadow = '';
     }
     if (rError) rError.style.display = 'none';
+    if (amtError) amtError.style.display = 'none';
+    if (dateError) dateError.style.display = 'none';
+
     document.getElementById('confirmApproveModal').classList.remove('show');
 }
 
@@ -1442,35 +1572,118 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Dynamic amount and date listeners to clear error
+    const amtInput = document.getElementById('approvePaidAmountInput');
+    if (amtInput) {
+        amtInput.addEventListener('input', function() {
+            const amtError = document.getElementById('approvePaidAmountError');
+            if (parseFloat(this.value) > 0) {
+                if (amtError) amtError.style.display = 'none';
+                this.style.borderColor = '';
+            }
+        });
+    }
+
+    const dateInput = document.getElementById('approvePaidDateInput');
+    if (dateInput) {
+        dateInput.addEventListener('change', function() {
+            const dateError = document.getElementById('approvePaidDateError');
+            if (this.value) {
+                if (dateError) dateError.style.display = 'none';
+                this.style.borderColor = '';
+            }
+        });
+    }
+
     // Confirm Approve Submit Listener
     const btnApprove = document.getElementById('btnConfirmApproveSubmit');
     if (btnApprove) {
         btnApprove.addEventListener('click', function() {
-            const input = document.getElementById('approveRemarksInput');
-            const error = document.getElementById('approveRemarksError');
-            const remarks = input ? input.value.trim() : '';
+            const rInput = document.getElementById('approveRemarksInput');
+            const rError = document.getElementById('approveRemarksError');
+            const remarks = rInput ? rInput.value.trim() : '';
+
+            let hasError = false;
 
             if (!remarks) {
-                if (error) error.style.display = 'block';
-                if (input) {
-                    input.style.borderColor = '#dc2626';
-                    input.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
-                    input.focus();
+                if (rError) rError.style.display = 'block';
+                if (rInput) {
+                    rInput.style.borderColor = '#dc2626';
+                    rInput.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
                 }
+                hasError = true;
+            }
+
+            let paidAmountVal = null;
+            let paidDateVal = null;
+
+            if (isFinalApprovalStage) {
+                const amtInput = document.getElementById('approvePaidAmountInput');
+                const amtError = document.getElementById('approvePaidAmountError');
+                const dateInput = document.getElementById('approvePaidDateInput');
+                const dateError = document.getElementById('approvePaidDateError');
+
+                paidAmountVal = amtInput ? parseFloat(amtInput.value) : 0;
+                paidDateVal = dateInput ? dateInput.value.trim() : '';
+
+                if (isNaN(paidAmountVal) || paidAmountVal <= 0) {
+                    if (amtError) amtError.style.display = 'block';
+                    if (amtInput) amtInput.style.borderColor = '#dc2626';
+                    hasError = true;
+                } else {
+                    if (amtError) amtError.style.display = 'none';
+                    if (amtInput) amtInput.style.borderColor = '';
+                }
+
+                if (!paidDateVal) {
+                    if (dateError) dateError.style.display = 'block';
+                    if (dateInput) dateInput.style.borderColor = '#dc2626';
+                    hasError = true;
+                } else {
+                    if (dateError) dateError.style.display = 'none';
+                    if (dateInput) dateInput.style.borderColor = '';
+                }
+            }
+
+            if (hasError) {
+                if (!remarks && rInput) rInput.focus();
                 return;
             }
 
             if (pendingApproveFormId) {
                 const form = document.getElementById(pendingApproveFormId);
                 if (form) {
-                    let hidden = form.querySelector('input[name="remarks"]');
-                    if (!hidden) {
-                        hidden = document.createElement('input');
-                        hidden.type = 'hidden';
-                        hidden.name = 'remarks';
-                        form.appendChild(hidden);
+                    // Hidden Remarks input
+                    let hiddenRemarks = form.querySelector('input[name="remarks"]');
+                    if (!hiddenRemarks) {
+                        hiddenRemarks = document.createElement('input');
+                        hiddenRemarks.type = 'hidden';
+                        hiddenRemarks.name = 'remarks';
+                        form.appendChild(hiddenRemarks);
                     }
-                    hidden.value = remarks;
+                    hiddenRemarks.value = remarks;
+
+                    if (isFinalApprovalStage) {
+                        // Hidden paid_amount
+                        let hiddenAmount = form.querySelector('input[name="paid_amount"]');
+                        if (!hiddenAmount) {
+                            hiddenAmount = document.createElement('input');
+                            hiddenAmount.type = 'hidden';
+                            hiddenAmount.name = 'paid_amount';
+                            form.appendChild(hiddenAmount);
+                        }
+                        hiddenAmount.value = paidAmountVal;
+
+                        // Hidden paid_date
+                        let hiddenDate = form.querySelector('input[name="paid_date"]');
+                        if (!hiddenDate) {
+                            hiddenDate = document.createElement('input');
+                            hiddenDate.type = 'hidden';
+                            hiddenDate.name = 'paid_date';
+                            form.appendChild(hiddenDate);
+                        }
+                        hiddenDate.value = paidDateVal;
+                    }
 
                     closeConfirmApproveModal();
                     showProcessOverlay(

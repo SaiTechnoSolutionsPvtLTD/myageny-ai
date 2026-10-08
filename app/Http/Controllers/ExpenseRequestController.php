@@ -241,6 +241,12 @@ class ExpenseRequestController extends Controller
         if (! $request->filled('remarks')) {
             $request->merge(['remarks' => 'Approved via email notification link']);
         }
+        if (! $request->filled('paid_amount')) {
+            $request->merge(['paid_amount' => $expenseRequest->amount]);
+        }
+        if (! $request->filled('paid_date')) {
+            $request->merge(['paid_date' => now()->toDateString()]);
+        }
 
         return $this->approve($request, $expenseRequest);
     }
@@ -314,14 +320,6 @@ class ExpenseRequestController extends Controller
                 ->with('error', 'You are not authorized to approve this expense request at its current stage.');
         }
 
-        $validated = $request->validate([
-            'remarks' => 'required|string|max:1000',
-        ], [
-            'remarks.required' => 'Approval remarks are mandatory.',
-        ]);
-
-        $remarks = trim($validated['remarks']);
-
         $applicantUser = $expenseRequest->user;
         $applicantCompanyId = $applicantUser?->company_id ?: $expenseRequest->company_id;
 
@@ -337,13 +335,39 @@ class ExpenseRequestController extends Controller
         }
 
         $currentStep = $expenseRequest->current_step;
+        $nextStepIndex = $currentStep; // 1-indexed currentStep matches next 0-indexed element in chain
+        $isFinalStage = ! isset($approvalChain[$nextStepIndex]);
+
+        $rules = [
+            'remarks' => 'required|string|max:1000',
+        ];
+        $messages = [
+            'remarks.required' => 'Approval remarks are mandatory.',
+        ];
+
+        if ($isFinalStage) {
+            $rules['paid_amount'] = 'required|numeric|min:0.01';
+            $rules['paid_date']   = 'required|date';
+            $messages['paid_amount.required'] = 'Payment Amount is mandatory for final approval.';
+            $messages['paid_amount.numeric']  = 'Payment Amount must be a valid number.';
+            $messages['paid_amount.min']      = 'Payment Amount must be greater than zero.';
+            $messages['paid_date.required']   = 'Payment Date is mandatory for final approval.';
+            $messages['paid_date.date']       = 'Payment Date must be a valid date.';
+        }
+
+        $validated = $request->validate($rules, $messages);
+
+        $remarks = trim($validated['remarks']);
+        $paidAmount = $isFinalStage ? $validated['paid_amount'] : null;
+        $paidDate = $isFinalStage ? $validated['paid_date'] : null;
+
         $currentRoleId = $expenseRequest->current_approver_role_id ?: ($approvalChain[$currentStep - 1] ?? null);
         $currentRole = Role::withoutGlobalScopes()->find($currentRoleId);
         $currentRoleName = $currentRole?->display_name ?: ($currentRole ? ucfirst(str_replace('_', ' ', preg_replace('/^company_\d+__/', '', $currentRole->name))) : "Stage {$currentStep}");
 
         // Record stage approval in history
         $history = $expenseRequest->stage_history ?? [];
-        $history[] = [
+        $historyEntry = [
             'step'        => $currentStep,
             'role_id'     => (int) $currentRoleId,
             'role_name'   => $currentRoleName,
@@ -354,7 +378,12 @@ class ExpenseRequestController extends Controller
             'remarks'     => $remarks,
         ];
 
-        $nextStepIndex = $currentStep; // 1-indexed currentStep matches next 0-indexed element in chain
+        if ($isFinalStage) {
+            $historyEntry['paid_amount'] = $paidAmount;
+            $historyEntry['paid_date']   = $paidDate;
+        }
+
+        $history[] = $historyEntry;
 
         if (isset($approvalChain[$nextStepIndex])) {
             $nextRoleId = (int) $approvalChain[$nextStepIndex];
@@ -377,6 +406,8 @@ class ExpenseRequestController extends Controller
             $expenseRequest->update([
                 'status'        => 'approved',
                 'approver_id'   => $user->id,
+                'paid_amount'   => $paidAmount,
+                'paid_date'     => $paidDate,
                 'stage_history' => $history,
                 'actioned_at'   => now(),
             ]);
@@ -384,7 +415,7 @@ class ExpenseRequestController extends Controller
             // Notify applicant of final approval
             $this->sendApplicantStatusNotification($expenseRequest, 'approved', $remarks);
 
-            $msg = "Expense request fully approved across all hierarchy stages!";
+            $msg = "Expense request fully approved with payment details saved!";
         }
 
         return redirect()
