@@ -220,11 +220,18 @@ class AdBudgetController extends Controller
     {
         $action = $request->input('action', 'approve');
 
+        $validated = $request->validate([
+            'tl_remarks' => 'required|string|max:1000',
+        ], [
+            'tl_remarks.required' => 'Please enter remarks before submitting your approval/rejection.',
+        ]);
+
         if ($action === 'reject') {
             $adBudgetRequest->update([
                 'status'         => 'rejected',
                 'tl_approved_by' => auth()->id(),
                 'tl_approved_at' => now(),
+                'tl_remarks'     => $validated['tl_remarks'],
             ]);
 
             $this->sendNotificationMail($adBudgetRequest, 'rejected');
@@ -236,6 +243,7 @@ class AdBudgetController extends Controller
             'status'         => 'accounts_pending',
             'tl_approved_by' => auth()->id(),
             'tl_approved_at' => now(),
+            'tl_remarks'     => $validated['tl_remarks'],
         ]);
 
         $this->sendNotificationMail($adBudgetRequest, 'tl_approved');

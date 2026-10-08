@@ -601,6 +601,24 @@
         </div>
         <div class="pp-mbody">
 
+@php
+    $currentUser = auth()->user();
+    $isHoUser = false;
+    if ($currentUser) {
+        if ($currentUser->hasAdminLikeRole()) {
+            $isHoUser = true;
+        } elseif ($currentUser->branch_id == 1) {
+            $isHoUser = true;
+        } else {
+            $userBranchName = strtolower($currentUser->branch?->name ?? '');
+            if ($currentUser->branch?->is_default || str_contains($userBranchName, 'ho') || str_contains($userBranchName, 'head office')) {
+                $isHoUser = true;
+            }
+        }
+    }
+    $allBranches = \App\Models\Branch::withoutGlobalScopes()->where('is_active', true)->orderBy('name')->get();
+@endphp
+
             <div class="ppf-r2">
                 <div class="ppf-grp">
                     <label class="ppf-lbl">Payment Type <span class="ppf-req">*</span></label>
@@ -608,11 +626,14 @@
                         <svg class="ppf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                         </svg>
-                        <select id="pp-pay-type" name="payment_type" class="ppf-inp" required style="cursor: pointer; appearance: auto;">
+                        <select id="pp-pay-type" name="payment_type" class="ppf-inp" required style="cursor: pointer; appearance: auto;" onchange="PP.ppHandlePayTypeChange(this.value)">
                             <option value="">-- Select Payment Type --</option>
                             <option value="new_sale">New Sale</option>
                             <option value="balance_payment">Balance Payment</option>
                             <option value="renewals">Renewals</option>
+                            @if($isHoUser)
+                                <option value="ad_budget_partner">Ad Budget for partner</option>
+                            @endif
                         </select>
                     </div>
                 </div>
@@ -625,6 +646,24 @@
                         </svg>
                         <input type="number" id="pp-pay-amount" class="ppf-inp"
                                placeholder="0.00" step="0.01" min="0.01" oninput="PP.ppRecalculateTds()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conditional Branch Dropdown for HO (shown only when Ad Budget for partner is selected) -->
+            <div id="pp-branch-container" style="display: none; margin-top: 14px; margin-bottom: 12px;">
+                <div class="ppf-grp">
+                    <label class="ppf-lbl">Select Branch <span class="ppf-req">*</span></label>
+                    <div class="ppf-rel">
+                        <svg class="ppf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0a2 2 0 100-4 2 2 0 000 4z" />
+                        </svg>
+                        <select id="pp-pay-branch" name="branch_id" class="ppf-inp" style="cursor: pointer; appearance: auto;">
+                            <option value="">-- Select Branch --</option>
+                            @foreach($allBranches as $branch)
+                                <option value="{{ $branch->id }}">{{ $branch->name }} {{ $branch->code ? '('.$branch->code.')' : '' }}</option>
+                            @endforeach
+                        </select>
                     </div>
                 </div>
             </div>

@@ -325,31 +325,23 @@
                             <td>
                                 <div style="display:flex; align-items:center; gap:6px;">
                                     @if($item->status === 'tl_pending' && $isDmTlUser)
-                                        <form method="POST" action="{{ route('accounts.ad-budget.tl-approve', $item) }}" style="display:inline;">
-                                            @csrf
-                                            <input type="hidden" name="action" value="approve">
-                                            <button type="submit" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;">
-                                                TL Approve
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="{{ route('accounts.ad-budget.tl-approve', $item) }}" style="display:inline;">
-                                            @csrf
-                                            <input type="hidden" name="action" value="reject">
-                                            <button type="submit" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;">
-                                                Reject
-                                            </button>
-                                        </form>
+                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;" data-item="{{ json_encode($item) }}" onclick='openTlActionModal(JSON.parse(this.getAttribute("data-item")), "approve")'>
+                                             ✓ TL Approve
+                                         </button>
+                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;" data-item="{{ json_encode($item) }}" onclick='openTlActionModal(JSON.parse(this.getAttribute("data-item")), "reject")'>
+                                             ✕ Reject
+                                         </button>
                                     @endif
 
                                     @if($item->status === 'accounts_pending' && $isAccountsUser)
                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;"
-                                                onclick='openAccountsApproveModal(@json($item))'>
+                                                data-item="{{ json_encode($item) }}" onclick='openAccountsApproveModal(JSON.parse(this.getAttribute("data-item")))'>
                                             Approve & Fill Details
                                         </button>
                                     @endif
 
                                     <button type="button" class="adb-btn adb-btn-secondary" style="padding:4px 10px; font-size:11px;"
-                                            onclick='openViewDetailsModal(@json($item))'>
+                                            data-item="{{ json_encode($item) }}" onclick='openViewDetailsModal(JSON.parse(this.getAttribute("data-item")))'>
                                         👁️ View
                                     </button>
                                 </div>
@@ -474,6 +466,33 @@
     </div>
 </div>
 
+{{-- DM TL Approval/Rejection Confirmation Modal --}}
+<div class="modal-overlay" id="tlActionModal">
+    <div class="modal-box" style="max-width:520px;">
+        <div class="modal-header">
+            <div class="modal-title" id="tlActionTitle">Confirm DM TL Action</div>
+            <button type="button" class="modal-close" onclick="closeTlActionModal()">×</button>
+        </div>
+        <form id="tlActionForm" method="POST" action="">
+            @csrf
+            <input type="hidden" name="action" id="tlActionInput" value="approve">
+            <div class="modal-body">
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; font-size:13px;" id="tlActionSummary">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">DM TL Remarks / Note <span style="color:#dc2626;">*</span></label>
+                    <textarea name="tl_remarks" id="tl_remarks_input" class="form-input" rows="3" placeholder="Enter remarks/reason before confirming…" required></textarea>
+                </div>
+            </div>
+            <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="adb-btn adb-btn-secondary" onclick="closeTlActionModal()">Cancel</button>
+                <button type="submit" class="adb-btn adb-btn-primary" id="tlSubmitBtn">Confirm & Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {{-- Accounts Team Approval Modal (hr@saitechnosolutions.net) --}}
 <div class="modal-overlay" id="accApproveModal">
     <div class="modal-box">
@@ -484,8 +503,19 @@
         <form method="POST" id="accApproveForm" enctype="multipart/form-data">
             @csrf
             <div class="modal-body">
-                <div style="font-size:13px; color:#475569; margin-bottom:4px;">
-                    Fill approval details & upload proof documents for Partner Request <strong id="acc_modal_req_id"></strong>:
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#64748b;">Partner Request ID:</span>
+                        <strong id="acc_modal_req_id" style="color:#0f172a;"></strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#64748b;">Requested Ad Account:</span>
+                        <strong id="acc_requested_account_display" style="color:#ea580c;"></strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#64748b;">Requested Amount:</span>
+                        <strong id="acc_requested_amount_display" style="color:#059669;"></strong>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -496,10 +526,12 @@
                 <div class="form-group">
                     <label class="form-label">Confirm / Select Ad Account <span style="color:#dc2626;">*</span></label>
                     <select name="ad_account_id" id="acc_ad_account_id" class="form-input" required>
+                        <option value="">-- Select Ad Account --</option>
                         @foreach($adAccounts as $acc)
                             <option value="{{ $acc->id }}">{{ $acc->account_name }} ({{ $acc->platform }})</option>
                         @endforeach
                     </select>
+                    <span style="font-size:11px; color:#64748b; margin-top:3px; display:block;">Pre-selected based on Executive request. You can change if needed.</span>
                 </div>
 
                 <div class="form-group">
@@ -577,6 +609,10 @@
                 <div class="summary-row">
                     <span class="summary-label">TL Approved By:</span>
                     <span class="summary-val" id="view_tl_by"></span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-label">TL Remarks:</span>
+                    <span class="summary-val" id="view_tl_remarks"></span>
                 </div>
             </div>
 
@@ -747,10 +783,84 @@ function closeConfirmModal() {
     document.getElementById('confirmModal').classList.remove('active');
 }
 
+function openTlActionModal(item, action) {
+    const form = document.getElementById('tlActionForm');
+    const actionInput = document.getElementById('tlActionInput');
+    const title = document.getElementById('tlActionTitle');
+    const summary = document.getElementById('tlActionSummary');
+    const submitBtn = document.getElementById('tlSubmitBtn');
+    const remarksInput = document.getElementById('tl_remarks_input');
+
+    form.action = '/accounts/ad-budget/' + item.id + '/tl-approve';
+    actionInput.value = action;
+    remarksInput.value = '';
+
+    const datesList = (item.selected_dates || []).join(', ');
+    const formattedAmount = '₹' + parseFloat(item.amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+
+    summary.innerHTML = `
+        <div style="font-weight:800; color:#0f172a; margin-bottom:6px; font-size:14px;">Partner Request #${item.id} — ${item.ad_account ? item.ad_account.account_name : '—'}</div>
+        <div style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:#475569;">
+            <div><strong>Partner:</strong> ${item.client_name || '—'}</div>
+            <div><strong>Requester:</strong> ${item.requester ? item.requester.name : '—'}</div>
+            <div><strong>Requested Amount:</strong> <span style="color:#0f172a; font-weight:700;">${formattedAmount}</span></div>
+            <div><strong>Selected Dates:</strong> ${datesList || '—'}</div>
+            <div><strong>Executive Remarks:</strong> ${item.remarks || 'None'}</div>
+        </div>
+    `;
+
+    if (action === 'approve') {
+        title.innerHTML = '✓ Confirm DM TL Approval';
+        submitBtn.className = 'adb-btn adb-btn-primary';
+        submitBtn.style.background = 'linear-gradient(135deg,#16a34a,#22c55e)';
+        submitBtn.style.boxShadow = '0 4px 14px rgba(22,163,74,.25)';
+        submitBtn.style.color = '#fff';
+        submitBtn.innerHTML = '✓ Approve & Send to Accounts';
+        remarksInput.placeholder = 'Enter approval remarks (e.g., Verified partner campaign dates & budget. Approved for Accounts team).';
+    } else {
+        title.innerHTML = '✕ Confirm Request Rejection';
+        submitBtn.className = 'adb-btn';
+        submitBtn.style.background = 'linear-gradient(135deg,#dc2626,#ef4444)';
+        submitBtn.style.boxShadow = '0 4px 14px rgba(220,38,38,.25)';
+        submitBtn.style.color = '#fff';
+        submitBtn.innerHTML = '✕ Reject Request';
+        remarksInput.placeholder = 'Enter rejection reason (e.g., Budget exceeds limits / Invalid partner dates).';
+    }
+
+    document.getElementById('tlActionModal').classList.add('active');
+}
+function closeTlActionModal() {
+    document.getElementById('tlActionModal').classList.remove('active');
+}
+
 function openAccountsApproveModal(item) {
     document.getElementById('accApproveForm').action = '/accounts/ad-budget/' + item.id + '/accounts-approve';
     document.getElementById('acc_modal_req_id').innerText = '#' + item.id;
-    document.getElementById('acc_ad_account_id').value = item.ad_account_id || '';
+
+    const reqAccName = item.ad_account ? (item.ad_account.account_name + ' (' + item.ad_account.platform + ')') : '—';
+    const accReqDisplay = document.getElementById('acc_requested_account_display');
+    if (accReqDisplay) {
+        accReqDisplay.innerText = reqAccName;
+    }
+
+    const accAmountDisplay = document.getElementById('acc_requested_amount_display');
+    if (accAmountDisplay) {
+        accAmountDisplay.innerText = '₹' + parseFloat(item.amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    }
+
+    const targetAccountId = item.ad_account_id || (item.ad_account ? item.ad_account.id : '');
+    const selectElem = document.getElementById('acc_ad_account_id');
+    if (selectElem) {
+        selectElem.value = String(targetAccountId || '');
+        for (let i = 0; i < selectElem.options.length; i++) {
+            if (String(selectElem.options[i].value) === String(targetAccountId)) {
+                selectElem.selectedIndex = i;
+                selectElem.options[i].selected = true;
+                break;
+            }
+        }
+    }
+
     document.getElementById('acc_approved_amount').value = item.amount || '';
     document.getElementById('accApproveModal').classList.add('active');
 }
@@ -769,6 +879,7 @@ function openViewDetailsModal(item) {
 
     document.getElementById('view_tl_status').innerText = (item.status === 'tl_pending') ? 'Pending DM TL Approval' : 'Approved by DM TL';
     document.getElementById('view_tl_by').innerText = item.tl_approver ? (item.tl_approver.name + ' (' + (item.tl_approved_at || '') + ')') : '—';
+    document.getElementById('view_tl_remarks').innerText = item.tl_remarks || 'None';
 
     document.getElementById('view_acc_by').innerText = item.approver ? (item.approver.name + ' (' + (item.approver.email || '') + ')') : '—';
     document.getElementById('view_payment_date').innerText = item.payment_date || 'Not set yet';

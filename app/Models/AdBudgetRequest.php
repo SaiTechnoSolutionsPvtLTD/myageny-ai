@@ -26,6 +26,7 @@ class AdBudgetRequest extends Model
         'status',
         'tl_approved_by',
         'tl_approved_at',
+        'tl_remarks',
         'approved_by',
         'approved_at',
         'payment_date',

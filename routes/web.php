@@ -264,6 +264,15 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/partners/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storePartnerRequest'])->name('partners.raise-request');
             Route::post('/{adBudgetRequest}/tl-approve', [App\Http\Controllers\AdBudgetController::class, 'tlApprove'])->name('tl-approve');
             Route::post('/{adBudgetRequest}/accounts-approve', [App\Http\Controllers\AdBudgetController::class, 'accountsApprove'])->name('accounts-approve');
+
+            // Ad Spend routes
+            Route::get('/spend', [App\Http\Controllers\AdSpendController::class, 'index'])->name('spend');
+            Route::post('/spend', [App\Http\Controllers\AdSpendController::class, 'store'])->name('spend.store');
+            Route::put('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'update'])->name('spend.update');
+            Route::delete('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'destroy'])->name('spend.destroy');
+
+            // Ad Budget Allocation Vs Spent Report route
+            Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->name('allocation-vs-spent');
         });
 
         // Ad Accounts Master CRUD

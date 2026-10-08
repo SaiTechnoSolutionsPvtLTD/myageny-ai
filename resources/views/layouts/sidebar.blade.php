@@ -165,6 +165,12 @@
                     <a href="{{ route('accounts.ad-budget.partners') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.partners') ? 'active' : '' }}">
                         For Partners
                     </a>
+                    <a href="{{ route('accounts.ad-budget.spend') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.spend') ? 'active' : '' }}">
+                        Ad Spent
+                    </a>
+                    <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.allocation-vs-spent') ? 'active' : '' }}">
+                        Allocation Vs Spent
+                    </a>
                 </div>
 
                 <a href="{{ route('accounts.ad-accounts-master.index') }}" class="nav-item {{ request()->routeIs('accounts.ad-accounts-master.*') ? 'active' : '' }}">

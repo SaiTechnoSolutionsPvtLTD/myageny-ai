@@ -114,6 +114,12 @@
                     <td>{{ $adBudgetRequest->remarks }}</td>
                 </tr>
                 @endif
+                @if($adBudgetRequest->tl_remarks)
+                <tr>
+                    <th>DM TL Remarks</th>
+                    <td>{{ $adBudgetRequest->tl_remarks }}</td>
+                </tr>
+                @endif
                 @if($adBudgetRequest->accounts_remarks)
                 <tr>
                     <th>Accounts Remarks</th>
