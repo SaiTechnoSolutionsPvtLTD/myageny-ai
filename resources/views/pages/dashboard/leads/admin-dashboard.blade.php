@@ -7651,9 +7651,9 @@
                                         </tr>
                                         <tr style="background:#f8fafc; font-size:10.5px; color:#64748b; border-bottom:2px solid #e2e8f0;">
                                             <th style="padding:6px 10px; text-align:center; background:#eef2ff; color:#4338ca;">Count</th>
-                                            <th style="padding:6px 10px; text-align:right; background:#eef2ff; color:#4338ca; border-right:1px solid #cbd5e1;">Deal Value</th>
+                                            <th style="padding:6px 10px; text-align:right; background:#eef2ff; color:#4338ca; border-right:1px solid #cbd5e1;">EXPECTED VALUE</th>
                                             <th style="padding:6px 10px; text-align:center; background:#f0fdf4; color:#047857;">Count</th>
-                                            <th style="padding:6px 10px; text-align:right; background:#f0fdf4; color:#047857; border-right:1px solid #cbd5e1;">Deal Value</th>
+                                            <th style="padding:6px 10px; text-align:right; background:#f0fdf4; color:#047857; border-right:1px solid #cbd5e1;">EXPECTED VALUE</th>
                                             <th style="padding:6px 10px; text-align:center;">Prospects</th>
                                             <th style="padding:6px 10px; text-align:right;">Deal Value</th>
                                             <th style="padding:6px 10px; text-align:right; color:#059669;">Expected Value</th>
@@ -16486,23 +16486,25 @@ function renderActiveBranchesTable(filterType) {
     var totalDealSum = 0;
     var totalExpSum = 0;
     var totalNstCountSum = 0;
-    var totalNstDealSum = 0;
+    var totalNstExpSum = 0;
     var totalCstCountSum = 0;
-    var totalCstDealSum = 0;
+    var totalCstExpSum = 0;
 
     filtered.forEach(function(b) {
         var nstCount = parseInt(b.nst_count) || 0;
-        var nstDeal  = parseFloat(b.nst_deal) || 0;
+        var nstExp   = parseFloat(b.nst_exp) || 0;
         var cstCount = parseInt(b.cst_count) || 0;
+        var cstExp   = parseFloat(b.cst_exp) || 0;
+        var nstDeal  = parseFloat(b.nst_deal) || 0;
         var cstDeal  = parseFloat(b.cst_deal) || 0;
         var pCount   = parseInt(b.prospect_count) || (nstCount + cstCount);
         var dVal     = parseFloat(b.deal_value) || (nstDeal + cstDeal);
-        var eVal     = parseFloat(b.expected_value) || 0;
+        var eVal     = parseFloat(b.expected_value) || (nstExp + cstExp);
 
         totalNstCountSum += nstCount;
-        totalNstDealSum  += nstDeal;
+        totalNstExpSum   += nstExp;
         totalCstCountSum += cstCount;
-        totalCstDealSum  += cstDeal;
+        totalCstExpSum   += cstExp;
         totalProspectsSum += pCount;
         totalDealSum     += dVal;
         totalExpSum      += eVal;
@@ -16533,16 +16535,16 @@ function renderActiveBranchesTable(filterType) {
                     nstCount +
                 '</span>' +
             '</td>' +
-            '<td style="text-align:right; font-weight:700; color:' + (nstDeal > 0 ? '#4338ca' : '#94a3b8') + '; background:#f8fafc; border-right:1px solid #e2e8f0;">' +
-                fmt(nstDeal) +
+            '<td style="text-align:right; font-weight:700; color:' + (nstExp > 0 ? '#4338ca' : '#94a3b8') + '; background:#f8fafc; border-right:1px solid #e2e8f0;">' +
+                fmt(nstExp) +
             '</td>' +
             '<td style="text-align:center; background:#f0fdf4;">' +
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (cstCount > 0 ? '#ccfbf1; color:#115e59;' : '#f1f5f9; color:#94a3b8;') + '">' +
                     cstCount +
                 '</span>' +
             '</td>' +
-            '<td style="text-align:right; font-weight:700; color:' + (cstDeal > 0 ? '#047857' : '#94a3b8') + '; background:#f0fdf4; border-right:1px solid #e2e8f0;">' +
-                fmt(cstDeal) +
+            '<td style="text-align:right; font-weight:700; color:' + (cstExp > 0 ? '#047857' : '#94a3b8') + '; background:#f0fdf4; border-right:1px solid #e2e8f0;">' +
+                fmt(cstExp) +
             '</td>' +
             '<td style="text-align:center; font-weight:800;">' +
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
@@ -16565,9 +16567,9 @@ function renderActiveBranchesTable(filterType) {
         tfoot.innerHTML = '<tr style="font-weight:800; background:#f1f5f9; border-top:2px solid #cbd5e1;">' +
             '<td style="padding:10px 12px;">Total (' + filtered.length + ' ' + label + ')</td>' +
             '<td style="padding:10px; text-align:center; color:#3730a3; background:#eef2ff;">' + totalNstCountSum + '</td>' +
-            '<td style="padding:10px; text-align:right; color:#3730a3; background:#eef2ff; border-right:1px solid #cbd5e1;">' + fmt(totalNstDealSum) + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#3730a3; background:#eef2ff; border-right:1px solid #cbd5e1;">' + fmt(totalNstExpSum) + '</td>' +
             '<td style="padding:10px; text-align:center; color:#115e59; background:#f0fdf4;">' + totalCstCountSum + '</td>' +
-            '<td style="padding:10px; text-align:right; color:#115e59; background:#f0fdf4; border-right:1px solid #cbd5e1;">' + fmt(totalCstDealSum) + '</td>' +
+            '<td style="padding:10px; text-align:right; color:#115e59; background:#f0fdf4; border-right:1px solid #cbd5e1;">' + fmt(totalCstExpSum) + '</td>' +
             '<td style="padding:10px; text-align:center; color:#0f172a;">' + totalProspectsSum + '</td>' +
             '<td style="padding:10px; text-align:right; color:#0f172a;">' + fmt(totalDealSum) + '</td>' +
             '<td style="padding:10px; text-align:right; color:#059669;">' + fmt(totalExpSum) + '</td>' +

@@ -17,6 +17,8 @@ class ExpenseRequest extends Model
         'user_id',
         'expense_category_id',
         'amount',
+        'paid_amount',
+        'paid_date',
         'description',
         'attachment',
         'current_step',
@@ -30,6 +32,8 @@ class ExpenseRequest extends Model
 
     protected $casts = [
         'amount'        => 'decimal:2',
+        'paid_amount'   => 'decimal:2',
+        'paid_date'     => 'date',
         'current_step'  => 'integer',
         'stage_history' => 'array',
         'actioned_at'   => 'datetime',
