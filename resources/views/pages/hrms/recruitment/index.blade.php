@@ -126,7 +126,13 @@
                                     </td>
                                     <td>
                                         <div class="eob-cell-title">{{ $candidate->job_title }}</div>
-                                        <div class="eob-cell-sub">{{ $candidate->source ?: 'Source not added' }}</div>
+                                        <div class="eob-cell-sub">
+                                            @if($candidate->branch || $candidate->location)
+                                                <i class="bi bi-geo-alt" style="color:#fe5f04;"></i> {{ $candidate->branch?->name ?? $candidate->location }}
+                                            @else
+                                                {{ $candidate->source ?: 'Source not added' }}
+                                            @endif
+                                        </div>
                                     </td>
                                     <td>
                                         <div class="eob-cell-title">{{ $candidate->mobile_number }}</div>
@@ -151,6 +157,7 @@
                                             <summary class="eob-table-dropdown-trigger">Actions</summary>
                                             <div class="eob-table-dropdown-menu">
                                                 <a href="{{ route('recruitment.show', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
+                                                <a href="{{ route('recruitment.show', [$candidate, 'action' => 'reschedule']) }}" class="eob-table-dropdown-item"><i class="bi bi-arrow-repeat" style="color:#fe5f04;"></i> Reschedule</a>
                                                 <a href="{{ route('recruitment.edit', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-pencil"></i> Edit</a>
                                             </div>
                                         </details>

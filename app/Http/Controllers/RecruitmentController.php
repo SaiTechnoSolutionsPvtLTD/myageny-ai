@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
 use App\Models\EmployeeOnboarding;
 use App\Models\RecruitmentCallUpdate;
 use App\Models\RecruitmentCandidate;
@@ -26,7 +27,7 @@ class RecruitmentController extends Controller
         $employee = $this->currentEmployee();
 
         $query = RecruitmentCandidate::query()
-            ->with(['creator', 'latestInterview'])
+            ->with(['creator', 'latestInterview', 'branch'])
             ->withCount(['callUpdates', 'interviews'])
             ->latest();
 
@@ -50,7 +51,10 @@ class RecruitmentController extends Controller
                     ->orWhere('mobile_number', 'like', '%' . $search . '%')
                     ->orWhere('email', 'like', '%' . $search . '%')
                     ->orWhere('job_title', 'like', '%' . $search . '%')
-                    ->orWhere('location', 'like', '%' . $search . '%');
+                    ->orWhere('location', 'like', '%' . $search . '%')
+                    ->orWhereHas('branch', function ($bq) use ($search) {
+                        $bq->where('name', 'like', '%' . $search . '%');
+                    });
             });
         }
 
@@ -243,8 +247,15 @@ class RecruitmentController extends Controller
 
     public function create(): View
     {
+        $companyId = auth()->user()?->company_id;
+        $branches = Branch::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get();
+
         return view('pages.hrms.recruitment.create', [
             'candidateNo' => RecruitmentCandidate::generateCandidateNo(),
+            'branches' => $branches,
         ]);
     }
 
@@ -254,6 +265,7 @@ class RecruitmentController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'mobile_number' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
+            'branch_id' => ['nullable', 'exists:branches,id'],
             'location' => ['nullable', 'string', 'max:150'],
             'job_title' => ['required', 'string', 'max:150'],
             'candidate_type' => ['required', 'string', Rule::in(['fresher', 'experienced', 'intern'])],
@@ -341,6 +353,13 @@ class RecruitmentController extends Controller
 
         unset($validated['resume']);
 
+        if (!empty($validated['branch_id'])) {
+            $branchObj = Branch::find($validated['branch_id']);
+            if ($branchObj && empty($validated['location'])) {
+                $validated['location'] = $branchObj->name;
+            }
+        }
+
         $candidate = RecruitmentCandidate::create(array_merge($validated, [
             'candidate_no' => RecruitmentCandidate::generateCandidateNo(),
             'status' => RecruitmentCandidate::STATUS_SHORTLIST,
@@ -416,7 +435,7 @@ class RecruitmentController extends Controller
 
     public function show(RecruitmentCandidate $recruitment): View
     {
-        $recruitment->load(['callUpdates.user', 'interviews.scheduler', 'creator', 'updater']);
+        $recruitment->load(['callUpdates.user', 'interviews.scheduler', 'creator', 'updater', 'branch']);
 
         $activeUsers = User::query()
             ->with(['roles', 'branch'])
@@ -442,8 +461,15 @@ class RecruitmentController extends Controller
 
     public function edit(RecruitmentCandidate $recruitment): View
     {
+        $companyId = auth()->user()?->company_id;
+        $branches = Branch::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->orderBy('name')
+            ->get();
+
         return view('pages.hrms.recruitment.edit', [
             'candidate' => $recruitment,
+            'branches' => $branches,
         ]);
     }
 
@@ -453,6 +479,7 @@ class RecruitmentController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'mobile_number' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
+            'branch_id' => ['nullable', 'exists:branches,id'],
             'location' => ['nullable', 'string', 'max:150'],
             'job_title' => ['required', 'string', 'max:150'],
             'candidate_type' => ['required', 'string', Rule::in(['fresher', 'experienced', 'intern'])],
@@ -548,6 +575,13 @@ class RecruitmentController extends Controller
         }
 
         unset($validated['resume']);
+
+        if (!empty($validated['branch_id'])) {
+            $branchObj = Branch::find($validated['branch_id']);
+            if ($branchObj && empty($validated['location'])) {
+                $validated['location'] = $branchObj->name;
+            }
+        }
 
         $recruitment->update(array_merge($validated, [
             'updated_by' => auth()->id(),

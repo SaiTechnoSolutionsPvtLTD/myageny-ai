@@ -34,6 +34,7 @@ class RecruitmentCandidate extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'candidate_no',
         'name',
         'mobile_number',
@@ -74,6 +75,11 @@ class RecruitmentCandidate extends Model
         'education_details' => 'array',
         'status_updated_at' => 'datetime',
     ];
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
 
     public function callUpdates(): HasMany
     {

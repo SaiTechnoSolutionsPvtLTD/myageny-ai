@@ -121,8 +121,18 @@
                             @error('email')<div class="eob-error">{{ $message }}</div>@enderror
                         </div>
                         <div class="eob-group">
-                            <label class="eob-label">Location / City</label>
-                            <input type="text" name="location" class="eob-input @error('location') is-invalid @enderror" value="{{ old('location', $candidate->location) }}" placeholder="Chennai, Bangalore, Coimbatore...">
+                            <label class="eob-label">Location / Branch</label>
+                            <select name="branch_id" id="branchSelect" class="eob-select @error('branch_id') is-invalid @enderror" onchange="autoFillLocationText(this)">
+                                <option value="">Select Branch Location</option>
+                                @foreach($branches as $branch)
+                                    <option value="{{ $branch->id }}" data-name="{{ $branch->name }}" @selected(old('branch_id', $candidate->branch_id) == $branch->id)>{{ $branch->name }}</option>
+                                @endforeach
+                            </select>
+                            @error('branch_id')<div class="eob-error">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="eob-group">
+                            <label class="eob-label">Specific Location / City</label>
+                            <input type="text" name="location" id="locationInput" class="eob-input @error('location') is-invalid @enderror" value="{{ old('location', $candidate->location) }}" placeholder="e.g. Chennai, Bangalore, Coimbatore...">
                             @error('location')<div class="eob-error">{{ $message }}</div>@enderror
                         </div>
                         <div class="eob-group">
@@ -456,6 +466,14 @@
         } else {
             const inputs = btn.closest('tr').querySelectorAll('input');
             inputs.forEach(input => input.value = '');
+        }
+    }
+
+    function autoFillLocationText(select) {
+        const selectedOption = select.options[select.selectedIndex];
+        const locationInput = document.getElementById('locationInput');
+        if (selectedOption && selectedOption.dataset.name && locationInput && !locationInput.value.trim()) {
+            locationInput.value = selectedOption.dataset.name;
         }
     }
 
