@@ -48,7 +48,29 @@ class SupportController extends Controller
                     || str_contains($display, 'super admin');
             });
 
-        // If Company Admin or Super Admin, fetch all tickets in the company scope
+        // Calculate total KPI statistics from database for card metrics
+        if ($isCompanyAdmin) {
+            $kpiQuery = SupportTicket::query();
+            if ($companyId) {
+                $kpiQuery->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)
+                      ->orWhereHas('creator', fn($cq) => $cq->where('company_id', $companyId))
+                      ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
+                });
+            }
+        } else {
+            $kpiQuery = SupportTicket::where(function ($q) use ($userId) {
+                $q->where('to_user_id', $userId)
+                  ->orWhere('created_by', $userId);
+            });
+        }
+
+        $statTotal     = (clone $kpiQuery)->count();
+        $statPending   = (clone $kpiQuery)->where('status', 'pending')->count();
+        $statOnProcess = (clone $kpiQuery)->where('status', 'onprocess')->count();
+        $statResolved  = (clone $kpiQuery)->whereIn('status', ['resolved', 'closed'])->count();
+
+        // If Company Admin or Super Admin, fetch all tickets in the company scope (Paginated)
         if ($isCompanyAdmin) {
             $allTicketsQuery = SupportTicket::with(['creator', 'assignedTo']);
             if ($companyId) {
@@ -58,22 +80,24 @@ class SupportController extends Controller
                       ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
                 });
             }
-            $allTickets = $allTicketsQuery->latest()->get();
+            $allTickets = $allTicketsQuery->latest()->paginate(15, ['*'], 'all_page')->withQueryString();
         } else {
             $allTickets = collect();
         }
 
-        // Get received tickets (where current user is the target)
+        // Get received tickets (where current user is the target) (Paginated)
         $receivedTickets = SupportTicket::with(['creator', 'assignedTo'])
             ->where('to_user_id', $userId)
             ->latest()
-            ->get();
+            ->paginate(15, ['*'], 'received_page')
+            ->withQueryString();
 
-        // Get created tickets (where current user is the creator)
+        // Get created tickets (where current user is the creator) (Paginated)
         $createdTickets = SupportTicket::with(['creator', 'assignedTo'])
             ->where('created_by', $userId)
             ->latest()
-            ->get();
+            ->paginate(15, ['*'], 'created_page')
+            ->withQueryString();
 
         // Get users for Select2 dropdown (exclude current user, include all active users for the company)
         $usersQuery = User::withoutGlobalScope('branch')
@@ -90,7 +114,17 @@ class SupportController extends Controller
         $users = $usersQuery->orderBy('name')
             ->get(['id', 'name', 'email']);
 
-        return view('pages.support.index', compact('receivedTickets', 'createdTickets', 'allTickets', 'isCompanyAdmin', 'users'));
+        return view('pages.support.index', compact(
+            'receivedTickets',
+            'createdTickets',
+            'allTickets',
+            'isCompanyAdmin',
+            'users',
+            'statTotal',
+            'statPending',
+            'statOnProcess',
+            'statResolved'
+        ));
     }
 
     /**

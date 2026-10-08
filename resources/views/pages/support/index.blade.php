@@ -517,6 +517,61 @@
     font-weight: 700;
     color: #4b5563;
 }
+
+/* Custom Pagination Styles */
+.pagination {
+    display: flex !important;
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 6px !important;
+    align-items: center !important;
+}
+.page-item {
+    display: inline-block !important;
+    margin: 0 !important;
+}
+.page-item a,
+.page-item span,
+.page-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 10px !important;
+    text-decoration: none !important;
+    color: #4b5563 !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+    transition: all 0.2s ease !important;
+    line-height: 1 !important;
+}
+.page-item a:hover,
+.page-link:hover {
+    border-color: #fe5f04 !important;
+    color: #fe5f04 !important;
+    background: #fff1e8 !important;
+}
+.page-item.active span,
+.page-item.active .page-link {
+    background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%) !important;
+    color: #ffffff !important;
+    border-color: #fe5f04 !important;
+    box-shadow: 0 4px 12px rgba(254, 95, 4, 0.25) !important;
+}
+.page-item.disabled span,
+.page-item.disabled .page-link {
+    color: #cbd5e1 !important;
+    background: #f8fafc !important;
+    border-color: #f1f5f9 !important;
+    cursor: not-allowed !important;
+    opacity: 0.7 !important;
+}
 </style>
 @endpush
 
@@ -553,14 +608,28 @@
         </button>
     </div>
 
-    {{-- KPI Summary Stats --}}
+    {{-- Active Tab Resolution --}}
     @php
-        $statsTickets = $isCompanyAdmin ? $allTickets : $receivedTickets->concat($createdTickets)->unique('id');
-        $statTotal = $statsTickets->count();
-        $statPending = $statsTickets->where('status', 'pending')->count();
-        $statOnProcess = $statsTickets->where('status', 'onprocess')->count();
-        $statResolved = $statsTickets->whereIn('status', ['resolved', 'closed'])->count();
+        $activeTab = 'received';
+        if ($isCompanyAdmin) {
+            $activeTab = 'all_tickets';
+            if (request()->has('received_page')) {
+                $activeTab = 'received';
+            } elseif (request()->has('created_page')) {
+                $activeTab = 'created';
+            } elseif (request()->has('all_page')) {
+                $activeTab = 'all_tickets';
+            }
+        } else {
+            if (request()->has('created_page')) {
+                $activeTab = 'created';
+            } elseif (request()->has('received_page')) {
+                $activeTab = 'received';
+            }
+        }
     @endphp
+
+    {{-- KPI Summary Stats --}}
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
         <div class="support-kpi-card active-filter" data-status-filter="all" onclick="filterByCardStatus('all')" title="Click to view all tickets">
             <div>
@@ -607,21 +676,21 @@
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 22px;">
         <div class="tabs-container" style="margin-bottom: 0;">
             @if($isCompanyAdmin)
-                <button type="button" class="tab-btn active" onclick="switchTab(event, 'all_tickets')">
-                    <i class="bi bi-collection-fill"></i> All Tickets ({{ $allTickets->count() }})
+                <button type="button" class="tab-btn {{ $activeTab === 'all_tickets' ? 'active' : '' }}" onclick="switchTab(event, 'all_tickets')">
+                    <i class="bi bi-collection-fill"></i> All Tickets ({{ $allTickets->total() }})
                 </button>
-                <button type="button" class="tab-btn" onclick="switchTab(event, 'received')">
-                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->count() }})
+                <button type="button" class="tab-btn {{ $activeTab === 'received' ? 'active' : '' }}" onclick="switchTab(event, 'received')">
+                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->total() }})
                 </button>
-                <button type="button" class="tab-btn" onclick="switchTab(event, 'created')">
-                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->count() }})
+                <button type="button" class="tab-btn {{ $activeTab === 'created' ? 'active' : '' }}" onclick="switchTab(event, 'created')">
+                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->total() }})
                 </button>
             @else
-                <button type="button" class="tab-btn active" onclick="switchTab(event, 'received')">
-                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->count() }})
+                <button type="button" class="tab-btn {{ $activeTab === 'received' ? 'active' : '' }}" onclick="switchTab(event, 'received')">
+                    <i class="bi bi-inbox-fill"></i> Received Tickets ({{ $receivedTickets->total() }})
                 </button>
-                <button type="button" class="tab-btn" onclick="switchTab(event, 'created')">
-                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->count() }})
+                <button type="button" class="tab-btn {{ $activeTab === 'created' ? 'active' : '' }}" onclick="switchTab(event, 'created')">
+                    <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->total() }})
                 </button>
             @endif
         </div>
@@ -633,10 +702,9 @@
         </div>
     </div>
 
-    <!-- Tab Panels -->
     @if($isCompanyAdmin)
         {{-- ALL TICKETS PANEL (FOR COMPANY ADMIN) --}}
-        <div id="all_tickets" class="tab-panel active">
+        <div id="all_tickets" class="tab-panel {{ $activeTab === 'all_tickets' ? 'active' : '' }}">
             <div class="ticket-card">
                 <div class="ticket-table-responsive">
                     <table class="support-table">
@@ -756,12 +824,22 @@
                     </tbody>
                 </table>
                 </div>
+                @if($allTickets->hasPages())
+                    <div style="padding: 16px 24px; border-top: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #ffffff;">
+                        <div style="font-size: 13px; font-weight: 600; color: #6b7280;">
+                            Showing <span style="font-weight: 800; color: #111827;">{{ $allTickets->firstItem() }}</span> to <span style="font-weight: 800; color: #111827;">{{ $allTickets->lastItem() }}</span> of <span style="font-weight: 800; color: #111827;">{{ $allTickets->total() }}</span> tickets
+                        </div>
+                        <div>
+                            {{ $allTickets->links('pagination::bootstrap-4') }}
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
     @endif
 
     {{-- RECEIVED TICKETS PANEL --}}
-    <div id="received" class="tab-panel {{ $isCompanyAdmin ? '' : 'active' }}">
+    <div id="received" class="tab-panel {{ $activeTab === 'received' ? 'active' : '' }}">
         <div class="ticket-card">
             <div class="ticket-table-responsive">
                 <table class="support-table">
@@ -880,11 +958,21 @@
                 </tbody>
             </table>
             </div>
+            @if($receivedTickets->hasPages())
+                <div style="padding: 16px 24px; border-top: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #ffffff;">
+                    <div style="font-size: 13px; font-weight: 600; color: #6b7280;">
+                        Showing <span style="font-weight: 800; color: #111827;">{{ $receivedTickets->firstItem() }}</span> to <span style="font-weight: 800; color: #111827;">{{ $receivedTickets->lastItem() }}</span> of <span style="font-weight: 800; color: #111827;">{{ $receivedTickets->total() }}</span> tickets
+                    </div>
+                    <div>
+                        {{ $receivedTickets->links('pagination::bootstrap-4') }}
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
     {{-- CREATED TICKETS PANEL --}}
-    <div id="created" class="tab-panel">
+    <div id="created" class="tab-panel {{ $activeTab === 'created' ? 'active' : '' }}">
         <div class="ticket-card">
             <div class="ticket-table-responsive">
                 <table class="support-table">
@@ -1007,6 +1095,16 @@
                 </tbody>
             </table>
             </div>
+            @if($createdTickets->hasPages())
+                <div style="padding: 16px 24px; border-top: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #ffffff;">
+                    <div style="font-size: 13px; font-weight: 600; color: #6b7280;">
+                        Showing <span style="font-weight: 800; color: #111827;">{{ $createdTickets->firstItem() }}</span> to <span style="font-weight: 800; color: #111827;">{{ $createdTickets->lastItem() }}</span> of <span style="font-weight: 800; color: #111827;">{{ $createdTickets->total() }}</span> tickets
+                    </div>
+                    <div>
+                        {{ $createdTickets->links('pagination::bootstrap-4') }}
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 </div>
