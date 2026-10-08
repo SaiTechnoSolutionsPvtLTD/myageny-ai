@@ -616,7 +616,12 @@
             }
         }
     }
-    $allBranches = \App\Models\Branch::withoutGlobalScopes()->where('is_active', true)->orderBy('name')->get();
+    $userCompanyId = $currentUser?->company_id ?? $lead->company_id;
+    $allBranchesQuery = \App\Models\Branch::withoutGlobalScope('branch')->where('is_active', true);
+    if ($userCompanyId) {
+        $allBranchesQuery->where('company_id', $userCompanyId);
+    }
+    $allBranches = $allBranchesQuery->orderBy('name')->get();
 @endphp
 
             <div class="ppf-r2">

@@ -173,6 +173,20 @@
                     </a>
                 </div>
 
+                <a href="{{ route('accounts.domains-hosting.index') }}" class="nav-item {{ request()->routeIs('accounts.domains-hosting.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.domains-hosting.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"></path>
+                        </svg>
+                        <span>Domains & Hosting</span>
+                    </div>
+                </a>
+
                 <a href="{{ route('accounts.ad-accounts-master.index') }}" class="nav-item {{ request()->routeIs('accounts.ad-accounts-master.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.ad-accounts-master.*'))
                         <div class="active-indicator"></div>

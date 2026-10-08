@@ -275,6 +275,19 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->name('allocation-vs-spent');
         });
 
+        // Domains & Hosting routes
+        Route::prefix('domains-hosting')->name('domains-hosting.')->group(function () {
+            Route::get('/', [App\Http\Controllers\DomainsHostingController::class, 'index'])->name('index');
+            Route::post('/domains', [App\Http\Controllers\DomainsHostingController::class, 'storeDomain'])->name('domains.store');
+            Route::put('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'updateDomain'])->name('domains.update');
+            Route::delete('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'destroyDomain'])->name('domains.destroy');
+            Route::post('/domains/sync-godaddy', [App\Http\Controllers\DomainsHostingController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
+
+            Route::post('/hostings', [App\Http\Controllers\DomainsHostingController::class, 'storeHosting'])->name('hostings.store');
+            Route::put('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'updateHosting'])->name('hostings.update');
+            Route::delete('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHosting'])->name('hostings.destroy');
+        });
+
         // Ad Accounts Master CRUD
         Route::prefix('ad-accounts-master')->name('ad-accounts-master.')->group(function () {
             Route::get('/', [App\Http\Controllers\AdAccountMasterController::class, 'index'])->name('index');

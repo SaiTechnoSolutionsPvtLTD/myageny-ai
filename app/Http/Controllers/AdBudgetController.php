@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\AdAccountMaster;
 use App\Models\AdBudgetRequest;
+use App\Models\Branch;
+use App\Models\LeadProductPayment;
 use App\Models\User;
 use App\Mail\AdBudgetNotificationMail;
 use Illuminate\Http\Request;
@@ -114,55 +116,103 @@ class AdBudgetController extends Controller
     }
 
     /**
-     * Display Ad Budget requests for partners.
+     * Display Partner Ad Budget payments recorded via Leads.
+     */
+    /**
+     * Display Partner Ad Budget payments recorded via Leads.
      */
     public function partners(Request $request)
     {
-        $query = AdBudgetRequest::with(['adAccount', 'requester', 'tlApprover', 'approver'])
-            ->where('type', 'partner')
-            ->when($request->search, function ($q) use ($request) {
-                $q->where(function ($q2) use ($request) {
-                    $q2->where('client_name', 'like', '%' . $request->search . '%')
-                       ->orWhere('remarks', 'like', '%' . $request->search . '%')
-                       ->orWhere('accounts_remarks', 'like', '%' . $request->search . '%')
-                       ->orWhereHas('adAccount', function ($q3) use ($request) {
-                           $q3->where('account_name', 'like', '%' . $request->search . '%');
-                       });
+        $user = auth()->user();
+        $companyId = $user?->company_id;
+
+        $isCompanyAdminOrCbo = $user && (
+            $user->isSuperAdmin()
+            || $user->isSystemAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->isCbo()
+        );
+
+        $canRedirectLead = $isCompanyAdminOrCbo;
+
+        $query = LeadProductPayment::with(['lead', 'product', 'branch', 'recordedBy'])
+            ->whereIn('payment_type', ['ad_budget_partner', 'ad_budget_for_partner', 'Ad Budget for partner'])
+            ->when($companyId, function ($q) use ($companyId) {
+                $q->where(function ($q2) use ($companyId) {
+                    $q2->whereHas('lead', fn($l) => $l->where('company_id', $companyId))
+                       ->orWhereHas('branch', fn($b) => $b->where('company_id', $companyId));
                 });
-            })
-            ->when($request->status, function ($q) use ($request) {
-                $q->where('status', $request->status);
-            })
-            ->when($request->ad_account_id, function ($q) use ($request) {
-                $q->where('ad_account_id', $request->ad_account_id);
-            })
-            ->latest()
+            });
+
+        // Non-Company-Admin / Non-CBO users can ONLY see their own branch data
+        if (! $isCompanyAdminOrCbo) {
+            $myBranchIds = $user ? $user->getMyBranchIds() : [];
+            if (! empty($myBranchIds)) {
+                $query->whereIn('branch_id', $myBranchIds);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        if ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+        if ($request->filled('from_date')) {
+            $query->whereDate('payment_date', '>=', $request->from_date);
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('payment_date', '<=', $request->to_date);
+        }
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($q2) use ($search) {
+                $q2->where('reference_number', 'like', "%{$search}%")
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhere('amount', 'like', "%{$search}%")
+                  ->orWhereHas('lead', function ($ql) use ($search) {
+                      $ql->where('company_name', 'like', "%{$search}%")
+                         ->orWhere('contact_name', 'like', "%{$search}%")
+                         ->orWhere('mobile_number', 'like', "%{$search}%")
+                         ->orWhere('id', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('branch', function ($qb) use ($search) {
+                      $qb->where('name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('recordedBy', function ($qu) use ($search) {
+                      $qu->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Summary stats before pagination
+        $statsQuery = clone $query;
+        $totalAmount  = (float) $statsQuery->sum('amount');
+        $totalCount   = $statsQuery->count();
+
+        $payments = $query->orderBy('payment_date', 'desc')
+            ->orderBy('id', 'desc')
             ->paginate(15)
             ->withQueryString();
 
-        $adAccounts = AdAccountMaster::active()->orderBy('account_name')->get();
-
-        $totalRequested  = AdBudgetRequest::where('type', 'partner')->sum('amount');
-        $totalApproved   = AdBudgetRequest::where('type', 'partner')->where('status', 'approved')->sum('approved_amount');
-        $pendingTlCount  = AdBudgetRequest::where('type', 'partner')->where('status', 'tl_pending')->count();
-        $pendingAccCount = AdBudgetRequest::where('type', 'partner')->where('status', 'accounts_pending')->count();
-
-        $statusCounts = [
-            'all'              => AdBudgetRequest::where('type', 'partner')->count(),
-            'tl_pending'       => AdBudgetRequest::where('type', 'partner')->where('status', 'tl_pending')->count(),
-            'accounts_pending' => AdBudgetRequest::where('type', 'partner')->where('status', 'accounts_pending')->count(),
-            'approved'         => AdBudgetRequest::where('type', 'partner')->where('status', 'approved')->count(),
-            'rejected'         => AdBudgetRequest::where('type', 'partner')->where('status', 'rejected')->count(),
-        ];
+        // Branches list for single-row filter dropdown
+        $branchesQuery = Branch::withoutGlobalScope('branch')->where('is_active', true);
+        if ($companyId) {
+            $branchesQuery->where('company_id', $companyId);
+        }
+        if (! $isCompanyAdminOrCbo && $user) {
+            $myBranchIds = $user->getMyBranchIds();
+            if (! empty($myBranchIds)) {
+                $branchesQuery->whereIn('id', $myBranchIds);
+            }
+        }
+        $branches = $branchesQuery->orderBy('name')->get();
 
         return view('pages.accounts.ad_budget.partners', compact(
-            'query',
-            'adAccounts',
-            'totalRequested',
-            'totalApproved',
-            'pendingTlCount',
-            'pendingAccCount',
-            'statusCounts'
+            'payments',
+            'branches',
+            'totalAmount',
+            'totalCount',
+            'canRedirectLead'
         ));
     }
 

@@ -122,7 +122,7 @@
                     <i class="bi bi-search adb-search-ico"></i>
                     <input type="text" name="search" class="adb-search-input" placeholder="Search particulars, account, user…" value="{{ request('search') }}">
                 </div>
-                
+
                 <select name="ad_account_id" class="adb-select" style="min-width:180px;" onchange="this.form.submit()">
                     <option value="">All Ad Accounts</option>
                     @foreach($adAccounts as $acc)
@@ -164,8 +164,8 @@
                             <th>Date</th>
                             <th>Ad Account Name</th>
                             <th>Particulars / Description</th>
-                            <th style="text-align:right;">Credit (Allocated +)</th>
-                            <th style="text-align:right;">Debit (Spent -)</th>
+                            <th style="text-align:right;">Allocated</th>
+                            <th style="text-align:right;">Spent</th>
                             <th style="text-align:right;">Running Balance</th>
                             <th>User / Ref</th>
                         </tr>
