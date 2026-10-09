@@ -183,23 +183,47 @@ class DomainsHostingController extends Controller
             : 'https://api.godaddy.com/v1/domains';
 
         try {
-            $response = Http::timeout(15)
-                ->withHeaders([
-                    'Authorization' => "sso-key {$godaddyKey}:{$godaddySecret}",
-                    'Accept'        => 'application/json',
-                ])
-                ->get($baseUrl);
+            $godaddyDomains = [];
+            $marker = null;
+            $limit = 1000;
 
-            if ($response->failed()) {
-                Log::error('GoDaddy API Sync Error', ['status' => $response->status(), 'body' => $response->body()]);
-                return redirect()->route('accounts.domains-hosting.index', ['tab' => 'domains'])
-                    ->with('error', 'Failed to fetch domains from GoDaddy API: ' . ($response->json('message') ?? 'HTTP ' . $response->status()));
-            }
+            do {
+                $queryParams = ['limit' => $limit];
+                if ($marker) {
+                    $queryParams['marker'] = $marker;
+                }
 
-            $godaddyDomains = $response->json();
-            if (! is_array($godaddyDomains)) {
+                $response = Http::timeout(30)
+                    ->withHeaders([
+                        'Authorization' => "sso-key {$godaddyKey}:{$godaddySecret}",
+                        'Accept'        => 'application/json',
+                    ])
+                    ->get($baseUrl, $queryParams);
+
+                if ($response->failed()) {
+                    Log::error('GoDaddy API Sync Error', ['status' => $response->status(), 'body' => $response->body()]);
+                    return redirect()->route('accounts.domains-hosting.index', ['tab' => 'domains'])
+                        ->with('error', 'Failed to fetch domains from GoDaddy API: ' . ($response->json('message') ?? 'HTTP ' . $response->status()));
+                }
+
+                $batch = $response->json();
+                if (! is_array($batch) || empty($batch)) {
+                    break;
+                }
+
+                $godaddyDomains = array_merge($godaddyDomains, $batch);
+
+                if (count($batch) >= $limit) {
+                    $lastItem = end($batch);
+                    $marker = $lastItem['domain'] ?? null;
+                } else {
+                    $marker = null;
+                }
+            } while ($marker);
+
+            if (empty($godaddyDomains)) {
                 return redirect()->route('accounts.domains-hosting.index', ['tab' => 'domains'])
-                    ->with('error', 'Invalid response received from GoDaddy API.');
+                    ->with('error', 'No domains received from GoDaddy API.');
             }
 
             $user = auth()->user();

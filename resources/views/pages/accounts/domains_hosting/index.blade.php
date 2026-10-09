@@ -331,9 +331,7 @@
                     </table>
                 </div>
                 @if($domains->hasPages())
-                    <div style="padding:16px 20px; border-top:1px solid #e2e8f0;">
-                        {{ $domains->links() }}
-                    </div>
+                    @include('partials.table-pagination', ['paginator' => $domains])
                 @endif
             @endif
 
@@ -506,9 +504,7 @@
                     </table>
                 </div>
                 @if($hostings->hasPages())
-                    <div style="padding:16px 20px; border-top:1px solid #e2e8f0;">
-                        {{ $hostings->links() }}
-                    </div>
+                    @include('partials.table-pagination', ['paginator' => $hostings])
                 @endif
             @endif
 
