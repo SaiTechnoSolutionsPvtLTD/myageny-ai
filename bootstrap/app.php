@@ -55,6 +55,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
                 $statusCode = $e->getStatusCode();
+                if ($statusCode === 503) {
+                    if ($request->expectsJson() || $request->is('api/*')) {
+                        return response()->json([
+                            'message' => 'Service Unavailable. System is under maintenance.',
+                        ], 503);
+                    }
+                    return response()->view('errors.503', [], 503);
+                }
+
                 if ($statusCode < 500) {
                     return null;
                 }

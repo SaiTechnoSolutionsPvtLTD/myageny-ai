@@ -184,14 +184,14 @@
             <div class="usr-page-title">User Management</div>
             <div class="usr-breadcrumb">Admin › <span>Users</span></div>
         </div>
+        @can('users.manage')
         <div class="usr-topbar-right">
-            @canany(['users.manage', 'users.create'])
             <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>Add User</span>
+                Add User
             </a>
-            @endcanany
         </div>
+        @endcan
     </div>
 
     {{-- Filter Bar --}}

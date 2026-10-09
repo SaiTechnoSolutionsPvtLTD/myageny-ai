@@ -1143,6 +1143,18 @@ class User extends Authenticatable
             || $this->isHrOrAdmin();
     }
 
+    public function canAccessAccountsModule(): bool
+    {
+        return $this->can('modules_menu.accounts')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin();
+    }
+
+    public function canAccessMobileAccountsModule(): bool
+    {
+        return $this->canAccessAccountsModule();
+    }
+
     public function allowsPriceRequests(): bool
     {
         if ($this->isSystemAdmin()) {

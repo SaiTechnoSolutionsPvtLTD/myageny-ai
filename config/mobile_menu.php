@@ -326,4 +326,14 @@ return [
         ],
     ],
 
+    'accounts' => [
+        'label' => 'Accounts',
+        'order' => 50,
+        'gate' => ['require_method' => 'canAccessMobileAccountsModule'],
+        'items' => [
+            ['key' => 'accounts.payment_collection', 'label' => 'Payment Collection', 'section' => 'ACCOUNTS', 'order' => 10, 'permission' => 'modules_menu.accounts'],
+            ['key' => 'accounts.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 20],
+        ],
+    ],
+
 ];

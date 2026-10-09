@@ -63,6 +63,7 @@ class Permission extends SpatiePermission
         'support' => ['menuview', 'view', 'create', 'update', 'delete'],
         'expense_pipeline' => ['menuview', 'manage'],
         'leave_hierarchy' => ['menuview', 'manage'],
+        'modules_menu' => ['crm', 'hrms', 'projects', 'cst', 'accounts', 'view'],
     ];
 
     protected $fillable = [
