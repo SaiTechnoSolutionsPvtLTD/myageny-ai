@@ -19,7 +19,7 @@
     .addr-cell + .addr-cell { border-left: 1px solid #d8dde5; }
     .addr-label { font-size: 8px; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; color: #5a6472; margin-bottom: 6px; }
     .addr-name { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
-    .addr-text { font-size: 10px; color: #5a6472; line-height: 1.6; }
+    .addr-text { font-size: 10px; color: #5a6472; line-height: 1.35; white-space: normal; word-wrap: break-word; }
     .gstin-pill { display: inline-block; background: #fdf4e7; color: #c8973a; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 3px; margin-top: 5px; }
     .table-wrap { padding: 0 28px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 10px; }
@@ -107,7 +107,7 @@
     @endif
     <div class="brand-sub">
       {{ $quoteSetting['company_name'] }}<br>
-      {{ $quoteSetting['company_address'] }}
+      {!! nl2br(e($quoteSetting['company_address'])) !!}
     </div>
     <span class="gstin-badge">GSTIN: {{ $quoteSetting['company_gstin'] }}</span>
   </div>
@@ -125,16 +125,16 @@
 <div class="addr-row clearfix">
   <div class="addr-cell">
     <div class="addr-label">Bill To</div>
-    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead->company_name }}</div>
-    <div class="addr-text">{{ $quotation->bill_to_address }}</div>
+    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead?->company_name ?: $quotation->lead?->contact_name }}</div>
+    <div class="addr-text">{!! nl2br(e($quotation->bill_to_address)) !!}</div>
     @if($quotation->gst_number)
       <span class="gstin-pill">GSTIN: {{ $quotation->gst_number }}</span>
     @endif
   </div>
   <div class="addr-cell">
     <div class="addr-label">Ship To</div>
-    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead->company_name }}</div>
-    <div class="addr-text">{{ $quotation->ship_to_address }}</div>
+    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead?->company_name ?: $quotation->lead?->contact_name }}</div>
+    <div class="addr-text">{!! nl2br(e($quotation->ship_to_address)) !!}</div>
     @if($quotation->gst_number)
       <span class="gstin-pill">GSTIN: {{ $quotation->gst_number }}</span>
     @endif

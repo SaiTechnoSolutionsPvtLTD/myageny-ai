@@ -252,6 +252,131 @@ class QuotationController extends Controller
         return view('pages.quotations.show', compact('quotation'));
     }
 
+    // ── Edit & Update ─────────────────────────────────────────────────────────
+
+    public function edit(Quotation $quotation): View
+    {
+        abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        $quotation->load(['lead.branch', 'items.product']);
+
+        $leadQuery = Lead::orderBy('contact_name');
+        $this->visibility->applyLeadVisibility($leadQuery);
+        $leads = $leadQuery->get(['id', 'contact_name', 'company_name']);
+
+        $productQuery = Product::orderBy('product_name');
+        $this->visibility->applyProductVisibility($productQuery);
+        $products = $productQuery->get([
+            'id',
+            'product_name',
+            'description',
+            'final_price',
+            'base_price',
+            'discount_type',
+            'discount_value',
+        ]);
+
+        $lead = $quotation->lead;
+
+        return view('pages.quotations.edit', compact('quotation', 'leads', 'products', 'lead'));
+    }
+
+    public function update(Request $request, Quotation $quotation): RedirectResponse
+    {
+        abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        $validated = $request->validate([
+            'lead_id'        => ['nullable'],
+            'quotation_date' => ['required', 'date'],
+            'valid_until'    => ['required', 'date', 'after_or_equal:quotation_date'],
+            'gst_number'     => ['nullable', 'string', 'max:20'],
+            'customer_state' => ['required', 'string', 'max:100'],
+            'notes'          => ['nullable', 'string'],
+
+            // Line items
+            'items'                  => ['required', 'array', 'min:1'],
+            'items.*.product_id'     => ['required', 'exists:products,id'],
+            'items.*.description'    => ['nullable', 'string'],
+            'items.*.qty'            => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price'     => ['required', 'numeric', 'min:0'],
+            'items.*.discount'       => ['required', 'numeric', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($validated, $request, $quotation) {
+            $lead = ! empty($validated['lead_id'])
+                ? Lead::with('branch')->find($validated['lead_id'])
+                : $quotation->lead;
+
+            if ($lead) {
+                abort_unless($this->visibility->canAccessLead($lead), 403);
+            }
+
+            foreach ($validated['items'] as $item) {
+                Product::findOrFail($item['product_id']);
+            }
+
+            $subtotal = 0;
+            foreach ($validated['items'] as $item) {
+                $rowTotal = ($item['qty'] * $item['unit_price']) - $item['discount'];
+                $subtotal += max($rowTotal, 0);
+            }
+
+            $customerState = Quotation::normalizeState($validated['customer_state'])
+                ?: Quotation::inferStateFromGstin($validated['gst_number'])
+                ?: 'Tamil Nadu';
+            $sellerState = Quotation::normalizeState($lead?->branch?->state ?: Quotation::DEFAULT_SELLER_STATE)
+                ?: Quotation::DEFAULT_SELLER_STATE;
+            $taxBreakup = Quotation::calculateTaxBreakup($subtotal, $customerState, $sellerState);
+
+            $quotation->update([
+                'lead_id'         => $validated['lead_id'] ?? $quotation->lead_id,
+                'quotation_date'  => $validated['quotation_date'],
+                'valid_until'     => $validated['valid_until'],
+                'tax'             => $taxBreakup['tax_rate'],
+                'subtotal'        => $subtotal,
+                'tax_amount'      => $taxBreakup['tax_amount'],
+                'total_amount'    => $taxBreakup['total_amount'],
+                'notes'           => $validated['notes'] ?? null,
+                'bill_to_address' => $request->bill_to_address,
+                'ship_to_address' => $request->ship_to_address,
+                'gst_number'      => strtoupper((string) ($validated['gst_number'] ?? '')) ?: null,
+                'customer_state'  => $taxBreakup['customer_state'],
+                'seller_state'    => $taxBreakup['seller_state'],
+                'tax_type'        => $taxBreakup['tax_type'],
+                'cgst_rate'       => $taxBreakup['cgst_rate'],
+                'sgst_rate'       => $taxBreakup['sgst_rate'],
+                'igst_rate'       => $taxBreakup['igst_rate'],
+                'cgst_amount'     => $taxBreakup['cgst_amount'],
+                'sgst_amount'     => $taxBreakup['sgst_amount'],
+                'igst_amount'     => $taxBreakup['igst_amount'],
+            ]);
+
+            $quotation->items()->delete();
+
+            foreach ($validated['items'] as $item) {
+                $rowTotal = max(
+                    ($item['qty'] * $item['unit_price']) - $item['discount'],
+                    0
+                );
+
+                QuotationItem::create([
+                    'quotation_id' => $quotation->id,
+                    'company_id'   => $quotation->company_id,
+                    'product_id'   => $item['product_id'],
+                    'description'  => $item['description'] ?? null,
+                    'qty'          => $item['qty'],
+                    'unit_price'   => $item['unit_price'],
+                    'discount'     => $item['discount'],
+                    'total'        => $rowTotal,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('quotations.show', $quotation)
+            ->with('success', 'Quotation updated successfully.');
+    }
+
     // ── Approve ───────────────────────────────────────────────────────────────
 
     public function approve(Quotation $quotation): RedirectResponse

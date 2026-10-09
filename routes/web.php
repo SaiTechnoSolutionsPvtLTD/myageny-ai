@@ -939,6 +939,8 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
     Route::get('/quotations/create/{leadId?}', [QuotationController::class, 'create'])->middleware('can:quotations.create')->name('quotations.create');
     Route::post('/quotations', [QuotationController::class, 'store'])->middleware('can:quotations.create')->name('quotations.store');
     Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->middleware('can:quotations.view')->name('quotations.show');
+    Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->middleware('can:quotations.create')->name('quotations.edit');
+    Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->middleware('can:quotations.create')->name('quotations.update');
     Route::patch('/quotations/{quotation}/approve', [QuotationController::class, 'approve'])->middleware('can:quotations.approve')->name('quotations.approve');
     Route::post('/quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->middleware('can:quotations.view')->name('quotations.send-email');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('can:quotations.delete')->name('quotations.destroy');

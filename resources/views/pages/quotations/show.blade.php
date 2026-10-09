@@ -90,6 +90,9 @@
                 </button>
             </form>
             @endif
+            <a href="{{ route('quotations.edit', $quotation) }}" class="btn-back">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
             <a href="{{ route('quotations.index') }}" class="btn-back">
                 <i class="bi bi-list-ul"></i> All Quotations
             </a>
@@ -143,6 +146,18 @@
                     <label>Approved By</label>
                     <span>{{ $quotation->approver->name ?? '-' }}</span>
                 </div>
+                @if($quotation->bill_to_address)
+                <div class="info-item" style="grid-column: span 3">
+                    <label>Bill To Address</label>
+                    <span style="line-height: 1.35; display: block;">{!! nl2br(e($quotation->bill_to_address)) !!}</span>
+                </div>
+                @endif
+                @if($quotation->ship_to_address && $quotation->ship_to_address !== $quotation->bill_to_address)
+                <div class="info-item" style="grid-column: span 3">
+                    <label>Ship To Address</label>
+                    <span style="line-height: 1.35; display: block;">{!! nl2br(e($quotation->ship_to_address)) !!}</span>
+                </div>
+                @endif
             </div>
 
             <table class="qt-table">

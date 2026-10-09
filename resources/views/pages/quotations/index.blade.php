@@ -288,6 +288,9 @@ tbody tr:last-child td { border-bottom: none; }
                                 <a href="/quotations/{{ $q->id }}/pdf" target="_blank" class="btn-outline-sm">
                                     <i class="bi bi-eye"></i> View
                                 </a>
+                                <a href="{{ route('quotations.edit', $q) }}" class="btn-outline-sm">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
                                 <button
                                     type="button"
                                     class="btn-send-sm js-send-quotation"
