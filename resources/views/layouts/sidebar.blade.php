@@ -198,6 +198,21 @@
                         <span>Ad Accounts Master</span>
                     </div>
                 </a>
+
+                <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.master.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+                        </svg>
+                        <span>Master</span>
+                    </div>
+                </a>
             </div>
         </div>
         @elseif($isProjectsModule)
@@ -809,6 +824,7 @@
                 </a>
                 @endif
 
+                @can('masters.menuview')
                  <a href="{{ route('masters.index') }}" class="nav-item {{ request()->is('masters') || request()->is('masters/*') ? 'active' : '' }}">
                     @if(request()->is('masters') || request()->is('masters/*'))
                         <div class="active-indicator"></div>
@@ -823,6 +839,7 @@
                         <span>Masters</span>
                     </div>
                 </a>
+                @endcan
 
                 @can('leads.menuview')
     <a href="javascript:void(0)"

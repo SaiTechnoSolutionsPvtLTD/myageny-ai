@@ -23,6 +23,7 @@ class HostingRecord extends Model
         'renewal_date',
         'renewal_amount',
         'client_name',
+        'lead_id',
         'notes',
         'created_by',
     ];
@@ -35,6 +36,21 @@ class HostingRecord extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function lead()
+    {
+        return $this->belongsTo(Lead::class, 'lead_id');
+    }
+
+    public function renewals()
+    {
+        return $this->hasMany(HostingRenewal::class, 'hosting_record_id')->orderBy('renewal_date', 'desc')->orderBy('id', 'desc');
+    }
+
+    public function latestRenewal()
+    {
+        return $this->hasOne(HostingRenewal::class, 'hosting_record_id')->latestOfMany('renewal_date');
     }
 
     public function getDaysUntilRenewalAttribute(): ?int

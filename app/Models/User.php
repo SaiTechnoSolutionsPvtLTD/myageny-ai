@@ -452,6 +452,7 @@ class User extends Authenticatable
             'people_operations',
             'talent_acquisition',
             'recruitment',
+            'hr_admin'
         ])->isNotEmpty();
     }
 

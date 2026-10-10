@@ -3,8 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\DomainRecord;
+use App\Models\DomainRenewal;
 use App\Models\HostingRecord;
+use App\Models\HostingRenewal;
+use App\Models\Lead;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -26,6 +30,8 @@ class DomainsHostingController extends Controller
 
         // Fetch Domains
         $domainQuery = DomainRecord::query()
+            ->with(['lead', 'renewals'])
+            ->withCount('renewals')
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($request->filled('search') && $activeTab === 'domains', function ($q) use ($request) {
                 $search = trim($request->search);
@@ -33,7 +39,12 @@ class DomainsHostingController extends Controller
                     $q2->where('domain_name', 'like', "%{$search}%")
                        ->orWhere('registrar', 'like', "%{$search}%")
                        ->orWhere('client_name', 'like', "%{$search}%")
-                       ->orWhere('notes', 'like', "%{$search}%");
+                       ->orWhere('notes', 'like', "%{$search}%")
+                       ->orWhereHas('lead', function ($lq) use ($search) {
+                           $lq->where('contact_name', 'like', "%{$search}%")
+                              ->orWhere('company_name', 'like', "%{$search}%")
+                              ->orWhere('mobile_number', 'like', "%{$search}%");
+                       });
                 });
             })
             ->when($request->filled('status') && $activeTab === 'domains', function ($q) use ($request) {
@@ -59,6 +70,8 @@ class DomainsHostingController extends Controller
 
         // Fetch Hostings
         $hostingQuery = HostingRecord::query()
+            ->with(['lead', 'renewals'])
+            ->withCount('renewals')
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($request->filled('search') && $activeTab === 'hostings', function ($q) use ($request) {
                 $search = trim($request->search);
@@ -66,7 +79,12 @@ class DomainsHostingController extends Controller
                     $q2->where('hosting_name', 'like', "%{$search}%")
                        ->orWhere('provider', 'like', "%{$search}%")
                        ->orWhere('ip_address', 'like', "%{$search}%")
-                       ->orWhere('client_name', 'like', "%{$search}%");
+                       ->orWhere('client_name', 'like', "%{$search}%")
+                       ->orWhereHas('lead', function ($lq) use ($search) {
+                           $lq->where('contact_name', 'like', "%{$search}%")
+                              ->orWhere('company_name', 'like', "%{$search}%")
+                              ->orWhere('mobile_number', 'like', "%{$search}%");
+                       });
                 });
             })
             ->when($request->filled('status') && $activeTab === 'hostings', function ($q) use ($request) {
@@ -149,8 +167,175 @@ class DomainsHostingController extends Controller
 
         $domain->update($validated);
 
+        if ($request->has('from_show') || str_contains(url()->previous(), "/domains/{$domain->id}")) {
+            return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
+                ->with('success', 'Domain record updated successfully!');
+        }
+
         return redirect()->route('accounts.domains-hosting.index', ['tab' => 'domains'])
             ->with('success', 'Domain record updated successfully!');
+    }
+
+    /**
+     * Display a specific Domain record details, mapped lead, and renewal history.
+     */
+    public function showDomain(DomainRecord $domain)
+    {
+        $domain->load(['lead', 'creator', 'renewals.creator']);
+        $renewalsCount = $domain->renewals->count();
+        $totalRenewalSpend = $domain->renewals->sum('amount');
+
+        return view('pages.accounts.domains_hosting.show', compact(
+            'domain',
+            'renewalsCount',
+            'totalRenewalSpend'
+        ));
+    }
+
+    /**
+     * Migrate/Map domain to a CRM Lead.
+     */
+    public function migrateLead(Request $request, DomainRecord $domain)
+    {
+        $validated = $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::findOrFail($validated['lead_id']);
+
+        $domain->lead_id = $lead->id;
+        $displayName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #'.$lead->id);
+        $domain->client_name = $displayName;
+        $domain->save();
+
+        return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
+            ->with('success', "Domain '{$domain->domain_name}' successfully migrated to lead: {$displayName}!");
+    }
+
+    /**
+     * Unlink CRM Lead from domain.
+     */
+    public function unlinkLead(DomainRecord $domain)
+    {
+        $domain->lead_id = null;
+        $domain->save();
+
+        return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
+            ->with('success', "Lead unlinked from domain '{$domain->domain_name}'.");
+    }
+
+    /**
+     * Store a new domain renewal entry.
+     */
+    public function storeRenewal(Request $request, DomainRecord $domain)
+    {
+        $validated = $request->validate([
+            'renewal_date' => 'required|date',
+            'expires_at'   => 'required|date|after_or_equal:renewal_date',
+            'amount'       => 'nullable|numeric|min:0',
+            'notes'        => 'nullable|string|max:1000',
+        ]);
+
+        $user = auth()->user();
+
+        $domain->renewals()->create([
+            'company_id'   => $user?->company_id,
+            'renewal_date' => $validated['renewal_date'],
+            'expires_at'   => $validated['expires_at'],
+            'amount'       => $validated['amount'] ?? null,
+            'notes'        => $validated['notes'] ?? null,
+            'created_by'   => $user?->id,
+        ]);
+
+        // Keep domain expires_at in sync with the renewal's new expiry date
+        $domain->expires_at = $validated['expires_at'];
+        if ($domain->status === 'EXPIRED' && Carbon::parse($validated['expires_at'])->isFuture()) {
+            $domain->status = 'ACTIVE';
+        }
+        $domain->save();
+
+        return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
+            ->with('success', 'Domain renewal entry recorded successfully!');
+    }
+
+    /**
+     * Delete a domain renewal entry.
+     */
+    public function destroyRenewal(DomainRecord $domain, DomainRenewal $renewal)
+    {
+        if ($renewal->domain_record_id !== $domain->id) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $renewal->delete();
+
+        // Re-sync expires_at with latest remaining renewal, if any
+        $latest = $domain->renewals()->orderBy('expires_at', 'desc')->first();
+        if ($latest) {
+            $domain->expires_at = $latest->expires_at;
+            $domain->save();
+        }
+
+        return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
+            ->with('success', 'Renewal record deleted successfully!');
+    }
+
+    /**
+     * AJAX search leads by Name or Mobile number for Select2.
+     */
+    public function searchLeads(Request $request)
+    {
+        $search = trim($request->input('q', $request->input('term', '')));
+        $companyId = auth()->user()?->company_id;
+
+        $query = Lead::query()
+            ->when($companyId, fn ($q) => $q->where(function ($cq) use ($companyId) {
+                $cq->where('company_id', $companyId)->orWhereNull('company_id');
+            }));
+
+        if (!empty($search)) {
+            $query->where(function ($sub) use ($search) {
+                $sub->where('contact_name', 'like', "%{$search}%")
+                    ->orWhere('company_name', 'like', "%{$search}%")
+                    ->orWhere('mobile_number', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+
+                // If searching by lead ID (e.g. 123 or #123)
+                $cleanId = ltrim($search, '#');
+                if (is_numeric($cleanId)) {
+                    $sub->orWhere('id', (int) $cleanId);
+                }
+
+                // If user entered phone number with spaces, symbols, or country code
+                $digits = preg_replace('/\D+/', '', $search);
+                if (strlen($digits) >= 4) {
+                    $sub->orWhere('mobile_number', 'like', "%{$digits}%");
+                    if (str_starts_with($digits, '91') && strlen($digits) >= 12) {
+                        $last10 = substr($digits, -10);
+                        $sub->orWhere('mobile_number', 'like', "%{$last10}%");
+                    }
+                }
+            });
+        }
+
+        $leads = $query->latest('id')->limit(30)->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email']);
+
+        $results = $leads->map(function ($l) {
+            $primary = $l->contact_name ?: ($l->company_name ?: 'Unnamed Lead');
+            $secondary = ($l->company_name && $l->company_name !== $primary) ? " ({$l->company_name})" : '';
+            $phone = $l->mobile_number ? " • 📞 {$l->mobile_number}" : '';
+            return [
+                'id'            => $l->id,
+                'text'          => "#{$l->id} - {$primary}{$secondary}{$phone}",
+                'contact_name'  => $l->contact_name,
+                'company_name'  => $l->company_name,
+                'mobile_number' => $l->mobile_number,
+            ];
+        });
+
+        return response()->json([
+            'results' => $results,
+        ]);
     }
 
     /**
@@ -314,8 +499,123 @@ class DomainsHostingController extends Controller
 
         $hosting->update($validated);
 
+        if ($request->has('from_show') || str_contains(url()->previous(), "/hostings/{$hosting->id}")) {
+            return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+                ->with('success', 'Hosting record updated successfully!');
+        }
+
         return redirect()->route('accounts.domains-hosting.index', ['tab' => 'hostings'])
             ->with('success', 'Hosting record updated successfully!');
+    }
+
+    /**
+     * Display a specific Hosting record details, mapped lead, and renewal history.
+     */
+    public function showHosting(HostingRecord $hosting)
+    {
+        $hosting->load(['lead', 'creator', 'renewals.creator']);
+        $renewalsCount = $hosting->renewals->count();
+        $totalRenewalSpend = $hosting->renewals->sum('amount');
+
+        return view('pages.accounts.domains_hosting.show_hosting', compact(
+            'hosting',
+            'renewalsCount',
+            'totalRenewalSpend'
+        ));
+    }
+
+    /**
+     * Migrate/Map hosting to a CRM Lead.
+     */
+    public function migrateHostingLead(Request $request, HostingRecord $hosting)
+    {
+        $validated = $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::findOrFail($validated['lead_id']);
+
+        $hosting->lead_id = $lead->id;
+        $displayName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #'.$lead->id);
+        $hosting->client_name = $displayName;
+        $hosting->save();
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', "Hosting '{$hosting->hosting_name}' successfully migrated to lead: {$displayName}!");
+    }
+
+    /**
+     * Unlink CRM Lead from hosting.
+     */
+    public function unlinkHostingLead(HostingRecord $hosting)
+    {
+        $hosting->lead_id = null;
+        $hosting->save();
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', "Lead unlinked from hosting '{$hosting->hosting_name}'.");
+    }
+
+    /**
+     * Store a new hosting renewal entry.
+     */
+    public function storeHostingRenewal(Request $request, HostingRecord $hosting)
+    {
+        $validated = $request->validate([
+            'renewal_date' => 'required|date',
+            'expires_at'   => 'required|date|after_or_equal:renewal_date',
+            'amount'       => 'nullable|numeric|min:0',
+            'notes'        => 'nullable|string|max:1000',
+        ]);
+
+        $user = auth()->user();
+
+        $hosting->renewals()->create([
+            'company_id'   => $user?->company_id,
+            'renewal_date' => $validated['renewal_date'],
+            'expires_at'   => $validated['expires_at'],
+            'amount'       => $validated['amount'] ?? null,
+            'notes'        => $validated['notes'] ?? null,
+            'created_by'   => $user?->id,
+        ]);
+
+        // Keep hosting renewal_date in sync with the renewal's new expiry date
+        $hosting->renewal_date = $validated['expires_at'];
+        if ($validated['amount'] !== null) {
+            $hosting->renewal_amount = $validated['amount'];
+        }
+        if ($hosting->status === 'EXPIRED' && Carbon::parse($validated['expires_at'])->isFuture()) {
+            $hosting->status = 'ACTIVE';
+        }
+        $hosting->save();
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', 'Hosting renewal entry recorded successfully!');
+    }
+
+    /**
+     * Delete a hosting renewal entry.
+     */
+    public function destroyHostingRenewal(HostingRecord $hosting, HostingRenewal $renewal)
+    {
+        if ($renewal->hosting_record_id !== $hosting->id) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $renewal->delete();
+
+        // Re-sync renewal_date and amount with latest remaining renewal, if any
+        $latest = $hosting->renewals()->orderBy('expires_at', 'desc')->first();
+        if ($latest) {
+            $hosting->renewal_date = $latest->expires_at;
+            if ($latest->amount !== null) {
+                $hosting->renewal_amount = $latest->amount;
+            }
+            $hosting->save();
+        }
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', 'Renewal record deleted successfully!');
     }
 
     /**

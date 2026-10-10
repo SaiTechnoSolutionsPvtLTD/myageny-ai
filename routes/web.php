@@ -279,13 +279,28 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('domains-hosting')->name('domains-hosting.')->group(function () {
             Route::get('/', [App\Http\Controllers\DomainsHostingController::class, 'index'])->name('index');
             Route::post('/domains', [App\Http\Controllers\DomainsHostingController::class, 'storeDomain'])->name('domains.store');
+            Route::get('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'showDomain'])->name('domains.show');
             Route::put('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'updateDomain'])->name('domains.update');
             Route::delete('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'destroyDomain'])->name('domains.destroy');
             Route::post('/domains/sync-godaddy', [App\Http\Controllers\DomainsHostingController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
 
+            // Domain Lead Migration & Renewals
+            Route::post('/domains/{domain}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateLead'])->name('domains.migrate-lead');
+            Route::post('/domains/{domain}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkLead'])->name('domains.unlink-lead');
+            Route::post('/domains/{domain}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeRenewal'])->name('domains.renewals.store');
+            Route::delete('/domains/{domain}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyRenewal'])->name('domains.renewals.destroy');
+            Route::get('/leads/search', [App\Http\Controllers\DomainsHostingController::class, 'searchLeads'])->name('leads.search');
+
             Route::post('/hostings', [App\Http\Controllers\DomainsHostingController::class, 'storeHosting'])->name('hostings.store');
+            Route::get('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'showHosting'])->name('hostings.show');
             Route::put('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'updateHosting'])->name('hostings.update');
             Route::delete('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHosting'])->name('hostings.destroy');
+
+            // Hosting Lead Migration & Renewals
+            Route::post('/hostings/{hosting}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateHostingLead'])->name('hostings.migrate-lead');
+            Route::post('/hostings/{hosting}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkHostingLead'])->name('hostings.unlink-lead');
+            Route::post('/hostings/{hosting}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeHostingRenewal'])->name('hostings.renewals.store');
+            Route::delete('/hostings/{hosting}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHostingRenewal'])->name('hostings.renewals.destroy');
         });
 
         // Ad Accounts Master CRUD
@@ -295,6 +310,26 @@ Route::middleware(['auth'])->group(function () {
             Route::put('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'update'])->name('update');
             Route::patch('/{adAccount}/toggle-status', [App\Http\Controllers\AdAccountMasterController::class, 'toggleStatus'])->name('toggle-status');
             Route::delete('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'destroy'])->name('destroy');
+        });
+
+        // Accounts Master CRUD (Expense Categories & Subcategories)
+        Route::prefix('master')->name('master.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AccountExpenseMasterController::class, 'index'])->name('index');
+
+            // Expense Categories
+            Route::get('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'categories'])->name('expense-categories.index');
+            Route::post('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeCategory'])->name('expense-categories.store');
+            Route::put('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateCategory'])->name('expense-categories.update');
+            Route::patch('/expense-categories/{category}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleCategoryStatus'])->name('expense-categories.toggle-status');
+            Route::delete('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroyCategory'])->name('expense-categories.destroy');
+
+            // Expense Subcategories
+            Route::get('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'subcategories'])->name('expense-subcategories.index');
+            Route::post('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeSubcategory'])->name('expense-subcategories.store');
+            Route::put('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateSubcategory'])->name('expense-subcategories.update');
+            Route::patch('/expense-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleSubcategoryStatus'])->name('expense-subcategories.toggle-status');
+            Route::delete('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
+            Route::get('/expense-categories/{category}/subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'getSubcategoriesByCategory'])->name('expense-categories.subcategories');
         });
     });
 

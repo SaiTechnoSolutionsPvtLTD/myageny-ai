@@ -257,7 +257,9 @@
                             <tr>
                                 <td style="color:#94a3b8; font-weight:700;">#{{ $item->id }}</td>
                                 <td>
-                                    <strong>{{ $item->domain_name }}</strong>
+                                    <a href="{{ route('accounts.domains-hosting.domains.show', $item->id) }}" style="color:#0f172a; text-decoration:none; font-weight:800;" onmouseover="this.style.color='#fe5f04'" onmouseout="this.style.color='#0f172a'" title="Click to view domain details, lead mapping & renewals">
+                                        {{ $item->domain_name }}
+                                    </a>
                                     @if($item->godaddy_domain_id)
                                         <span style="font-size:10px; padding:1px 5px; background:#eff6ff; color:#2563eb; border-radius:4px; margin-left:4px;">GoDaddy API</span>
                                     @endif
@@ -278,11 +280,18 @@
                                 </td>
                                 <td style="font-weight:700; white-space:nowrap;">
                                     @if($item->expires_at)
-                                        {{ $item->expires_at->format('d M, Y') }}
+                                        <div>{{ $item->expires_at->format('d M, Y') }}</div>
                                         @if($isExpired)
-                                            <span style="font-size:11px; color:#dc2626; margin-left:4px;">({{ abs($days) }} days ago)</span>
+                                            <span style="font-size:11px; color:#dc2626;">({{ abs($days) }} days ago)</span>
                                         @elseif($days !== null)
-                                            <span style="font-size:11px; color:{{ $isExpiring ? '#d97706' : '#16a34a' }}; margin-left:4px;">({{ $days }} days left)</span>
+                                            <span style="font-size:11px; color:{{ $isExpiring ? '#d97706' : '#16a34a' }};">({{ $days }} days left)</span>
+                                        @endif
+                                        @if($item->renewals_count > 0)
+                                            <div style="margin-top:2px;">
+                                                <span style="font-size:10px; font-weight:700; color:#4f46e5; background:#eef2ff; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;">
+                                                    <i class="bi bi-arrow-repeat"></i> {{ $item->renewals_count }} {{ Str::plural('renewal', $item->renewals_count) }}
+                                                </span>
+                                            </div>
                                         @endif
                                     @else
                                         <span style="color:#94a3b8;">—</span>
@@ -298,9 +307,22 @@
                                         {{ $item->privacy ? '✓ Yes' : '✕ No' }}
                                     </span>
                                 </td>
-                                <td>{{ $item->client_name ?: '—' }}</td>
+                                <td>
+                                    @if($item->lead)
+                                        <a href="{{ route('accounts.domains-hosting.domains.show', $item->id) }}" style="text-decoration:none;">
+                                            <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px;" title="Mapped CRM Lead">
+                                                <i class="bi bi-person-check-fill"></i> {{ $item->lead->contact_name ?: $item->lead->company_name }}
+                                            </span>
+                                        </a>
+                                    @else
+                                        {{ $item->client_name ?: '—' }}
+                                    @endif
+                                </td>
                                 <td>
                                     <div style="display:flex; gap:6px;">
+                                        <a href="{{ route('accounts.domains-hosting.domains.show', $item->id) }}" class="dh-btn dh-btn-outline" style="padding:4px 10px; font-size:11px;" title="View Details, Lead Mapping & Renewals">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
                                         <button type="button" class="dh-btn dh-btn-secondary" style="padding:4px 10px; font-size:11px;"
                                                 data-item="{{ json_encode([
                                                     'id' => $item->id,
@@ -319,7 +341,7 @@
                                         <form method="POST" action="{{ route('accounts.domains-hosting.domains.destroy', $item->id) }}" onsubmit="return confirm('Are you sure you want to delete this domain record?')" style="margin:0;">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="dh-btn dh-btn-danger" style="padding:4px 8px; font-size:11px;">
+                                            <button type="submit" class="dh-btn dh-btn-danger" style="padding:4px 8px; font-size:11px;" title="Delete Domain">
                                                 🗑️
                                             </button>
                                         </form>
@@ -440,7 +462,11 @@
                             @endphp
                             <tr>
                                 <td style="color:#94a3b8; font-weight:700;">#{{ $item->id }}</td>
-                                <td><strong>{{ $item->hosting_name }}</strong></td>
+                                <td>
+                                    <a href="{{ route('accounts.domains-hosting.hostings.show', $item->id) }}" style="color:#0f172a; text-decoration:none; font-weight:800;" onmouseover="this.style.color='#fe5f04'" onmouseout="this.style.color='#0f172a'" title="Click to view hosting details, lead mapping & renewals">
+                                        {{ $item->hosting_name }}
+                                    </a>
+                                </td>
                                 <td><span style="font-weight:600; color:#475569;">{{ $item->provider }}</span></td>
                                 <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:12px;">{{ $item->ip_address ?: '—' }}</code></td>
                                 <td><span style="font-size:11px; padding:2px 8px; background:#eff6ff; color:#2563eb; border-radius:4px; font-weight:700;">{{ $item->plan_type }}</span></td>
@@ -457,11 +483,18 @@
                                 </td>
                                 <td style="font-weight:700; white-space:nowrap;">
                                     @if($item->renewal_date)
-                                        {{ $item->renewal_date->format('d M, Y') }}
+                                        <div>{{ $item->renewal_date->format('d M, Y') }}</div>
                                         @if($isExpired)
-                                            <span style="font-size:11px; color:#dc2626; margin-left:4px;">({{ abs($days) }} days ago)</span>
+                                            <span style="font-size:11px; color:#dc2626;">({{ abs($days) }} days ago)</span>
                                         @elseif($days !== null)
-                                            <span style="font-size:11px; color:{{ $isExpiring ? '#d97706' : '#16a34a' }}; margin-left:4px;">({{ $days }} days left)</span>
+                                            <span style="font-size:11px; color:{{ $isExpiring ? '#d97706' : '#16a34a' }};">({{ $days }} days left)</span>
+                                        @endif
+                                        @if($item->renewals_count > 0)
+                                            <div style="margin-top:2px;">
+                                                <span style="font-size:10px; font-weight:700; color:#4f46e5; background:#eef2ff; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;">
+                                                    <i class="bi bi-arrow-repeat"></i> {{ $item->renewals_count }} {{ Str::plural('renewal', $item->renewals_count) }}
+                                                </span>
+                                            </div>
                                         @endif
                                     @else
                                         <span style="color:#94a3b8;">—</span>
@@ -470,9 +503,22 @@
                                 <td style="font-weight:800; color:#15803d; white-space:nowrap;">
                                     {{ $item->renewal_amount ? '₹'.number_format($item->renewal_amount, 2) : '—' }}
                                 </td>
-                                <td>{{ $item->client_name ?: '—' }}</td>
+                                <td>
+                                    @if($item->lead)
+                                        <a href="{{ route('accounts.domains-hosting.hostings.show', $item->id) }}" style="text-decoration:none;">
+                                            <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px;" title="Mapped CRM Lead">
+                                                <i class="bi bi-person-check-fill"></i> {{ $item->lead->contact_name ?: $item->lead->company_name }}
+                                            </span>
+                                        </a>
+                                    @else
+                                        {{ $item->client_name ?: '—' }}
+                                    @endif
+                                </td>
                                 <td>
                                     <div style="display:flex; gap:6px;">
+                                        <a href="{{ route('accounts.domains-hosting.hostings.show', $item->id) }}" class="dh-btn dh-btn-outline" style="padding:4px 10px; font-size:11px;" title="View Details, Lead Mapping & Renewals">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
                                         <button type="button" class="dh-btn dh-btn-secondary" style="padding:4px 10px; font-size:11px;"
                                                 data-item="{{ json_encode([
                                                     'id' => $item->id,
@@ -492,7 +538,7 @@
                                         <form method="POST" action="{{ route('accounts.domains-hosting.hostings.destroy', $item->id) }}" onsubmit="return confirm('Are you sure you want to delete this hosting record?')" style="margin:0;">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="dh-btn dh-btn-danger" style="padding:4px 8px; font-size:11px;">
+                                            <button type="submit" class="dh-btn dh-btn-danger" style="padding:4px 8px; font-size:11px;" title="Delete Hosting">
                                                 🗑️
                                             </button>
                                         </form>
