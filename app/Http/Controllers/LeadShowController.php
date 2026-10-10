@@ -292,7 +292,8 @@ class LeadShowController extends Controller
         }
 
         $data = $request->validate([
-            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
+            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,Ad Budget for partner,new_sale,balance_payment,renewals,new_sales,ad_budget_partner'],
+            'branch_id'        => ['nullable', 'exists:branches,id'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
             'gross_amount'     => ['nullable', 'numeric', 'min:0.01'],
             'net_amount'       => ['nullable', 'numeric', 'min:0.01'],
@@ -310,8 +311,10 @@ class LeadShowController extends Controller
             'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
             'balancepayment', 'balance_payment'             => 'balance_payment',
             'renewal', 'renewals'                           => 'renewals',
+            'ad_budget_for_partner', 'ad_budget_partner'    => 'ad_budget_partner',
             default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
         };
+        $data['branch_id'] = $request->filled('branch_id') ? (int) $request->branch_id : null;
 
         $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
         $data['is_tds_deducted'] = $isTdsDeducted;

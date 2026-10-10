@@ -452,6 +452,7 @@ class User extends Authenticatable
             'people_operations',
             'talent_acquisition',
             'recruitment',
+            'hr_admin'
         ])->isNotEmpty();
     }
 
@@ -1110,6 +1111,18 @@ class User extends Authenticatable
             || $this->belongsToHrDepartment()
             || $this->hasHrLikeRole()
             || $this->isHrOrAdmin();
+    }
+
+    public function canAccessAccountsModule(): bool
+    {
+        return $this->can('modules_menu.accounts')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin();
+    }
+
+    public function canAccessMobileAccountsModule(): bool
+    {
+        return $this->canAccessAccountsModule();
     }
 
     public function allowsPriceRequests(): bool

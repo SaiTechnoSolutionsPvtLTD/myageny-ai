@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Module Agile User Story Specification Document</title>
+<style>
+  @page {
+    size: A4;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.5;
+    font-size: 10.5pt;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  h1, h2, h3, h4 {
+    color: #0f172a;
+    font-weight: 700;
+    margin-top: 1.4em;
+    margin-bottom: 0.5em;
+    page-break-after: avoid;
+  }
+  h1 {
+    font-size: 21pt;
+    margin-top: 0;
+  }
+  h2 {
+    font-size: 14pt;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding-bottom: 5px;
+    margin-top: 22px;
+    color: #1e1b4b;
+  }
+  h3 {
+    font-size: 12pt;
+    color: #312e81;
+    margin-top: 16px;
+  }
+  p, ul, ol {
+    margin-top: 0;
+    margin-bottom: 8px;
+  }
+  .doc-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+    color: #ffffff;
+    padding: 22px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    page-break-inside: avoid;
+  }
+  .doc-header h1 {
+    color: #ffffff;
+    font-size: 19pt;
+    margin: 0 0 8px 0;
+  }
+  .meta-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .meta-badge {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 9pt;
+  }
+  .meta-badge strong {
+    color: #e0e7ff;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 18px 0;
+    font-size: 9pt;
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  th {
+    background: #1e293b;
+    color: #ffffff;
+    padding: 7px 9px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid #1e293b;
+  }
+  td {
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+
+  /* Story Cards */
+  .story-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #4f46e5;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin: 14px 0 18px 0;
+    page-break-inside: avoid;
+  }
+  .story-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 6px;
+  }
+  .story-title {
+    font-size: 11.5pt;
+    font-weight: 700;
+    color: #1e1b4b;
+    margin: 0;
+  }
+  .story-badges {
+    display: flex;
+    gap: 6px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-must { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-should { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .badge-could { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+
+  .narrative-box {
+    background: #f8fafc;
+    border-left: 3px solid #6366f1;
+    padding: 8px 12px;
+    font-style: italic;
+    margin: 8px 0;
+    font-size: 9.5pt;
+    color: #334155;
+  }
+  .ac-list {
+    margin: 6px 0 8px 0;
+    padding-left: 18px;
+    font-size: 9pt;
+  }
+  .ac-list li {
+    margin-bottom: 4px;
+  }
+  .tech-ref {
+    font-size: 8.5pt;
+    color: #64748b;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px dashed #e2e8f0;
+  }
+  .tech-ref strong {
+    color: #334155;
+  }
+
+  code {
+    font-family: "Cascadia Code", Consolas, Monaco, monospace;
+    font-size: 8.5pt;
+    background: #f1f5f9;
+    color: #4338ca;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  .footer {
+    margin-top: 25px;
+    padding-top: 8px;
+    border-top: 1px solid #cbd5e1;
+    text-align: center;
+    font-size: 8pt;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>Lead Module Agile User Story Specification</h1>
+  <p style="margin: 0; font-size: 10.5pt; opacity: 0.9;">End-to-End Business Requirements, Acceptance Criteria (BDD/Gherkin), Scoping Rules &amp; Traceability</p>
+  <div class="meta-grid">
+    <div class="meta-badge"><strong>Platform:</strong> myAgenci.ai CRM</div>
+    <div class="meta-badge"><strong>Module:</strong> Lead Management &amp; Sales Pipeline</div>
+    <div class="meta-badge"><strong>Version:</strong> 2.0</div>
+    <div class="meta-badge"><strong>Framework:</strong> Agile Scrum / BDD</div>
+    <div class="meta-badge"><strong>Date:</strong> 2026-10-10</div>
+  </div>
+</div>
+
+<h2>1. User Personas &amp; Role Profiles</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 15%;">Persona</th>
+      <th style="width: 25%;">Role Name</th>
+      <th style="width: 20%;">System Access Level</th>
+      <th>Key Objectives</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>PER-1</strong></td><td>Company Admin / Director</td><td><code>ACCESS_COMPANY</code></td><td>Full sales pipeline visibility, price discount approvals, company revenue tracking.</td></tr>
+    <tr><td><strong>PER-2</strong></td><td>Branch Manager</td><td><code>ACCESS_BRANCH</code></td><td>Branch-level sales supervision, lead quota allocation, agent workload rebalancing.</td></tr>
+    <tr><td><strong>PER-3</strong></td><td>Team Leader (TL)</td><td><code>ACCESS_TEAM</code></td><td>Daily team targets, untouched lead follow-ups, telecaller performance audits.</td></tr>
+    <tr><td><strong>PER-4</strong></td><td>Sales Executive / Telecaller</td><td><code>ACCESS_SELF</code></td><td>Calling assigned leads, logging conversation notes, deal negotiations, closing sales.</td></tr>
+    <tr><td><strong>PER-5</strong></td><td>Pre-Sales Qualifier</td><td>Branch / Company Scope</td><td>Rapid lead scrubbing, verifying customer intent, routing to branch sales reps.</td></tr>
+    <tr><td><strong>PER-6</strong></td><td>Customer Support Exec (CST)</td><td>Support Scoped</td><td>Post-sales customer onboarding, project kick-off handover, ticket resolution.</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Epics &amp; User Stories</h2>
+
+<!-- Story 1.1 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-1.1: Single Manual Lead Creation with Branch Scoping</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-4 / PER-3</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Sales Executive or Manager,<br>
+    <strong>I want to</strong> quickly capture a new lead with company name, contact person, mobile number, branch, and product interest,<br>
+    <strong>So that</strong> the lead is recorded in the CRM and tracked in the sales pipeline without losing inbound prospects.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-1.1.1 (Required Fields):</strong> On <code>/leads/create</code>, <em>Company Name</em>, <em>Contact Person</em>, <em>Branch</em>, and <em>Mobile Number</em> are mandatory.</li>
+    <li><strong>AC-1.1.2 (Phone Validation):</strong> Enforces international E.164 phone regex <code>/^\+?[0-9]{7,15}$/</code>. Non-numeric or invalid input yields inline error.</li>
+    <li><strong>AC-1.1.3 (Auto-Attributes):</strong> System defaults <code>created_by = auth()->id()</code>, <code>company_id = auth()->user()->company_id</code>, and <code>lead_date = today()</code>.</li>
+    <li><strong>AC-1.1.4 (Feedback):</strong> On submission, redirects to <code>/leads/{id}</code> with toast: <em>"Lead created successfully"</em>.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadController@store</code> | <code>StoreLeadRequest</code> | Model: <code>Lead</code>
+  </div>
+</div>
+
+<!-- Story 1.2 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-1.2: Bulk Lead Ingestion via CSV / Excel</div>
+    <div class="story-badges">
+      <span class="badge badge-should">Should Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-1 / PER-2</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Branch Manager or Administrator,<br>
+    <strong>I want to</strong> upload a spreadsheet of leads and map its columns to CRM fields,<br>
+    <strong>So that</strong> marketing event attendees and directories can be ingested in bulk without manual typing.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-1.2.1 (Upload &amp; Parsing):</strong> Supports <code>.csv</code> and <code>.xlsx</code> up to 10MB; extracts headers and shows column mapping GUI.</li>
+    <li><strong>AC-1.2.2 (Column Mapping):</strong> User can map Company Name, Contact Person, Phone, Email, Source, and Branch.</li>
+    <li><strong>AC-1.2.3 (Duplicate Detection):</strong> Checks phone numbers against tenant leads; duplicates are skipped and logged in error summary.</li>
+    <li><strong>AC-1.2.4 (Atomic Transactions):</strong> Batch inserts processed in chunks of 100 within safe DB transactions.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadImportController</code> | Model: <code>Lead</code>
+  </div>
+</div>
+
+<!-- Story 1.3 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-1.3: Real-Time Facebook Lead Ads Graph API Ingestion</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-1 / System</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Marketing Administrator,<br>
+    <strong>I want</strong> inquiries from Meta Lead Gen Ad campaigns to instantly sync into the CRM via Meta Graph API,<br>
+    <strong>So that</strong> our sales team can contact ad respondents within minutes of ad submission.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-1.3.1 (Graph API Sync):</strong> Cron <code>php artisan app:facebook-lead-integration</code> polls Graph API v19.0 using campaign tokens.</li>
+    <li><strong>AC-1.3.2 (Field Mapping):</strong> Extracts <code>full_name</code>, <code>phone_number</code>, <code>email</code> from Meta's <code>field_data</code> JSON array.</li>
+    <li><strong>AC-1.3.3 (Audit Payload):</strong> Stores raw payload in <code>leads.facebook_payload</code> and <code>facebook_lead_id</code>.</li>
+    <li><strong>AC-1.3.4 (Round-Robin):</strong> Automatically distributes incoming leads round-robin across configured <code>assigned_users</code>.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>FacebookLeadImporter</code> | <code>FacebookLeadIntegration</code>
+  </div>
+</div>
+
+<!-- Story 2.1 & 2.2 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-2.1: Mass / Single Lead Reallocation</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-2 / PER-3</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Team Leader or Branch Manager,<br>
+    <strong>I want to</strong> transfer leads between executives (due to employee absence, resignation, or quota rebalancing),<br>
+    <strong>So that</strong> customer communication continues without interruption.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-2.1.1 (Single Reassign):</strong> Clicking "Reassign" on lead detail opens a modal to choose the target executive.</li>
+    <li><strong>AC-2.1.2 (Bulk Reassign):</strong> Checkbox multi-select on <code>/leads</code> triggers bulk reassignment action bar.</li>
+    <li><strong>AC-2.1.3 (Security Guard):</strong> Sales executives cannot reassign leads; only Branch Managers and TLs have permission.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadReallocationController</code> | Model: <code>Lead</code>
+  </div>
+</div>
+
+<!-- Story 3.1 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-3.1: Untouched Leads Priority Queue &amp; SLA Tracking</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-3 / PER-4</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Sales Executive,<br>
+    <strong>I want to</strong> see an isolated queue of leads that have never received a telecall,<br>
+    <strong>So that</strong> I can prioritize fresh inquiries and achieve first contact within the company SLA (&lt; 2 hours).
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-3.1.1 (Query Filter):</strong> <code>/leads/untouched</code> lists leads where <code>COUNT(lead_call_updates) == 0</code> and status not closed.</li>
+    <li><strong>AC-3.1.2 (SLA Badging):</strong> Visual badges highlight lead aging (&lt; 2 hrs green, 2-24 hrs amber, &gt; 24 hrs red).</li>
+    <li><strong>AC-3.1.3 (Auto-Removal):</strong> Logging the first call immediately removes the lead from the untouched list.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadController@untouchedIndex</code> | View: <code>pages.leads.untouched</code>
+  </div>
+</div>
+
+<!-- Story 3.2 & 3.3 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-3.2: Logging Telecall Outcomes &amp; Follow-up Tasks</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-4</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Sales Executive,<br>
+    <strong>I want to</strong> log call outcome notes and schedule follow-up dates in one modal,<br>
+    <strong>So that</strong> interaction history is captured and a reminder is automatically scheduled on my calendar.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-3.2.1:</strong> Modal captures Outcome, Outcome Subcategory, Call Notes, Next Follow-Up Date &amp; Time.</li>
+    <li><strong>AC-3.2.2 (Auto Reminder):</strong> When a future follow-up date is provided, a record in <code>lead_reminders</code> is auto-created.</li>
+    <li><strong>AC-3.2.3 (Timeline Display):</strong> Call log is appended chronologically to the 360-degree lead profile timeline.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadShowController@storeCall</code> | Models: <code>LeadCallUpdate</code>, <code>LeadReminder</code>
+  </div>
+</div>
+
+<!-- Story 4.1 & 4.2 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-4.1: Product Line Items, Discounts &amp; Price Approval Workflow</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-4 / PER-1</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Sales Executive negotiating deal values,<br>
+    <strong>I want to</strong> add multiple products, apply discounts, and request manager approval when price is below base unit price,<br>
+    <strong>So that</strong> accurate commercial deals can be offered while respecting company margin thresholds.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-4.1.1 (Multi-Products):</strong> Supports multiple services/products per lead with unit price, qty, discount %, GST %.</li>
+    <li><strong>AC-4.1.2 (Price Exception):</strong> If offered unit price is lower than product base rate, requires manager approval request.</li>
+    <li><strong>AC-4.1.3 (Approval Action):</strong> Authorized manager can Approve/Reject via web or mobile API; approval updates unit price and recalculates totals.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadShowController@storeProduct</code> | <code>LeadProductPriceRequestController</code>
+  </div>
+</div>
+
+<!-- Story 4.3 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-4.3: Milestone Payments Collection &amp; TDS Accounting</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-4 / Accounts</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As an</strong> Executive collecting customer advances,<br>
+    <strong>I want to</strong> record payments with reference numbers, payment mode, receipt file, and TDS deduction details,<br>
+    <strong>So that</strong> commercial accounts reconcile accurately with our bank statements.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-4.3.1:</strong> Modal captures Gross Amount, Payment Mode (NEFT/UPI/Cheque), Reference UTR, Date, and Voucher Receipt.</li>
+    <li><strong>AC-4.3.2 (TDS Computation):</strong> If TDS is deducted, calculates TDS Amount and Net Bank Credit.</li>
+    <li><strong>AC-4.3.3 (Paid Status):</strong> When cumulative payments match or exceed <code>total_price</code>, status transitions to <code>paid</code>.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadShowController@storeProductPayment</code> | Model: <code>LeadProductPayment</code>
+  </div>
+</div>
+
+<!-- Story 5.1 & 5.2 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-5.1: Hierarchical Data Visibility &amp; Tenant Security</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">Security Engine</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As an</strong> Enterprise Security Auditor,<br>
+    <strong>I want</strong> lead visibility to be strictly bound to tenant and organizational role level,<br>
+    <strong>So that</strong> cross-tenant data leakage is impossible and sales reps cannot snoop on colleagues' leads.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-5.1.1 (Multi-Tenancy):</strong> Every query is scoped by <code>company_id</code>; cross-company access returns 403 Forbidden.</li>
+    <li><strong>AC-5.1.2 (Role Scopes):</strong> Execs see only assigned leads; TLs see team leads; Branch Managers see branch leads; Admins see company leads.</li>
+    <li><strong>AC-5.1.3 (Central Enforcer):</strong> All queries route through <code>DataVisibilityService::applyLeadVisibility($query)</code>.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>DataVisibilityService</code> | <code>BelongsToCompany</code> trait
+  </div>
+</div>
+
+<!-- Story 6.1 & 6.2 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-6.1: Deal Conversion &amp; Customer Support Team (CST) Handover</div>
+    <div class="story-badges">
+      <span class="badge badge-must">Must Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-4 / PER-6</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Sales Executive closing a deal,<br>
+    <strong>I want to</strong> convert the lead to "Won" and allocate a Customer Support TL &amp; Executive,<br>
+    <strong>So that</strong> post-sales project fulfillment commences immediately without loss of customer requirements.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-6.1.1 (Conversion Event):</strong> Status update to "Won" timestamps <code>converted_at</code> and <code>closure_date</code>.</li>
+    <li><strong>AC-6.1.2 (CST Allocation):</strong> Prompts allocation of CST TL and Support Executive; triggers handover notification.</li>
+    <li><strong>AC-6.1.3 (CST Notes):</strong> CST executive can log onboarding milestones via <code>/leads/{id}/cst-updates</code>.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadController@updateStatus</code> | <code>LeadController@storeCstUpdate</code>
+  </div>
+</div>
+
+<!-- Story 7.1 -->
+<div class="story-card">
+  <div class="story-header">
+    <div class="story-title">US-7.1: Dynamic Custom Fields (Custom Form Builder)</div>
+    <div class="story-badges">
+      <span class="badge badge-could">Could Have</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">PER-1</span>
+    </div>
+  </div>
+  <div class="narrative-box">
+    <strong>As a</strong> Company Administrator,<br>
+    <strong>I want to</strong> configure custom lead fields for specific branches without running database migrations,<br>
+    <strong>So that</strong> industry-specific lead information (e.g. GSTIN, Turnover, Fleet Size) can be captured.
+  </div>
+  <strong>Acceptance Criteria:</strong>
+  <ul class="ac-list">
+    <li><strong>AC-7.1.1:</strong> Admin defines fields with label, type (text, number, select, date), and validation rules.</li>
+    <li><strong>AC-7.1.2:</strong> Fields render dynamically on lead create/edit forms.</li>
+    <li><strong>AC-7.1.3:</strong> Values are validated and stored in <code>lead_field_values</code> via EAV model.</li>
+  </ul>
+  <div class="tech-ref">
+    <strong>Technical Mapping:</strong> <code>LeadFormFieldController</code> | Models: <code>LeadFormField</code>, <code>LeadFieldValue</code>
+  </div>
+</div>
+
+<h2>3. Traceability &amp; Priority Matrix</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Story ID</th>
+      <th style="width: 33%;">Title</th>
+      <th style="width: 15%;">MoSCoW Priority</th>
+      <th style="width: 20%;">Core Controller</th>
+      <th>Primary Model</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>US-1.1</code></td><td>Single Manual Lead Creation</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadController@store</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-1.2</code></td><td>Bulk CSV/Excel Lead Ingestion</td><td><span class="badge badge-should">Should Have</span></td><td><code>LeadImportController</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-1.3</code></td><td>Facebook Graph API Auto-Sync</td><td><span class="badge badge-must">Must Have</span></td><td><code>FacebookLeadImporter</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-2.1</code></td><td>Single / Mass Lead Reallocation</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadReallocationController</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-3.1</code></td><td>Untouched Leads Queue</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadController@untouchedIndex</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-3.2</code></td><td>Telecall Interaction &amp; Reminders</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadShowController@storeCall</code></td><td><code>LeadCallUpdate</code></td></tr>
+    <tr><td><code>US-4.1</code></td><td>Product Line Items &amp; Price Approval</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadShowController@storeProduct</code></td><td><code>LeadProduct</code></td></tr>
+    <tr><td><code>US-4.3</code></td><td>Milestone Payments &amp; TDS</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadShowController@storeProductPayment</code></td><td><code>LeadProductPayment</code></td></tr>
+    <tr><td><code>US-5.1</code></td><td>Hierarchical Data Visibility (RBAC)</td><td><span class="badge badge-must">Must Have</span></td><td><code>DataVisibilityService</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-6.1</code></td><td>Deal Conversion &amp; CST Handover</td><td><span class="badge badge-must">Must Have</span></td><td><code>LeadController@updateStatus</code></td><td><code>Lead</code></td></tr>
+    <tr><td><code>US-7.1</code></td><td>Dynamic Custom Form Builder</td><td><span class="badge badge-could">Could Have</span></td><td><code>LeadFormFieldController</code></td><td><code>LeadFormField</code></td></tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  &copy; 2026 myAgenci.ai CRM. Agile User Stories &amp; Functional Requirements Specification.
+</div>
+
+</body>
+</html>

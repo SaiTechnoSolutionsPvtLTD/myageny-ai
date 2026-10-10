@@ -970,7 +970,8 @@ class LeadProductController extends Controller
         $v = Validator::make($request->all(), [
             'lead_product_id' => ['required', 'exists:lead_products,id'],
             'lead_status_id'  => ['nullable', 'integer'],
-            'payment_type'    => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
+            'payment_type'    => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,Ad Budget for partner,new_sale,balance_payment,renewals,new_sales,ad_budget_partner'],
+            'branch_id'       => ['nullable', 'exists:branches,id'],
             'amount'          => ['required', 'numeric', 'min:1'],
             'gross_amount'    => ['nullable', 'numeric', 'min:0.01'],
             'net_amount'      => ['nullable', 'numeric', 'min:0.01'],
@@ -996,6 +997,7 @@ class LeadProductController extends Controller
             'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
             'balancepayment', 'balance_payment'             => 'balance_payment',
             'renewal', 'renewals'                           => 'renewals',
+            'ad_budget_for_partner', 'ad_budget_partner'    => 'ad_budget_partner',
             default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
         };
 
@@ -1055,7 +1057,9 @@ class LeadProductController extends Controller
             ], 422);
         }
 
-        $payment = DB::transaction(function () use ($request, $lp, $actorId, $paymentType, $isTdsDeducted, $tdsPercentage, $tdsAmount, $afterTdsAmount, $paymentAmount) {
+        $branchId = $request->filled('branch_id') ? (int) $request->branch_id : null;
+
+        $payment = DB::transaction(function () use ($request, $lp, $actorId, $paymentType, $isTdsDeducted, $tdsPercentage, $tdsAmount, $afterTdsAmount, $paymentAmount, $branchId) {
             $attachment = $request->file('attachment');
             $attachmentPath = null;
             $attachmentName = null;
@@ -1074,6 +1078,7 @@ class LeadProductController extends Controller
             $p = LeadProductPayment::create([
                 'lead_product_id' => $lp->id,
                 'lead_id'         => $lp->lead_id,
+                'branch_id'       => $branchId,
                 'payment_type'    => $paymentType,
                 'is_tds_deducted' => $isTdsDeducted,
                 'tds_percentage'  => $tdsPercentage,

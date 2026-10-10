@@ -1304,7 +1304,10 @@
         if (notesInp) notesInp.value = '';
 
         var typeInp = el('pp-pay-type');
-        if (typeInp) typeInp.value = isConverting ? 'new_sale' : '';
+        if (typeInp) {
+            typeInp.value = isConverting ? 'new_sale' : '';
+            PP.ppHandlePayTypeChange(typeInp.value);
+        }
 
         var tdsChk = el('pp-pay-deduct-tds');
         if (tdsChk) tdsChk.checked = false;
@@ -1322,6 +1325,21 @@
         if (fileInp) fileInp.value = '';
 
         ppShow('pp-modal-payment');
+    };
+
+    PP.ppHandlePayTypeChange = function (val) {
+        var branchContainer = el('pp-branch-container');
+        var branchSelect = el('pp-pay-branch');
+        if (val === 'ad_budget_partner') {
+            if (branchContainer) branchContainer.style.display = 'block';
+            if (branchSelect) branchSelect.required = true;
+        } else {
+            if (branchContainer) branchContainer.style.display = 'none';
+            if (branchSelect) {
+                branchSelect.required = false;
+                branchSelect.value = '';
+            }
+        }
     };
 
     PP.ppToggleTds = function (isChecked) {
@@ -1375,6 +1393,7 @@
     PP.ppSubmitPayment = function () {
         var pid         = ppState.activePayProdId;
         var paymentType = (el('pp-pay-type')    || {}).value || '';
+        var branchId    = (el('pp-pay-branch')  || {}).value || '';
         var amount      = parseFloat((el('pp-pay-amount') || {}).value || 0);
         var mode        = (el('pp-mode-val')     || {}).value || 'upi';
         var date        = (el('pp-pay-date')     || {}).value || todayStr();
@@ -1390,6 +1409,11 @@
 
         if (!pid)          { toast('No product selected.', 'error'); return; }
         if (!paymentType)  { toast('Please select Payment Type.', 'error'); if (el('pp-pay-type')) el('pp-pay-type').focus(); return; }
+        if (paymentType === 'ad_budget_partner' && !branchId) {
+            toast('Please select a Branch for Ad Budget for partner.', 'error');
+            if (el('pp-pay-branch')) el('pp-pay-branch').focus();
+            return;
+        }
         if (isNaN(amount) || amount < 1) {
             toast('Minimum payment amount is ₹1.00.', 'error');
             if (el('pp-pay-amount')) el('pp-pay-amount').focus();
@@ -1415,6 +1439,9 @@
         var formData = new FormData();
         formData.append('lead_product_id', pid);
         formData.append('payment_type', paymentType);
+        if (paymentType === 'ad_budget_partner' && branchId) {
+            formData.append('branch_id', branchId);
+        }
         formData.append('amount', isTds ? netReceivedAmount : amount);
         formData.append('gross_amount', amount);
         formData.append('net_amount', netReceivedAmount);

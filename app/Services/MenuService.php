@@ -19,6 +19,8 @@ class MenuService
         'crm'      => ['label' => 'CRM',      'order' => 10],
         'projects' => ['label' => 'Projects', 'order' => 20],
         'hrms'     => ['label' => 'HRMS',     'order' => 30],
+        'cst'      => ['label' => 'CST',      'order' => 40],
+        'accounts' => ['label' => 'Accounts', 'order' => 50],
     ];
 
     // ── OVP role scoping — mirrors resources/views/layouts/sidebar.blade.php
@@ -112,6 +114,8 @@ class MenuService
                 $canAccess = $user->can('modules_menu.projects') || $user->canAccessMobileProjectsModule();
             } elseif ($key === 'cst') {
                 $canAccess = $user->can('modules_menu.cst') || $user->canAccessMobileCstModule();
+            } elseif ($key === 'accounts') {
+                $canAccess = $user->can('modules_menu.accounts') || $user->canAccessAccountsModule();
             } else {
                 $canAccess = $user->can("modules_menu.$key") || $user->isCompanyAdmin() || $user->isSuperAdmin();
             }

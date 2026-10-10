@@ -1059,17 +1059,28 @@ table td:last-child,
             top: 0;
             right: 0;
             z-index: 100001 !important;
-            width: min(380px, calc(100vw - 24px));
+            width: min(380px, calc(100vw - 20px));
             height: 100vh;
-            padding: 24px;
+            padding: 20px 20px 28px 20px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
-            background: linear-gradient(180deg, #fff8f4 0%, #ffffff 100%);
-            border-left: 1px solid rgba(254, 95, 4, 0.12);
-            box-shadow: -24px 0 60px rgba(18, 18, 18, 0.18);
+            gap: 16px;
+            background: #ffffff;
+            border-left: 1px solid #e2e8f0;
+            box-shadow: -20px 0 50px rgba(15, 23, 42, 0.12);
             transform: translateX(108%);
-            transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+            transition: transform .3s cubic-bezier(.16, 1, .3, 1);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(254, 95, 4, 0.2) transparent;
+        }
+        .module-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        .module-panel::-webkit-scrollbar-thumb {
+            background: rgba(254, 95, 4, 0.2);
+            border-radius: 8px;
         }
         .module-panel.is-open {
             transform: translateX(0);
@@ -1078,115 +1089,193 @@ table td:last-child,
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 16px;
+            gap: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #f1f5f9;
         }
         .module-panel__eyebrow {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 7px 12px;
+            gap: 5px;
+            padding: 4px 10px;
             border-radius: 999px;
-            background: rgba(254, 95, 4, 0.10);
-            color: #d35400;
-            font-size: 11px;
+            background: linear-gradient(135deg, rgba(254, 95, 4, 0.12), rgba(254, 124, 48, 0.12));
+            color: #d94600;
+            font-size: 10px;
             font-weight: 800;
             letter-spacing: .08em;
             text-transform: uppercase;
         }
         .module-panel__title {
-            margin-top: 12px;
-            font-size: 24px;
+            margin-top: 6px;
+            font-size: 19px;
             font-weight: 800;
-            color: #121212;
+            color: #0f172a;
+            line-height: 1.2;
+            letter-spacing: -0.02em;
         }
         .module-panel__text {
-            margin-top: 8px;
-            color: #6d6d6d;
-            font-size: 14px;
-            line-height: 1.55;
+            margin-top: 3px;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.4;
         }
         .module-panel__close {
-            width: 42px;
-            height: 42px;
-            border-radius: 14px;
-            background: #fff;
-            color: #444;
-            border: 1px solid #f1dfd4;
-            box-shadow: 0 8px 20px rgba(18, 18, 18, 0.05);
-            transition: transform .2s ease, background-color .2s ease;
-        }
-        .module-panel__close:hover {
-            transform: rotate(90deg);
-            background: #fff5ef;
-        }
-        .module-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-        }
-        .module-card {
-            position: relative;
-            min-height: 152px;
-            padding: 18px;
-            border-radius: 24px;
-            background: #fff;
-            border: 1px solid #f2e7df;
-            box-shadow: 0 12px 28px rgba(18, 18, 18, 0.05);
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-        }
-        .module-card--button {
-            width: 100%;
-            text-align: left;
-        }
-        .module-card:hover {
-            transform: translateY(-4px);
-            border-color: #ffc9aa;
-            box-shadow: 0 16px 34px rgba(254, 95, 4, 0.12);
-        }
-        .module-card__icon {
-            width: 54px;
-            height: 54px;
-            border-radius: 18px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            color: #fff;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+            font-size: 14px;
+            transition: all .2s ease;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .module-panel__close:hover {
+            transform: rotate(90deg);
+            background: #fee2e2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        .module-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .module-card {
+            position: relative;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            transition: all .22s cubic-bezier(.16, 1, .3, 1);
+        }
+        .module-card:hover {
+            transform: translateX(4px);
+            box-shadow: 0 10px 24px -4px rgba(15, 23, 42, 0.08);
+            background: #ffffff;
+        }
+        .module-card__icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #ffffff;
+            flex-shrink: 0;
+            transition: transform .22s ease;
+        }
+        .module-card:hover .module-card__icon {
+            transform: scale(1.06);
+        }
+        .module-card__body {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
         }
         .module-card__title {
-            font-size: 17px;
-            font-weight: 800;
-            color: #121212;
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.25;
+            transition: color .2s ease;
         }
         .module-card__desc {
-            font-size: 13px;
-            line-height: 1.5;
-            color: #7a7a7a;
+            font-size: 12px;
+            line-height: 1.35;
+            color: #64748b;
         }
+        .module-card__arrow {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #94a3b8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+            transition: all .2s ease;
+            border: 1px solid #e2e8f0;
+        }
+        .module-card:hover .module-card__arrow {
+            transform: translateX(3px);
+            background: #0f172a;
+            color: #ffffff;
+            border-color: #0f172a;
+        }
+
+        /* Specific module colors & glow effects */
         .module-card--crm .module-card__icon {
-            background: linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%);
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+            box-shadow: 0 6px 16px rgba(13, 148, 136, 0.28);
         }
+        .module-card--crm:hover {
+            border-color: #0d9488;
+        }
+        .module-card--crm:hover .module-card__title {
+            color: #0d9488;
+        }
+
         .module-card--hrms .module-card__icon {
-            background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28);
         }
-        .module-card--accounts .module-card__icon {
-            background: linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%);
+        .module-card--hrms:hover {
+            border-color: #6366f1;
         }
-        .module-card--production .module-card__icon {
-            background: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%);
+        .module-card--hrms:hover .module-card__title {
+            color: #6366f1;
         }
-        .module-card--invoice .module-card__icon {
-            background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
-        }
+
+        .module-card--production .module-card__icon,
         .module-card--projects .module-card__icon {
-            background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
+            background: linear-gradient(135deg, #fe5f04 0%, #ff8c42 100%);
+            box-shadow: 0 6px 16px rgba(254, 95, 4, 0.28);
         }
+        .module-card--production:hover,
+        .module-card--projects:hover {
+            border-color: #fe5f04;
+        }
+        .module-card--production:hover .module-card__title,
+        .module-card--projects:hover .module-card__title {
+            color: #fe5f04;
+        }
+
         .module-card--cst .module-card__icon {
             background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+            box-shadow: 0 6px 16px rgba(236, 72, 153, 0.28);
+        }
+        .module-card--cst:hover {
+            border-color: #ec4899;
+        }
+        .module-card--cst:hover .module-card__title {
+            color: #ec4899;
+        }
+
+        .module-card--accounts .module-card__icon {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            box-shadow: 0 6px 16px rgba(5, 150, 105, 0.28);
+        }
+        .module-card--accounts:hover {
+            border-color: #059669;
+        }
+        .module-card--accounts:hover .module-card__title {
+            color: #059669;
         }
         @keyframes moduleFabFloat {
             0%, 100% { transform: translateY(0); }
@@ -1212,10 +1301,7 @@ table td:last-child,
             }
             .module-panel {
                 width: min(100vw, 100%);
-                padding: 20px 16px 24px;
-            }
-            .module-grid {
-                grid-template-columns: 1fr;
+                padding: 16px 14px 20px;
             }
             .module-fab {
                 right: 14px;

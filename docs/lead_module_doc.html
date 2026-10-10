@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Module Technical Architecture & Development Documentation</title>
+<style>
+  @page {
+    size: A4;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.5;
+    font-size: 11pt;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  h1, h2, h3, h4 {
+    color: #0f172a;
+    font-weight: 700;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    page-break-after: avoid;
+  }
+  h1 {
+    font-size: 22pt;
+    border-bottom: 2px solid #4f46e5;
+    padding-bottom: 8px;
+    margin-top: 0;
+  }
+  h2 {
+    font-size: 15pt;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 6px;
+    margin-top: 24px;
+    color: #1e1b4b;
+  }
+  h3 {
+    font-size: 12.5pt;
+    color: #312e81;
+    margin-top: 16px;
+  }
+  p, ul, ol {
+    margin-top: 0;
+    margin-bottom: 10px;
+  }
+  .doc-header {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
+    color: #ffffff;
+    padding: 24px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+  }
+  .doc-header h1 {
+    color: #ffffff;
+    border-bottom: none;
+    font-size: 20pt;
+    margin: 0 0 10px 0;
+    padding: 0;
+  }
+  .meta-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .meta-badge {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 9.5pt;
+  }
+  .meta-badge strong {
+    color: #e0e7ff;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px 0;
+    font-size: 9.5pt;
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  th {
+    background: #1e293b;
+    color: #ffffff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid #1e293b;
+  }
+  td {
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-get { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .badge-post { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+  .badge-put, .badge-patch { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .badge-delete { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+  /* Code block */
+  pre {
+    background: #0f172a;
+    color: #f1f5f9;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-family: "Cascadia Code", Consolas, Monaco, "Courier New", monospace;
+    font-size: 8.5pt;
+    line-height: 1.45;
+    overflow-x: auto;
+    page-break-inside: avoid;
+    border: 1px solid #334155;
+    margin: 10px 0 16px 0;
+  }
+  code {
+    font-family: "Cascadia Code", Consolas, Monaco, monospace;
+    font-size: 9pt;
+    background: #f1f5f9;
+    color: #4338ca;
+    padding: 2px 5px;
+    border-radius: 4px;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  /* Callout Alerts */
+  .callout {
+    padding: 12px 14px;
+    border-radius: 6px;
+    margin: 14px 0;
+    page-break-inside: avoid;
+    font-size: 9.5pt;
+  }
+  .callout-important {
+    background-color: #fef2f2;
+    border-left: 4px solid #ef4444;
+    color: #991b1b;
+  }
+  .callout-tip {
+    background-color: #f0fdf4;
+    border-left: 4px solid #22c55e;
+    color: #166534;
+  }
+  .callout-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  /* Architecture & Flow Diagrams */
+  .diagram-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 14px 0 20px 0;
+    page-break-inside: avoid;
+  }
+  .diagram-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .flow-box {
+    flex: 1;
+    background: #f8fafc;
+    border: 1.5px solid #6366f1;
+    border-radius: 6px;
+    padding: 9px 12px;
+    text-align: center;
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #1e1b4b;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .flow-box.highlight {
+    background: #eef2ff;
+    border-color: #4f46e5;
+  }
+  .flow-arrow {
+    text-align: center;
+    color: #6366f1;
+    font-weight: 900;
+    font-size: 14pt;
+    line-height: 1;
+  }
+
+  /* Role Grid */
+  .role-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin: 14px 0 18px 0;
+    page-break-inside: avoid;
+  }
+  .role-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-top: 3px solid #4f46e5;
+    padding: 10px 12px;
+    border-radius: 5px;
+    font-size: 9.5pt;
+  }
+  .role-card h4 {
+    margin: 0 0 4px 0;
+    color: #1e1b4b;
+    font-size: 10pt;
+  }
+  .footer {
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid #cbd5e1;
+    text-align: center;
+    font-size: 8pt;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header Banner -->
+<div class="doc-header">
+  <h1>Lead Module Technical Architecture &amp; Development Documentation</h1>
+  <p style="margin: 0; font-size: 11pt; opacity: 0.9;">Comprehensive Developer Reference, Database Schema, Lifecycle &amp; Security Engineering Manual</p>
+  <div class="meta-grid">
+    <div class="meta-badge"><strong>Platform:</strong> myAgenci.ai CRM</div>
+    <div class="meta-badge"><strong>Module:</strong> Lead Management &amp; Sales Pipeline</div>
+    <div class="meta-badge"><strong>Version:</strong> 2.0</div>
+    <div class="meta-badge"><strong>Stack:</strong> Laravel 11 / PHP 8.2+, MySQL 8.0, Sanctum</div>
+    <div class="meta-badge"><strong>Date:</strong> 2026-10-10</div>
+  </div>
+</div>
+
+<!-- Section 1 -->
+<h2>1. Executive Summary &amp; Architectural Overview</h2>
+<p>
+  The <strong>Lead Module</strong> is the foundational CRM engine of <code>myAgenci.ai</code>. It orchestrates the entire lifecycle of prospects—from lead generation (via web forms, manual creation, CSV imports, and automated Facebook Lead Ads Graph API sync) through qualification, call tracking, product mapping, quotation building, and conversion into paying clients.
+</p>
+
+<div class="diagram-flow">
+  <div class="diagram-row">
+    <div class="flow-box"><strong>1. Lead Acquisition</strong><br><small>Manual / Web / FB Graph API / CSV Import</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box"><strong>2. Routing &amp; Pre-Sales</strong><br><small>Branch Allocation &amp; Tele-Qualifier</small></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box highlight"><strong>3. Data Visibility Scope</strong><br><small>Company &gt; Branch &gt; TL &gt; Executive</small></div>
+  </div>
+  <div style="text-align: center; color: #6366f1; font-weight: bold; font-size: 13pt;">&darr;</div>
+  <div class="diagram-row">
+    <div class="flow-box"><strong>6. Conversion &amp; Billing</strong><br><small>Won/Converted, Payments, CST Handover</small></div>
+    <div class="flow-arrow">&larr;</div>
+    <div class="flow-box"><strong>5. Commercial Deals</strong><br><small>Products, Discount Approvals, GST</small></div>
+    <div class="flow-arrow">&larr;</div>
+    <div class="flow-box"><strong>4. Touchpoints &amp; Pipeline</strong><br><small>Calls, Follow-ups, Reminders</small></div>
+  </div>
+</div>
+
+<h3>Architectural Highlights</h3>
+<ul>
+  <li><strong>Multi-Tenant Isolation:</strong> Built on the <code>BelongsToCompany</code> trait, enforcing strict company-level tenant boundaries.</li>
+  <li><strong>Hierarchical Data Visibility:</strong> Scoped dynamically via <code>DataVisibilityService</code> across Company Admin, Branch Manager, Team Leader (TL), and Sales Executive levels.</li>
+  <li><strong>Dynamic Field Engine:</strong> Supports extensible custom fields (<code>LeadFormField</code> &amp; <code>LeadFieldValue</code>) per branch and tenant without database schema alterations.</li>
+  <li><strong>Multi-Product Line Items:</strong> Supports multiple products/services per lead with custom pricing, discount approval workflows, and milestone payment tracking.</li>
+  <li><strong>Omni-Channel Synchronization:</strong> Unified web dashboard paired with Sanctum-authenticated mobile REST API endpoints for Android and iOS apps.</li>
+</ul>
+
+<!-- Section 2 -->
+<h2>2. Database Schema &amp; Data Dictionary</h2>
+<p>The module revolves around the central <code>leads</code> table and multiple satellite operational tables.</p>
+
+<h3>2.1. <code>leads</code> Table (Core Entity)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Column</th>
+      <th style="width: 20%;">Type</th>
+      <th style="width: 12%;">Nullable</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED</td><td>No</td><td>Auto-increment Primary Key</td></tr>
+    <tr><td><code>company_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Multi-tenant tenant ID (<code>companies.id</code>)</td></tr>
+    <tr><td><code>branch_id</code></td><td>BIGINT UNSIGNED</td><td>No</td><td>Branch ownership (<code>branches.id</code>)</td></tr>
+    <tr><td><code>company_name</code></td><td>VARCHAR(150)</td><td>No</td><td>Lead organization / business name</td></tr>
+    <tr><td><code>contact_name</code></td><td>VARCHAR(100)</td><td>No</td><td>Primary contact person name</td></tr>
+    <tr><td><code>lead_date</code></td><td>DATE</td><td>No</td><td>Inbound lead arrival date</td></tr>
+    <tr><td><code>mobile_number</code></td><td>VARCHAR(20)</td><td>No</td><td>Primary phone (E.164: <code>/^\+?[0-9]{7,15}$/</code>)</td></tr>
+    <tr><td><code>email</code></td><td>VARCHAR(150)</td><td>Yes</td><td>Contact email address</td></tr>
+    <tr><td><code>lead_source_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Foreign Key to <code>lead_sources.id</code></td></tr>
+    <tr><td><code>lead_source</code></td><td>VARCHAR(255)</td><td>Yes</td><td>Legacy source name cache / fallback</td></tr>
+    <tr><td><code>lead_status_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Foreign Key to <code>lead_statuses.id</code></td></tr>
+    <tr><td><code>lead_status</code></td><td>VARCHAR(255)</td><td>Yes</td><td>Legacy status string (e.g. <code>new</code>, <code>qualified</code>)</td></tr>
+    <tr><td><code>priority</code></td><td>ENUM</td><td>No</td><td><code>low</code>, <code>medium</code>, <code>high</code> (Default: <code>medium</code>)</td></tr>
+    <tr><td><code>deal_value</code></td><td>DECIMAL(12,2)</td><td>Yes</td><td>Estimated high-level pipeline opportunity value</td></tr>
+    <tr><td><code>remarks</code></td><td>TEXT</td><td>Yes</td><td>Initial notes / customer requirements</td></tr>
+    <tr><td><code>assigned_to</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Sales Executive user (<code>users.id</code>)</td></tr>
+    <tr><td><code>pre_sale_executive_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Pre-sales qualifier user (<code>users.id</code>)</td></tr>
+    <tr><td><code>customer_support_tl_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Allocated Customer Support TL (<code>users.id</code>)</td></tr>
+    <tr><td><code>customer_support_executive_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Allocated CST Support Executive (<code>users.id</code>)</td></tr>
+    <tr><td><code>facebook_lead_id</code></td><td>VARCHAR(255)</td><td>Yes</td><td>Facebook Graph API Lead ID</td></tr>
+    <tr><td><code>facebook_campaign_id</code></td><td>VARCHAR(255)</td><td>Yes</td><td>Facebook Ad Campaign ID</td></tr>
+    <tr><td><code>facebook_payload</code></td><td>JSON</td><td>Yes</td><td>Raw JSON payload from Meta Lead Ads</td></tr>
+    <tr><td><code>product_id</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>Primary product interest ID (<code>products.id</code>)</td></tr>
+    <tr><td><code>product_name</code></td><td>VARCHAR(255)</td><td>Yes</td><td>Cached primary product title</td></tr>
+    <tr><td><code>created_by</code></td><td>BIGINT UNSIGNED</td><td>Yes</td><td>User who captured the lead</td></tr>
+    <tr><td><code>deleted_at</code></td><td>TIMESTAMP</td><td>Yes</td><td>Soft delete tracking</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2. <code>lead_products</code> Table (Line Items)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Column</th>
+      <th style="width: 22%;">Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED</td><td>Primary Key</td></tr>
+    <tr><td><code>lead_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>leads.id</code> (Cascade delete)</td></tr>
+    <tr><td><code>product_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>products.id</code></td></tr>
+    <tr><td><code>product_name</code></td><td>VARCHAR(255)</td><td>Service / Product item title</td></tr>
+    <tr><td><code>deal_name</code></td><td>VARCHAR(255)</td><td>Specific deal title or customized package</td></tr>
+    <tr><td><code>unit_price</code></td><td>DECIMAL(12,2)</td><td>Base unit rate</td></tr>
+    <tr><td><code>quantity</code></td><td>INT</td><td>Quantity units</td></tr>
+    <tr><td><code>discount_percent</code></td><td>DECIMAL(5,2)</td><td>Applied discount %</td></tr>
+    <tr><td><code>gst_percent</code></td><td>DECIMAL(5,2)</td><td>Applied GST % (e.g. 18.00)</td></tr>
+    <tr><td><code>total_price</code></td><td>DECIMAL(12,2)</td><td>Net payable price after discount and taxes</td></tr>
+    <tr><td><code>amount_paid</code></td><td>DECIMAL(12,2)</td><td>Total advance / realized collections to date</td></tr>
+    <tr><td><code>payment_status</code></td><td>VARCHAR(50)</td><td><code>pending</code>, <code>partial</code>, <code>paid</code></td></tr>
+    <tr><td><code>product_status</code></td><td>VARCHAR(100)</td><td>Line item status (<code>in_progress</code>, <code>won</code>, <code>lost</code>)</td></tr>
+    <tr><td><code>lead_status_id</code></td><td>BIGINT UNSIGNED</td><td>Independent status stage for this product line</td></tr>
+    <tr><td><code>converted_at</code></td><td>DATETIME</td><td>Exact timestamp when product line closed as Won</td></tr>
+    <tr><td><code>closure_date</code></td><td>DATE</td><td>Expected or realized sale closure date</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3. <code>lead_call_updates</code> Table (Interaction &amp; Telephony Logs)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Column</th>
+      <th style="width: 22%;">Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED</td><td>Primary Key</td></tr>
+    <tr><td><code>lead_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>leads.id</code></td></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT UNSIGNED</td><td>Caller executive ID (<code>users.id</code>)</td></tr>
+    <tr><td><code>called_at</code></td><td>DATETIME</td><td>Call timestamp</td></tr>
+    <tr><td><code>outcome</code></td><td>VARCHAR(100)</td><td>Master outcome category ID</td></tr>
+    <tr><td><code>outcome_subcategory</code></td><td>VARCHAR(100)</td><td>Subcategory outcome (e.g. "Price Objection")</td></tr>
+    <tr><td><code>notes</code></td><td>TEXT</td><td>Call transcript / telecaller remarks</td></tr>
+    <tr><td><code>next_follow_up</code></td><td>DATE</td><td>Scheduled follow-up date</td></tr>
+    <tr><td><code>followup_time</code></td><td>TIME</td><td>Scheduled follow-up time slot</td></tr>
+  </tbody>
+</table>
+
+<h3>2.4. <code>lead_reminders</code> Table (Scheduled Tasks)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Column</th>
+      <th style="width: 22%;">Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED</td><td>Primary Key</td></tr>
+    <tr><td><code>lead_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>leads.id</code></td></tr>
+    <tr><td><code>user_id</code></td><td>BIGINT UNSIGNED</td><td>Assigned agent to execute reminder</td></tr>
+    <tr><td><code>title</code></td><td>VARCHAR(255)</td><td>Reminder title (e.g. "Proposal Follow-up Call")</td></tr>
+    <tr><td><code>description</code></td><td>TEXT</td><td>Notes and briefing</td></tr>
+    <tr><td><code>remind_at</code></td><td>DATE</td><td>Scheduled execution date</td></tr>
+    <tr><td><code>remainder_time</code></td><td>TIME</td><td>Execution time</td></tr>
+    <tr><td><code>is_completed</code></td><td>BOOLEAN</td><td><code>1</code> when done, <code>0</code> when pending</td></tr>
+    <tr><td><code>completed_at</code></td><td>DATETIME</td><td>Completion timestamp</td></tr>
+  </tbody>
+</table>
+
+<h3>2.5. <code>lead_product_payments</code> Table (Collections &amp; TDS Tracking)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Column</th>
+      <th style="width: 22%;">Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED</td><td>Primary Key</td></tr>
+    <tr><td><code>lead_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>leads.id</code></td></tr>
+    <tr><td><code>lead_product_id</code></td><td>BIGINT UNSIGNED</td><td>Foreign Key to <code>lead_products.id</code></td></tr>
+    <tr><td><code>amount</code></td><td>DECIMAL(12,2)</td><td>Gross payment received</td></tr>
+    <tr><td><code>is_tds_deducted</code></td><td>BOOLEAN</td><td>Indicates if TDS was withheld by client</td></tr>
+    <tr><td><code>tds_percentage</code></td><td>DECIMAL(5,2)</td><td>TDS % deducted</td></tr>
+    <tr><td><code>tds_amount</code></td><td>DECIMAL(12,2)</td><td>TDS amount deducted</td></tr>
+    <tr><td><code>after_tds_amount</code></td><td>DECIMAL(12,2)</td><td>Net bank credit received</td></tr>
+    <tr><td><code>payment_mode</code></td><td>VARCHAR(50)</td><td><code>NEFT</code>, <code>UPI</code>, <code>Cheque</code>, <code>Card</code>, <code>Cash</code></td></tr>
+    <tr><td><code>payment_date</code></td><td>DATE</td><td>Bank transaction date</td></tr>
+    <tr><td><code>reference_number</code></td><td>VARCHAR(100)</td><td>Bank UTR / Transaction reference</td></tr>
+    <tr><td><code>attachment_path</code></td><td>VARCHAR(255)</td><td>Bank receipt file voucher attachment</td></tr>
+  </tbody>
+</table>
+
+<h3>2.6. Dynamic Custom Fields (<code>lead_form_fields</code> &amp; <code>lead_field_values</code>)</h3>
+<p>
+  Tenant admins can create dynamic custom fields per branch (e.g. "GST Number", "Annual Turnover", "Website URL") without running migrations. The data is persisted using an Entity-Attribute-Value (EAV) structure in <code>lead_field_values</code>.
+</p>
+
+<!-- Section 3 -->
+<h2>3. Eloquent Models &amp; Business Logic</h2>
+
+<h3>3.1. <code>App\Models\Lead</code> Lifecycle Booting</h3>
+<pre><code class="language-php">protected static function booted(): void
+{
+    // 1. Global Branch Scoping for Branch Managers
+    static::addGlobalScope('branch', function (Builder $builder) {
+        if (! auth()->hasUser()) return;
+        $user = auth()->user();
+        if ($user && $user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            if (!empty($branchIds)) {
+                $builder->whereIn($builder->getModel()->getTable() . '.branch_id', $branchIds);
+            }
+        }
+    });
+
+    // 2. Automated Attribute Assignment on Creation
+    static::creating(function (Lead $lead) {
+        if (!$lead->created_by && auth()->check()) {
+            $lead->created_by = auth()->id();
+        }
+        if (!$lead->company_id && auth()->check()) {
+            $lead->company_id = auth()->user()?->company_id;
+        }
+        if (!$lead->lead_date) {
+            $lead->lead_date = now()->toDateString();
+        }
+    });
+}</code></pre>
+
+<h3>Key Query Scopes</h3>
+<ul>
+  <li><code>scopeForUser($query, $userId)</code>: Restricts records to where <code>assigned_to == $userId</code> or <code>created_by == $userId</code>.</li>
+  <li><code>scopeForBranch($query, $branchId)</code>: Limits records strictly to a specified branch ID.</li>
+  <li><code>scopeConverted($query)</code>: Matches won leads using status IDs <code>[5, 15]</code> or status strings <code>won</code> / <code>converted</code>.</li>
+  <li><code>scopeLost($query)</code>: Filters lost / cancelled / not-interested leads.</li>
+</ul>
+
+<!-- Section 4 -->
+<h2>4. Security &amp; Role-Based Data Visibility (<code>DataVisibilityService</code>)</h2>
+<p>
+  Visibility is centrally enforced by <code>App\Services\DataVisibilityService::applyLeadVisibility($query)</code>. It ensures no user can access leads outside their authorized organizational hierarchy.
+</p>
+
+<div class="role-grid">
+  <div class="role-card">
+    <h4>1. ACCESS_COMPANY (Company Admin / Director)</h4>
+    <p>Complete company-wide visibility across all branches belonging to <code>company_id</code>.</p>
+  </div>
+  <div class="role-card">
+    <h4>2. ACCESS_BRANCH (Branch Manager)</h4>
+    <p>Restricted to leads belonging to their assigned branch IDs configured in <code>user_branches</code>.</p>
+  </div>
+  <div class="role-card">
+    <h4>3. ACCESS_TEAM / TL (Team Leader)</h4>
+    <p>Can access leads assigned to themselves and any sales reps reporting to them in <code>user_mappings</code>.</p>
+  </div>
+  <div class="role-card">
+    <h4>4. ACCESS_SELF (Sales Executive / Telecaller)</h4>
+    <p>Strictly restricted to leads where <code>assigned_to = auth()->id()</code> or <code>created_by = auth()->id()</code>.</p>
+  </div>
+</div>
+
+<!-- Section 5 -->
+<h2>5. Web &amp; Mobile API Endpoints</h2>
+
+<h3>5.1. Web Controller Routes (<code>routes/web.php</code>)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 28%;">Endpoint</th>
+      <th style="width: 25%;">Controller Action</th>
+      <th style="width: 15%;">Middleware</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads</code></td><td><code>LeadController@index</code></td><td><code>can:leads.view</code></td><td>Main Lead Pipeline &amp; Table</td></tr>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads/untouched</code></td><td><code>LeadController@untouchedIndex</code></td><td><code>can:leads.view</code></td><td>Uncontacted leads with 0 calls</td></tr>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads/products</code></td><td><code>LeadController@productsIndex</code></td><td><code>can:leads.view</code></td><td>Product line items breakdown</td></tr>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads/create</code></td><td><code>LeadController@create</code></td><td><code>can:leads.create</code></td><td>Lead creation form</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads</code></td><td><code>LeadController@store</code></td><td><code>can:leads.create</code></td><td>Save lead &amp; dynamic fields</td></tr>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads/{lead}</code></td><td><code>LeadController@show</code></td><td><code>can:leads.view</code></td><td>360-degree lead profile page</td></tr>
+    <tr><td><span class="badge badge-get">GET</span></td><td><code>/leads/{lead}/edit</code></td><td><code>LeadController@edit</code></td><td><code>can:leads.edit</code></td><td>Lead edit form</td></tr>
+    <tr><td><span class="badge badge-put">PUT</span></td><td><code>/leads/{lead}</code></td><td><code>LeadController@update</code></td><td><code>can:leads.edit</code></td><td>Update lead attributes</td></tr>
+    <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/leads/{lead}</code></td><td><code>LeadController@destroy</code></td><td><code>can:leads.delete</code></td><td>Soft-delete lead</td></tr>
+    <tr><td><span class="badge badge-patch">PATCH</span></td><td><code>/leads/{lead}/status</code></td><td><code>LeadController@updateStatus</code></td><td><code>can:leads.update</code></td><td>Quick stage / status change</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads/{lead}/reassign</code></td><td><code>LeadController@reassign</code></td><td><code>auth</code></td><td>Reallocate lead to another agent</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads/{lead}/calls</code></td><td><code>LeadShowController@storeCall</code></td><td><code>can:call_updates.create</code></td><td>Log call &amp; auto-schedule reminder</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads/{lead}/products</code></td><td><code>LeadShowController@storeProduct</code></td><td><code>can:leads.edit</code></td><td>Attach product line item</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads/{lead}/products/{p}/payments</code></td><td><code>LeadShowController@storeProductPayment</code></td><td><code>can:leads.edit</code></td><td>Record milestone payment</td></tr>
+    <tr><td><span class="badge badge-post">POST</span></td><td><code>/leads/{lead}/cst-updates</code></td><td><code>LeadController@storeCstUpdate</code></td><td><code>auth</code></td><td>CST post-sales log update</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2. Mobile REST API Routes (<code>routes/api.php</code>)</h3>
+<p>Protected by <code>auth:sanctum</code> for Android and iOS Flutter CRM apps:</p>
+<ul>
+  <li><code>GET /api/leads</code> - Paginated leads list with query filters.</li>
+  <li><code>GET /api/leads/{id}</code> - Complete lead resource with products, calls, and reminders.</li>
+  <li><code>POST /api/leads</code> - Mobile lead capture (validates via <code>Lead::MOBILE_NUMBER_REGEX</code>).</li>
+  <li><code>PUT /api/leads/{id}</code> - Full lead update.</li>
+  <li><code>PATCH /api/leads/{id}/status</code> - Quick pipeline status update.</li>
+  <li><code>POST /api/leads/{id}/calls</code> - Mobile telecalling interaction log.</li>
+  <li><code>GET /api/leads/price-requests</code> - Fetch pending discount approval requests.</li>
+  <li><code>POST /api/leads/price-requests/{id}/approve</code> - Approve discounted unit price.</li>
+  <li><code>POST /api/leads/price-requests/{id}/reject</code> - Reject discounted unit price.</li>
+</ul>
+
+<!-- Section 6 -->
+<h2>6. Core Subsystems &amp; Integrations</h2>
+
+<h3>6.1. Untouched Leads Pipeline</h3>
+<p>
+  Identifies inbound leads that have received 0 customer interactions to prevent leads from growing cold:
+</p>
+<pre><code class="language-sql">SELECT * FROM leads 
+WHERE id NOT IN (SELECT DISTINCT lead_id FROM lead_call_updates)
+  AND lead_status NOT IN ('won', 'lost', 'cancelled')
+ORDER BY lead_date DESC;</code></pre>
+
+<h3>6.2. Facebook Lead Ads Auto-Import</h3>
+<p>
+  Automated ingestion via <code>App\Services\FacebookLeadImporter</code>:
+</p>
+<ul>
+  <li>Queries Meta Graph API <code>v19.0</code> using page access tokens from <code>campaign_masters</code>.</li>
+  <li>Maps form field keys to CRM fields via <code>campaign_field_migrations</code>.</li>
+  <li>Performs round-robin auto-assignment among active agents in <code>assigned_users</code>.</li>
+  <li>Automated via cron command: <code>php artisan app:facebook-lead-integration</code>.</li>
+</ul>
+
+<h3>6.3. CSV / Excel Bulk Lead Ingestion</h3>
+<p>
+  Managed by <code>LeadImportController</code>: parses CSV headers, maps dynamic columns, detects phone number duplicates, and bulk-inserts rows inside safe database transactions.
+</p>
+
+<h3>6.4. Price Request Approval Workflow</h3>
+<p>
+  Sales reps wishing to offer discounts below approved unit rates trigger a request to <code>lead_product_price_requests</code>. Upon approval by an Admin or Sales Head, product pricing, GST, and totals are automatically updated.
+</p>
+
+<!-- Section 7 -->
+<h2>7. Developer &amp; Extension Guidelines</h2>
+
+<h3>7.1. Adding a New Column to the <code>leads</code> Table</h3>
+<ol>
+  <li><strong>Migration:</strong> <code>php artisan make:migration add_field_to_leads_table --table=leads</code></li>
+  <li><strong>Model:</strong> Add column to <code>$fillable</code> in <code>App\Models\Lead</code>.</li>
+  <li><strong>Form Requests:</strong> Add validation rules in <code>StoreLeadRequest</code> and <code>UpdateLeadRequest</code>.</li>
+  <li><strong>Blade Views:</strong> Add input in <code>form.blade.php</code> and display in <code>show.blade.php</code>.</li>
+  <li><strong>API Resource:</strong> Include attribute in <code>LeadResource</code> for mobile clients.</li>
+</ol>
+
+<div class="callout callout-important">
+  <div class="callout-title">&excl; IMPORTANT: Querying Leads Safely</div>
+  Never query <code>Lead::all()</code> directly in controllers or services without passing through <code>DataVisibilityService</code>. Always invoke:
+  <pre style="margin: 6px 0 0 0;"><code class="language-php">$query = Lead::query();
+app(DataVisibilityService::class)->applyLeadVisibility($query);</code></pre>
+</div>
+
+<div class="callout callout-tip">
+  <div class="callout-title">&#10003; TIP: Mobile Phone Number Regex &amp; Search</div>
+  Always validate phone numbers using <code>Lead::MOBILE_NUMBER_REGEX</code> (<code>/^\+?[0-9]{7,15}$/</code>). For AJAX lookups, sanitize search terms by stripping white spaces and non-digits to match international (<code>+91</code>) and domestic numbers seamlessly.
+</div>
+
+<!-- Section 8 -->
+<h2>8. Directory &amp; File Reference Map</h2>
+<pre><code>myagency/
+├── app/
+│   ├── Console/Commands/
+│   │   ├── FacebookLeadIntegration.php        # Cron command for Meta Graph API sync
+│   │   ├── SyncLeadAssignedTo.php            # Sync assignment consistency
+│   │   └── SyncLeadBranch.php                # Sync branch allocations
+│   ├── Http/Controllers/
+│   │   ├── LeadController.php                # Main web CRUD &amp; pipeline actions
+│   │   ├── LeadShowController.php            # Detail page sub-resources (calls, products, payments)
+│   │   ├── LeadCallUpdateController.php      # Call reports and histories
+│   │   ├── LeadImportController.php          # Bulk CSV/Excel lead ingestion
+│   │   ├── LeadReallocationController.php    # Mass transfer of leads between agents
+│   │   ├── LeadSourceController.php          # Lead source master CRUD
+│   │   ├── LeadStatusController.php          # Lead status master CRUD
+│   │   ├── LeadProductController.php         # Product line items management
+│   │   ├── LeadFormFieldController.php       # Dynamic custom field builder
+│   │   └── App/
+│   │       ├── LeadController.php            # Mobile REST API endpoints
+│   │       └── LeadShowController.php        # Mobile detail &amp; touchpoint actions
+│   ├── Http/Requests/
+│   │   ├── StoreLeadRequest.php              # Ingestion validation &amp; custom field rules
+│   │   └── UpdateLeadRequest.php             # Edit validation
+│   ├── Models/
+│   │   ├── Lead.php                          # Core Lead model &amp; scopes
+│   │   ├── LeadProduct.php                   # Product line items
+│   │   ├── LeadProductPayment.php            # Milestone payments &amp; TDS
+│   │   ├── LeadCallUpdate.php                # Interaction logs &amp; call outcomes
+│   │   ├── LeadReminder.php                  # Follow-up tasks &amp; reminders
+│   │   ├── LeadSource.php                    # Source master
+│   │   ├── LeadStatus.php                    # Status master
+│   │   ├── LeadFormField.php                 # Dynamic form builder schema
+│   │   └── LeadFieldValue.php                # Dynamic field values (EAV)
+│   └── Services/
+│       ├── DataVisibilityService.php         # Multi-level hierarchical RBAC
+│       └── FacebookLeadImporter.php          # Meta Graph API ingestion service
+└── resources/views/pages/leads/
+    ├── index.blade.php                       # Main lead pipeline &amp; listing view
+    ├── show.blade.php                        # 360-degree comprehensive profile
+    ├── create.blade.php / edit.blade.php     # Lead forms
+    ├── form.blade.php                        # Reusable form component with custom fields
+    ├── untouched.blade.php                   # Dormant/untouched lead queue
+    ├── call_updates/index.blade.php          # Telecalling audit log
+    └── products/index.blade.php              # Product line items breakdown view</code></pre>
+
+<div class="footer">
+  &copy; 2026 myAgenci.ai CRM. Confidential &amp; Proprietary Technical Documentation. Generated for Internal Engineering Reference.
+</div>
+
+</body>
+</html>

@@ -14,6 +14,7 @@ class LeadProductPayment extends Model
     protected $fillable = [
         'lead_product_id',
         'lead_id',
+        'branch_id',
         'recorded_by',
         'payment_type',
         'is_tds_deducted',
@@ -30,9 +31,10 @@ class LeadProductPayment extends Model
     ];
 
     const PAYMENT_TYPES = [
-        'new_sale'        => 'New Sale',
-        'balance_payment' => 'Balance Payment',
-        'renewals'        => 'Renewals',
+        'new_sale'          => 'New Sale',
+        'balance_payment'   => 'Balance Payment',
+        'renewals'          => 'Renewals',
+        'ad_budget_partner' => 'Ad Budget for partner',
     ];
 
     public function getPaymentTypeLabelAttribute(): string
@@ -67,6 +69,7 @@ class LeadProductPayment extends Model
 
     public function product()    { return $this->belongsTo(LeadProduct::class, 'lead_product_id'); }
     public function lead()       { return $this->belongsTo(Lead::class); }
+    public function branch()     { return $this->belongsTo(Branch::class, 'branch_id'); }
     public function recordedBy() { return $this->belongsTo(User::class, 'recorded_by'); }
 
     public function getFormattedAmountAttribute(): string

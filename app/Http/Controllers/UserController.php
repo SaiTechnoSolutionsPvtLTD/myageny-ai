@@ -268,6 +268,13 @@ class UserController extends Controller
             return back()->with('error', 'Company admin account cannot be deactivated. Assign another company admin first.');
         }
 
+        if (! $user->is_active) {
+            $company = $this->currentCompany();
+            if ($company && $company->activeUsers()->count() >= $company->user_limit) {
+                return back()->with('error', 'User limit reached for this company. Please contact admin to increase the limit.');
+            }
+        }
+
         $user->update(['is_active' => !$user->is_active]);
 
         $this->syncEmployeeOnboardingStatus($user);
