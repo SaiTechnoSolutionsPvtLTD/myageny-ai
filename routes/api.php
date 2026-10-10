@@ -54,6 +54,7 @@ use App\Http\Controllers\App\CrmTaskApiController;
 use App\Http\Controllers\App\CustomerSuccessDashboardApiController;
 use App\Http\Controllers\App\PreSalesApiController;
 use App\Http\Controllers\App\ExpenseRequestApiController;
+use App\Http\Controllers\App\AccountsApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -787,4 +788,52 @@ Route::middleware('auth:sanctum')->prefix('mobile/day-sales-tracker')->name('mob
     Route::post('/update-sale-type', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'updateSaleType'])->name('update-sale-type');
     Route::get('/report', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'report'])->name('report');
     Route::get('/trend-analysis', [\App\Http\Controllers\App\DaySalesTrackerApiController::class, 'trendAnalysis'])->name('trend-analysis');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Mobile Accounts Module Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accounts.')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [AccountsApiController::class, 'dashboard'])->name('dashboard');
+
+    // Ad Budget - Clients
+    Route::get('/ad-budget/clients', [AccountsApiController::class, 'adBudgetClients'])->name('ad-budget.clients');
+    Route::post('/ad-budget/clients/raise', [AccountsApiController::class, 'raiseClientBudget'])->name('ad-budget.clients.raise');
+    Route::post('/ad-budget/{adBudgetRequest}/tl-approve', [AccountsApiController::class, 'tlApproveAdBudget'])->name('ad-budget.tl-approve');
+    Route::post('/ad-budget/{adBudgetRequest}/accounts-approve', [AccountsApiController::class, 'accountsApproveAdBudget'])->name('ad-budget.accounts-approve');
+
+    // Ad Budget - Partners
+    Route::get('/ad-budget/partners', [AccountsApiController::class, 'adBudgetPartners'])->name('ad-budget.partners');
+    Route::post('/ad-budget/partners/raise', [AccountsApiController::class, 'raisePartnerBudget'])->name('ad-budget.partners.raise');
+
+    // Ad Budget - Ad Spent
+    Route::get('/ad-budget/spend', [AccountsApiController::class, 'adSpends'])->name('ad-budget.spend');
+    Route::post('/ad-budget/spend', [AccountsApiController::class, 'storeAdSpend'])->name('ad-budget.spend.store');
+    Route::put('/ad-budget/spend/{adSpend}', [AccountsApiController::class, 'updateAdSpend'])->name('ad-budget.spend.update');
+    Route::delete('/ad-budget/spend/{adSpend}', [AccountsApiController::class, 'destroyAdSpend'])->name('ad-budget.spend.destroy');
+
+    // Ad Budget - Allocation Vs Spent
+    Route::get('/ad-budget/allocation-vs-spent', [AccountsApiController::class, 'allocationVsSpent'])->name('ad-budget.allocation-vs-spent');
+
+    // Domains & Hosting
+    Route::get('/domains', [AccountsApiController::class, 'domains'])->name('domains.index');
+    Route::post('/domains', [AccountsApiController::class, 'storeDomain'])->name('domains.store');
+    Route::put('/domains/{domain}', [AccountsApiController::class, 'updateDomain'])->name('domains.update');
+    Route::delete('/domains/{domain}', [AccountsApiController::class, 'destroyDomain'])->name('domains.destroy');
+    Route::post('/domains/sync-godaddy', [AccountsApiController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
+
+    Route::get('/hostings', [AccountsApiController::class, 'hostings'])->name('hostings.index');
+    Route::post('/hostings', [AccountsApiController::class, 'storeHosting'])->name('hostings.store');
+    Route::put('/hostings/{hosting}', [AccountsApiController::class, 'updateHosting'])->name('hostings.update');
+    Route::delete('/hostings/{hosting}', [AccountsApiController::class, 'destroyHosting'])->name('hostings.destroy');
+
+    // Ad Accounts Master
+    Route::get('/ad-accounts-master', [AccountsApiController::class, 'adAccounts'])->name('ad-accounts-master.index');
+    Route::post('/ad-accounts-master', [AccountsApiController::class, 'storeAdAccount'])->name('ad-accounts-master.store');
+    Route::put('/ad-accounts-master/{adAccount}', [AccountsApiController::class, 'updateAdAccount'])->name('ad-accounts-master.update');
+    Route::patch('/ad-accounts-master/{adAccount}/toggle-status', [AccountsApiController::class, 'toggleAdAccountStatus'])->name('ad-accounts-master.toggle-status');
+    Route::delete('/ad-accounts-master/{adAccount}', [AccountsApiController::class, 'destroyAdAccount'])->name('ad-accounts-master.destroy');
 });
