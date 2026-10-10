@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PermissionRequestFormRequest;
+use App\Models\Branch;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\PermissionApproval;
@@ -33,6 +34,26 @@ class PermissionRequestController extends Controller
         } else {
             if ($user->company_id) {
                 $permissionRequestsQuery->where('company_id', $user->company_id);
+            }
+
+            if ($user->isBranchAdmin() && ! $user->isSuperAdmin() && ! $user->isCompanyAdmin()) {
+                $branchIds = $user->getMyBranchIds();
+                $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+                $permissionRequestsQuery->where(function ($query) use ($branchIds, $branchCodes, $user) {
+                    $query->where('user_id', $user->id)
+                        ->orWhereHas('user', function ($uq) use ($branchIds) {
+                            $uq->inBranches($branchIds);
+                        })
+                        ->orWhereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
+                            $eq->where(function ($q) use ($branchIds, $branchCodes) {
+                                $q->whereHas('portalUser', fn($pu) => $pu->inBranches($branchIds));
+                                foreach ($branchCodes as $code) {
+                                    $q->orWhere('employee_id', 'like', $code . '%');
+                                }
+                            });
+                        });
+                });
             }
 
             // Quick Filters
@@ -325,6 +346,33 @@ class PermissionRequestController extends Controller
     {
         if ((int) $permissionRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
+        }
+
+        if ($user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            $requesterUser = $permissionRequest->user;
+            $requesterEmployee = $permissionRequest->employee;
+
+            $isInBranch = false;
+            if ($requesterUser && !empty(array_intersect($branchIds, $requesterUser->getMyBranchIds()))) {
+                $isInBranch = true;
+            } elseif ($requesterEmployee) {
+                $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                if ($requesterEmployee->portalUser && !empty(array_intersect($branchIds, $requesterEmployee->portalUser->getMyBranchIds()))) {
+                    $isInBranch = true;
+                } else {
+                    foreach ($branchCodes as $code) {
+                        if (str_starts_with((string) $requesterEmployee->employee_id, $code)) {
+                            $isInBranch = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($isInBranch) {
+                return true;
+            }
         }
 
         return $permissionRequest->approvals->contains(function (PermissionApproval $approval) use ($user) {

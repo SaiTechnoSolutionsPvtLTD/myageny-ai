@@ -42,6 +42,8 @@ class Permission extends SpatiePermission
         'leave_requests' => ['menuview', 'view', 'create', 'edit', 'delete', 'update', 'approve', 'reject'],
         'permission_requests' => ['menuview', 'view', 'create', 'edit', 'delete', 'update', 'approve', 'reject'],
         'od_request' => ['menuview', 'view', 'create', 'edit', 'delete', 'update', 'approve', 'reject'],
+        'outside_permission_request' => ['menuview'],
+        'outside-office-requests' => ['menuview'],
         'visitor_management' => ['menuview'],
         'dynamic_forms' => ['menuview'],
         'facility_management' => ['menuview'],

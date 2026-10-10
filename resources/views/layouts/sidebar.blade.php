@@ -405,8 +405,7 @@
                 </a>
                 @endcan
 
-                @if(! $hrmsSelfService)
-                @can('outside_permission_request.menuview')
+                @can('outside-office-requests.menuview')
                 <a href="{{ route('hrms.outside-office-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.outside-office-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.outside-office-requests.*'))
                         <div class="active-indicator"></div>
@@ -426,7 +425,6 @@
                     </div>
                 </a>
                 @endcan
-                @endif
 
                 @if(! $hrmsSelfService)
                 @can('timesheet_lop.menuview')
