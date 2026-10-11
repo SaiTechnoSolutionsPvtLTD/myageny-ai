@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\AccountExpenseCategory;
 use App\Models\AccountExpenseSubcategory;
+use App\Models\AdAccountMaster;
+use App\Models\VendorMaster;
 use Illuminate\Http\Request;
 
 class AccountExpenseMasterController extends Controller
 {
     /**
-     * Display Master Hub page showing Cards for Expense Category and Expense Subcategory.
+     * Display Master Hub page showing Cards for Expense Category, Expense Subcategory, Ad Accounts, and Vendors.
      */
     public function index(Request $request)
     {
@@ -18,6 +20,8 @@ class AccountExpenseMasterController extends Controller
 
         $allCategories = AccountExpenseCategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allSubcategories = AccountExpenseSubcategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allAdAccounts = AdAccountMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allVendors = VendorMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
 
         $categoryStats = [
             'total'    => $allCategories->count(),
@@ -31,9 +35,23 @@ class AccountExpenseMasterController extends Controller
             'inactive' => $allSubcategories->where('status', 'inactive')->count(),
         ];
 
+        $adAccountStats = [
+            'total'    => $allAdAccounts->count(),
+            'active'   => $allAdAccounts->where('status', 'active')->count(),
+            'inactive' => $allAdAccounts->where('status', 'inactive')->count(),
+        ];
+
+        $vendorStats = [
+            'total'    => $allVendors->count(),
+            'active'   => $allVendors->where('status', 'active')->count(),
+            'inactive' => $allVendors->where('status', 'inactive')->count(),
+        ];
+
         return view('pages.accounts.master.index', compact(
             'categoryStats',
-            'subcategoryStats'
+            'subcategoryStats',
+            'adAccountStats',
+            'vendorStats'
         ));
     }
 

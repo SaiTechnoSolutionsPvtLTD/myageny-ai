@@ -330,6 +330,18 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('/expense-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleSubcategoryStatus'])->name('expense-subcategories.toggle-status');
             Route::delete('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
             Route::get('/expense-categories/{category}/subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'getSubcategoriesByCategory'])->name('expense-categories.subcategories');
+
+            // Ad Accounts Master alias
+            Route::get('/ad-accounts', fn () => redirect()->route('accounts.ad-accounts-master.index'))->name('ad-accounts.index');
+
+            // Vendor Master CRUD
+            Route::prefix('vendors')->name('vendors.')->group(function () {
+                Route::get('/', [App\Http\Controllers\VendorMasterController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\VendorMasterController::class, 'store'])->name('store');
+                Route::put('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'update'])->name('update');
+                Route::patch('/{vendor}/toggle-status', [App\Http\Controllers\VendorMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'destroy'])->name('destroy');
+            });
         });
     });
 

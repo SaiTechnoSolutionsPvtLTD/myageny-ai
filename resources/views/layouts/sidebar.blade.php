@@ -187,20 +187,8 @@
                     </div>
                 </a>
 
-                <a href="{{ route('accounts.ad-accounts-master.index') }}" class="nav-item {{ request()->routeIs('accounts.ad-accounts-master.*') ? 'active' : '' }}">
-                    @if(request()->routeIs('accounts.ad-accounts-master.*'))
-                        <div class="active-indicator"></div>
-                    @endif
-                    <div class="nav-content">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 7h-7L10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z"></path>
-                        </svg>
-                        <span>Ad Accounts Master</span>
-                    </div>
-                </a>
-
-                <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*') ? 'active' : '' }}">
-                    @if(request()->routeIs('accounts.master.*'))
+                <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*'))
                         <div class="active-indicator"></div>
                     @endif
                     <div class="nav-content">

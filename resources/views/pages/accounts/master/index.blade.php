@@ -86,9 +86,9 @@
 /* Master Cards Grid */
 .master-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 24px;
-    max-width: 900px;
+    max-width: 1280px;
 }
 
 .master-card {
@@ -149,6 +149,18 @@
     background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
     color: #2563eb;
     border: 1px solid #bfdbfe;
+}
+
+.icon-purple {
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    color: #9333ea;
+    border: 1px solid #e9d5ff;
+}
+
+.icon-emerald {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    color: #059669;
+    border: 1px solid #a7f3d0;
 }
 
 .master-card-badge {
@@ -227,7 +239,7 @@
             </div>
             <h1 class="master-title">Accounts Master Hub</h1>
             <p class="master-subtitle">
-                Centralized master control for expense categorization and subcategory breakdown. Select a card below to manage records and add new entries.
+                Centralized master control for expense categorization, subcategory breakdown, ad accounts, and registered vendors. Select a card below to manage records and add new entries.
             </p>
         </div>
 
@@ -241,15 +253,23 @@
                 <span><strong>{{ $subcategoryStats['total'] }}</strong> Subcategories</span>
             </div>
             <div class="master-glance-item">
+                <i class="bi bi-wallet2" style="color:#9333ea;"></i>
+                <span><strong>{{ $adAccountStats['total'] }}</strong> Ad Accounts</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-shop" style="color:#059669;"></i>
+                <span><strong>{{ $vendorStats['total'] }}</strong> Vendors</span>
+            </div>
+            <div class="master-glance-item">
                 <i class="bi bi-check-circle-fill" style="color:#16a34a;"></i>
-                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] }}</strong> Active Entries</span>
+                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] }}</strong> Active Entries</span>
             </div>
         </div>
     </div>
 
     {{-- Alert Messages --}}
     @if(session('success'))
-        <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:14px 20px; border-radius:12px; font-size:13px; font-weight:600; margin-bottom:24px; max-width:900px;">
+        <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:14px 20px; border-radius:12px; font-size:13px; font-weight:600; margin-bottom:24px; max-width:1280px;">
             ✓ {{ session('success') }}
         </div>
     @endif
@@ -307,6 +327,60 @@
                 </div>
                 <div class="master-card-action">
                     Manage Subcategories <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 3: Ad Account Master --}}
+        <a href="{{ route('accounts.ad-accounts-master.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-purple">
+                        <i class="bi bi-wallet2"></i>
+                    </div>
+                    <span class="master-card-badge">Ads Master</span>
+                </div>
+                <div class="master-card-title">Ad Account Master</div>
+                <div class="master-card-desc">
+                    Manage digital marketing ad accounts for Meta, Google Ads, LinkedIn & more with branch allocation, platform IDs, and status tracking.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $adAccountStats['total'] }}</strong> Accounts
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $adAccountStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage Ad Accounts <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 4: Vendor Master --}}
+        <a href="{{ route('accounts.master.vendors.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-emerald">
+                        <i class="bi bi-shop"></i>
+                    </div>
+                    <span class="master-card-badge">Vendors Master</span>
+                </div>
+                <div class="master-card-title">Vendor Master</div>
+                <div class="master-card-desc">
+                    Register and manage supplier & vendor profiles, GST numbers, contact details, and bank settlement credentials.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $vendorStats['total'] }}</strong> Vendors
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $vendorStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage Vendors <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
