@@ -318,7 +318,7 @@ class InternApiController extends Controller
                                     ? $i->date_of_birth->age . ' yrs'
                                     : '',
             'declaration_date'=> optional($i->declaration_date)->format('d M Y') ?? '',
-            'avatar_initial'  => strtoupper(substr($i->name, 0, 1)),
+            'avatar_initial'  => avatar_initial($i->name),
             'created_at'      => optional($i->created_at)->format('d M Y'),
 
             // Mirrors the remaining intern-index.blade.php table columns
@@ -345,7 +345,7 @@ class InternApiController extends Controller
             'name'                     => $i->name,
             'email'                    => $i->email,
             'mobile'                   => $i->mobile,
-            'avatar_initial'           => strtoupper(substr($i->name, 0, 1)),
+            'avatar_initial'           => avatar_initial($i->name),
             'photograph_url'           => $i->photograph ? asset('storage/' . $i->photograph) : null,
 
             // Internship — mirrors the "Personal Details" card's internship

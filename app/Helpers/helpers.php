@@ -59,3 +59,62 @@ if (!function_exists('amount_in_words')) {
         return trim($rupees) . " Rupees" . $paise . " Only";
     }
 }
+
+if (!function_exists('ensure_utf8')) {
+    function ensure_utf8(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            if (mb_check_encoding($value, 'UTF-8')) {
+                return $value;
+            }
+
+            // Convert Windows-1252 / ISO-8859-1 strings (e.g. smart quotes, em-dashes, bullets)
+            $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+            if (mb_check_encoding($converted, 'UTF-8')) {
+                return $converted;
+            }
+
+            // Fallback transcode/scrub invalid bytes
+            return mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        }
+
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $k => $v) {
+                $cleanKey = is_string($k) ? ensure_utf8($k) : $k;
+                $clean[$cleanKey] = ensure_utf8($v);
+            }
+            return $clean;
+        }
+
+        return $value;
+    }
+}
+
+if (!function_exists('avatar_initial')) {
+    function avatar_initial(?string $name, string $fallback = '?'): string
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return $fallback;
+        }
+
+        return mb_strtoupper(mb_substr($name, 0, 1, 'UTF-8'), 'UTF-8');
+    }
+}
+
+if (!function_exists('utf8_json_response')) {
+    function utf8_json_response(mixed $data = [], int $status = 200, array $headers = []): \Illuminate\Http\JsonResponse
+    {
+        $headers = array_merge(['Content-Type' => 'application/json; charset=UTF-8'], $headers);
+        $cleanData = ensure_utf8($data);
+
+        return response()->json(
+            $cleanData,
+            $status,
+            $headers,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+    }
+}
+

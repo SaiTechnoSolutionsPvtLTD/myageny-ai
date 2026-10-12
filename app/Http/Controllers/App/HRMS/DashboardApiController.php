@@ -191,7 +191,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         // ── Today's work anniversaries ────────────────────────────────────────
@@ -203,7 +203,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
             ]);
@@ -217,7 +217,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         // ── Holiday filter (mirrors web resolveHolidayFilter) ─────────────────
@@ -231,36 +231,7 @@ class DashboardApiController extends Controller
             ->where('salary_payment_mode', 'monthly_10th')->count();
 
         // ── Monthly leave data (last 6 months) ────────────────────────────────
-        $employeeIds = $this->employeeQueryForDashboard($actingBranchIds)->pluck('id');
-        $internIds   = $this->internQueryForDashboard($actingBranchIds)->pluck('id');
-
-        $monthly_leave_data = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $month  = $today->copy()->subMonths($i);
-            $leavesQuery = DailyAttendance::whereYear('attendance_date', $month->year)
-                ->whereMonth('attendance_date', $month->month)
-                ->where('attendance_status', 'leave');
-
-            if ($actingBranchIds !== null) {
-                $leavesQuery->where(function ($q) use ($employeeIds, $internIds) {
-                    $q->where(function ($sub) use ($employeeIds) {
-                        $sub->where('attendee_type', 'employee')
-                            ->whereIn('employee_id', $employeeIds);
-                    })->orWhere(function ($sub) use ($internIds) {
-                        $sub->where('attendee_type', 'intern')
-                            ->whereIn('intern_joining_form_id', $internIds);
-                    });
-                });
-            }
-
-            $leaves = $leavesQuery->count();
-
-            $monthly_leave_data[] = [
-                'month'       => $month->format('M Y'),
-                'month_short' => $month->format('M'),
-                'leaves'      => $leaves,
-            ];
-        }
+        $monthly_leave_data = $this->buildOrganizationMonthlyLeaveData($actingBranchIds, $today);
 
         // ── Announcements ─────────────────────────────────────────────────────
         $announcements = $this->announcementsForDashboard();
@@ -305,7 +276,7 @@ class DashboardApiController extends Controller
                 ->map(fn ($er) => [
                     'id'             => $er->id,
                     'employee_name'  => optional($er->employee)->name,
-                    'avatar_initial' => strtoupper(substr(optional($er->employee)->name ?? '?', 0, 1)),
+                    'avatar_initial' => $this->avatarInitial(optional($er->employee)->name),
                     'exit_date'      => optional($er->exit_date)->toDateString(),
                     'exit_status'    => $er->exit_status,
                     'revoke_status'  => $er->revoke_status,
@@ -318,7 +289,7 @@ class DashboardApiController extends Controller
         $isAnniversaryToday     = $this->isAnniversaryToday($currentEmployee, $today);
         $isWorkAnniversaryToday = $this->isWorkAnniversaryToday($currentEmployee, $today);
 
-        return response()->json([
+        return $this->utf8JsonResponse([
             'success' => true,
             'mode'    => 'organization',
             'data'    => [
@@ -451,23 +422,7 @@ class DashboardApiController extends Controller
             : null;
 
         // ── Monthly leave data (own, last 6 months) ───────────────────────────
-        $monthly_leave_data = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $month  = $today->copy()->subMonths($i);
-            $leaves = $employee
-                ? DailyAttendance::where('employee_id', $employee->id)
-                    ->whereYear('attendance_date', $month->year)
-                    ->whereMonth('attendance_date', $month->month)
-                    ->where('attendance_status', 'leave')
-                    ->count()
-                : 0;
-
-            $monthly_leave_data[] = [
-                'month'       => $month->format('M Y'),
-                'month_short' => $month->format('M'),
-                'leaves'      => $leaves,
-            ];
-        }
+        $monthly_leave_data = $this->buildSelfServiceMonthlyLeaveData($employee, auth()->user(), $today);
 
         // ── Holiday filter (mirrors web resolveHolidayFilter) ─────────────────
         $holidayFilter     = $this->resolveHolidayFilter($request, $today);
@@ -501,7 +456,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         $today_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('date_of_marriage', $today->month)
@@ -512,7 +467,7 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
             ]);
 
         $today_work_anniversaries = $this->employeeQueryForDashboard($actingBranchId)->whereMonth('joining_date', $today->month)
@@ -523,12 +478,12 @@ class DashboardApiController extends Controller
                 'id'             => $emp->id,
                 'name'           => $emp->name,
                 'role'           => optional($emp->role)->display_name,
-                'avatar_initial' => strtoupper(substr($emp->name, 0, 1)),
+                'avatar_initial' => $this->avatarInitial($emp->name),
                 'joining_date'   => optional($emp->joining_date)->toDateString(),
                 'years'          => optional($emp->joining_date)?->diffInYears($today),
             ]);
 
-        return response()->json([
+        return $this->utf8JsonResponse([
             'success' => true,
             'mode'    => 'self_service',
             'data'    => [
@@ -753,7 +708,7 @@ class DashboardApiController extends Controller
             ->map(fn ($lr) => [
                 'id'             => $lr->id,
                 'employee_name'  => optional($lr->employee)->name,
-                'avatar_initial' => strtoupper(substr(optional($lr->employee)->name ?? '?', 0, 1)),
+                'avatar_initial' => $this->avatarInitial(optional($lr->employee)->name),
                 'role'           => optional($lr->employee?->role)->display_name,
                 'department'     => optional($lr->employee?->department)->name,
                 'start_date'     => optional($lr->start_date)->toDateString(),
@@ -800,7 +755,7 @@ class DashboardApiController extends Controller
             ->map(fn ($pr) => [
                 'id'             => $pr->id,
                 'employee_name'  => optional($pr->employee)->name,
-                'avatar_initial' => strtoupper(substr(optional($pr->employee)->name ?? '?', 0, 1)),
+                'avatar_initial' => $this->avatarInitial(optional($pr->employee)->name),
                 'role'           => optional($pr->employee?->role)->display_name,
                 'department'     => optional($pr->employee?->department)->name,
                 'from_time'      => $pr->from_time,
@@ -879,7 +834,7 @@ class DashboardApiController extends Controller
                 'candidate_name'           => $interview->candidate?->name,
                 'candidate_no'             => $interview->candidate?->candidate_no,
                 'job_title'                => $interview->candidate?->job_title,
-                'avatar_initial'           => strtoupper(substr($interview->candidate?->name ?: 'C', 0, 1)),
+                'avatar_initial'           => $this->avatarInitial($interview->candidate?->name, 'C'),
                 'scheduled_at'             => optional($interview->scheduled_at)->format('Y-m-d H:i:s'),
                 'scheduled_at_formatted'   => optional($interview->scheduled_at)->format('d M Y, h:i A'),
                 'interviewer_name'         => $interview->interviewer_name,
@@ -965,8 +920,9 @@ class DashboardApiController extends Controller
         return $query->get(['id', 'name']);
     }
 
-    private function resolveActingBranchIds(Request $request): ?array
+    private function resolveActingBranchIds(?Request $request = null): ?array
     {
+        $request = $request ?? request();
         $user = auth()->user();
         if (! $user) {
             return null;
@@ -1012,6 +968,13 @@ class DashboardApiController extends Controller
         }
 
         return $user->branch_id ? [(int) $user->branch_id] : null;
+    }
+
+    private function resolveActingBranchId(?Request $request = null): ?int
+    {
+        $ids = $this->resolveActingBranchIds($request);
+
+        return (! empty($ids) && ! in_array(-1, $ids, true)) ? (int) $ids[0] : null;
     }
 
     private function currentEmployee(): ?EmployeeOnboarding
@@ -1493,4 +1456,281 @@ class DashboardApiController extends Controller
             'rejected_at'        => $od->rejected_at?->format('Y-m-d H:i:s'),
         ];
     }
+
+    /**
+     * Build the last 6 months leave data for the logged-in employee self-service dashboard.
+     * Incorporates approved LeaveRequests and DailyAttendance records without duplicating dates.
+     */
+    private function buildSelfServiceMonthlyLeaveData(?EmployeeOnboarding $employee, ?User $user, Carbon $today): array
+    {
+        $startOfCurrentMonth = $today->copy()->startOfMonth();
+        $windowStart = $startOfCurrentMonth->copy()->subMonths(5)->startOfDay();
+        $windowEnd   = $today->copy()->endOfMonth()->endOfDay();
+
+        $approvedLeaves = collect();
+        if ($user || $employee) {
+            $approvedLeaves = LeaveRequest::query()
+                ->where('status', LeaveRequest::STATUS_APPROVED)
+                ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+                ->where(function ($q) use ($user, $employee) {
+                    $hasCondition = false;
+                    if ($user) {
+                        $q->where('user_id', $user->id);
+                        $hasCondition = true;
+                    }
+                    if ($employee) {
+                        if ($hasCondition) {
+                            $q->orWhere('employee_id', $employee->id);
+                        } else {
+                            $q->where('employee_id', $employee->id);
+                        }
+                    }
+                })
+                ->whereDate('start_date', '<=', $windowEnd->toDateString())
+                ->whereDate('end_date', '>=', $windowStart->toDateString())
+                ->get(['id', 'start_date', 'end_date', 'total_days']);
+        }
+
+        $dailyLeaves = $employee
+            ? DailyAttendance::query()
+                ->where('employee_id', $employee->id)
+                ->whereBetween('attendance_date', [$windowStart->toDateString(), $windowEnd->toDateString()])
+                ->where('attendance_status', 'leave')
+                ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+                ->pluck('attendance_date')
+                ->map(fn ($d) => optional($d)->toDateString())
+                ->filter()
+                ->all()
+            : [];
+
+        $monthlyLeaveData = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month  = $startOfCurrentMonth->copy()->subMonths($i);
+            $mStart = $month->copy()->startOfMonth();
+            $mEnd   = $month->copy()->endOfMonth();
+
+            $leaveDates = [];
+
+            foreach ($approvedLeaves as $lr) {
+                if (! $lr->start_date || ! $lr->end_date) {
+                    continue;
+                }
+                $lrStart = Carbon::parse($lr->start_date)->startOfDay();
+                $lrEnd   = Carbon::parse($lr->end_date)->startOfDay();
+
+                if ($lrStart->gt($lrEnd)) {
+                    continue;
+                }
+
+                if ($lrStart->lte($mEnd) && $lrEnd->gte($mStart)) {
+                    $overlapStart = $lrStart->gt($mStart) ? $lrStart->copy() : $mStart->copy();
+                    $overlapEnd   = $lrEnd->lt($mEnd) ? $lrEnd->copy() : $mEnd->copy();
+
+                    $cursor = $overlapStart->copy();
+                    while ($cursor->lte($overlapEnd)) {
+                        $leaveDates[$cursor->toDateString()] = true;
+                        $cursor->addDay();
+                    }
+                }
+            }
+
+            foreach ($dailyLeaves as $attDate) {
+                if ($attDate >= $mStart->toDateString() && $attDate <= $mEnd->toDateString()) {
+                    $leaveDates[$attDate] = true;
+                }
+            }
+
+            $monthlyLeaveData[] = [
+                'month'       => $month->format('M Y'),
+                'month_short' => $month->format('M'),
+                'leaves'      => count($leaveDates),
+            ];
+        }
+
+        return $monthlyLeaveData;
+    }
+
+    /**
+     * Build the last 6 months leave data for the organization dashboard within acting branch scope.
+     * Incorporates approved LeaveRequests and DailyAttendance records without duplicating person-days.
+     */
+    private function buildOrganizationMonthlyLeaveData(array|int|null $actingBranchIds, Carbon $today): array
+    {
+        $startOfCurrentMonth = $today->copy()->startOfMonth();
+        $windowStart = $startOfCurrentMonth->copy()->subMonths(5)->startOfDay();
+        $windowEnd   = $today->copy()->endOfMonth()->endOfDay();
+
+        $employeeQuery = $this->employeeQueryForDashboard($actingBranchIds);
+        $internQuery   = $this->internQueryForDashboard($actingBranchIds);
+
+        $employeeIds   = $employeeQuery->pluck('id')->all();
+        $internIds     = $internQuery->pluck('id')->all();
+
+        if ($actingBranchIds !== null && empty($employeeIds) && empty($internIds)) {
+            $monthlyLeaveData = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $month = $startOfCurrentMonth->copy()->subMonths($i);
+                $monthlyLeaveData[] = [
+                    'month'       => $month->format('M Y'),
+                    'month_short' => $month->format('M'),
+                    'leaves'      => 0,
+                ];
+            }
+            return $monthlyLeaveData;
+        }
+
+        $employeePortalUserIds = ! empty($employeeIds)
+            ? EmployeeOnboarding::whereIn('id', $employeeIds)->whereNotNull('portal_user_id')->pluck('portal_user_id')->all()
+            : [];
+
+        $userToEmployeeMap = ! empty($employeePortalUserIds)
+            ? EmployeeOnboarding::whereIn('portal_user_id', $employeePortalUserIds)->pluck('id', 'portal_user_id')->all()
+            : [];
+
+        // 1. Approved LeaveRequests overlapping the 6-month window
+        $leaveRequestsQuery = LeaveRequest::query()
+            ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
+            ->whereDate('start_date', '<=', $windowEnd->toDateString())
+            ->whereDate('end_date', '>=', $windowStart->toDateString());
+
+        if ($actingBranchIds !== null) {
+            $leaveRequestsQuery->where(function ($q) use ($employeeIds, $employeePortalUserIds) {
+                $q->whereIn('employee_id', $employeeIds);
+                if (! empty($employeePortalUserIds)) {
+                    $q->orWhereIn('user_id', $employeePortalUserIds);
+                }
+            });
+        }
+
+        $approvedLeaveRequests = $leaveRequestsQuery->get(['id', 'employee_id', 'user_id', 'start_date', 'end_date', 'total_days']);
+
+        // 2. DailyAttendance leave entries overlapping the 6-month window
+        $dailyAttendanceQuery = DailyAttendance::query()
+            ->whereBetween('attendance_date', [$windowStart->toDateString(), $windowEnd->toDateString()])
+            ->where('attendance_status', 'leave')
+            ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id));
+
+        if ($actingBranchIds !== null) {
+            $dailyAttendanceQuery->where(function ($q) use ($employeeIds, $internIds) {
+                $q->where(function ($sub) use ($employeeIds) {
+                    $sub->where('attendee_type', 'employee')
+                        ->whereIn('employee_id', $employeeIds);
+                })->orWhere(function ($sub) use ($internIds) {
+                    $sub->where('attendee_type', 'intern')
+                        ->whereIn('intern_joining_form_id', $internIds);
+                });
+            });
+        }
+
+        $dailyLeaves = $dailyAttendanceQuery->get(['attendee_type', 'employee_id', 'intern_joining_form_id', 'attendance_date']);
+
+        $monthlyLeaveData = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month  = $startOfCurrentMonth->copy()->subMonths($i);
+            $mStart = $month->copy()->startOfMonth();
+            $mEnd   = $month->copy()->endOfMonth();
+
+            $personLeaveMap = [];
+
+            // From approved leave requests
+            foreach ($approvedLeaveRequests as $lr) {
+                if (! $lr->start_date || ! $lr->end_date) {
+                    continue;
+                }
+
+                $lrStart = Carbon::parse($lr->start_date)->startOfDay();
+                $lrEnd   = Carbon::parse($lr->end_date)->startOfDay();
+
+                if ($lrStart->gt($lrEnd)) {
+                    continue;
+                }
+
+                $empId = $lr->employee_id ?? ($userToEmployeeMap[$lr->user_id] ?? null);
+                $personKey = $empId ? 'emp_' . $empId : 'user_' . $lr->user_id;
+
+                if ($lrStart->lte($mEnd) && $lrEnd->gte($mStart)) {
+                    $overlapStart = $lrStart->gt($mStart) ? $lrStart->copy() : $mStart->copy();
+                    $overlapEnd   = $lrEnd->lt($mEnd) ? $lrEnd->copy() : $mEnd->copy();
+
+                    $cursor = $overlapStart->copy();
+                    while ($cursor->lte($overlapEnd)) {
+                        $personLeaveMap[$personKey . ':' . $cursor->toDateString()] = true;
+                        $cursor->addDay();
+                    }
+                }
+            }
+
+            // From daily attendance
+            foreach ($dailyLeaves as $att) {
+                $attDate = optional($att->attendance_date)->toDateString();
+                if ($attDate && $attDate >= $mStart->toDateString() && $attDate <= $mEnd->toDateString()) {
+                    $personKey = $att->attendee_type === 'intern'
+                        ? 'intern_' . $att->intern_joining_form_id
+                        : 'emp_' . $att->employee_id;
+                    $personLeaveMap[$personKey . ':' . $attDate] = true;
+                }
+            }
+
+            $monthlyLeaveData[] = [
+                'month'       => $month->format('M Y'),
+                'month_short' => $month->format('M'),
+                'leaves'      => count($personLeaveMap),
+            ];
+        }
+
+        return $monthlyLeaveData;
+    }
+
+    private function avatarInitial(?string $name, string $fallback = '?'): string
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return $fallback;
+        }
+
+        return mb_strtoupper(mb_substr($name, 0, 1, 'UTF-8'), 'UTF-8');
+    }
+
+    private function ensureUtf8(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            if (mb_check_encoding($value, 'UTF-8')) {
+                return $value;
+            }
+
+            // Convert Windows-1252 / ISO-8859-1 strings (e.g. smart quotes, em-dashes, bullets)
+            $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+            if (mb_check_encoding($converted, 'UTF-8')) {
+                return $converted;
+            }
+
+            // Fallback transcode/scrub invalid bytes
+            return mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        }
+
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $k => $v) {
+                $cleanKey = is_string($k) ? $this->ensureUtf8($k) : $k;
+                $clean[$cleanKey] = $this->ensureUtf8($v);
+            }
+            return $clean;
+        }
+
+        return $value;
+    }
+
+    private function utf8JsonResponse(array $payload, int $status = 200): JsonResponse
+    {
+        $cleanPayload = $this->ensureUtf8($payload);
+
+        return response()->json(
+            $cleanPayload,
+            $status,
+            ['Content-Type' => 'application/json; charset=UTF-8'],
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+    }
 }
+

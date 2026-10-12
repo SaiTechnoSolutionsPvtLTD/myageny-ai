@@ -325,6 +325,37 @@ class User extends Authenticatable
             || $this->isCbo();
     }
 
+    public function canViewCampaignDailyBudget(): bool
+    {
+        if ($this->isSuperAdmin() || $this->isSystemAdmin() || $this->isCompanyAdminRole() || $this->isCbo()) {
+            return true;
+        }
+
+        $permissionKeys = [
+            'campaigns.view_daily_budget',
+            'projects.view_daily_budget',
+            'campaign.view_daily_budget',
+        ];
+
+        foreach ($permissionKeys as $key) {
+            try {
+                if ($this->hasCrmPermission($key)) {
+                    return true;
+                }
+            } catch (\Throwable) {
+            }
+
+            try {
+                if ($this->can($key)) {
+                    return true;
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return false;
+    }
+
     public function isBranchAdmin(): bool
     {
         if ($this->company_id !== null && $this->hasExactRoleName(Role::tenantRoleName('branch_admin', $this->company_id))) {
@@ -1088,12 +1119,16 @@ class User extends Authenticatable
     {
         return $this->can('modules_menu.projects')
             || $this->isSuperAdmin()
-            || $this->isCompanyAdmin();
+            || $this->isCompanyAdmin()
+            || $this->isCompanyAdminRole();
     }
 
     public function canAccessMobileCrmModule(): bool
     {
-        return $this->canAccessCrmModule();
+        return $this->can('modules_menu.crm')
+            || $this->isSuperAdmin()
+            || $this->isCompanyAdmin()
+            || $this->isCompanyAdminRole();
     }
 
     public function canAccessMobileCstModule(): bool

@@ -264,6 +264,7 @@ return [
                     'hasHrLikeRole',
                     'isCompanyAdmin',
                     'isBranchAdmin',
+                    'isBranchManager',
                 ],
             ],
             // HR/Admin-only, same gate pattern as outside_office_approval
@@ -325,14 +326,20 @@ return [
         ],
     ],
 
-    'accounts' => [
-        'label' => 'Accounts',
-        'order' => 50,
-        'gate' => ['require_method' => 'canAccessMobileAccountsModule'],
-        'items' => [
-            ['key' => 'accounts.payment_collection', 'label' => 'Payment Collection', 'section' => 'ACCOUNTS', 'order' => 10, 'permission' => 'modules_menu.accounts'],
-            ['key' => 'accounts.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 20],
-        ],
-    ],
+    // 'accounts' => [
+    //     'label' => 'Accounts',
+    //     'order' => 50,
+    //     'gate' => ['require_method' => 'canAccessMobileAccountsModule'],
+    //     'items' => [
+    //         ['key' => 'accounts.dashboard', 'label' => 'Dashboard', 'section' => 'ACCOUNTS', 'order' => 10],
+    //         ['key' => 'accounts.ad_budget_clients', 'label' => 'For Clients', 'section' => 'AD BUDGET', 'order' => 20],
+    //         ['key' => 'accounts.ad_budget_partners', 'label' => 'For Partners', 'section' => 'AD BUDGET', 'order' => 30],
+    //         ['key' => 'accounts.ad_spend', 'label' => 'Ad Spent', 'section' => 'AD BUDGET', 'order' => 40],
+    //         ['key' => 'accounts.allocation_vs_spent', 'label' => 'Allocation Vs Spent', 'section' => 'AD BUDGET', 'order' => 50],
+    //         ['key' => 'accounts.domains_hosting', 'label' => 'Domains & Hosting', 'section' => 'ACCOUNTS', 'order' => 60],
+    //         ['key' => 'accounts.ad_accounts_master', 'label' => 'Ad Accounts Master', 'section' => 'ACCOUNTS', 'order' => 70],
+    //         ['key' => 'accounts.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 80],
+    //     ],
+    // ],
 
 ];

@@ -693,6 +693,8 @@ class DashboardController extends Controller
         $canViewActiveBranches = $vis['canViewActiveBranches'];
         $userRoleType          = $vis['userRoleType'];
 
+        $activeBranchesMetrics = $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [];
+
         // Aggregate ONLY the sections the logged-in user is authorized to see
         $userTotalProspects = 0;
         $userTotalDealValue = 0.0;
@@ -719,26 +721,12 @@ class DashboardController extends Controller
             $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
         }
 
-        // For Company Admin / CBO, include NST prospects from other non-default active branches
+        // For Company Admin / CBO, Total Prospects card MUST match Active Branches table total count
         $isCompanyAdminOrCboUnfiltered = ($authUser->isSuperAdmin() || $authUser->isSystemAdmin() || $authUser->isCompanyAdminRole() || $authUser->isCbo()) && !$request->filled('user_id');
-        if ($isCompanyAdminOrCboUnfiltered) {
-            $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
-            $cpProductIds = [];
-            $channelPartnerCat = ProductCategory::where('name', 'like', '%Channel Partner%')->first();
-            if ($channelPartnerCat) {
-                $cpProductIds = Product::where('product_category_id', $channelPartnerCat->id)->pluck('id')->toArray();
-            }
-
-            $otherBranchesNstQuery = (clone $currentMonthHotProductsQuery)
-                ->whereHas('lead', fn($lq) => $lq->whereNotIn('branch_id', $defaultBranchIds))
-                ->where(function ($q) use ($cpProductIds) {
-                    if (!empty($cpProductIds)) $q->whereNotIn('product_id', $cpProductIds);
-                    $q->where('product_name', 'not like', '%COCO%')->where('product_name', 'not like', '%Channel Partner%');
-                });
-
-            $userTotalProspects += (int) (clone $otherBranchesNstQuery)->count();
-            $userTotalDealValue += (float) (clone $otherBranchesNstQuery)->sum('total_price');
-            $userTotalExpectedCollection += (float) (clone $otherBranchesNstQuery)->sum('expected_value');
+        if ($isCompanyAdminOrCboUnfiltered && !empty($activeBranchesMetrics)) {
+            $userTotalProspects = (int) array_sum(array_column($activeBranchesMetrics, 'prospect_count'));
+            $userTotalDealValue = (float) array_sum(array_column($activeBranchesMetrics, 'deal_value'));
+            $userTotalExpectedCollection = (float) array_sum(array_column($activeBranchesMetrics, 'expected_value'));
         }
 
         // ── Day Sales Tracker (Today Converted Products & Collections) ──
@@ -858,7 +846,7 @@ class DashboardController extends Controller
                     'non_coco'                  => $hasNonCocoBranch ? $cpMetrics['non_coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner NON COCO Model'],
                     'coco'                      => $hasCocoBranch ? $cpMetrics['coco'] : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'Channel Partner COCO Model'],
                     'cst'                       => $canViewCst ? $cstMetrics : ['count' => 0, 'deal_value' => 0.0, 'expected_value' => 0.0, 'product_name' => 'CST'],
-                    'active_branches'           => $canViewActiveBranches ? $this->buildActiveBranchesHotMetrics($request) : [],
+                    'active_branches'           => $canViewActiveBranches ? $activeBranchesMetrics : [],
                 ],
 
                 'day_sales_tracker' => [
@@ -1243,7 +1231,7 @@ class DashboardController extends Controller
             ->toArray();
 
         // NON COCO Hot query: matching branchHotLeads logic
-        $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
+        $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
             $q->where(function ($sub) use ($nonCocoProduct) {
                 if ($nonCocoProduct) {
                     $sub->where('product_id', $nonCocoProduct->id)
@@ -1252,15 +1240,17 @@ class DashboardController extends Controller
                     $sub->where('product_name', 'like', '%NON%COCO%');
                 }
             });
-            if (!empty($nonCocoBranchIds)) {
-                $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                    $lq->whereIn('branch_id', $nonCocoBranchIds);
-                });
-            } else {
-                $q->orWhereHas('lead.branch', function ($bq) {
-                    $bq->where('is_default', false)
-                       ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                });
+            if (!$isCompanyAdminOrCbo) {
+                if (!empty($nonCocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                        $lq->whereIn('branch_id', $nonCocoBranchIds);
+                    });
+                } else {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->where('is_default', false)
+                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                    });
+                }
             }
         });
         $nonCocoHotCount = (clone $nonCocoHotQuery)->count();
@@ -1268,7 +1258,7 @@ class DashboardController extends Controller
         $nonCocoExpectedValue = (float) (clone $nonCocoHotQuery)->sum('expected_value');
 
         // COCO Hot query: matching branchHotLeads logic
-        $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
+        $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
             $q->where(function ($sub) use ($cocoProduct) {
                 if ($cocoProduct) {
                     $sub->where(function ($sq) use ($cocoProduct) {
@@ -1283,15 +1273,17 @@ class DashboardController extends Controller
                         ->where('product_name', 'not like', '%NON%');
                 }
             });
-            if (!empty($cocoBranchIds)) {
-                $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                    $lq->whereIn('branch_id', $cocoBranchIds);
-                });
-            } else {
-                $q->orWhereHas('lead.branch', function ($bq) {
-                    $bq->where('is_default', false)
-                       ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                });
+            if (!$isCompanyAdminOrCbo) {
+                if (!empty($cocoBranchIds)) {
+                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                        $lq->whereIn('branch_id', $cocoBranchIds);
+                    });
+                } else {
+                    $q->orWhereHas('lead.branch', function ($bq) {
+                        $bq->where('is_default', false)
+                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                    });
+                }
             }
         });
         $cocoHotCount = (clone $cocoHotQuery)->count();
@@ -2373,7 +2365,7 @@ class DashboardController extends Controller
                 });
             })->first();
 
-            $query->where(function ($q) use ($nonCocoProduct, $nonCocoBranchIds) {
+            $query->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
                 $q->where(function ($sub) use ($nonCocoProduct) {
                     if ($nonCocoProduct) {
                         $sub->where('product_id', $nonCocoProduct->id)
@@ -2382,15 +2374,17 @@ class DashboardController extends Controller
                         $sub->where('product_name', 'like', '%NON%COCO%');
                     }
                 });
-                if (!empty($nonCocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                        $lq->whereIn('branch_id', $nonCocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($nonCocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
+                            $lq->whereIn('branch_id', $nonCocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                               ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
+                        });
+                    }
                 }
             });
 
@@ -2445,7 +2439,7 @@ class DashboardController extends Controller
                   ->where('package_name', 'not like', '%NON%');
             })->first();
 
-            $query->where(function ($q) use ($cocoProduct, $cocoBranchIds) {
+            $query->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
                 $q->where(function ($sub) use ($cocoProduct) {
                     if ($cocoProduct) {
                         $sub->where(function ($sq) use ($cocoProduct) {
@@ -2460,15 +2454,17 @@ class DashboardController extends Controller
                             ->where('product_name', 'not like', '%NON%');
                     }
                 });
-                if (!empty($cocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                        $lq->whereIn('branch_id', $cocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                    });
+                if (!$isCompanyAdminOrCbo) {
+                    if (!empty($cocoBranchIds)) {
+                        $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
+                            $lq->whereIn('branch_id', $cocoBranchIds);
+                        });
+                    } else {
+                        $q->orWhereHas('lead.branch', function ($bq) {
+                            $bq->where('is_default', false)
+                               ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                        });
+                    }
                 }
             });
 
