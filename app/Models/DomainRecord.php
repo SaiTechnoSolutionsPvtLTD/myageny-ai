@@ -22,6 +22,7 @@ class DomainRecord extends Model
         'auto_renew',
         'privacy',
         'client_name',
+        'lead_id',
         'notes',
         'godaddy_domain_id',
         'created_by',
@@ -36,6 +37,21 @@ class DomainRecord extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function lead()
+    {
+        return $this->belongsTo(Lead::class, 'lead_id');
+    }
+
+    public function renewals()
+    {
+        return $this->hasMany(DomainRenewal::class, 'domain_record_id')->orderBy('renewal_date', 'desc')->orderBy('id', 'desc');
+    }
+
+    public function latestRenewal()
+    {
+        return $this->hasOne(DomainRenewal::class, 'domain_record_id')->latestOfMany('renewal_date');
     }
 
     public function getDaysUntilExpirationAttribute(): ?int

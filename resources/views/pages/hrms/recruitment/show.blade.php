@@ -54,10 +54,13 @@
             </div>
         </div>
         <div class="lsp-topbar-right">
+            <button type="button" class="lsp-btn lsp-btn-primary" style="background: linear-gradient(135deg, #fe5f04 0%, #ff8745 100%); border-color: #fe5f04;" onclick="handleQuickReschedule()">
+                <i class="bi bi-arrow-repeat"></i> Reschedule Interview
+            </button>
             <a href="{{ route('recruitment.edit', $candidate) }}" class="lsp-btn lsp-btn-outline"><i class="bi bi-pencil"></i> Edit Candidate</a>
             @if($candidate->resume_path)
                 <a href="{{ route('recruitment.resume.view', $candidate) }}" target="_blank" class="lsp-btn lsp-btn-outline"><i class="bi bi-eye"></i> View Resume</a>
-                <a href="{{ route('recruitment.resume.download', $candidate) }}" class="lsp-btn lsp-btn-primary"><i class="bi bi-download"></i> Download Resume</a>
+                <a href="{{ route('recruitment.resume.download', $candidate) }}" class="lsp-btn lsp-btn-outline"><i class="bi bi-download"></i> Download Resume</a>
             @endif
             <a href="{{ route('recruitment.index') }}" class="lsp-btn lsp-btn-outline">Back</a>
         </div>
@@ -75,9 +78,9 @@
                     <span style="color:#ddd">.</span>
                     <span>{{ $candidate->email }}</span>
                 @endif
-                @if($candidate->location)
+                @if($candidate->branch || $candidate->location)
                     <span style="color:#ddd">.</span>
-                    <span>{{ $candidate->location }}</span>
+                    <span><i class="bi bi-geo-alt" style="color:#fe5f04;"></i> {{ $candidate->branch?->name ?? $candidate->location }}</span>
                 @endif
             </div>
         </div>
@@ -132,7 +135,19 @@
                                 <div class="lsp-info-item"><div class="lsp-il">Candidate Name</div><div class="lsp-iv">{{ $candidate->name }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Mobile Number</div><div class="lsp-iv"><a href="tel:{{ $candidate->mobile_number }}">{{ $candidate->mobile_number }}</a></div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Email</div><div class="lsp-iv">{!! $candidate->email ? '<a href="mailto:'.$candidate->email.'">'.$candidate->email.'</a>' : 'N/A' !!}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Location</div><div class="lsp-iv">{{ $candidate->location ?: 'N/A' }}</div></div>
+                                <div class="lsp-info-item">
+                                    <div class="lsp-il">Location / Branch</div>
+                                    <div class="lsp-iv">
+                                        @if($candidate->branch)
+                                            <strong>{{ $candidate->branch->name }}</strong>
+                                            @if($candidate->location && $candidate->location !== $candidate->branch->name)
+                                                <span style="color:#666; font-weight:normal;">({{ $candidate->location }})</span>
+                                            @endif
+                                        @else
+                                            {{ $candidate->location ?: 'N/A' }}
+                                        @endif
+                                    </div>
+                                </div>
                                 <div class="lsp-info-item"><div class="lsp-il">Applied For</div><div class="lsp-iv">{{ $candidate->job_title }}</div></div>
                                 <div class="lsp-info-item">
                                     <div class="lsp-il">Candidate Type</div>
@@ -654,6 +669,26 @@ function closeRescheduleModal() {
     document.getElementById('modalRescheduleInterview').style.display = 'none';
 }
 
+function handleQuickReschedule() {
+    @if($candidate->interviews->isNotEmpty())
+        @php
+            $latest = $candidate->interviews->first();
+        @endphp
+        openRescheduleModal(
+            {{ $latest->id }},
+            '{{ optional($latest->scheduled_at)->format('Y-m-d\TH:i') }}',
+            '{{ addslashes($latest->interviewer_name ?? '') }}',
+            '{{ $latest->status }}',
+            '{{ addslashes($latest->notes ?? '') }}'
+        );
+    @else
+        const interviewTabBtn = document.querySelector('button[onclick*="interviews"]');
+        if (interviewTabBtn) {
+            switchRecruitmentTab('interviews', interviewTabBtn);
+        }
+    @endif
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     if (window.jQuery && window.jQuery.fn.select2) {
         window.jQuery('#interviewer_select, #reschedule_interviewer_select').select2({
@@ -661,6 +696,11 @@ document.addEventListener('DOMContentLoaded', function() {
             allowClear: true,
             width: '100%'
         });
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('action') === 'reschedule') {
+        handleQuickReschedule();
     }
 });
 </script>

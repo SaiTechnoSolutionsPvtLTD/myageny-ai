@@ -187,15 +187,18 @@
                     </div>
                 </a>
 
-                <a href="{{ route('accounts.ad-accounts-master.index') }}" class="nav-item {{ request()->routeIs('accounts.ad-accounts-master.*') ? 'active' : '' }}">
-                    @if(request()->routeIs('accounts.ad-accounts-master.*'))
+                <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*'))
                         <div class="active-indicator"></div>
                     @endif
                     <div class="nav-content">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 7h-7L10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z"></path>
+                            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
                         </svg>
-                        <span>Ad Accounts Master</span>
+                        <span>Master</span>
                     </div>
                 </a>
             </div>
@@ -483,8 +486,7 @@
                 </a>
                 @endcan
 
-                @if(! $hrmsSelfService)
-                @can('outside_permission_request.menuview')
+                @can('outside-office-requests.menuview')
                 <a href="{{ route('hrms.outside-office-requests.index') }}" class="nav-item {{ request()->routeIs('hrms.outside-office-requests.*') ? 'active' : '' }}">
                     @if(request()->routeIs('hrms.outside-office-requests.*'))
                         <div class="active-indicator"></div>
@@ -504,7 +506,6 @@
                     </div>
                 </a>
                 @endcan
-                @endif
 
                 @if(! $hrmsSelfService)
                 @can('timesheet_lop.menuview')
@@ -809,6 +810,7 @@
                 </a>
                 @endif
 
+                @can('masters.menuview')
                  <a href="{{ route('masters.index') }}" class="nav-item {{ request()->is('masters') || request()->is('masters/*') ? 'active' : '' }}">
                     @if(request()->is('masters') || request()->is('masters/*'))
                         <div class="active-indicator"></div>
@@ -823,6 +825,7 @@
                         <span>Masters</span>
                     </div>
                 </a>
+                @endcan
 
                 @can('leads.menuview')
     <a href="javascript:void(0)"

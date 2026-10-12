@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\OdRequestFormRequest;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
 use App\Models\OdApproval;
@@ -330,10 +331,31 @@ class OdRequestController extends Controller
 
     private function pendingApprovalsFor(User $user): Collection
     {
-        return OdApproval::with(['odRequest.user.roles', 'odRequest.employee', 'approver', 'actionedBy'])
+        $query = OdApproval::with(['odRequest.user.roles', 'odRequest.employee', 'approver', 'actionedBy'])
             ->where('status', OdApproval::STATUS_PENDING)
-            ->whereHas('odRequest', fn ($query) => $query->where('status', OdRequest::STATUS_PENDING))
-            ->oldest()
+            ->whereHas('odRequest', fn ($query) => $query->where('status', OdRequest::STATUS_PENDING));
+
+        if ($user->isBranchAdmin() && ! $user->isSuperAdmin() && ! $user->isCompanyAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+            $query->whereHas('odRequest', function ($oq) use ($branchIds, $branchCodes, $user) {
+                $oq->where(function ($sub) use ($branchIds, $branchCodes, $user) {
+                    $sub->where('user_id', $user->id)
+                        ->orWhereHas('user', fn($uq) => $uq->inBranches($branchIds))
+                        ->orWhereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
+                            $eq->where(function ($q) use ($branchIds, $branchCodes) {
+                                $q->whereHas('portalUser', fn($pu) => $pu->inBranches($branchIds));
+                                foreach ($branchCodes as $code) {
+                                    $q->orWhere('employee_id', 'like', $code . '%');
+                                }
+                            });
+                        });
+                });
+            });
+        }
+
+        return $query->oldest()
             ->get()
             ->filter(fn (OdApproval $approval) => $this->canActOnApproval($approval, $user))
             ->values();
@@ -341,8 +363,35 @@ class OdRequestController extends Controller
 
     private function canViewOdRequest(OdRequest $odRequest, User $user): bool
     {
-        if ((int) $odRequest->user_id === (int) $user->id || $user->isSystemAdmin()) {
+        if ((int) $odRequest->user_id === (int) $user->id || $user->isSystemAdmin() || $user->isSuperAdmin() || $user->isCompanyAdmin()) {
             return true;
+        }
+
+        if ($user->isBranchAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            $requesterUser = $odRequest->user;
+            $requesterEmployee = $odRequest->employee;
+
+            $isInBranch = false;
+            if ($requesterUser && !empty(array_intersect($branchIds, $requesterUser->getMyBranchIds()))) {
+                $isInBranch = true;
+            } elseif ($requesterEmployee) {
+                $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+                if ($requesterEmployee->portalUser && !empty(array_intersect($branchIds, $requesterEmployee->portalUser->getMyBranchIds()))) {
+                    $isInBranch = true;
+                } else {
+                    foreach ($branchCodes as $code) {
+                        if (str_starts_with((string) $requesterEmployee->employee_id, $code)) {
+                            $isInBranch = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($isInBranch) {
+                return true;
+            }
         }
 
         return $odRequest->approvals->contains(function (OdApproval $approval) use ($user) {

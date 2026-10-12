@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\DailyAttendance;
 use App\Models\OutsideOfficeAttendanceRequest;
 use App\Services\NotificationService;
@@ -28,6 +29,7 @@ class OutsideOfficeAttendanceRequestController extends Controller
         return (bool) ($user && (
             $user->isSystemAdmin()
             || $user->can('outside_permission_request.menuview')
+            || $user->can('outside-office-requests.menuview')
             || $user->belongsToHrDepartment()
             || $user->hasHrLikeRole()
             || $user->isCompanyAdmin()
@@ -137,6 +139,8 @@ class OutsideOfficeAttendanceRequestController extends Controller
             abort(403, 'You are not authorized to approve outside-office requests.');
         }
 
+        $this->authorizeBranchAccess($outsideOfficeRequest);
+
         if (! $outsideOfficeRequest->isPending()) {
             $msg = "This request has already been {$outsideOfficeRequest->status}.";
             return $request->wantsJson()
@@ -232,6 +236,8 @@ class OutsideOfficeAttendanceRequestController extends Controller
             abort(403, 'You are not authorized to reject outside-office requests.');
         }
 
+        $this->authorizeBranchAccess($outsideOfficeRequest);
+
         if (! $outsideOfficeRequest->isPending()) {
             $msg = "This request has already been {$outsideOfficeRequest->status}.";
             return $request->wantsJson()
@@ -297,5 +303,38 @@ class OutsideOfficeAttendanceRequestController extends Controller
             'status'         => $status,
             'branch_id'      => $applicantUser->branch_id,
         ]);
+    }
+
+    private function authorizeBranchAccess(OutsideOfficeAttendanceRequest $outsideOfficeRequest): void
+    {
+        $user = auth()->user();
+        if ($user && $user->isBranchAdmin() && ! $user->isSuperAdmin() && ! $user->isCompanyAdmin()) {
+            $branchIds = $user->getMyBranchIds();
+            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+            $outsideOfficeRequest->loadMissing(['employee.portalUser', 'intern.portalUser']);
+
+            $isPermitted = false;
+            $portalUser = $outsideOfficeRequest->attendee_type === 'intern'
+                ? $outsideOfficeRequest->intern?->portalUser
+                : $outsideOfficeRequest->employee?->portalUser;
+
+            if ($portalUser && !empty(array_intersect($branchIds, $portalUser->getMyBranchIds()))) {
+                $isPermitted = true;
+            } else {
+                $identifier = $outsideOfficeRequest->attendee_type === 'intern'
+                    ? $outsideOfficeRequest->intern?->intern_id
+                    : $outsideOfficeRequest->employee?->employee_id;
+                foreach ($branchCodes as $code) {
+                    if ($identifier && str_starts_with((string) $identifier, $code)) {
+                        $isPermitted = true;
+                        break;
+                    }
+                }
+            }
+
+            if (! $isPermitted) {
+                abort(403, 'You are not authorized to manage outside-office requests for other branches.');
+            }
+        }
     }
 }

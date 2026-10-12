@@ -60,7 +60,7 @@
       margin-bottom: 6px;
     }
     .addr-name { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
-    .addr-text { font-size: 10px; color: #5a6472; line-height: 1.6; }
+    .addr-text { font-size: 10px; color: #5a6472; line-height: 1.35; white-space: normal; word-wrap: break-word; }
     .gstin-pill {
       display: inline-block;
       background: #e8f8f0;
@@ -233,20 +233,19 @@
 <div class="addr-row clearfix">
   <div class="addr-cell">
     <div class="addr-label">Bill To</div>
-    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead->company_name }}</div>
-    <div class="addr-text">{{ $quotation->bill_to_address }}</div>
+    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead?->company_name ?: $quotation->lead?->contact_name }}</div>
+    <div class="addr-text">{!! nl2br(e($quotation->bill_to_address)) !!}</div>
     @if(isset($quotation->client_gstin))
         <span class="gstin-pill">GSTIN: {{ $quotation->client_gstin }}</span>
     @endif
   </div>
   <div class="addr-cell">
     <div class="addr-label">Ship To</div>
-    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead->company_name }}</div>
-    <div class="addr-text">{{ $quotation->ship_to_address }}</div>
+    <div class="addr-name" style="text-transform: uppercase">{{ $quotation->lead?->company_name ?: $quotation->lead?->contact_name }}</div>
+    <div class="addr-text">{!! nl2br(e($quotation->ship_to_address)) !!}</div>
     @if(isset($quotation->client_gstin))
         <span class="gstin-pill">GSTIN: {{ $quotation->client_gstin }}</span>
     @endif
-
   </div>
 </div>
 

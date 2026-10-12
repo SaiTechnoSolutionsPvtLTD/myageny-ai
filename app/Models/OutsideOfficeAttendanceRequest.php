@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Branch;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -54,11 +55,33 @@ class OutsideOfficeAttendanceRequest extends Model
                 }
 
                 if (!empty($branchIds)) {
-                    $builder->where(function ($query) use ($branchIds) {
-                        $query->whereHas('employee.portalUser', function ($q) use ($branchIds) {
-                            $q->inBranches($branchIds);
-                        })->orWhereHas('intern.portalUser', function ($q) use ($branchIds) {
-                            $q->inBranches($branchIds);
+                    $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $branchIds)->pluck('code')->filter()->all();
+
+                    $builder->where(function ($query) use ($branchIds, $branchCodes) {
+                        $query->where(function ($eqQuery) use ($branchIds, $branchCodes) {
+                            $eqQuery->where('attendee_type', 'employee')
+                                ->whereHas('employee', function ($eq) use ($branchIds, $branchCodes) {
+                                    $eq->where(function ($q) use ($branchIds, $branchCodes) {
+                                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                                            $puQ->inBranches($branchIds);
+                                        });
+                                        foreach ($branchCodes as $code) {
+                                            $q->orWhere('employee_id', 'like', $code . '%');
+                                        }
+                                    });
+                                });
+                        })->orWhere(function ($iqQuery) use ($branchIds, $branchCodes) {
+                            $iqQuery->where('attendee_type', 'intern')
+                                ->whereHas('intern', function ($iq) use ($branchIds, $branchCodes) {
+                                    $iq->where(function ($q) use ($branchIds, $branchCodes) {
+                                        $q->whereHas('portalUser', function ($puQ) use ($branchIds) {
+                                            $puQ->inBranches($branchIds);
+                                        });
+                                        foreach ($branchCodes as $code) {
+                                            $q->orWhere('intern_id', 'like', $code . '%');
+                                        }
+                                    });
+                                });
                         });
                     });
                 } elseif ($isBranchManager) {

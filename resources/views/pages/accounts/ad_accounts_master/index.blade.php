@@ -49,6 +49,11 @@
     {{-- Topbar --}}
     <div class="adm-topbar">
         <div>
+            <div style="margin-bottom:6px;">
+                <a href="{{ route('accounts.master.index') }}" class="adm-btn adm-btn-secondary" style="padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="bi bi-arrow-left"></i> Back to Master Hub
+                </a>
+            </div>
             <div class="adm-title">Ad Accounts Master</div>
             <div class="adm-sub">Manage Digital Marketing Ad Accounts for Meta, Google, LinkedIn & more</div>
         </div>
