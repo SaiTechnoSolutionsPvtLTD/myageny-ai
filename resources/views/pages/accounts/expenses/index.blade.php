@@ -1,0 +1,775 @@
+@extends('layouts.app')
+
+@section('title', 'Expenses - Accounts')
+
+@push('styles')
+<style>
+.acc-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
+.acc-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
+.acc-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
+.acc-sub { font-size:13px; color:#64748b; }
+
+.acc-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
+.acc-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
+.acc-btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(254,95,4,.35); color:#fff; }
+.acc-btn-secondary { background:#f1f5f9; color:#334155; }
+.acc-btn-secondary:hover { background:#e2e8f0; }
+.acc-btn-outline { background:#fff; border:1px solid #cbd5e1; color:#334155; }
+.acc-btn-outline:hover { border-color:#fe5f04; color:#fe5f04; }
+.acc-btn-danger { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
+.acc-btn-danger:hover { background:#fca5a5; }
+
+.acc-stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; }
+.acc-stat-card { background:#fff; border-radius:14px; padding:16px 20px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:16px; box-shadow:0 2px 6px rgba(0,0,0,.02); }
+.acc-stat-icon { width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.acc-stat-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; }
+.acc-stat-val { font-size:22px; font-weight:800; color:#0f172a; margin-top:3px; line-height:1; }
+
+.acc-card { background:#fff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.02); }
+
+/* 5 Column Filter Grid */
+.acc-filter-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; padding:16px 20px; border-bottom:1px solid #e2e8f0; background:#fff; align-items:end; }
+@media (max-width: 1200px) { .acc-filter-grid { grid-template-columns:repeat(3, 1fr); } }
+@media (max-width: 768px) { .acc-filter-grid { grid-template-columns:repeat(2, 1fr); } }
+@media (max-width: 480px) { .acc-filter-grid { grid-template-columns:1fr; } }
+.filter-col { display:flex; flex-direction:column; gap:5px; }
+.filter-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+.filter-control { width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; font-family:inherit; outline:none; background:#fff; box-sizing:border-box; height:38px; }
+.filter-control:focus { border-color:#fe5f04; box-shadow:0 0 0 2px rgba(254,95,4,.1); }
+
+.acc-tbl { width:100%; border-collapse:collapse; }
+.acc-tbl th { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#64748b; padding:12px 16px; border-bottom:1px solid #e2e8f0; background:#f8fafc; text-align:left; white-space:nowrap; }
+.acc-tbl td { padding:14px 16px; font-size:13px; color:#1e293b; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.acc-tbl tr:hover td { background:#fafbfc; }
+
+.type-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+.type-fixed-badge { background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe; }
+.type-variable-badge { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
+
+.attachment-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; background:#eff6ff; color:#2563eb; font-size:11px; font-weight:700; border:1px solid #bfdbfe; text-decoration:none; }
+.attachment-chip:hover { background:#dbeafe; color:#1d4ed8; }
+
+/* Modal Styling */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center; }
+.modal-overlay.active { display:flex; }
+.modal-box { background:#fff; border-radius:18px; width:94%; max-width:720px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.25); animation:popIn .25s ease; }
+@keyframes popIn { from{ opacity:0; transform:scale(.95); } to{ opacity:1; transform:scale(1); } }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid #e2e8f0; background:#f8fafc; position:sticky; top:0; z-index:10; }
+.modal-title { font-size:17px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px; }
+.modal-close { background:none; border:none; font-size:22px; color:#94a3b8; cursor:pointer; line-height:1; }
+.modal-body { padding:24px; display:flex; flex-direction:column; gap:18px; }
+
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width: 600px) { .detail-grid { grid-template-columns:1fr; } }
+.detail-item { background:#f8fafc; padding:12px 14px; border-radius:10px; border:1px solid #e2e8f0; }
+.detail-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:4px; }
+.detail-val { font-size:13px; font-weight:700; color:#0f172a; word-break:break-word; }
+</style>
+@endpush
+
+@section('content')
+<div class="acc-page">
+
+    {{-- Topbar --}}
+    <div class="acc-topbar">
+        <div>
+            <div style="margin-bottom:6px;">
+                <a href="{{ route('accounts.dashboard') }}" class="acc-btn acc-btn-secondary" style="padding:4px 10px; font-size:12px;">
+                    <i class="bi bi-arrow-left"></i> Accounts Dashboard
+                </a>
+            </div>
+            <div class="acc-title">
+                <i class="bi bi-receipt-cutoff" style="color:#fe5f04;"></i>
+                <span>Accounts Expenses</span>
+            </div>
+            <div class="acc-sub">Manage and audit company expenses, invoices, fixed and variable costs, and vendor settlements</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <form action="{{ route('accounts.expenses.sync-recurring') }}" method="POST" style="margin:0;" onsubmit="return confirm('Generate due recurring fixed expenses for this month now?')">
+                @csrf
+                <button type="submit" class="acc-btn acc-btn-outline" style="border-color:#16a34a; color:#15803d; background:#f0fdf4;" title="Generate recurring fixed expenses for current month">
+                    <i class="bi bi-arrow-repeat"></i> Sync Fixed
+                </button>
+            </form>
+            <a href="{{ route('accounts.expenses.pivot') }}" class="acc-btn acc-btn-outline" style="border-color:#fe5f04; color:#fe5f04; background:#fff7ed;">
+                <i class="bi bi-table"></i> Expense Pivot
+            </a>
+            <a href="{{ route('accounts.expenses.create') }}" class="acc-btn acc-btn-primary">
+                <i class="bi bi-plus-lg"></i> Add Expense
+            </a>
+        </div>
+    </div>
+
+    {{-- Alerts --}}
+    @if(session('success'))
+        <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:12px 18px; border-radius:10px; font-size:13px; font-weight:600;">
+            ✓ {{ session('success') }}
+        </div>
+    @endif
+    @if(session('error'))
+        <div style="background:#fee2e2; border:1px solid #fecaca; color:#b91c1c; padding:12px 18px; border-radius:10px; font-size:13px; font-weight:600;">
+            ✕ {{ session('error') }}
+        </div>
+    @endif
+
+    {{-- Summary KPI Cards --}}
+    <div class="acc-stats-grid">
+        <div class="acc-stat-card">
+            <div class="acc-stat-icon" style="background:#f0fdf4; color:#16a34a;">
+                <i class="bi bi-currency-rupee"></i>
+            </div>
+            <div>
+                <div class="acc-stat-label">Total Expenses</div>
+                <div class="acc-stat-val">₹{{ number_format($totalAmount, 2) }}</div>
+            </div>
+        </div>
+
+        <div class="acc-stat-card">
+            <div class="acc-stat-icon" style="background:#eff6ff; color:#2563eb;">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <div>
+                <div class="acc-stat-label">This Month Expenses</div>
+                <div class="acc-stat-val">₹{{ number_format($thisMonthAmount, 2) }}</div>
+            </div>
+        </div>
+
+        <div class="acc-stat-card">
+            <div class="acc-stat-icon" style="background:#e0e7ff; color:#4338ca;">
+                <i class="bi bi-pin-angle"></i>
+            </div>
+            <div>
+                <div class="acc-stat-label">Fixed Expenses</div>
+                <div class="acc-stat-val">₹{{ number_format($fixedAmount, 2) }}</div>
+            </div>
+        </div>
+
+        <div class="acc-stat-card">
+            <div class="acc-stat-icon" style="background:#fef3c7; color:#d97706;">
+                <i class="bi bi-graph-up-arrow"></i>
+            </div>
+            <div>
+                <div class="acc-stat-label">Variable Expenses</div>
+                <div class="acc-stat-val">₹{{ number_format($variableAmount, 2) }}</div>
+            </div>
+        </div>
+
+        {{-- Next Month Fixed Expense Forecast KPI Card --}}
+        <div class="acc-stat-card" style="border-left: 4px solid #8b5cf6;">
+            <div class="acc-stat-icon" style="background:#f5f3ff; color:#7c3aed;">
+                <i class="bi bi-magic"></i>
+            </div>
+            <div style="flex:1;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                    <span class="acc-stat-label">Next Month (Fixed)</span>
+                    <span style="font-size:10px; font-weight:800; background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px;">{{ $nextMonthCarbon->format('M Y') }}</span>
+                </div>
+                <div class="acc-stat-val" style="color:#6d28d9;">₹{{ number_format($nextMonthProjectedAmount, 2) }}</div>
+                <div style="font-size:11px; color:#7c3aed; margin-top:3px; display:flex; align-items:center; justify-content:space-between;">
+                    <span>{{ $nextMonthFixedCount }} recurring items</span>
+                    <a href="{{ route('accounts.expenses.index', ['month' => $nextMonthCarbon->format('Y-m')]) }}" style="color:#6d28d9; font-weight:700; text-decoration:none;">View &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="acc-stat-card">
+            <div class="acc-stat-icon" style="background:#f1f5f9; color:#475569;">
+                <i class="bi bi-collection"></i>
+            </div>
+            <div>
+                <div class="acc-stat-label">Total Entries</div>
+                <div class="acc-stat-val">{{ $totalCount }}</div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Filters & Table Card --}}
+    <div class="acc-card">
+        <form method="GET" action="{{ route('accounts.expenses.index') }}" class="acc-filter-grid">
+            {{-- ROW 1 (5 Columns) --}}
+            {{-- Col 1: Search --}}
+            <div class="filter-col">
+                <label class="filter-label">Search</label>
+                <div style="position:relative;">
+                    <i class="bi bi-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:12px;"></i>
+                    <input type="text"
+                           name="search"
+                           value="{{ request('search') }}"
+                           placeholder="Invoice #, remarks, vendor..."
+                           class="filter-control"
+                           style="padding-left:30px;">
+                </div>
+            </div>
+
+            {{-- Col 2: Category --}}
+            <div class="filter-col">
+                <label class="filter-label">Category</label>
+                <select name="category_id" id="filterCategory" class="filter-control" onchange="filterCategoryChanged(this.value)">
+                    <option value="">All Categories</option>
+                    @foreach($categories as $cat)
+                        <option value="{{ $cat->id }}" {{ request('category_id') == $cat->id ? 'selected' : '' }}>
+                            {{ $cat->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Col 3: Subcategory (Master) --}}
+            <div class="filter-col">
+                <label class="filter-label">Subcategory</label>
+                <select name="subcategory_id" id="filterSubcategory" class="filter-control">
+                    <option value="">All Subcategories</option>
+                    @foreach($subcategories as $sub)
+                        <option value="{{ $sub->id }}" data-category-id="{{ $sub->account_expense_category_id }}" {{ request('subcategory_id') == $sub->id ? 'selected' : '' }}>
+                            {{ $sub->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Col 4: Vendor --}}
+            <div class="filter-col">
+                <label class="filter-label">Vendor</label>
+                <select name="vendor_id" class="filter-control">
+                    <option value="">All Vendors</option>
+                    @foreach($vendors as $ven)
+                        <option value="{{ $ven->id }}" {{ request('vendor_id') == $ven->id ? 'selected' : '' }}>
+                            {{ $ven->vendor_name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Col 5: Expense Type --}}
+            <div class="filter-col">
+                <label class="filter-label">Expense Type</label>
+                <select name="expense_type" class="filter-control">
+                    <option value="">All Types</option>
+                    <option value="Fixed" {{ request('expense_type') === 'Fixed' ? 'selected' : '' }}>Fixed</option>
+                    <option value="Variable" {{ request('expense_type') === 'Variable' ? 'selected' : '' }}>Variable</option>
+                </select>
+            </div>
+
+            {{-- ROW 2 (5 Columns) --}}
+            {{-- Col 1: Date From --}}
+            <div class="filter-col">
+                <label class="filter-label">Date From</label>
+                <input type="date" name="date_from" value="{{ request('date_from') }}" class="filter-control">
+            </div>
+
+            {{-- Col 2: Date To --}}
+            <div class="filter-col">
+                <label class="filter-label">Date To</label>
+                <input type="date" name="date_to" value="{{ request('date_to') }}" class="filter-control">
+            </div>
+
+            {{-- Col 3: Month Preset --}}
+            <div class="filter-col">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label class="filter-label" style="margin-bottom:0;">Month</label>
+                    <a href="{{ route('accounts.expenses.index', ['month' => $nextMonthCarbon->format('Y-m')]) }}" style="font-size:10px; color:#7c3aed; font-weight:800; text-decoration:none;" title="Quick Forecast for {{ $nextMonthCarbon->format('M Y') }}">
+                        Next: {{ $nextMonthCarbon->format('M Y') }} &rarr;
+                    </a>
+                </div>
+                <input type="month" name="month" value="{{ request('month') }}" class="filter-control">
+            </div>
+
+            {{-- Col 4: Apply Filter Button --}}
+            <div class="filter-col">
+                <label class="filter-label">&nbsp;</label>
+                <button type="submit" class="acc-btn acc-btn-primary" style="width:100%; justify-content:center; height:38px;">
+                    <i class="bi bi-funnel-fill"></i> Filter
+                </button>
+            </div>
+
+            {{-- Col 5: Reset Button --}}
+            <div class="filter-col">
+                <label class="filter-label">&nbsp;</label>
+                <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary" style="width:100%; justify-content:center; height:38px; text-decoration:none;">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </a>
+            </div>
+        </form>
+
+        {{-- Future Month Forecast Banner --}}
+        @if($isFutureMonthFilter)
+        <div style="background: linear-gradient(135deg, #f5f3ff, #ede9fe); border-bottom: 1px solid #ddd6fe; padding: 14px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:38px; height:38px; border-radius:10px; background:#7c3aed; color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px;">
+                    <i class="bi bi-calendar-event"></i>
+                </div>
+                <div>
+                    <div style="font-weight:800; font-size:14px; color:#4c1d95;">
+                        {{ $futureMonthLabel }} — Fixed Expenses Projection & Forecast
+                    </div>
+                    <div style="font-size:12px; color:#6d28d9; margin-top:2px;">
+                        Scheduled Monthly Recurring Total: <strong style="font-size:13px; color:#4c1d95;">₹{{ number_format($nextMonthProjectedAmount, 2) }}</strong> across {{ count($projectedExpenses) }} scheduled fixed item(s).
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <form action="{{ route('accounts.expenses.sync-recurring') }}" method="POST" style="margin:0;" onsubmit="return confirm('Generate fixed expenses for {{ $futureMonthLabel }} now?')">
+                    @csrf
+                    <input type="hidden" name="month" value="{{ request('month') }}">
+                    <input type="hidden" name="force" value="1">
+                    <button type="submit" class="acc-btn" style="background:#7c3aed; color:#fff; font-size:12px; padding:7px 14px; box-shadow:0 2px 8px rgba(124,58,237,.25);">
+                        <i class="bi bi-lightning-charge-fill"></i> Generate Now for {{ $futureMonthLabel }}
+                    </button>
+                </form>
+            </div>
+        </div>
+        @endif
+
+        {{-- Table --}}
+        <div style="overflow-x:auto;">
+            <table class="acc-tbl">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Expense #</th>
+                        <th>Invoice No</th>
+                        <th>Category / Subcategory</th>
+                        <th>Vendor</th>
+                        <th>Type</th>
+                        <th style="text-align:right;">Amount (₹)</th>
+                        <th>Attachments</th>
+                        <th>Recorded By</th>
+                        <th style="text-align:center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{-- If looking at a future month, show scheduled recurring fixed expenses --}}
+                    @if($isFutureMonthFilter && $projectedExpenses->isNotEmpty())
+                        <tr style="background:#f5f3ff;">
+                            <td colspan="10" style="padding:10px 16px; font-weight:800; font-size:12px; color:#6d28d9; border-top:1px solid #ddd6fe; border-bottom:1px solid #ddd6fe;">
+                                <i class="bi bi-clock-history"></i> Scheduled Fixed Expenses for {{ $futureMonthLabel }} (Projected: ₹{{ number_format($nextMonthProjectedAmount, 2) }})
+                            </td>
+                        </tr>
+                        @foreach($projectedExpenses as $pExp)
+                        @php $tplId = $pExp->template_id ?? ($pExp->id ?? null); @endphp
+                        <tr style="background:#faf5ff;">
+                            <td style="white-space:nowrap; font-weight:700; color:#6d28d9;">
+                                <i class="bi bi-calendar-event"></i> {{ $pExp->expense_date->format('d M Y') }}
+                            </td>
+                            <td style="white-space:nowrap;">
+                                <span style="background:#ede9fe; color:#6d28d9; padding:3px 8px; border-radius:6px; font-weight:800; font-size:11px; border:1px solid #ddd6fe;">
+                                    SCHEDULED #{{ $pExp->template?->expense_number ?? $tplId }}
+                                </span>
+                            </td>
+                            <td style="white-space:nowrap; color:#64748b; font-size:12px;">
+                                {{ $pExp->invoice_no ? 'Template: ' . $pExp->invoice_no : 'Monthly Fixed' }}
+                            </td>
+                            <td>
+                                <div style="font-weight:700; color:#1e293b;">
+                                    {{ $pExp->category?->name ?? '—' }}
+                                </div>
+                                @if($pExp->subcategory)
+                                    <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                        ↳ {{ $pExp->subcategory->name }}
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
+                                @if($pExp->vendor)
+                                    <div style="font-weight:700; color:#0f172a;">{{ $pExp->vendor->vendor_name }}</div>
+                                    @if($pExp->vendor->company_name)
+                                        <div style="font-size:11px; color:#64748b;">{{ $pExp->vendor->company_name }}</div>
+                                    @endif
+                                @else
+                                    <span style="color:#94a3b8; font-style:italic;">No Vendor</span>
+                                @endif
+                            </td>
+                            <td>
+                                <span class="type-badge type-fixed-badge" style="background:#ede9fe; color:#6d28d9; border-color:#c4b5fd;">
+                                    <i class="bi bi-arrow-repeat"></i> Recurring Fixed
+                                </span>
+                                <div style="font-size:10px; color:#6d28d9; margin-top:2px; font-weight:700;">
+                                    Due Day {{ $pExp->recurring_day_of_month ?? $pExp->expense_date->day }}
+                                </div>
+                            </td>
+                            <td style="text-align:right; font-weight:800; font-size:14px; color:#6d28d9; white-space:nowrap;">
+                                ₹{{ number_format($pExp->amount, 2) }}
+                            </td>
+                            <td>
+                                <span style="font-size:11px; color:#8b5cf6; font-style:italic;">Copies from template</span>
+                            </td>
+                            <td style="font-size:12px; color:#6d28d9;">
+                                <i class="bi bi-robot"></i> Scheduled
+                            </td>
+                            <td style="text-align:center; white-space:nowrap;">
+                                @if($tplId)
+                                <a href="{{ route('accounts.expenses.show', $tplId) }}"
+                                   class="acc-btn acc-btn-secondary"
+                                   style="padding:5px 8px; font-size:11px;"
+                                   title="View Recurring Template">
+                                    <i class="bi bi-eye"></i> Template
+                                </a>
+                                <a href="{{ route('accounts.expenses.edit', $tplId) }}"
+                                   class="acc-btn acc-btn-outline"
+                                   style="padding:5px 8px; font-size:11px;"
+                                   title="Edit Recurring Settings">
+                                    <i class="bi bi-pencil-square"></i> Edit
+                                </a>
+                                @endif
+                            </td>
+                        </tr>
+                        @endforeach
+                    @endif
+
+                    @forelse($expenses as $exp)
+                    <tr>
+                        <td style="white-space:nowrap; font-weight:600; color:#475569;">
+                            {{ $exp->expense_date ? $exp->expense_date->format('d M Y') : '—' }}
+                        </td>
+                        <td style="white-space:nowrap; font-weight:700; color:#0f172a;">
+                            <span style="cursor:pointer; color:#fe5f04;" onclick="viewExpense({{ $exp->id }})">
+                                {{ $exp->expense_number }}
+                            </span>
+                        </td>
+                        <td style="white-space:nowrap; font-weight:600;">
+                            {{ $exp->invoice_no ?: '—' }}
+                        </td>
+                        <td>
+                            <div style="font-weight:700; color:#1e293b;">
+                                {{ $exp->category?->name ?? '—' }}
+                            </div>
+                            @if($exp->subcategory)
+                                <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                    ↳ {{ $exp->subcategory->name }}
+                                </div>
+                            @endif
+                        </td>
+                        <td>
+                            @if($exp->vendor)
+                                <div style="font-weight:700; color:#0f172a;">{{ $exp->vendor->vendor_name }}</div>
+                                @if($exp->vendor->company_name)
+                                    <div style="font-size:11px; color:#64748b;">{{ $exp->vendor->company_name }}</div>
+                                @endif
+                            @else
+                                <span style="color:#94a3b8; font-style:italic;">No Vendor</span>
+                            @endif
+                        </td>
+                        <td>
+                            @if($exp->expense_type === 'Fixed')
+                                <span class="type-badge type-fixed-badge">
+                                    <i class="bi bi-pin-angle-fill"></i> Fixed
+                                </span>
+                            @else
+                                <span class="type-badge type-variable-badge">
+                                    <i class="bi bi-graph-up-arrow"></i> Variable
+                                </span>
+                            @endif
+
+                            @if($exp->is_recurring)
+                                <div style="margin-top:4px;">
+                                    <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;">
+                                        <i class="bi bi-arrow-repeat"></i> Monthly (Day {{ $exp->recurring_day_of_month ?? ($exp->expense_date ? $exp->expense_date->day : 1) }})
+                                    </span>
+                                </div>
+                            @elseif($exp->auto_generated)
+                                <div style="margin-top:4px;">
+                                    <span style="background:#ede9fe; color:#6d28d9; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px;">
+                                        <i class="bi bi-robot"></i> Auto-Gen
+                                    </span>
+                                </div>
+                            @endif
+                        </td>
+                        <td style="text-align:right; font-weight:800; font-size:14px; color:#0f172a; white-space:nowrap;">
+                            ₹{{ number_format($exp->amount, 2) }}
+                        </td>
+                        <td>
+                            @php $attList = $exp->attachment_list; @endphp
+                            @if(!empty($attList))
+                                <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                                    @foreach($attList as $att)
+                                        <a href="{{ $att['url'] }}" target="_blank" class="attachment-chip" title="{{ $att['name'] }} ({{ $att['formatted_size'] }})">
+                                            <i class="bi {{ $att['is_image'] ? 'bi-image' : ($att['is_pdf'] ? 'bi-file-earmark-pdf' : 'bi-paperclip') }}"></i>
+                                            <span>{{ Str::limit($att['name'], 12) }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @else
+                                <span style="color:#94a3b8; font-size:11px;">None</span>
+                            @endif
+                        </td>
+                        <td style="font-size:12px; color:#64748b;">
+                            {{ $exp->creator?->name ?? 'System' }}
+                        </td>
+                        <td style="text-align:center; white-space:nowrap;">
+                            <div style="display:inline-flex; align-items:center; gap:6px;">
+                                <a href="{{ route('accounts.expenses.show', $exp->id) }}"
+                                   class="acc-btn acc-btn-secondary"
+                                   style="padding:5px 8px; font-size:12px;"
+                                   title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ route('accounts.expenses.edit', $exp->id) }}"
+                                   class="acc-btn acc-btn-outline"
+                                   style="padding:5px 8px; font-size:12px;"
+                                   title="Edit Expense">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <button type="button"
+                                        class="acc-btn acc-btn-danger"
+                                        style="padding:5px 8px; font-size:12px;"
+                                        title="Delete Expense"
+                                        onclick="confirmDeleteExpense({{ $exp->id }}, '{{ $exp->expense_number }}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    @if(!$isFutureMonthFilter || $projectedExpenses->isEmpty())
+                    <tr>
+                        <td colspan="10" style="text-align:center; padding:40px; color:#94a3b8;">
+                            <i class="bi bi-receipt" style="font-size:36px; display:block; margin-bottom:8px; opacity:0.6;"></i>
+                            No accounts expenses found. Click <strong>"Add Expense"</strong> above to record your first expense.
+                        </td>
+                    </tr>
+                    @endif
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        {{-- Pagination --}}
+        @if($expenses->hasPages())
+            <div style="padding:16px 20px; border-top:1px solid #e2e8f0;">
+                {{ $expenses->links() }}
+            </div>
+        @endif
+    </div>
+
+</div>
+
+{{-- Quick View Modal --}}
+<div class="modal-overlay" id="viewExpenseModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="bi bi-receipt" style="color:#fe5f04;"></i>
+                <span id="mvExpenseNumber">Expense Details</span>
+            </div>
+            <button type="button" class="modal-close" onclick="closeViewModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="viewModalBody">
+            <div style="text-align:center; padding:30px; color:#64748b;">
+                <i class="bi bi-arrow-repeat spin" style="font-size:24px;"></i>
+                <div style="margin-top:6px;">Loading expense details...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Delete Confirmation Modal --}}
+<div class="modal-overlay" id="deleteExpenseModal">
+    <div class="modal-box" style="max-width:440px;">
+        <div class="modal-header">
+            <div class="modal-title" style="color:#b91c1c;">
+                <i class="bi bi-exclamation-triangle-fill"></i> Delete Expense
+            </div>
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:14px; color:#334155; margin:0;">
+                Are you sure you want to delete expense <strong id="delExpenseNum"></strong>? This record will be soft deleted.
+            </p>
+            <form id="deleteExpenseForm" method="POST" action="">
+                @csrf
+                @method('DELETE')
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" class="acc-btn acc-btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                    <button type="submit" class="acc-btn acc-btn-danger">
+                        <i class="bi bi-trash"></i> Yes, Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+function viewExpense(id) {
+    const modal = document.getElementById('viewExpenseModal');
+    const body = document.getElementById('viewModalBody');
+    const title = document.getElementById('mvExpenseNumber');
+
+    modal.classList.add('active');
+    body.innerHTML = `
+        <div style="text-align:center; padding:30px; color:#64748b;">
+            <i class="bi bi-arrow-repeat spin" style="font-size:24px;"></i>
+            <div style="margin-top:6px;">Loading expense details...</div>
+        </div>
+    `;
+
+    fetch(`{{ url('accounts/expenses') }}/${id}`, {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.status) throw new Error('Failed to load');
+        const exp = data.expense;
+        const atts = data.attachment_list || [];
+
+        title.textContent = `${exp.expense_number} Details`;
+
+        let attachmentsHtml = '<div style="color:#94a3b8; font-size:12px;">No attachments uploaded</div>';
+        if (atts.length > 0) {
+            attachmentsHtml = '<div style="display:flex; flex-direction:column; gap:8px;">';
+            atts.forEach(att => {
+                attachmentsHtml += `
+                    <div style="display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border:1px solid #e2e8f0; padding:8px 12px; border-radius:8px;">
+                        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                            <i class="bi ${att.is_image ? 'bi-image' : (att.is_pdf ? 'bi-file-earmark-pdf' : 'bi-paperclip')}" style="color:#2563eb; font-size:18px;"></i>
+                            <div>
+                                <div style="font-weight:600; font-size:12px; color:#1e293b;">${att.name}</div>
+                                <div style="font-size:11px; color:#64748b;">${att.formatted_size || ''}</div>
+                            </div>
+                        </div>
+                        <a href="${att.url}" target="_blank" class="acc-btn acc-btn-outline" style="padding:4px 10px; font-size:11px;">
+                            <i class="bi bi-box-arrow-up-right"></i> View / Download
+                        </a>
+                    </div>
+                `;
+            });
+            attachmentsHtml += '</div>';
+        }
+
+        body.innerHTML = `
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Expense Number</div>
+                    <div class="detail-val" style="color:#fe5f04;">${exp.expense_number}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Expense Date</div>
+                    <div class="detail-val">${exp.expense_date ? new Date(exp.expense_date).toLocaleDateString() : '—'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Expense Amount</div>
+                    <div class="detail-val" style="font-size:16px; color:#059669;">₹${parseFloat(exp.amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Expense Type</div>
+                    <div class="detail-val">
+                        <span class="type-badge ${exp.expense_type === 'Fixed' ? 'type-fixed-badge' : 'type-variable-badge'}">
+                            ${exp.expense_type}
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Invoice / Bill No</div>
+                    <div class="detail-val">${exp.invoice_no || '—'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Recurring Setting</div>
+                    <div class="detail-val">
+                        ${exp.is_recurring 
+                            ? `<span style="color:#15803d; font-weight:800;"><i class="bi bi-arrow-repeat"></i> Auto-generates Monthly (Day ${exp.recurring_day_of_month || '1'})</span>` 
+                            : (exp.auto_generated 
+                                ? `<span style="color:#6d28d9; font-weight:700;"><i class="bi bi-robot"></i> Auto-generated Monthly Record</span>` 
+                                : '<span style="color:#64748b; font-weight:normal;">One-off / Non-recurring</span>')}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Category / Subcategory</div>
+                    <div class="detail-val">
+                        ${exp.category ? exp.category.name : '—'}
+                        ${exp.subcategory ? '<br><span style="color:#64748b; font-size:11px;">↳ ' + exp.subcategory.name + '</span>' : ''}
+                    </div>
+                </div>
+                <div class="detail-item" style="grid-column:1/-1;">
+                    <div class="detail-label">Vendor Details</div>
+                    <div class="detail-val">
+                        ${exp.vendor ? `<strong>${exp.vendor.vendor_name}</strong> ${exp.vendor.company_name ? '— ' + exp.vendor.company_name : ''} ${exp.vendor.mobile_number ? ' | 📞 ' + exp.vendor.mobile_number : ''} ${exp.vendor.gst_number ? ' | GST: ' + exp.vendor.gst_number : ''}` : '<span style="color:#94a3b8;">No vendor associated</span>'}
+                    </div>
+                </div>
+                <div class="detail-item" style="grid-column:1/-1;">
+                    <div class="detail-label">Remarks / Description</div>
+                    <div class="detail-val" style="font-weight:normal; line-height:1.5;">${exp.remarks || '<span style="color:#94a3b8;">No remarks provided</span>'}</div>
+                </div>
+                <div class="detail-item" style="grid-column:1/-1;">
+                    <div class="detail-label" style="margin-bottom:8px;">Attachments (${atts.length})</div>
+                    ${attachmentsHtml}
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+                <a href="{{ url('accounts/expenses') }}/${exp.id}/edit" class="acc-btn acc-btn-primary" style="padding:6px 14px; font-size:12px;">
+                    <i class="bi bi-pencil-square"></i> Edit Expense
+                </a>
+            </div>
+        `;
+    })
+    .catch(err => {
+        body.innerHTML = `
+            <div style="text-align:center; padding:30px; color:#b91c1c;">
+                <i class="bi bi-exclamation-triangle" style="font-size:24px;"></i>
+                <div style="margin-top:6px;">Failed to load expense details.</div>
+            </div>
+        `;
+    });
+}
+
+function closeViewModal() {
+    document.getElementById('viewExpenseModal').classList.remove('active');
+}
+
+function confirmDeleteExpense(id, number) {
+    document.getElementById('delExpenseNum').textContent = number;
+    document.getElementById('deleteExpenseForm').action = `{{ url('accounts/expenses') }}/${id}`;
+    document.getElementById('deleteExpenseModal').classList.add('active');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteExpenseModal').classList.remove('active');
+}
+
+// Close modals on clicking overlay
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
+    });
+});
+
+// Filter Dynamic Subcategory Loading
+const filterSubcatUrl = "{{ route('accounts.master.expense-categories.subcategories', ['category' => ':id']) }}";
+const initialFilterSubcatId = "{{ request('subcategory_id') }}";
+
+function filterCategoryChanged(categoryId) {
+    const subSelect = document.getElementById('filterSubcategory');
+    if (!subSelect) return;
+
+    if (!categoryId) {
+        subSelect.innerHTML = '<option value="">All Subcategories</option>';
+        return;
+    }
+
+    subSelect.innerHTML = '<option value="">Loading...</option>';
+
+    fetch(filterSubcatUrl.replace(':id', categoryId), {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        subSelect.innerHTML = '<option value="">All Subcategories</option>';
+        if (data.status && Array.isArray(data.data)) {
+            data.data.forEach(sub => {
+                const opt = document.createElement('option');
+                opt.value = sub.id;
+                opt.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
+                if (String(sub.id) === String(initialFilterSubcatId)) {
+                    opt.selected = true;
+                }
+                subSelect.appendChild(opt);
+            });
+        }
+    })
+    .catch(() => {
+        subSelect.innerHTML = '<option value="">All Subcategories</option>';
+    });
+}
+</script>
+@endpush
+@endsection

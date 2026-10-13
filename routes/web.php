@@ -343,6 +343,20 @@ Route::middleware(['auth'])->group(function () {
                 Route::delete('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'destroy'])->name('destroy');
             });
         });
+
+        // Accounts Expenses CRUD
+        Route::prefix('expenses')->name('expenses.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AccountExpenseController::class, 'index'])->name('index');
+            Route::get('/create', [App\Http\Controllers\AccountExpenseController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\AccountExpenseController::class, 'store'])->name('store');
+            Route::post('/sync-recurring', [App\Http\Controllers\AccountExpenseController::class, 'syncRecurring'])->name('sync-recurring');
+            Route::get('/pivot', [App\Http\Controllers\AccountExpenseController::class, 'pivot'])->name('pivot');
+            Route::get('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'show'])->name('show');
+            Route::get('/{expense}/edit', [App\Http\Controllers\AccountExpenseController::class, 'edit'])->name('edit');
+            Route::put('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'update'])->name('update');
+            Route::delete('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'destroy'])->name('destroy');
+            Route::delete('/{expense}/attachments/{index}', [App\Http\Controllers\AccountExpenseController::class, 'deleteAttachment'])->name('attachments.destroy');
+        });
     });
 
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
