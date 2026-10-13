@@ -115,7 +115,8 @@ class DashboardController extends Controller
         // ── 1. KPIs ───────────────────────────────────────────────
         $totalLeads    = (clone $base())->count();
         $wonQuery      = (clone $base())->converted();
-        $lostLeads     = (clone $base())->where('lead_status', 'lost')->count();
+        $lostQuery     = (clone $base())->lost();
+        $lostLeads     = (clone $lostQuery)->count();
 
         // Query converted products in the selected date range using converted_at (converted date)
         // matching SuperAdminDashboardController so won_leads (Active Customers) counts
@@ -144,7 +145,10 @@ class DashboardController extends Controller
                 if ($branchId) $lq->where('branch_id', $branchId);
                 if ($userId)   $lq->where('assigned_to', $userId);
                 if ($stage)    $lq->where('lead_status', $stage);
-                if ($source)   $lq->where('lead_source_id', $source);
+                if ($source)   $lq->where(function($sq) use ($source) {
+                    $sq->where('lead_source_id', $source)
+                       ->orWhere('lead_source', $source);
+                });
             });
 
         if ($dateFrom) {
@@ -161,10 +165,12 @@ class DashboardController extends Controller
         $convertedLeadIdsInPeriod = $convertedProducts->pluck('lead_id')->unique();
         $wonLeadIds    = (clone $wonQuery)->pluck('id')->merge($convertedLeadIdsInPeriod)->unique();
         $wonLeads      = $wonLeadIds->count();
+        $wonValue      = $convertedValue > 0 ? $convertedValue : (float) (clone $wonQuery)->sum('deal_value');
         $activeLeads   = max(0, $totalLeads - $wonLeads - $lostLeads);
-        $pipelineValue = (float)(clone $base())->whereNotIn('lead_status', ['won', 'lost'])->sum('deal_value');
-        $wonValue      = (float)(clone $base())->converted()->sum('deal_value');
-        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('lead_status', ['won', 'lost'])->count();
+
+        $excludedIds   = $wonLeadIds->merge((clone $lostQuery)->pluck('id'))->unique();
+        $pipelineValue = (float)(clone $base())->whereNotIn('id', $excludedIds)->sum('deal_value');
+        $highPriority  = (clone $base())->where('priority', 'high')->whereNotIn('id', $excludedIds)->count();
         $convRate      = $totalLeads > 0 ? round($wonLeads / $totalLeads * 100, 1) : 0;
 
         // ── 2. Pipeline funnel from lead_products.lead_status_id ───
@@ -172,6 +178,10 @@ class DashboardController extends Controller
         $lpProducts = LeadProduct::whereIn('lead_id', $leadIds)->with('payments')->get();
 
         $nonConvertedProducts = $lpProducts->reject($isConvertedProduct);
+
+        $upcomingAmount = (float) $nonConvertedProducts->sum('total_price');
+        $totalProductsCount = $convertedProductsCount + $nonConvertedProducts->count();
+        $convertedPercentage = $totalProductsCount > 0 ? round(($convertedProductsCount / $totalProductsCount) * 100, 1) : 0;
 
         $allLpProducts = $nonConvertedProducts->merge($convertedProducts)->unique('id');
 
@@ -220,42 +230,16 @@ class DashboardController extends Controller
         }
         unset($src);
 
-        // ── 4. Financials ─────────────────────────────────────────
-        $lpBase = $this->getLeadProductBaseQuery($request);
-        $lpProducts = (clone $lpBase)->with('payments')->get();
-
-        $convertedStatusIds = LeadProduct::convertedStatusIds();
-        $isConvertedProduct = fn(LeadProduct $lp) => $lp->isConvertedProduct($convertedStatusIds);
-
-        $convertedProducts = $lpProducts->filter($isConvertedProduct);
-        $convertedValue    = (float) $convertedProducts->sum('total_price');
-        $convertedCount    = $convertedProducts->count();
+        // ── 4. Financials (from lead_products + payments) ─────────
+        $totalProductValue = (float) $allLpProducts->sum('total_price');
+        $convertedCount    = $convertedProductsCount;
+        $convertedProductIds = $convertedProducts->pluck('id');
 
         // Amount Received / Amount Pending — Payment Financials cards.
-        // $totalProductValue/$totalPaid/$totalPending were previously
-        // referenced below (in the 'financials' response block) without
-        // ever being assigned anywhere in this method — a pre-existing
-        // bug where PHP silently treated the undefined variables as
-        // null/0, which is also why these numbers could show as 0 or
-        // drift out of sync with each other on mobile.
-        //
-        // Amount Received is sourced strictly from the Lead Products
-        // Payment table (LeadProductPayment) — NOT the LeadProduct's own
-        // amount_paid column/accessor. That column can be stale relative
-        // to what's actually been logged as payments (e.g. an old
-        // migrated/raw value), and summing the per-row clamped
-        // getAmountPendingAttribute() (max(0, total_price - amount_paid))
-        // silently inflates the total whenever any single converted
-        // product's raw amount_paid overstates its real payments — a
-        // negative per-row contribution gets clamped to 0 instead of
-        // offsetting the total, which is exactly what was producing an
-        // Amount Pending far larger than the Converted Products value.
-        // Per the business rule Converted Products Amount = Amount
-        // Received + Amount Pending, Pending is now the straight
-        // aggregate difference, not a per-row sum.
-        $convertedProductIds = $convertedProducts->pluck('id');
-        $totalProductValue = (float) $lpProducts->sum('total_price');
         $totalPaid    = (float) LeadProductPayment::whereIn('lead_product_id', $convertedProductIds)->sum('amount');
+        if ($totalPaid <= 0 && $convertedProducts->isNotEmpty()) {
+            $totalPaid = (float) $convertedProducts->sum(fn(LeadProduct $lp) => $lp->amount_paid);
+        }
         $totalPending = max(0, $convertedValue - $totalPaid);
         $payPct       = $convertedValue > 0 ? round($totalPaid / $convertedValue * 100, 1) : 0;
 
@@ -267,7 +251,10 @@ class DashboardController extends Controller
                 if ($branchId) $lq->where('branch_id', $branchId);
                 if ($userId)   $lq->where('assigned_to', $userId);
                 if ($stage)    $lq->where('lead_status', $stage);
-                if ($source)   $lq->where('lead_source', $source);
+                if ($source)   $lq->where(function($sq) use ($source) {
+                    $sq->where('lead_source_id', $source)
+                       ->orWhere('lead_source', $source);
+                });
             });
 
         if ($dateFrom) {
@@ -278,16 +265,7 @@ class DashboardController extends Controller
         }
         $totalReceivedAmount = (float) $paymentsQuery->sum('amount');
 
-        // Mirrors SuperAdminDashboardController's KPI block — these were
-        // previously computed nowhere on the mobile side, so the "Converted
-        // Products" / "Upcoming Amount" / "Converted Value" / "Converted
-        // Percentage" Key Metrics cards always showed 0 on mobile even
-        // though $lpProducts (above) already has everything needed.
-        $upcomingAmount      = (float) $lpProducts->where('product_status', '!=', 'converted')->sum('total_price');
-        $totalProductsCount  = $lpProducts->count();
-        $convertedPercentage = $totalProductsCount > 0 ? round($convertedCount / $totalProductsCount * 100, 1) : 0;
-
-        $leadProductIds = $lpProducts->pluck('id');
+        $leadProductIds = $allLpProducts->pluck('id');
         $paymentByMode = LeadProductPayment::whereIn('lead_product_id', $leadProductIds)
             ->select('payment_mode', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as txn_count'))
             ->groupBy('payment_mode')
@@ -302,7 +280,7 @@ class DashboardController extends Controller
 
         $productStatusDist = [];
         foreach (LeadProduct::PRODUCT_STATUSES as $pkey => $plabel) {
-            $cnt = $lpProducts->where('product_status', $pkey)->count();
+            $cnt = $allLpProducts->where('product_status', $pkey)->count();
             $productStatusDist[] = [
                 'status' => $pkey,
                 'label'  => $plabel,
@@ -721,12 +699,11 @@ class DashboardController extends Controller
             $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
         }
 
-        // For Company Admin / CBO, Total Prospects card MUST match Active Branches table total count
-        $isCompanyAdminOrCboUnfiltered = ($authUser->isSuperAdmin() || $authUser->isSystemAdmin() || $authUser->isCompanyAdminRole() || $authUser->isCbo()) && !$request->filled('user_id');
-        if ($isCompanyAdminOrCboUnfiltered && !empty($activeBranchesMetrics)) {
-            $userTotalProspects = (int) array_sum(array_column($activeBranchesMetrics, 'prospect_count'));
-            $userTotalDealValue = (float) array_sum(array_column($activeBranchesMetrics, 'deal_value'));
-            $userTotalExpectedCollection = (float) array_sum(array_column($activeBranchesMetrics, 'expected_value'));
+        // Total Prospects card MUST match Active Branches table total count if user can view active branches (matching web SuperAdminDashboardController)
+        if ($canViewActiveBranches && !empty($activeBranchesMetrics)) {
+            $userTotalProspects = (int) collect($activeBranchesMetrics)->sum('prospect_count');
+            $userTotalDealValue = (float) collect($activeBranchesMetrics)->sum('deal_value');
+            $userTotalExpectedCollection = (float) collect($activeBranchesMetrics)->sum('expected_value');
         }
 
         // ── Day Sales Tracker (Today Converted Products & Collections) ──
@@ -787,14 +764,16 @@ class DashboardController extends Controller
                 'filters_applied' => $filtersApplied,
 
                 'kpis' => [
-                    'total_leads'     => $totalLeads,
-                    'active_leads'    => $activeLeads,
-                    'won_leads'       => $wonLeads,
-                    'lost_leads'      => $lostLeads,
-                    'high_priority'   => $highPriority,
-                    'pipeline_value'  => $pipelineValue,
-                    'won_value'       => $wonValue,
+                    'total_leads'                => $totalLeads,
+                    'active_leads'               => $activeLeads,
+                    'won_leads'                  => $wonLeads,
+                    'lost_leads'                 => $lostLeads,
+                    'high_priority'              => $highPriority,
+                    'pipeline_value'             => $pipelineValue,
+                    'won_value'                  => $wonValue,
                     'conversion_rate'            => $convRate,
+                    'total_products_count'       => $totalProductsCount,
+                    'total_product_value'        => $totalProductValue,
                     'converted_products_count'   => $convertedCount,
                     'upcoming_amount'            => $upcomingAmount,
                     'total_received_amount'      => $totalReceivedAmount,
@@ -1230,8 +1209,8 @@ class DashboardController extends Controller
             ->pluck('id')
             ->toArray();
 
-        // NON COCO Hot query: matching branchHotLeads logic
-        $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo, $nonCocoBranchIds) {
+        // NON COCO Hot query: For Company Admin & CBO, filter strictly by Channel Partner NON COCO product
+        $nonCocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($nonCocoProduct, $isCompanyAdminOrCbo) {
             $q->where(function ($sub) use ($nonCocoProduct) {
                 if ($nonCocoProduct) {
                     $sub->where('product_id', $nonCocoProduct->id)
@@ -1241,32 +1220,25 @@ class DashboardController extends Controller
                 }
             });
             if (!$isCompanyAdminOrCbo) {
-                if (!empty($nonCocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($nonCocoBranchIds) {
-                        $lq->whereIn('branch_id', $nonCocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("(branch_type IS NULL OR UPPER(TRIM(branch_type)) != 'COCO')");
-                    });
-                }
+                $q->orWhereHas('lead.branch', function ($bq) {
+                    $bq->whereRaw("UPPER(TRIM(branch_type)) in ('NON COCO', 'NON_COCO', 'NON-COCO')");
+                });
             }
         });
         $nonCocoHotCount = (clone $nonCocoHotQuery)->count();
         $nonCocoDealValue = (float) (clone $nonCocoHotQuery)->sum('total_price');
         $nonCocoExpectedValue = (float) (clone $nonCocoHotQuery)->sum('expected_value');
 
-        // COCO Hot query: matching branchHotLeads logic
-        $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo, $cocoBranchIds) {
+        // COCO Hot query: For Company Admin & CBO, filter strictly by Channel Partner COCO product
+        $cocoHotQuery = (clone $currentMonthHotProductsQuery)->where(function ($q) use ($cocoProduct, $isCompanyAdminOrCbo) {
             $q->where(function ($sub) use ($cocoProduct) {
                 if ($cocoProduct) {
                     $sub->where(function ($sq) use ($cocoProduct) {
                         $sq->where('product_id', $cocoProduct->id)
-                           ->orWhere(function ($ssq) {
-                               $ssq->where('product_name', 'like', '%COCO%')
-                                   ->where('product_name', 'not like', '%NON%');
-                           });
+                            ->orWhere(function ($ssq) {
+                                $ssq->where('product_name', 'like', '%COCO%')
+                                    ->where('product_name', 'not like', '%NON%');
+                            });
                     });
                 } else {
                     $sub->where('product_name', 'like', '%COCO%')
@@ -1274,16 +1246,9 @@ class DashboardController extends Controller
                 }
             });
             if (!$isCompanyAdminOrCbo) {
-                if (!empty($cocoBranchIds)) {
-                    $q->orWhereHas('lead', function ($lq) use ($cocoBranchIds) {
-                        $lq->whereIn('branch_id', $cocoBranchIds);
-                    });
-                } else {
-                    $q->orWhereHas('lead.branch', function ($bq) {
-                        $bq->where('is_default', false)
-                           ->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
-                    });
-                }
+                $q->orWhereHas('lead.branch', function ($bq) {
+                    $bq->whereRaw("UPPER(TRIM(branch_type)) = 'COCO'");
+                });
             }
         });
         $cocoHotCount = (clone $cocoHotQuery)->count();
@@ -1548,7 +1513,7 @@ class DashboardController extends Controller
                     });
             })
             ->when($visibleBranchIds->isNotEmpty(), fn($query) => $query->whereIn('id', $visibleBranchIds))
-            ->when($visibleBranchIds->isEmpty() && $companyId, fn($query) => $query->whereRaw('1 = 0'))
+            ->when($visibleBranchIds->isEmpty() && $this->visibility->companyIdFor($request->user()), fn($query) => $query->whereRaw('1 = 0'))
             ->when($request->filled('branch_id'), fn($query) => $query->where('id', $request->branch_id))
             ->orderByRaw('is_default DESC, name ASC')
             ->get();
@@ -1819,7 +1784,11 @@ class DashboardController extends Controller
     }
 
     /**
-     * Resolve target date for CST prospect item based on product and department type.
+     * Resolve target date for CST prospect item based on standardized business rules across dashboards:
+     * - Technical SEO & Local SEO: Delivery Date (project_delivery_date).
+     * - Development Projects: Expected Date first priority, fallback to Delivery Date.
+     * - LG (Lead Generation): Renewal Date (Expiry date in custom_form_data).
+     * - SMM (Social Media Marketing): Renewal Date (Expiry date in custom_form_data).
      */
     protected function resolveCstProspectTargetDate(ProductionInitiation $pi): ?Carbon
     {
@@ -1854,7 +1823,13 @@ class DashboardController extends Controller
         $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
         $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
 
-        // 1. Development: Expected Date first priority, else Delivery date
+        // 1. Technical SEO & Local SEO: Delivery Date based
+        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
+        if ($isSeo) {
+            return $deliveryDate ?: ($expectedDate ?: null);
+        }
+
+        // 2. Development Projects: Expected Date (Priority) & Delivery Date
         $isDevelopment = ($pi->department_id == 1)
             || str_contains($deptName, 'develop')
             || str_contains($productName, 'develop')
@@ -1866,35 +1841,18 @@ class DashboardController extends Controller
             return $expectedDate ?: ($deliveryDate ?: null);
         }
 
-        // 2. Onetime design: Delivery date
-        $isOnetimeDesign = str_contains($productName, 'onetime')
-            || str_contains($productName, 'one time')
-            || str_contains($productName, 'design')
-            || str_contains($deptName, 'design');
-
-        if ($isOnetimeDesign) {
-            return $deliveryDate ?: ($expectedDate ?: null);
-        }
-
-        // 3. Renewal products - Lead Generation: Campaign expiry date
-        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen');
+        // 3. LG (Lead Generation): Renewal Date (Expiry date in form data)
+        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen') || str_contains($productName, 'lg');
         if ($isLeadGen) {
             $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
             return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
         }
 
-        // 4. Renewal products - SMM Sheet: Expiry date
+        // 4. SMM (Social Media Marketing): Renewal Date (Expiry date in form data)
         $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
         if ($isSmm) {
             $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
             return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
-        }
-
-        // 5. SEO Products: Expiry date or delivery date
-        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
-        if ($isSeo) {
-            $seoExpiry = $getFormDate(['seo_end_date', 'seo end date', 'seo_expiry', 'seo expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            return $seoExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
         }
 
         // Default fallback for any other CST / Renewal item
@@ -1905,6 +1863,26 @@ class DashboardController extends Controller
     public function buildCstProspectMetrics(?Request $request = null): array
     {
         $items = $this->getCstProspectItems($request);
+
+        // Filter to HO / default branch only — mirrors the branchHotLeads type=cst filter
+        $currentUser = $request?->user() ?: (auth('sanctum')->user() ?: auth()->user());
+        if ($currentUser) {
+            $companyId = $this->visibility->companyIdFor($currentUser) ?? ($currentUser?->company_id ?: 1);
+            $defaultBranchQuery = Branch::where('is_default', true);
+            if ($companyId) {
+                $defaultBranchQuery->where('company_id', $companyId);
+            }
+            $defaultBranchIds = $defaultBranchQuery->pluck('id')->toArray();
+            if (empty($defaultBranchIds)) {
+                $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->toArray();
+            }
+
+            if (!empty($defaultBranchIds)) {
+                $items = $items->filter(function ($item) use ($defaultBranchIds) {
+                    return in_array($item['branch_id'] ?? null, $defaultBranchIds);
+                });
+            }
+        }
 
         return [
             'count'          => $items->count(),
