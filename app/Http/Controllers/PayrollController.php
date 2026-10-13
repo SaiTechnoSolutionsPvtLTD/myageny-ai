@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\CstDailyClosing;
 use App\Models\DailyAttendance;
+use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\HolidayCalendar;
 use App\Models\LeaveRequest;
@@ -12,11 +14,14 @@ use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Models\PayrollSetting;
 use App\Models\PermissionRequest;
+use App\Models\ProjectTimesheet;
 use App\Models\QuotationSetting;
+use App\Models\SalesDailyClosing;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -77,14 +82,10 @@ class PayrollController extends Controller
             ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
             : now()->startOfMonth();
 
-        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : 1;
+        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
 
         $branches = Branch::query()
             ->where('is_active', true)
-            ->where(function ($q) {
-                $q->where('name', 'like', 'Coimbatore%')
-                  ->orWhere('id', 1);
-            })
             ->when(auth()->user()?->company_id, fn ($q) => $q->where('company_id', auth()->user()->company_id))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
@@ -111,7 +112,7 @@ class PayrollController extends Controller
             ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
             : now()->startOfMonth();
 
-        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : 1;
+        $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
 
         $employees = EmployeeOnboarding::query()
             ->active()
@@ -121,7 +122,7 @@ class PayrollController extends Controller
                         $userQuery->where('is_active', true);
                     });
             })
-            ->with(['role', 'portalUser'])
+            ->with(['role', 'portalUser', 'department'])
             ->when(auth()->user()?->company_id, function ($query) {
                 $query->whereHas('portalUser', function ($subQuery) {
                     $subQuery->where('company_id', auth()->user()->company_id);
@@ -146,15 +147,16 @@ class PayrollController extends Controller
         $workingDates   = $this->workingDateStringsForMonth($selectedMonth);
         $workingDays    = count($workingDates);
         $payrollSettings = PayrollSetting::forCompany(auth()->user()?->company_id);
-        $attendanceSummary = $this->attendanceSummaryForMonth($selectedMonth, $employees->pluck('id')->all(), $workingDays, $workingDates, $payrollSettings);
+        $attendanceSummary = $this->attendanceSummaryForMonth($selectedMonth, $employees, $workingDays, $workingDates, $payrollSettings);
 
         $rows = $employees->map(function (EmployeeOnboarding $employee) use ($attendanceSummary, $workingDays, $payrollSettings) {
             $components = $this->salaryComponentsForEmployee($employee);
             $summary    = $attendanceSummary[$employee->id] ?? [
-                'days_attended' => 0,
-                'leave_days'    => 0,
-                'lop_days'      => $workingDays,
-                'payable_days'  => 0,
+                'days_attended'      => 0,
+                'leave_days'         => 0,
+                'timesheet_lop_days' => 0,
+                'lop_days'           => $workingDays,
+                'payable_days'       => 0,
             ];
 
             return $this->calculatePayrollRow([
@@ -169,6 +171,7 @@ class PayrollController extends Controller
                 'working_days'             => $workingDays,
                 'days_attended'            => $summary['days_attended'],
                 'leave_days'               => $summary['leave_days'],
+                'timesheet_lop_days'       => $summary['timesheet_lop_days'],
                 'lop_days'                 => $summary['lop_days'],
                 'payable_days'             => $summary['payable_days'],
                 'use_pf'                   => (bool) $employee->pf_enabled,
@@ -212,6 +215,7 @@ class PayrollController extends Controller
             'items.*.working_days' => ['required', 'numeric', 'min:0'],
             'items.*.days_attended' => ['required', 'numeric', 'min:0'],
             'items.*.leave_days' => ['required', 'numeric', 'min:0'],
+            'items.*.timesheet_lop_days' => ['nullable', 'numeric', 'min:0'],
             'items.*.lop_days' => ['required', 'numeric', 'min:0'],
             'items.*.payable_days' => ['required', 'numeric', 'min:0'],
             'items.*.use_pf' => ['nullable', 'boolean'],
@@ -279,6 +283,7 @@ class PayrollController extends Controller
                     'working_days' => $item['working_days'],
                     'days_attended' => $item['days_attended'],
                     'leave_days' => $item['leave_days'],
+                    'timesheet_lop_days' => $item['timesheet_lop_days'] ?? 0,
                     'lop_days' => $item['lop_days'],
                     'payable_days' => $item['payable_days'],
                     'use_pf' => (bool) ($item['use_pf'] ?? false),
@@ -424,11 +429,19 @@ class PayrollController extends Controller
     {
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
+        $appTz = config('app.timezone', 'Asia/Kolkata');
 
         $holidays = HolidayCalendar::query()
-            ->whereBetween('holiday_date', [$start->toDateString(), $end->toDateString()])
+            ->where(function ($q) use ($start, $end) {
+                $q->whereBetween('holiday_date', [
+                    $start->copy()->subDay()->toDateString(),
+                    $end->copy()->addDay()->toDateString(),
+                ]);
+            })
             ->pluck('holiday_date')
-            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->map(function ($date) use ($appTz) {
+                return Carbon::parse($date)->setTimezone($appTz)->toDateString();
+            })
             ->all();
 
         $dates = [];
@@ -449,157 +462,271 @@ class PayrollController extends Controller
         return $dates;
     }
 
-    private function attendanceSummaryForMonth(Carbon $month, array $employeeIds, int $workingDays, array $workingDates = [], ?PayrollSetting $settings = null): array
+    private function isTimesheetLopDepartment(?Department $department): bool
+    {
+        if (! $department) {
+            return false;
+        }
+
+        $name = strtolower($department->name);
+        foreach (['develop', 'design', 'digital', 'marketing', 'dm', 'sales', 'customer', 'support', 'success', 'cst'] as $keyword) {
+            if (str_contains($name, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function getDepartmentSubmissionType(?Department $department): string
+    {
+        if (! $department) {
+            return 'timesheet';
+        }
+
+        $name = strtolower($department->name);
+        if (str_contains($name, 'sales')) {
+            return 'sales_closing';
+        }
+        if (str_contains($name, 'customer') || str_contains($name, 'support') || str_contains($name, 'success') || str_contains($name, 'cst')) {
+            return 'cst_closing';
+        }
+
+        return 'timesheet';
+    }
+
+    private function attendanceSummaryForMonth(Carbon $month, Collection|array $employees, int $workingDays, array $workingDates = [], ?PayrollSetting $settings = null): array
     {
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
         $settings = $settings ?? PayrollSetting::forCompany(auth()->user()?->company_id);
-        if (empty($workingDates)) {
-            $workingDates = $this->workingDateStringsForMonth($month);
+
+        if (is_array($employees)) {
+            $employees = EmployeeOnboarding::query()
+                ->with(['department', 'portalUser'])
+                ->whereIn('id', $employees)
+                ->get();
         }
-        $workingDateLookup = array_flip($workingDates);
-        $paidLeaveAllowance = max((float) $settings->paid_leave_days, 0);
-        $permissionAllowance = max((int) $settings->permission_days_per_month, 0);
-        $permissionMinutesPerDay = max((float) $settings->permission_hours_per_day * 60, 0);
-        $graceLoginTime = (string) ($settings->grace_login_time ?: '09:30:00');
 
-        $rows = DailyAttendance::query()
+        $paidLeaveAllowance = max((float) ($settings?->paid_leave_days ?? 1.0), 0);
+        $permissionAllowance = max((int) ($settings?->permission_days_per_month ?? 3), 0);
+        $permissionMinutesPerDay = max((float) ($settings?->permission_hours_per_day ?? 2.0) * 60, 0);
+        $graceLoginTime = (string) ($settings?->grace_login_time ?: '09:40:00');
+
+        $employeeIds = $employees->pluck('id')->all();
+        $portalUserIds = $employees->pluck('portal_user_id')->filter()->unique()->all();
+
+        // 1. Fetch DailyAttendance matching either employee_id or portal_user_id
+        $attendanceRows = DailyAttendance::query()
             ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
-            ->whereIn('employee_id', $employeeIds)
-            ->get(['employee_id', 'attendance_date', 'attendance_status', 'leave_category', 'login_time']);
+            ->where(function ($q) use ($employeeIds, $portalUserIds) {
+                $q->whereIn('employee_id', $employeeIds);
+                if (! empty($portalUserIds)) {
+                    $q->orWhereIn('employee_id', $portalUserIds);
+                }
+            })
+            ->get(['id', 'employee_id', 'attendee_type', 'attendance_date', 'attendance_status', 'leave_category', 'leave_session', 'login_time']);
 
+        // 2. Fetch approved LeaveRequests with leaveType
         $approvedLeaves = LeaveRequest::query()
             ->where('status', LeaveRequest::STATUS_APPROVED)
-            ->whereIn('employee_id', $employeeIds)
+            ->where(function ($q) use ($employeeIds, $portalUserIds) {
+                $q->whereIn('employee_id', $employeeIds);
+                if (! empty($portalUserIds)) {
+                    $q->orWhereIn('user_id', $portalUserIds);
+                }
+            })
             ->whereDate('start_date', '<=', $end->toDateString())
             ->whereDate('end_date', '>=', $start->toDateString())
-            ->get(['employee_id', 'start_date', 'end_date']);
+            ->with('leaveType')
+            ->get(['id', 'employee_id', 'user_id', 'leave_type_id', 'start_date', 'end_date', 'total_days']);
 
+        // 3. Fetch approved PermissionRequests
         $approvedPermissions = PermissionRequest::query()
             ->where('status', PermissionRequest::STATUS_APPROVED)
-            ->whereIn('employee_id', $employeeIds)
+            ->where(function ($q) use ($employeeIds, $portalUserIds) {
+                $q->whereIn('employee_id', $employeeIds);
+                if (! empty($portalUserIds)) {
+                    $q->orWhereIn('user_id', $portalUserIds);
+                }
+            })
             ->whereBetween('permission_date', [$start->toDateString(), $end->toDateString()])
-            ->get(['employee_id', 'permission_date', 'total_minutes']);
+            ->get(['id', 'employee_id', 'user_id', 'permission_date', 'total_minutes']);
+
+        // 4. Timesheet and daily closings for target portal users
+        $timesheetsByUser = ProjectTimesheet::query()
+            ->whereIn('user_id', $portalUserIds)
+            ->whereBetween('timesheet_date', [$start->toDateString(), $end->toDateString()])
+            ->get(['user_id', 'timesheet_date'])
+            ->groupBy('user_id');
+
+        $salesClosingsByUser = SalesDailyClosing::query()
+            ->whereIn('user_id', $portalUserIds)
+            ->whereBetween('closing_date', [$start->toDateString(), $end->toDateString()])
+            ->get(['user_id', 'closing_date'])
+            ->groupBy('user_id');
+
+        $cstClosingsByUser = CstDailyClosing::query()
+            ->whereIn('user_id', $portalUserIds)
+            ->whereBetween('closing_date', [$start->toDateString(), $end->toDateString()])
+            ->get(['user_id', 'closing_date'])
+            ->groupBy('user_id');
 
         $summary = [];
 
-        foreach ($employeeIds as $employeeId) {
-            $employeeRows = $rows->where('employee_id', $employeeId);
-            $presentDates = $employeeRows
-                ->where('attendance_status', 'present')
-                ->pluck('attendance_date')
-                ->map(fn ($date) => optional($date)->toDateString())
-                ->filter(fn (?string $date) => $date && isset($workingDateLookup[$date]))
-                ->unique()
-                ->values();
+        foreach ($employees as $employee) {
+            $empAttendance = $attendanceRows->filter(fn ($r) =>
+                (int) $r->employee_id === (int) $employee->id ||
+                ($employee->portal_user_id && (int) $r->employee_id === (int) $employee->portal_user_id)
+            );
 
-            $presentDateLookup = array_flip($presentDates->all());
+            $empLeaves = $approvedLeaves->filter(fn ($l) =>
+                (int) $l->employee_id === (int) $employee->id ||
+                ($employee->portal_user_id && (int) $l->user_id === (int) $employee->portal_user_id)
+            );
 
-            $manualLeaveDates = $employeeRows
-                ->where('attendance_status', 'leave')
-                ->mapWithKeys(function ($row) use ($workingDateLookup, $presentDateLookup) {
-                    $date = optional($row->attendance_date)->toDateString();
+            $empPerms = $approvedPermissions->filter(fn ($p) =>
+                (int) $p->employee_id === (int) $employee->id ||
+                ($employee->portal_user_id && (int) $p->user_id === (int) $employee->portal_user_id)
+            );
 
-                    if (! $date || ! isset($workingDateLookup[$date]) || isset($presentDateLookup[$date])) {
-                        return [];
+            // Approved leaves by date
+            $approvedLeavesByDate = [];
+            foreach ($empLeaves as $leave) {
+                $isHalf = in_array((int) $leave->leave_type_id, [3, 4], true)
+                    || str_contains(strtolower(optional($leave->leaveType)->name ?? ''), 'half')
+                    || (float) $leave->total_days === 0.5;
+                $val = $isHalf ? 0.5 : 1.0;
+
+                $cur = Carbon::parse($leave->start_date)->startOfDay();
+                $lEnd = Carbon::parse($leave->end_date)->startOfDay();
+                while ($cur->lte($lEnd)) {
+                    if ($cur->gte($start) && $cur->lte($end)) {
+                        $d = $cur->toDateString();
+                        $approvedLeavesByDate[$d] = max($approvedLeavesByDate[$d] ?? 0, $val);
                     }
+                    $cur->addDay();
+                }
+            }
 
-                    $value = match ($row->leave_category) {
-                        'paid' => 1.0,
+            $attendedByDate = [];
+            $manualLeavesByDate = [];
+            $lateLoginsByDate = [];
+
+            foreach ($empAttendance as $r) {
+                $d = optional($r->attendance_date)->toDateString();
+                if (! $d) {
+                    continue;
+                }
+
+                if ($r->attendance_status === 'present') {
+                    $isHalf = $r->leave_category === 'half_day'
+                        || ! empty($r->leave_session)
+                        || (($approvedLeavesByDate[$d] ?? 0) === 0.5);
+
+                    $attendedByDate[$d] = $isHalf ? 0.5 : 1.0;
+
+                    if ($r->login_time && $r->login_time > $graceLoginTime) {
+                        $lateLoginsByDate[$d] = true;
+                    }
+                } elseif ($r->attendance_status === 'leave') {
+                    $val = match ($r->leave_category) {
                         'half_day' => 0.5,
-                        default => 0.0,
+                        default => 1.0,
                     };
+                    $manualLeavesByDate[$d] = max($manualLeavesByDate[$d] ?? 0, $val);
+                }
+            }
 
-                    if ($value <= 0) {
-                        return [];
+            // Combine manual and approved leaves
+            $combinedLeaves = $approvedLeavesByDate;
+            foreach ($manualLeavesByDate as $d => $val) {
+                $combinedLeaves[$d] = max($combinedLeaves[$d] ?? 0, $val);
+            }
+
+            // If an employee worked full day, remove leave. If worked half day, cap leave at 0.5.
+            foreach ($attendedByDate as $d => $attVal) {
+                if ($attVal >= 1.0) {
+                    unset($combinedLeaves[$d]);
+                } elseif ($attVal === 0.5) {
+                    $combinedLeaves[$d] = min($combinedLeaves[$d] ?? 0.5, 0.5);
+                }
+            }
+
+            $presentDays = array_sum($attendedByDate);
+            $totalLeaveDays = array_sum($combinedLeaves);
+            $paidLeaveDays = min($totalLeaveDays, $paidLeaveAllowance);
+
+            // Timesheet LOP calculation
+            $tsLop = 0.0;
+            if ($this->isTimesheetLopDepartment($employee->department) && $employee->portal_user_id) {
+                $subType = $this->getDepartmentSubmissionType($employee->department);
+                $userTs = $timesheetsByUser->get($employee->portal_user_id, collect());
+                $userSales = $salesClosingsByUser->get($employee->portal_user_id, collect());
+                $userCst = $cstClosingsByUser->get($employee->portal_user_id, collect());
+
+                $tsDates = $userTs->pluck('timesheet_date')->map(fn ($d) => optional($d)->toDateString())->filter()->flip()->all();
+                $salesDates = $userSales->pluck('closing_date')->map(fn ($d) => optional($d)->toDateString())->filter()->flip()->all();
+                $cstDates = $userCst->pluck('closing_date')->map(fn ($d) => optional($d)->toDateString())->filter()->flip()->all();
+
+                $missingCount = 0;
+                foreach ($attendedByDate as $d => $attVal) {
+                    // Only count missing days when employee was present and not on full/half approved leave
+                    if ($attVal > 0 && ! isset($combinedLeaves[$d])) {
+                        $submitted = match ($subType) {
+                            'sales_closing' => isset($salesDates[$d]) || isset($tsDates[$d]),
+                            'cst_closing'   => isset($cstDates[$d]) || isset($tsDates[$d]),
+                            default         => isset($tsDates[$d]),
+                        };
+
+                        if (! $submitted) {
+                            $missingCount++;
+                        }
                     }
-
-                    return [$date => $value];
-                });
-
-            $approvedLeaveDates = collect();
-
-            foreach ($approvedLeaves->where('employee_id', $employeeId) as $leaveRequest) {
-                $approvedLeaveDates = $approvedLeaveDates->merge(
-                    $this->workingDatesBetween(
-                        Carbon::parse($leaveRequest->start_date),
-                        Carbon::parse($leaveRequest->end_date),
-                        $start,
-                        $end,
-                        $workingDateLookup
-                    )
-                );
-            }
-
-            $approvedLeaveMap = $approvedLeaveDates
-                ->filter(fn (?string $date) => $date && ! isset($presentDateLookup[$date]))
-                ->mapWithKeys(fn (string $date) => [$date => 1.0]);
-
-            $leaveDaysByDate = $approvedLeaveMap;
-
-            foreach ($manualLeaveDates as $date => $value) {
-                $leaveDaysByDate[$date] = max((float) ($leaveDaysByDate[$date] ?? 0), min((float) $value, 1.0));
-            }
-
-            $paidLeaveDays = min($leaveDaysByDate->sum(), $paidLeaveAllowance);
-
-            $permissionUsage = [];
-
-            foreach ($approvedPermissions->where('employee_id', $employeeId) as $permissionRequest) {
-                $permissionDate = optional($permissionRequest->permission_date)->toDateString();
-
-                if (! $permissionDate || ! isset($workingDateLookup[$permissionDate])) {
-                    continue;
                 }
 
-                $permissionUsage[$permissionDate] = ($permissionUsage[$permissionDate] ?? 0) + (int) $permissionRequest->total_minutes;
+                $tsLop = floor($missingCount / 2) * 0.5;
             }
 
-            foreach ($employeeRows->where('attendance_status', 'present') as $attendanceRow) {
-                $attendanceDate = optional($attendanceRow->attendance_date)->toDateString();
-
-                if (! $attendanceDate || ! isset($workingDateLookup[$attendanceDate]) || ! $attendanceRow->login_time) {
-                    continue;
-                }
-
-                if ($attendanceRow->login_time > $graceLoginTime) {
-                    $permissionUsage[$attendanceDate] = $permissionUsage[$attendanceDate] ?? 0;
+            // Permission & late login excess penalty calculation
+            $permUsageByDate = [];
+            foreach ($empPerms as $p) {
+                $pd = optional($p->permission_date)->toDateString();
+                if ($pd) {
+                    $permUsageByDate[$pd] = ($permUsageByDate[$pd] ?? 0) + (int) $p->total_minutes;
                 }
             }
 
-            ksort($permissionUsage);
-
-            $permissionPenaltyDays = 0.0;
-            $permissionIndex = 0;
-
-            foreach ($permissionUsage as $minutesUsed) {
-                if ($permissionIndex >= $permissionAllowance) {
-                    $permissionPenaltyDays += 1;
-                    $permissionIndex++;
-                    continue;
+            $dailyExcessPenalty = 0.0;
+            foreach ($permUsageByDate as $pd => $mins) {
+                if ($permissionMinutesPerDay > 0 && $mins > $permissionMinutesPerDay) {
+                    $dailyExcessPenalty += round(($mins - $permissionMinutesPerDay) / (8 * 60), 2);
                 }
-
-                if ($permissionMinutesPerDay <= 0) {
-                    if ($minutesUsed > 0) {
-                        $permissionPenaltyDays += 1;
-                    }
-                } elseif ($minutesUsed > $permissionMinutesPerDay) {
-                    $permissionPenaltyDays += round(($minutesUsed - $permissionMinutesPerDay) / $permissionMinutesPerDay, 2);
-                }
-
-                $permissionIndex++;
             }
 
-            $present = $presentDates->count();
-            $leave = round($paidLeaveDays, 2);
-            $payableDays = min($workingDays, max(($present + $paidLeaveDays) - $permissionPenaltyDays, 0));
-            $lopDays = max($workingDays - $payableDays, 0);
+            $unapprovedLateLogins = 0;
+            foreach ($lateLoginsByDate as $ld => $isLate) {
+                if (! isset($permUsageByDate[$ld])) {
+                    $unapprovedLateLogins++;
+                }
+            }
 
-            $summary[$employeeId] = [
-                'days_attended' => $present,
-                'leave_days' => $leave,
-                'lop_days' => $lopDays,
-                'payable_days' => $payableDays,
+            $totalPermissionAndLateEvents = count($permUsageByDate) + $unapprovedLateLogins;
+            $excessEvents = max($totalPermissionAndLateEvents - $permissionAllowance, 0);
+            $excessLatePenalty = floor($excessEvents / 3) * 0.5;
+            $permissionPenaltyDays = $dailyExcessPenalty + $excessLatePenalty;
+
+            // Attendance LOP is working days minus attended and paid leave
+            $baseAttendanceLop = max($workingDays - ($presentDays + $paidLeaveDays), 0);
+            $totalLop = $baseAttendanceLop + $tsLop + $permissionPenaltyDays;
+            $payableDays = max($workingDays - $totalLop, 0);
+
+            $summary[$employee->id] = [
+                'days_attended'      => round($presentDays, 2),
+                'leave_days'         => round($paidLeaveDays, 2),
+                'timesheet_lop_days' => round($tsLop, 2),
+                'lop_days'           => round($totalLop, 2),
+                'payable_days'       => round($payableDays, 2),
             ];
         }
 
@@ -659,9 +786,14 @@ class PayrollController extends Controller
         $workingDays = max((float) ($row['working_days'] ?? 0), 0);
         $daysAttended = max((float) ($row['days_attended'] ?? 0), 0);
         $leaveDays = max((float) ($row['leave_days'] ?? 0), 0);
-        $rawPayableDays = max($daysAttended + $leaveDays, 0);
-        $payableDays = min($workingDays > 0 ? $workingDays : $rawPayableDays, $rawPayableDays);
-        $lopDays = max($workingDays - $payableDays, 0);
+        $timesheetLop = max((float) ($row['timesheet_lop_days'] ?? 0), 0);
+
+        $attPayable = max($daysAttended + $leaveDays, 0);
+        $baseLop = max($workingDays - $attPayable, 0);
+
+        $lopDays = isset($row['lop_days']) ? max((float) $row['lop_days'], 0) : ($baseLop + $timesheetLop);
+        $payableDays = isset($row['payable_days']) ? max((float) $row['payable_days'], 0) : max($workingDays - $lopDays, 0);
+        $payableDays = min($workingDays > 0 ? $workingDays : $payableDays, $payableDays);
 
         $grossSalary = round((float) ($row['gross_salary'] ?? 0), 2);
         $salaryComponents = $this->salaryBreakdownFromGross($grossSalary);
@@ -713,6 +845,7 @@ class PayrollController extends Controller
             'working_days' => (int) round($workingDays),
             'days_attended' => round($daysAttended, 2),
             'leave_days' => round($leaveDays, 2),
+            'timesheet_lop_days' => round($timesheetLop, 2),
             'lop_days' => round($lopDays, 2),
             'payable_days' => round($payableDays, 2),
             'use_pf' => $usePf,

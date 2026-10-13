@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\CstDailyClosing;
 use App\Models\DailyAttendance;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\LeaveRequest;
 use App\Models\ProjectTimesheet;
+use App\Models\SalesDailyClosing;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +30,7 @@ class TimesheetLopApiController extends Controller
     }
 
     /**
-     * Get target department IDs (Development, Designing, Digital Marketing).
+     * Get target department IDs (Development, Designing, Digital Marketing, Sales, Customer Success Team).
      */
     private function targetDepartmentIds(): array
     {
@@ -39,10 +41,35 @@ class TimesheetLopApiController extends Controller
                   ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
                   ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
                   ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%sales%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%customer%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%support%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%success%'])
+                  ->orWhereRaw('LOWER(name) LIKE ?', ['%cst%']);
             })
             ->pluck('id')
             ->toArray();
+    }
+
+    /**
+     * Determine the submission type required for an employee's department.
+     */
+    private function getDepartmentSubmissionType(?Department $department): string
+    {
+        if (! $department) {
+            return 'timesheet';
+        }
+
+        $name = strtolower($department->name);
+        if (str_contains($name, 'sales')) {
+            return 'sales_closing';
+        }
+        if (str_contains($name, 'customer') || str_contains($name, 'support') || str_contains($name, 'success') || str_contains($name, 'cst')) {
+            return 'cst_closing';
+        }
+
+        return 'timesheet';
     }
 
     /**
@@ -167,10 +194,24 @@ class TimesheetLopApiController extends Controller
             ->whereBetween('timesheet_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->get(['user_id', 'timesheet_date', 'production_initiation_id', 'status', 'day_closing_update']);
 
+        // 4. Fetch SalesDailyClosings for these portal users in date range
+        $salesClosings = SalesDailyClosing::query()
+            ->whereIn('user_id', $portalUserIds)
+            ->whereBetween('closing_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->get(['user_id', 'closing_date', 'status']);
+
+        // 5. Fetch CstDailyClosings for these portal users in date range
+        $cstClosings = CstDailyClosing::query()
+            ->whereIn('user_id', $portalUserIds)
+            ->whereBetween('closing_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->get(['user_id', 'closing_date', 'status']);
+
         // Group data for quick lookup
         $attendanceByEmployee = $attendances->groupBy('employee_id');
         $leavesByEmployee     = $leaveRequests->groupBy('employee_id');
         $timesheetsByUser     = $timesheets->groupBy('user_id');
+        $salesClosingsByUser  = $salesClosings->groupBy('user_id');
+        $cstClosingsByUser    = $cstClosings->groupBy('user_id');
 
         $rows = [];
         $totalPresentDays         = 0;
@@ -179,9 +220,12 @@ class TimesheetLopApiController extends Controller
         $totalLopDays             = 0.0;
 
         foreach ($employees as $employee) {
+            $submissionType = $this->getDepartmentSubmissionType($employee->department);
             $empAttendances = $attendanceByEmployee->get($employee->id, collect());
             $empLeaves       = $leavesByEmployee->get($employee->id, collect());
             $userTimesheets = $employee->portal_user_id ? $timesheetsByUser->get($employee->portal_user_id, collect()) : collect();
+            $userSalesClosings = $employee->portal_user_id ? $salesClosingsByUser->get($employee->portal_user_id, collect()) : collect();
+            $userCstClosings = $employee->portal_user_id ? $cstClosingsByUser->get($employee->portal_user_id, collect()) : collect();
 
             // Approved leave date strings lookup
             $approvedLeaveDateStrings = [];
@@ -213,9 +257,27 @@ class TimesheetLopApiController extends Controller
                 }
             }
 
+            // Sales closings by date string
+            $salesClosingDates = [];
+            foreach ($userSalesClosings as $sc) {
+                $d = optional($sc->closing_date)->toDateString();
+                if ($d) {
+                    $salesClosingDates[$d] = true;
+                }
+            }
+
+            // CST closings by date string
+            $cstClosingDates = [];
+            foreach ($userCstClosings as $cc) {
+                $d = optional($cc->closing_date)->toDateString();
+                if ($d) {
+                    $cstClosingDates[$d] = true;
+                }
+            }
+
             $presentDates            = [];
-            $timesheetSubmittedDates = [];
-            $missingTimesheetDates   = [];
+            $submittedDates          = [];
+            $missingDates            = [];
             $leaveExemptDates        = [];
 
             // Evaluate dates where employee had attendance
@@ -230,17 +292,23 @@ class TimesheetLopApiController extends Controller
                 if ($attRecord->attendance_status === 'present') {
                     $presentDates[] = $dateStr;
 
-                    if (isset($timesheetDates[$dateStr])) {
-                        $timesheetSubmittedDates[] = $dateStr;
+                    $hasSubmitted = match ($submissionType) {
+                        'sales_closing' => isset($salesClosingDates[$dateStr]) || isset($timesheetDates[$dateStr]),
+                        'cst_closing'   => isset($cstClosingDates[$dateStr]) || isset($timesheetDates[$dateStr]),
+                        default         => isset($timesheetDates[$dateStr]),
+                    };
+
+                    if ($hasSubmitted) {
+                        $submittedDates[] = $dateStr;
                     } else {
-                        $missingTimesheetDates[] = $dateStr;
+                        $missingDates[] = $dateStr;
                     }
                 }
             }
 
             $presentCount     = count($presentDates);
-            $submittedCount   = count($timesheetSubmittedDates);
-            $missingCount     = count($missingTimesheetDates);
+            $submittedCount   = count($submittedDates);
+            $missingCount     = count($missingDates);
             $leaveExemptCount = count($leaveExemptDates);
 
             // Formula: floor(missing_days / 2) * 0.5
@@ -266,12 +334,13 @@ class TimesheetLopApiController extends Controller
                     'avatar_initial' => mb_strtoupper($initials ?: '?', 'UTF-8'),
                     'photograph_url' => $employee->photograph ? asset('storage/' . $employee->photograph) : null,
                 ],
+                'submission_type'          => $submissionType,
                 'present_days'             => $presentCount,
                 'timesheet_submitted_days' => $submittedCount,
                 'missing_days'             => $missingCount,
                 'leave_exempted_days'      => $leaveExemptCount,
                 'timesheet_lop_days'       => $lopDays,
-                'missing_dates'            => $missingTimesheetDates,
+                'missing_dates'            => $missingDates,
             ];
         }
 
@@ -408,6 +477,8 @@ class TimesheetLopApiController extends Controller
      */
     private function calculateEmployeeBreakdown(EmployeeOnboarding $employee, Carbon $startDate, Carbon $endDate): array
     {
+        $submissionType = $this->getDepartmentSubmissionType($employee->department);
+
         $empAttendances = DailyAttendance::query()
             ->where('employee_id', $employee->id)
             ->whereBetween('attendance_date', [$startDate->toDateString(), $endDate->toDateString()])
@@ -432,8 +503,25 @@ class TimesheetLopApiController extends Controller
             }
         }
 
-        $userTimesheets = collect();
+        $userTimesheets    = collect();
+        $userSalesClosings = collect();
+        $userCstClosings   = collect();
+
         if ($employee->portal_user_id) {
+            if ($submissionType === 'sales_closing') {
+                $userSalesClosings = SalesDailyClosing::query()
+                    ->where('user_id', $employee->portal_user_id)
+                    ->whereBetween('closing_date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->get()
+                    ->groupBy(fn ($item) => optional($item->closing_date)->toDateString());
+            } elseif ($submissionType === 'cst_closing') {
+                $userCstClosings = CstDailyClosing::query()
+                    ->where('user_id', $employee->portal_user_id)
+                    ->whereBetween('closing_date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->get()
+                    ->groupBy(fn ($item) => optional($item->closing_date)->toDateString());
+            }
+
             $userTimesheets = ProjectTimesheet::query()
                 ->with('project')
                 ->where('user_id', $employee->portal_user_id)
@@ -457,8 +545,24 @@ class TimesheetLopApiController extends Controller
             $isAttendanceLeave = $attRecord && $attRecord->attendance_status === 'leave';
             $isLeave           = $isApprovedLeave || $isAttendanceLeave;
 
-            $isPresent    = $attRecord && $attRecord->attendance_status === 'present' && ! $isLeave;
-            $hasTimesheet = $userTimesheets->has($dateStr);
+            $isPresent = $attRecord && $attRecord->attendance_status === 'present' && ! $isLeave;
+
+            $hasSalesClosing = $userSalesClosings->has($dateStr);
+            $hasCstClosing   = $userCstClosings->has($dateStr);
+            $hasTimesheet    = $userTimesheets->has($dateStr);
+
+            $isSubmitted    = false;
+            $submissionName = 'Timesheet';
+            if ($submissionType === 'sales_closing') {
+                $submissionName = 'Sales Day Closing';
+                $isSubmitted    = $hasSalesClosing || $hasTimesheet;
+            } elseif ($submissionType === 'cst_closing') {
+                $submissionName = 'CST Day Closing';
+                $isSubmitted    = $hasCstClosing || $hasTimesheet;
+            } else {
+                $submissionName = 'Timesheet';
+                $isSubmitted    = $hasTimesheet;
+            }
 
             $status     = 'Not Marked';
             $badgeClass = 'secondary';
@@ -470,12 +574,12 @@ class TimesheetLopApiController extends Controller
                 $leaveExemptCount++;
             } elseif ($isPresent) {
                 $presentCount++;
-                if ($hasTimesheet) {
-                    $status     = 'Present & Timesheet Submitted';
+                if ($isSubmitted) {
+                    $status     = "Present & {$submissionName} Submitted";
                     $badgeClass = 'success';
                     $submittedCount++;
                 } else {
-                    $status     = 'Present - Missing Timesheet';
+                    $status     = "Present - Missing {$submissionName}";
                     $badgeClass = 'danger';
                     $missingCount++;
                     $isMissing  = true;
@@ -503,8 +607,28 @@ class TimesheetLopApiController extends Controller
                 }
             }
 
-            // Timesheet entries summary on this date
+            // Entries summary on this date
             $timesheetEntries = [];
+            if ($hasSalesClosing) {
+                foreach ($userSalesClosings->get($dateStr) as $sc) {
+                    $callsSummary = "Total Calls: {$sc->total_calls} (New: {$sc->new_calls}, Followup: {$sc->followup_calls}, Converted: {$sc->converted_count})";
+                    $timesheetEntries[] = [
+                        'project_name'       => 'Sales Day Closing (' . ucfirst($sc->status ?: 'submitted') . ')',
+                        'status'             => $callsSummary,
+                        'day_closing_update' => $sc->closing_notes ?: '—',
+                    ];
+                }
+            }
+            if ($hasCstClosing) {
+                foreach ($userCstClosings->get($dateStr) as $cc) {
+                    $cstSummary = "Revenue: ₹" . number_format((float) $cc->today_revenue, 2) . " | Achieved: ₹" . number_format((float) $cc->till_now_achieved, 2) . " | Meetings: " . (int) $cc->current_week_meetings;
+                    $timesheetEntries[] = [
+                        'project_name'       => 'CST Day Closing (' . ucfirst($cc->status ?: 'submitted') . ')',
+                        'status'             => $cstSummary,
+                        'day_closing_update' => $cc->remarks ?: '—',
+                    ];
+                }
+            }
             if ($hasTimesheet) {
                 foreach ($userTimesheets->get($dateStr) as $ts) {
                     $timesheetEntries[] = [
@@ -526,10 +650,12 @@ class TimesheetLopApiController extends Controller
                 'is_weekend'        => $isHolidayWeekend,
                 'is_present'        => $isPresent,
                 'is_leave'          => $isLeave,
-                'has_timesheet'     => $hasTimesheet,
+                'has_timesheet'     => $isSubmitted,
                 'is_missing'        => $isMissing,
                 'status_label'      => $status,
                 'badge_class'       => $badgeClass,
+                'submission_type'   => $submissionType,
+                'submission_name'   => $submissionName,
                 'login_time'        => $attRecord?->login_time ? Carbon::parse($attRecord->login_time)->format('h:i A') : '—',
                 'logout_time'       => $attRecord?->logout_time ? Carbon::parse($attRecord->logout_time)->format('h:i A') : '—',
                 'timesheet_entries' => $timesheetEntries,

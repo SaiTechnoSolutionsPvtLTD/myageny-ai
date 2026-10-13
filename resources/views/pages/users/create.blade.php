@@ -18,6 +18,13 @@
             </div>
         </div>
         <div class="ufrm-topbar-right">
+            @if(isset($company) && $company && $userLimit !== null)
+                <div style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; background:#f0fdf4; border:1px solid #bbf7d0; font-size:12px; color:#166534; font-weight:600; margin-right:8px;">
+                    <span style="width:7px; height:7px; border-radius:50%; background:#16a34a;"></span>
+                    Accounts: <strong>{{ $activeUsersCount }}</strong> / <strong>{{ $userLimit }}</strong>
+                    <span style="font-size:11px; color:#6b7280; font-weight:500;">(incl. Super Admin)</span>
+                </div>
+            @endif
             <a href="{{ route('users.index') }}" class="ufrm-btn ufrm-btn-outline">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
                 Back

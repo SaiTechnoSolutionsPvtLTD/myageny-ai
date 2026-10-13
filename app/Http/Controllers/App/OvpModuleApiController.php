@@ -118,6 +118,21 @@ class OvpModuleApiController extends Controller
             if ($request->filled('company_id')) {
                 $query->where('company_id', $request->query('company_id'));
             }
+            if ($request->filled('lead_id')) {
+                $query->where('lead_id', $request->query('lead_id'));
+            }
+            if ($request->filled('customer')) {
+                $cust = $request->query('customer');
+                $query->where(function ($q) use ($cust) {
+                    $q->where('company_name', 'like', "%{$cust}%")
+                      ->orWhere('client_name', 'like', "%{$cust}%")
+                      ->orWhereHas('lead', function ($lq) use ($cust) {
+                          $lq->where('company_name', 'like', "%{$cust}%")
+                            ->orWhere('contact_name', 'like', "%{$cust}%")
+                            ->orWhere('mobile_number', 'like', "%{$cust}%");
+                      });
+                });
+            }
             if ($request->filled('department_id')) {
                 $query->where('department_id', $request->query('department_id'));
             }
@@ -203,6 +218,29 @@ class OvpModuleApiController extends Controller
      */
     private function filterOptions(?User $user = null): array
     {
+        $customersQuery = \App\Models\Lead::query();
+        if ($user && !$user->hasAdminLikeRole() && $user->company_id) {
+            $customersQuery->where('company_id', $user->company_id);
+        }
+        $customers = $customersQuery
+            ->where(function ($q) {
+                $q->whereIn('id', function ($sub) {
+                    $sub->select('lead_id')->from('production_initiations')->whereNotNull('lead_id');
+                })->orWhereHas('products', function ($pq) {
+                    $pq->where('product_status', 'converted');
+                });
+            })
+            ->select('id', 'company_name', 'contact_name', 'mobile_number')
+            ->orderBy('company_name')
+            ->orderBy('contact_name')
+            ->get()
+            ->map(fn($l) => [
+                'id'            => $l->id,
+                'name'          => ($l->company_name ?: ($l->contact_name ?: 'Lead #' . $l->id)) . ($l->mobile_number ? ' (' . $l->mobile_number . ')' : ''),
+                'mobile_number' => $l->mobile_number,
+            ])
+            ->all();
+
         return [
             'products' => \App\Models\Product::orderBy('product_name')
                 ->get(['id', 'product_name'])
@@ -212,6 +250,7 @@ class OvpModuleApiController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn($d) => ['id' => $d->id, 'name' => $d->name])
                 ->all(),
+            'customers' => $customers,
             'users' => $this->availableExecutiveUsers($user)->map(fn($e) => [
                 'id'               => $e->id,
                 'name'             => $e->name,
@@ -330,9 +369,45 @@ class OvpModuleApiController extends Controller
 
         if (($validated['decision'] ?? null) === 'approval') {
             try {
-                $recipientEmail = 'tamilarasan@saitechnosolutions.net';
-                $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+                $productionInitiation->loadMissing(['lead.branch', 'lead.customerSupportTl', 'leadProduct', 'department', 'ovpAllocatedTo']);
                 $reviewedBy = $user;
+
+                $cstExecutive = $productionInitiation->ovpAllocatedTo
+                    ?: ($productionInitiation->lead?->customerSupportExecutive ?: $reviewedBy);
+
+                $recipientEmails = [];
+                $seniorNames = [];
+                if ($cstExecutive) {
+                    $mappedManagers = $cstExecutive->mappedManagers()->where('is_active', true)->get();
+                    foreach ($mappedManagers as $manager) {
+                        if (!empty($manager->email) && filter_var($manager->email, FILTER_VALIDATE_EMAIL)) {
+                            $recipientEmails[] = $manager->email;
+                            $seniorNames[] = $manager->name;
+                        }
+                    }
+
+                    if ($productionInitiation->lead?->customerSupportTl?->email) {
+                        $tlEmail = $productionInitiation->lead->customerSupportTl->email;
+                        if (filter_var($tlEmail, FILTER_VALIDATE_EMAIL)) {
+                            $recipientEmails[] = $tlEmail;
+                            $seniorNames[] = $productionInitiation->lead->customerSupportTl->name;
+                        }
+                    }
+                }
+
+                $recipientEmails = array_values(array_unique($recipientEmails));
+                $seniorPersonName = !empty($seniorNames) ? implode(' / ', array_unique($seniorNames)) : null;
+
+                if (empty($recipientEmails)) {
+                    $primaryEmail = 'tamilarasan@saitechnosolutions.net';
+                    $ccEmails = [];
+                } else {
+                    $primaryEmail = array_shift($recipientEmails);
+                    $ccEmails = $recipientEmails;
+                    if ($primaryEmail !== 'tamilarasan@saitechnosolutions.net' && !in_array('tamilarasan@saitechnosolutions.net', $ccEmails, true)) {
+                        $ccEmails[] = 'tamilarasan@saitechnosolutions.net';
+                    }
+                }
 
                 Mail::send('emails.ovp_approved', [
                     'initiation' => $productionInitiation,
@@ -340,9 +415,13 @@ class OvpModuleApiController extends Controller
                     'leadProduct' => $productionInitiation->leadProduct,
                     'departmentName' => $productionInitiation->department?->name ?? 'Production',
                     'reviewedBy' => $reviewedBy,
-                ], function ($message) use ($recipientEmail, $productionInitiation) {
-                    $message->to($recipientEmail, 'Tamilarasan')
+                    'seniorPersonName' => $seniorPersonName,
+                ], function ($message) use ($primaryEmail, $ccEmails, $productionInitiation) {
+                    $message->to($primaryEmail)
                         ->subject('OVP Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                    if (!empty($ccEmails)) {
+                        $message->cc($ccEmails);
+                    }
                 });
             } catch (\Throwable $exception) {
                 \Illuminate\Support\Facades\Log::error('Failed to send OVP approval email via API.', [
@@ -739,8 +818,22 @@ class OvpModuleApiController extends Controller
 
     private function isTlScopedUser(?User $user): bool
     {
-        return $user && !$user->hasAdminLikeRole()
-            && ($this->hasAnyRoleKey($user, self::OVP_TL_ROLE_KEYS) || $user->hasTlLikeRole());
+        if (! $user || $user->hasAdminLikeRole()) {
+            return false;
+        }
+
+        if ($this->hasAnyRoleKey($user, self::OVP_TL_ROLE_KEYS) || $user->hasTlLikeRole()) {
+            return true;
+        }
+
+        if ($user->managedUsers()->exists()) {
+            return true;
+        }
+
+        return collect($user->roleKeys()->all())->contains(function ($k) {
+            return (str_contains($k, 'senior') || str_contains($k, 'tl') || str_contains($k, 'lead') || str_contains($k, 'manager'))
+                && (str_contains($k, 'support') || str_contains($k, 'success') || str_contains($k, 'cst'));
+        });
     }
 
     private function isExecutiveScopedUser(?User $user): bool

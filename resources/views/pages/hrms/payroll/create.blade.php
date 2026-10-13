@@ -130,6 +130,7 @@
                                 <th>Working Days</th>
                                 <th>Present</th>
                                 <th>Leave</th>
+                                <th>Timesheet LOP</th>
                                 <th>LOP</th>
                                 <th>Payable Days</th>
                                 <th>With PF</th>
@@ -214,12 +215,14 @@
     function fmt(v) { return Number(v).toFixed(2); }
 
     function calcRow(r) {
-        const wd  = n(r.working_days);
-        const da  = n(r.days_attended);
-        const ld  = n(r.leave_days);
-        const rawPay = Math.max(da + ld, 0);
-        const pay = Math.min(wd > 0 ? wd : rawPay, rawPay);
-        const lop = Math.max(wd - pay, 0);
+        const wd    = n(r.working_days);
+        const da    = n(r.days_attended);
+        const ld    = n(r.leave_days);
+        const tsLop = n(r.timesheet_lop_days);
+        const attPayable = Math.max(da + ld, 0);
+        const attLop = Math.max(wd - attPayable, 0);
+        const lop = attLop + tsLop;
+        const pay = Math.max(wd - lop, 0);
         const ratio = wd > 0 ? Math.min(pay / wd, 1) : 0;
         const gross  = n(r.gross_salary);
         const basic  = gross * 0.50;
@@ -259,16 +262,17 @@
     function syncRow(tr) {
         const get = key => tr.querySelector('[data-key="' + key + '"]');
         const row = {
-            working_days:     n(get('working_days')?.value),
-            days_attended:    n(get('days_attended')?.value),
-            leave_days:       n(get('leave_days')?.value),
-            use_pf:           get('use_pf')?.checked ?? false,
-            use_esi:          get('use_esi')?.checked ?? false,
-            gross_salary:     n(get('gross_salary')?.value),
-            professional_tax: n(get('professional_tax')?.value),
-            tds_amount:       n(get('tds_amount')?.value),
-            loan_deduction:   n(get('loan_deduction')?.value),
-            other_deduction:  n(get('other_deduction')?.value),
+            working_days:       n(get('working_days')?.value),
+            days_attended:      n(get('days_attended')?.value),
+            leave_days:         n(get('leave_days')?.value),
+            timesheet_lop_days: n(get('timesheet_lop_days')?.value),
+            use_pf:             get('use_pf')?.checked ?? false,
+            use_esi:            get('use_esi')?.checked ?? false,
+            gross_salary:       n(get('gross_salary')?.value),
+            professional_tax:   n(get('professional_tax')?.value),
+            tds_amount:         n(get('tds_amount')?.value),
+            loan_deduction:     n(get('loan_deduction')?.value),
+            other_deduction:    n(get('other_deduction')?.value),
         };
         const c = calcRow(row);
         const set = (key, v) => { const el = get(key); if (el) el.value = fmt(v); };
@@ -307,6 +311,7 @@
             <td>${inp('working_days', row.working_days, 'working_days')}</td>
             <td>${inp('days_attended', row.days_attended, 'days_attended')}</td>
             <td>${inp('leave_days', row.leave_days, 'leave_days')}</td>
+            <td>${inp('timesheet_lop_days', row.timesheet_lop_days || 0, 'timesheet_lop_days')}</td>
             <td>${inp('lop_days', c.lop, 'lop_days', 'readonly')}</td>
             <td>${inp('payable_days', c.pay, 'payable_days', 'readonly')}</td>
             <td>${chk('use_pf', 'use_pf', row.use_pf)}</td>

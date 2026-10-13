@@ -22,7 +22,7 @@
 
         {{-- Content --}}
         <div style="padding: 30px;">
-            <p style="font-size: 15px; margin-top: 0; color: #111827;">Hello Tamilarasan,</p>
+            <p style="font-size: 15px; margin-top: 0; color: #111827;">Hello {{ $seniorPersonName ?? 'Team' }},</p>
             <p style="font-size: 14px; color: #4b5563; line-height: 1.6; margin-bottom: 24px;">
                 An OVP item review has been <strong style="color: #059669;">APPROVED</strong> by <strong>{{ $reviewedBy?->name ?? 'Admin/Reviewer' }}</strong> ({{ $reviewedBy?->email }}). Below are the full review details:
             </p>

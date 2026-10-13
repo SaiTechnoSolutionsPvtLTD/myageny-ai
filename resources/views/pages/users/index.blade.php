@@ -21,6 +21,13 @@
 .usr-btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(254,95,4,.35); }
 .usr-btn-outline { background:#fff; color:#121212; border:1px solid #e1dee3; }
 .usr-btn-outline:hover { border-color:#fe5f04; color:#fe5f04; }
+.usr-btn-disabled { background:#e5e7eb !important; color:#9ca3af !important; cursor:not-allowed !important; box-shadow:none !important; border:1px solid #d1d5db !important; }
+.usr-account-pill { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; background:#f0fdf4; border:1px solid #bbf7d0; font-size:12px; color:#166534; font-weight:600; }
+.usr-account-pill .uap-dot { width:7px; height:7px; border-radius:50%; background:#16a34a; flex-shrink:0; }
+.usr-account-pill .uap-sub { font-size:11px; color:#6b7280; font-weight:500; }
+.usr-account-pill.limit-reached { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+.usr-account-pill.limit-reached .uap-dot { background:#dc2626; }
+
 
 /* ── Filter Bar ── */
 .usr-filter-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 28px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:60px; z-index:25; }
@@ -184,14 +191,29 @@
             <div class="usr-page-title">User Management</div>
             <div class="usr-breadcrumb">Admin › <span>Users</span></div>
         </div>
-        @can('users.manage')
         <div class="usr-topbar-right">
-            <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add User
-            </a>
+            @if(isset($company) && $company && $userLimit !== null)
+                <div class="usr-account-pill {{ $hasReachedLimit ? 'limit-reached' : '' }}" title="Accounts used: {{ $activeUsersCount }} of {{ $userLimit }} (Includes Company Admin / Super Admin)">
+                    <span class="uap-dot"></span>
+                    <span class="uap-text">Accounts: <strong>{{ $activeUsersCount }}</strong> / <strong>{{ $userLimit }}</strong></span>
+                    <span class="uap-sub">(incl. Super Admin)</span>
+                </div>
+            @endif
+
+            @can('users.manage')
+                @if(!empty($hasReachedLimit))
+                    <button type="button" class="usr-btn usr-btn-disabled" disabled title="Account limit reached ({{ $activeUsersCount }} of {{ $userLimit }} accounts used, including Company Admin). Please contact administrator to increase the limit.">
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add User
+                    </button>
+                @else
+                    <a href="{{ route('users.create') }}" class="usr-btn usr-btn-primary">
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add User
+                    </a>
+                @endif
+            @endcan
         </div>
-        @endcan
     </div>
 
     {{-- Filter Bar --}}
@@ -281,23 +303,45 @@
         </div>
         @endif
 
+        @if(!empty($hasReachedLimit))
+        <div class="usr-alert" style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:12px 18px; border-radius:10px; font-size:13px; display:flex; align-items:center; gap:10px;">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <div>
+                <strong>Account Limit Reached:</strong> This company has utilized all <strong>{{ $userLimit }}</strong> accounts ({{ $activeUsersCount }} used, including Company Admin / Super Admin). To add more users, please contact the administrator to increase the account limit.
+            </div>
+        </div>
+        @endif
+
         {{-- Stats --}}
         <div class="usr-stats-row">
             @php
-                $totalUsers    = \App\Models\User::count();
-                $activeUsers   = \App\Models\User::where('is_active', true)->count();
-                $recentLogins  = \App\Models\User::where('last_login_at', '>=', now()->subHours(24))->count();
-                $inactive3Days = \App\Models\User::where(function($q) {
-                    $q->whereNull('last_login_at')->orWhere('last_login_at', '<=', now()->subDays(3));
-                })->count();
+                if (!empty($company)) {
+                    $statTotal       = $userLimit;
+                    $statTotalLabel  = 'Account Limit';
+                    $statActive      = $activeUsersCount;
+                    $statActiveLabel = 'Active Accounts (incl. Admin)';
+                    $statRecent      = $company->users()->where('last_login_at', '>=', now()->subHours(24))->count();
+                    $statAvail       = $remainingAccounts;
+                    $statAvailLabel  = 'Available Slots';
+                } else {
+                    $statTotal       = \App\Models\User::count();
+                    $statTotalLabel  = 'Total Users';
+                    $statActive      = \App\Models\User::where('is_active', true)->count();
+                    $statActiveLabel = 'Active Users';
+                    $statRecent      = \App\Models\User::where('last_login_at', '>=', now()->subHours(24))->count();
+                    $statAvail       = \App\Models\User::where(function($q) {
+                        $q->whereNull('last_login_at')->orWhere('last_login_at', '<=', now()->subDays(3));
+                    })->count();
+                    $statAvailLabel  = 'Inactive (3+ Days)';
+                }
             @endphp
             <div class="usr-stat">
                 <div class="usr-stat-icon" style="background:#fff0e6">
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#fe5f04" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
                 <div>
-                    <div class="usr-stat-label">Total Users</div>
-                    <div class="usr-stat-value">{{ $totalUsers }}</div>
+                    <div class="usr-stat-label">{{ $statTotalLabel }}</div>
+                    <div class="usr-stat-value">{{ $statTotal }}</div>
                 </div>
             </div>
             <div class="usr-stat">
@@ -305,8 +349,8 @@
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
                 <div>
-                    <div class="usr-stat-label">Active Users</div>
-                    <div class="usr-stat-value" style="color:#16a34a">{{ $activeUsers }}</div>
+                    <div class="usr-stat-label">{{ $statActiveLabel }}</div>
+                    <div class="usr-stat-value" style="color:{{ !empty($hasReachedLimit) ? '#dc2626' : '#16a34a' }}">{{ $statActive }}</div>
                 </div>
             </div>
             <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'recent_login']) }}'">
@@ -315,17 +359,20 @@
                 </div>
                 <div>
                     <div class="usr-stat-label">Recent Login (24h)</div>
-                    <div class="usr-stat-value" style="color:#2563eb">{{ $recentLogins }}</div>
+                    <div class="usr-stat-value" style="color:#2563eb">{{ $statRecent }}</div>
                 </div>
             </div>
-            <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'inactive_3days']) }}'">
-                <div class="usr-stat-icon" style="background:#fef2f2">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="usr-stat" @if(empty($company)) style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'inactive_3days']) }}'" @endif>
+                <div class="usr-stat-icon" style="background:{{ !empty($company) ? ($statAvail > 0 ? '#f0fdf4' : '#fef2f2') : '#fef2f2' }}">
+                    @if(!empty($company))
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="{{ $statAvail > 0 ? '#16a34a' : '#dc2626' }}" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    @else
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    @endif
                 </div>
                 <div>
-                    <div class="usr-stat-label">Inactive (3+ Days)</div>
-                    <div class="usr-stat-value" style="color:#dc2626">{{ $inactive3Days }}</div>
-                </div>
+                    <div class="usr-stat-label">{{ $statAvailLabel }}</div>
+                    <div class="usr-stat-value" style="color:{{ !empty($company) ? ($statAvail > 0 ? '#16a34a' : '#dc2626') : '#dc2626' }}">{{ $statAvail }}</div>
             </div>
         </div>
 

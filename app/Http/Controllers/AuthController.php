@@ -69,20 +69,21 @@ class AuthController extends Controller
             }
         }
 
+        if ($user->company_id && $user->company) {
+            $user->company->syncExpiryState();
+            $user->company->refresh();
+            $user->refresh();
+
+            if ($user->company->company_status !== 'active') {
+                Auth::logout();
+                return back()->with('error', 'Your company subscription has expired or is inactive. Please contact the administrator.');
+            }
+        }
+
         // Check if user account is active
         if (! $user->is_active) {
             Auth::logout();
             return back()->with('error', 'Your account has been deactivated. Please contact your administrator.');
-        }
-
-        if ($user->company_id && $user->company) {
-            $user->company->syncExpiryState();
-            $user->company->refresh();
-        }
-
-        if ($user->company_id && $user->company && $user->company->company_status !== 'active') {
-            Auth::logout();
-            return back()->with('error', 'Your company account is inactive. Please contact the main administrator.');
         }
 
         $request->session()->regenerate();

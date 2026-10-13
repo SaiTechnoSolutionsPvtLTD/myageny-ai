@@ -356,10 +356,11 @@
         @php
             $hasActiveFilters = request()->filled('start_date') ||
                                 request()->filled('end_date') ||
+                                request()->filled('company_id') ||
+                                request()->filled('lead_id') ||
                                 request()->filled('product_id') ||
                                 request()->filled('status') ||
-                                request()->filled('user_id') ||
-                                request()->filled('department_id');
+                                request()->filled('user_id');
         @endphp
 
         {{-- Filter Accordion --}}
@@ -388,6 +389,38 @@
                         <div style="display:flex; flex-direction:column; gap:6px;">
                             <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">End Date</label>
                             <input type="date" name="end_date" value="{{ request('end_date') }}" class="ovp-input" style="padding:9px 12px;">
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Company</label>
+                            <div class="ovp-select-wrap">
+                                <select name="company_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Companies</option>
+                                    @foreach($companies as $c)
+                                        <option value="{{ $c->id }}" {{ request('company_id') == $c->id ? 'selected' : '' }}>{{ $c->company_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Customer / Lead</label>
+                            <div class="ovp-select-wrap">
+                                <select name="lead_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
+                                    <option value="">All Customers</option>
+                                    @foreach($customers as $cust)
+                                        @php
+                                            $custLabel = $cust->company_name ?: ($cust->contact_name ?: 'Lead #'.$cust->id);
+                                            if (!empty($cust->mobile_number)) {
+                                                $custLabel .= ' (' . $cust->mobile_number . ')';
+                                            }
+                                        @endphp
+                                        <option value="{{ $cust->id }}" {{ request('lead_id') == $cust->id ? 'selected' : '' }}>
+                                            {{ $custLabel }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
 
                         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -423,18 +456,6 @@
                                     <option value="">All Executives</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <label style="font-size:11px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em;">Department</label>
-                            <div class="ovp-select-wrap">
-                                <select name="department_id" class="ovp-input ovp-select select2" style="padding:9px 12px; padding-right:32px;">
-                                    <option value="">All Departments</option>
-                                    @foreach($departments as $d)
-                                        <option value="{{ $d->id }}" {{ request('department_id') == $d->id ? 'selected' : '' }}>{{ $d->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -488,6 +509,8 @@
                     <table class="ovp-table">
                         <thead>
                             <tr>
+                                <th>Company Name</th>
+                                <th>Client Name</th>
                                 <th>Product</th>
                                 <th>Department</th>
                                 <th>Status</th>
@@ -556,6 +579,12 @@
                                     $allocationStatus = strtolower((string) ($item->ovp_allocation_status ?: ($item->ovp_allocated_to ? 'allocated' : 'allocation_pending')));
                                 @endphp
                                  <tr class="ovp-row" data-href="{{ $item->lead_id ? route('leads.show', $item->lead_id) : '#' }}">
+                                     <td>
+                                         <div style="font-weight:800; color:#111827;">{{ $companyName ?: '—' }}</div>
+                                     </td>
+                                     <td>
+                                         <div style="font-weight:600; color:#374151;">{{ $clientName ?: '—' }}</div>
+                                     </td>
                                      <td>
                                          <div class="ovp-product">{{ $item->product_name }}</div>
                                      </td>
@@ -804,7 +833,7 @@
                 <i class="bi bi-envelope-paper-fill support-process-icon"></i>
             </div>
             <h4 id="ovpProcessOverlayTitle" class="support-process-title">Approving OVP & Sending Email...</h4>
-            <p id="ovpProcessOverlaySubtitle" class="support-process-subtitle">Please wait while OVP approval email notification is being sent to tamilarasan@saitechnosolutions.net...</p>
+            <p id="ovpProcessOverlaySubtitle" class="support-process-subtitle">Please wait while OVP approval email notification is being sent to senior CST team...</p>
 
             <div class="support-progress-wrapper">
                 <div class="support-progress-bar">
@@ -831,6 +860,13 @@ document.addEventListener('DOMContentLoaded', function () {
             $accordion.toggleClass('is-active');
             $body.slideToggle(200);
         });
+
+        // Initialize Select2 on filter dropdowns
+        if (window.jQuery.fn.select2) {
+            window.jQuery('.ovp-filter-bar .select2').select2({
+                width: '100%'
+            });
+        }
     }
 
     const modal = document.getElementById('ovp-review-modal');
@@ -1126,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (statusText) statusText.innerText = 'Building OVP details & form summary...';
                     } else if (progress < 85) {
                         progress += 6;
-                        if (statusText) statusText.innerText = 'Sending email to tamilarasan@saitechnosolutions.net...';
+                        if (statusText) statusText.innerText = 'Sending email notification to senior CST team...';
                     } else if (progress < 95) {
                         progress += 1;
                         if (statusText) statusText.innerText = 'Updating OVP item status in database...';

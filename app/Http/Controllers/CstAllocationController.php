@@ -68,12 +68,13 @@ class CstAllocationController extends Controller
                 ->selectRaw('COALESCE(SUM(amount_paid), 0)');
         }, 'payment_amount_paid');
 
-        // 2. Apply Filters in SQL (Branch, Product, CST User, Lead Account)
+        // 2. Apply Filters in SQL (Branch, Product, CST User, Lead Account, Mobile)
         $fBranch      = $request->get('branch_id');
         $fProduct     = $request->get('product_id');
         $fCstUser     = $request->get('cst_user_id');
         $fLeadId      = $request->get('lead_id');
         $fLeadAccount = $request->get('lead_account');
+        $fMobile      = $request->get('mobile_number') ?: ($request->get('mobile') ?: $request->get('phone'));
 
         if ($fBranch) {
             $leadsQuery->where('branch_id', $fBranch);
@@ -93,10 +94,14 @@ class CstAllocationController extends Controller
         if ($fLeadId) {
             $leadsQuery->where('leads.id', $fLeadId);
         }
+        if ($fMobile) {
+            $leadsQuery->where('mobile_number', 'like', "%{$fMobile}%");
+        }
         if ($fLeadAccount) {
             $leadsQuery->where(function($q) use ($fLeadAccount) {
                 $q->where('company_name', 'like', "%{$fLeadAccount}%")
-                  ->orWhere('contact_name', 'like', "%{$fLeadAccount}%");
+                  ->orWhere('contact_name', 'like', "%{$fLeadAccount}%")
+                  ->orWhere('mobile_number', 'like', "%{$fLeadAccount}%");
             });
         }
 
@@ -169,7 +174,7 @@ class CstAllocationController extends Controller
         }
 
         $leadAccounts = $leadAccountsQuery
-            ->select('id', 'company_name', 'contact_name')
+            ->select('id', 'company_name', 'contact_name', 'mobile_number')
             ->orderBy('company_name')
             ->orderBy('contact_name')
             ->get();

@@ -26,7 +26,10 @@ class UserController extends Controller
     {
         // $this->authorize('users.view');
 
+        $company = $this->currentCompany();
+
         $query = User::with(['branch', 'branches', 'roles'])
+            ->when($company, fn($q) => $q->where('company_id', $company->id))
             ->when($request->search, fn($q) =>
                 $q->where(fn($q2) =>
                     $q2->where('name', 'like', '%'.$request->search.'%')
@@ -66,9 +69,28 @@ class UserController extends Controller
             ->withQueryString();
 
         $branches = Branch::active()->orderByDesc('is_default')->orderBy('name')->get();
-        $roles    = Role::orderBy('name')->get();
+        $roles    = Role::withoutGlobalScope('company')
+            ->when($company, fn($q) => $q->where('company_id', $company->id))
+            ->orderBy('name')
+            ->get();
 
-        return view('pages.users.index', compact('query', 'branches', 'roles'));
+        $userLimit = $company ? (int) $company->number_of_accounts : null;
+        $activeUsersCount = $company ? $company->activeUsers()->count() : null;
+        $totalCompanyUsers = $company ? $company->users()->count() : null;
+        $hasReachedLimit = $company && $userLimit !== null ? ($activeUsersCount >= $userLimit) : false;
+        $remainingAccounts = ($company && $userLimit !== null) ? max(0, $userLimit - $activeUsersCount) : null;
+
+        return view('pages.users.index', compact(
+            'query',
+            'branches',
+            'roles',
+            'company',
+            'userLimit',
+            'activeUsersCount',
+            'totalCompanyUsers',
+            'hasReachedLimit',
+            'remainingAccounts'
+        ));
     }
 
     /**
@@ -83,7 +105,7 @@ class UserController extends Controller
         if ($company && $company->activeUsers()->count() >= $company->user_limit) {
             return redirect()
                 ->route('users.index')
-                ->with('error', 'User limit reached for this company. Please contact admin to increase the limit.');
+                ->with('error', "User limit reached for this company ({$company->activeUsers()->count()} of {$company->user_limit} accounts used, including Company Admin). Please contact admin to increase the limit.");
         }
 
         Branch::ensureDefaultForCurrentCompany();
@@ -93,7 +115,11 @@ class UserController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('pages.users.create', compact('branches', 'roles'));
+        $userLimit = $company ? (int) $company->number_of_accounts : null;
+        $activeUsersCount = $company ? $company->activeUsers()->count() : null;
+        $remainingAccounts = ($company && $userLimit !== null) ? max(0, $userLimit - $activeUsersCount) : null;
+
+        return view('pages.users.create', compact('branches', 'roles', 'company', 'userLimit', 'activeUsersCount', 'remainingAccounts'));
     }
 
     /**
@@ -107,7 +133,7 @@ class UserController extends Controller
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', 'User limit reached for this company. Please contact admin to increase the limit.');
+                ->with('error', "User limit reached for this company ({$company->activeUsers()->count()} of {$company->user_limit} accounts used, including Company Admin). Please contact admin to increase the limit.");
         }
 
         $data = $request->validated();
@@ -271,11 +297,15 @@ class UserController extends Controller
         if (! $user->is_active) {
             $company = $this->currentCompany();
             if ($company && $company->activeUsers()->count() >= $company->user_limit) {
-                return back()->with('error', 'User limit reached for this company. Please contact admin to increase the limit.');
+                return back()->with('error', "Cannot activate user. Account limit reached ({$company->activeUsers()->count()} of {$company->user_limit} accounts used, including Company Admin). Please contact admin to increase the limit.");
             }
         }
 
-        $user->update(['is_active' => !$user->is_active]);
+        $newActive = ! $user->is_active;
+        $user->update([
+            'is_active' => $newActive,
+            'user_status' => $newActive ? 'active' : 'inactive',
+        ]);
 
         $this->syncEmployeeOnboardingStatus($user);
         $this->syncInternJoiningFormStatus($user);

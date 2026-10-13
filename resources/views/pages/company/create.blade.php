@@ -80,17 +80,18 @@
 
                     <div class="cform-group">
                         <label class="cform-label">Expiry Date</label>
-                        <input type="date" name="expiry_date" class="cform-input" value="{{ old('expiry_date') }}" required>
+                        <input type="date" name="expiry_date" id="expiry_date_input" class="cform-input" value="{{ old('expiry_date') }}" required>
                         @error('expiry_date')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="cform-group">
                         <label class="cform-label">Company Status</label>
-                        <select name="company_status" class="cform-select" required>
+                        <select name="company_status" id="company_status_select" class="cform-select" required>
                             <option value="active" @selected(old('company_status', 'active') === 'active')>Activate</option>
                             <option value="inactive" @selected(old('company_status') === 'inactive')>Deactivate</option>
                         </select>
                         @error('company_status')<div class="cform-error">{{ $message }}</div>@enderror
+                        <div id="status_help_text" style="font-size:12px; margin-top:4px;"></div>
                     </div>
 
                     <div class="cform-group full" style="margin-top:8px;">
@@ -176,3 +177,53 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const expiryInput = document.getElementById('expiry_date_input');
+    const statusSelect = document.getElementById('company_status_select');
+    const statusHelp = document.getElementById('status_help_text');
+
+    if (!expiryInput || !statusSelect) return;
+
+    function evaluateDate() {
+        if (!expiryInput.value) {
+            if (statusHelp) statusHelp.innerHTML = '';
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        if (expiryInput.value < today) {
+            statusSelect.value = 'inactive';
+            if (statusHelp) {
+                statusHelp.innerHTML = '<span style="color:#dc2626; font-weight:600;">⚠️ Expiry date is in the past. Status is set to Deactivate (company and users will be created as deactivated).</span>';
+            }
+        } else {
+            if (statusSelect.value === 'inactive' && statusHelp && statusHelp.innerText.includes('in the past')) {
+                statusSelect.value = 'active';
+            }
+            if (statusHelp) {
+                if (statusSelect.value === 'inactive') {
+                    statusHelp.innerHTML = '<span style="color:#d97706; font-weight:600;">ℹ️ Status is Deactivate. Company and all its users will be created as deactivated.</span>';
+                } else {
+                    statusHelp.innerHTML = '<span style="color:#16a34a; font-weight:600;">✓ Company and its users will be created as Active.</span>';
+                }
+            }
+        }
+    }
+
+    expiryInput.addEventListener('change', evaluateDate);
+    statusSelect.addEventListener('change', function () {
+        const today = new Date().toISOString().split('T')[0];
+        if (statusSelect.value === 'active' && expiryInput.value && expiryInput.value < today) {
+            alert('Cannot activate company with a past expiry date. Please set a future expiry date.');
+            statusSelect.value = 'inactive';
+        }
+        evaluateDate();
+    });
+
+    evaluateDate();
+});
+</script>
+@endpush

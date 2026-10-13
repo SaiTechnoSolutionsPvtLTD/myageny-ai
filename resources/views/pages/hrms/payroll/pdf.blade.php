@@ -319,7 +319,7 @@
                 <td class="info-label">UAN / PF No.</td>
                 <td class="info-val">{{ $item->uan_no ?: 'N/A' }}</td>
                 <td class="info-label">Leave / LOP</td>
-                <td class="info-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}</td>
+                <td class="info-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}{{ (float) ($item->timesheet_lop_days ?? 0) > 0 ? ' (TS: ' . number_format((float) $item->timesheet_lop_days, 1) . ')' : '' }}</td>
             </tr>
             <tr>
                 <td class="info-label">ESI Number</td>

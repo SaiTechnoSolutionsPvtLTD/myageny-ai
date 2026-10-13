@@ -101,10 +101,14 @@ class CstAllocationApiController extends Controller
             if ($leadId = $request->get('lead_id')) {
                 $leadsQuery->where('leads.id', $leadId);
             }
+            if ($mobile = $request->get('mobile_number') ?: ($request->get('mobile') ?: $request->get('phone'))) {
+                $leadsQuery->where('mobile_number', 'like', "%{$mobile}%");
+            }
             if ($leadAccount = $request->get('lead_account')) {
                 $leadsQuery->where(function ($q) use ($leadAccount) {
                     $q->where('company_name', 'like', "%{$leadAccount}%")
-                      ->orWhere('contact_name', 'like', "%{$leadAccount}%");
+                      ->orWhere('contact_name', 'like', "%{$leadAccount}%")
+                      ->orWhere('mobile_number', 'like', "%{$leadAccount}%");
                 });
             }
 
@@ -204,12 +208,13 @@ class CstAllocationApiController extends Controller
             $leadAccountsQuery = Lead::whereHas('products', fn ($q) => $q->where('product_status', 'converted'));
             $this->visibility->applyCompanyVisibility($leadAccountsQuery, $currentUser);
             $leadAccounts = $leadAccountsQuery
-                ->select('id', 'company_name', 'contact_name')
+                ->select('id', 'company_name', 'contact_name', 'mobile_number')
                 ->orderBy('company_name')
                 ->get()
                 ->map(fn ($l) => [
                     'id' => $l->id,
-                    'name' => $l->company_name ?: ($l->contact_name ?: 'Lead #' . $l->id),
+                    'name' => ($l->company_name ?: ($l->contact_name ?: 'Lead #' . $l->id)) . ($l->mobile_number ? ' (' . $l->mobile_number . ')' : ''),
+                    'mobile_number' => $l->mobile_number,
                 ]);
 
             return response()->json([
@@ -379,6 +384,7 @@ class CstAllocationApiController extends Controller
             'id' => $lead->id,
             'company_name' => $lead->company_name,
             'contact_name' => $lead->contact_name,
+            'mobile_number' => $lead->mobile_number,
             'display_name' => $lead->company_name ?: ($lead->contact_name ?: 'N/A'),
             'branch_id' => $lead->branch_id,
             'branch_name' => $lead->branch?->name,

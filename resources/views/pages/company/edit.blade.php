@@ -84,17 +84,18 @@
 
                     <div class="cform-group">
                         <label class="cform-label">Expiry Date</label>
-                        <input type="date" name="expiry_date" class="cform-input" value="{{ old('expiry_date', optional($company->expiry_date)->format('Y-m-d')) }}" required>
+                        <input type="date" name="expiry_date" id="expiry_date_input" class="cform-input" value="{{ old('expiry_date', optional($company->expiry_date)->format('Y-m-d')) }}" required>
                         @error('expiry_date')<div class="cform-error">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="cform-group">
                         <label class="cform-label">Company Status</label>
-                        <select name="company_status" class="cform-select" required>
+                        <select name="company_status" id="company_status_select" class="cform-select" required>
                             <option value="active" @selected(old('company_status', $company->company_status) === 'active')>Activate</option>
                             <option value="inactive" @selected(old('company_status', $company->company_status) === 'inactive')>Deactivate</option>
                         </select>
                         @error('company_status')<div class="cform-error">{{ $message }}</div>@enderror
+                        <div id="status_help_text" style="font-size:12px; margin-top:4px;"></div>
                     </div>
 
                     <div class="cform-group full">
@@ -152,3 +153,61 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const expiryInput = document.getElementById('expiry_date_input');
+    const statusSelect = document.getElementById('company_status_select');
+    const statusHelp = document.getElementById('status_help_text');
+
+    if (!expiryInput || !statusSelect) return;
+
+    const initialDate = expiryInput.value;
+    const today = new Date().toISOString().split('T')[0];
+
+    function evaluateDate() {
+        if (!expiryInput.value) {
+            if (statusHelp) statusHelp.innerHTML = '';
+            return;
+        }
+
+        const isPast = expiryInput.value < today;
+
+        if (isPast) {
+            statusSelect.value = 'inactive';
+            if (statusHelp) {
+                statusHelp.innerHTML = '<span style="color:#dc2626; font-weight:600;">⚠️ Expiry date has passed. Company and all its users will be deactivated.</span>';
+            }
+        } else {
+            // If date extended from past to future
+            if (initialDate && initialDate < today && expiryInput.value >= today) {
+                statusSelect.value = 'active';
+                if (statusHelp) {
+                    statusHelp.innerHTML = '<span style="color:#16a34a; font-weight:600;">✓ Expiry date extended. Company and all its users will be activated again.</span>';
+                }
+            } else if (statusSelect.value === 'inactive') {
+                if (statusHelp) {
+                    statusHelp.innerHTML = '<span style="color:#d97706; font-weight:600;">ℹ️ Status is Deactivate. All users of this company will be deactivated.</span>';
+                }
+            } else {
+                if (statusHelp) {
+                    statusHelp.innerHTML = '<span style="color:#16a34a; font-weight:600;">✓ Company and all its users will be Active.</span>';
+                }
+            }
+        }
+    }
+
+    expiryInput.addEventListener('change', evaluateDate);
+    statusSelect.addEventListener('change', function () {
+        if (statusSelect.value === 'active' && expiryInput.value && expiryInput.value < today) {
+            alert('Cannot activate company with an expired date. Please extend the expiry date first.');
+            statusSelect.value = 'inactive';
+        }
+        evaluateDate();
+    });
+
+    evaluateDate();
+});
+</script>
+@endpush
