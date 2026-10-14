@@ -1027,23 +1027,7 @@
                 </a>
                 @endcan
 
-                @if(auth()->user()?->canAccessCstModule() || auth()->user()?->isCustomerSuccessUser() || auth()->user()?->can('cst_allocation.menuview'))
-                <a href="{{ route('cst.day-closing.index') }}" class="nav-item {{ request()->routeIs('cst.day-closing.*') ? 'active' : '' }}">
-                    @if(request()->routeIs('cst.day-closing.*'))
-                        <div class="active-indicator"></div>
-                    @endif
-                    <div class="nav-content">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <line x1="3" y1="10" x2="21" y2="10"></line>
-                            <polyline points="9 16 12 19 16 14"></polyline>
-                        </svg>
-                        <span>CST Day Closing</span>
-                    </div>
-                </a>
-                @endif
+
 
                 {{--  @if($canAccessProjectsModule)
                 <a href="{{ route('projects.dashboard') }}" class="nav-item {{ request()->routeIs('projects.*') ? 'active' : '' }}">
