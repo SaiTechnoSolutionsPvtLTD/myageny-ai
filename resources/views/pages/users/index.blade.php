@@ -53,12 +53,81 @@
 @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
 /* ── Stats Row ── */
-.usr-stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; animation:fadeUp .35s ease both; }
-.usr-stat { background:#fff; border:1px solid #e1dee3; border-radius:12px; padding:16px 18px; display:flex; align-items:center; gap:14px; transition:box-shadow .2s; }
-.usr-stat:hover { box-shadow:0 4px 18px rgba(0,0,0,.06); }
-.usr-stat-icon { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.usr-stat-label { font-size:11px; font-weight:700; color:#9e9e9e; text-transform:uppercase; letter-spacing:.5px; }
-.usr-stat-value { font-size:24px; font-weight:800; color:#121212; line-height:1; margin-top:4px; }
+.usr-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 4px;
+    animation: fadeUp .35s ease both;
+}
+@media (max-width: 1200px) {
+    .usr-stats-row { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+}
+@media (max-width: 640px) {
+    .usr-stats-row { grid-template-columns: 1fr; gap: 10px; }
+}
+.usr-stat {
+    background: #fff;
+    border: 1px solid #e1dee3;
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all .2s cubic-bezier(.4, 0, .2, 1);
+    min-height: 82px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.02);
+    box-sizing: border-box;
+}
+.usr-stat:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.06);
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+}
+.usr-stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.usr-stat-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1;
+}
+.usr-stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    line-height: 1.3;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.usr-stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+.usr-stat-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: none;
+    letter-spacing: normal;
+}
 
 /* ── Table Card ── */
 .usr-table-card { background:#fff; border:1px solid #e1dee3; border-radius:14px; overflow:hidden; animation:fadeUp .35s .1s ease both; }
@@ -319,7 +388,8 @@
                     $statTotal       = $userLimit;
                     $statTotalLabel  = 'Account Limit';
                     $statActive      = $activeUsersCount;
-                    $statActiveLabel = 'Active Accounts (incl. Admin)';
+                    $statActiveLabel = 'Active Accounts';
+                    $statActiveSub   = 'incl. Admin';
                     $statRecent      = $company->users()->where('last_login_at', '>=', now()->subHours(24))->count();
                     $statAvail       = $remainingAccounts;
                     $statAvailLabel  = 'Available Slots';
@@ -328,6 +398,7 @@
                     $statTotalLabel  = 'Total Users';
                     $statActive      = \App\Models\User::where('is_active', true)->count();
                     $statActiveLabel = 'Active Users';
+                    $statActiveSub   = null;
                     $statRecent      = \App\Models\User::where('last_login_at', '>=', now()->subHours(24))->count();
                     $statAvail       = \App\Models\User::where(function($q) {
                         $q->whereNull('last_login_at')->orWhere('last_login_at', '<=', now()->subDays(3));
@@ -337,44 +408,52 @@
             @endphp
             <div class="usr-stat">
                 <div class="usr-stat-icon" style="background:#fff0e6">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#fe5f04" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#fe5f04" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
-                <div>
-                    <div class="usr-stat-label">{{ $statTotalLabel }}</div>
+                <div class="usr-stat-content">
+                    <div class="usr-stat-label" title="{{ $statTotalLabel }}">{{ $statTotalLabel }}</div>
                     <div class="usr-stat-value">{{ $statTotal }}</div>
                 </div>
             </div>
             <div class="usr-stat">
                 <div class="usr-stat-icon" style="background:#f0fdf4">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <div>
-                    <div class="usr-stat-label">{{ $statActiveLabel }}</div>
+                <div class="usr-stat-content">
+                    <div class="usr-stat-label" title="{{ $statActiveLabel }}{{ !empty($statActiveSub) ? ' (' . $statActiveSub . ')' : '' }}">
+                        {{ $statActiveLabel }}
+                        @if(!empty($statActiveSub))
+                            <span class="usr-stat-sub">({{ $statActiveSub }})</span>
+                        @endif
+                    </div>
                     <div class="usr-stat-value" style="color:{{ !empty($hasReachedLimit) ? '#dc2626' : '#16a34a' }}">{{ $statActive }}</div>
                 </div>
             </div>
-            <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'recent_login']) }}'">
+            <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'recent_login']) }}'" title="Filter users with recent logins in the last 24 hours">
                 <div class="usr-stat-icon" style="background:#eff6ff">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
-                <div>
-                    <div class="usr-stat-label">Recent Login (24h)</div>
+                <div class="usr-stat-content">
+                    <div class="usr-stat-label" title="Recent Login (24h)">Recent Login (24h)</div>
                     <div class="usr-stat-value" style="color:#2563eb">{{ $statRecent }}</div>
                 </div>
             </div>
-            <div class="usr-stat" @if(empty($company)) style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'inactive_3days']) }}'" @endif>
+            <div class="usr-stat" @if(empty($company)) style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'inactive_3days']) }}'" title="Filter users inactive for 3+ days" @endif>
                 <div class="usr-stat-icon" style="background:{{ !empty($company) ? ($statAvail > 0 ? '#f0fdf4' : '#fef2f2') : '#fef2f2' }}">
                     @if(!empty($company))
-                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="{{ $statAvail > 0 ? '#16a34a' : '#dc2626' }}" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="{{ $statAvail > 0 ? '#16a34a' : '#dc2626' }}" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     @else
-                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     @endif
                 </div>
-                <div>
-                    <div class="usr-stat-label">{{ $statAvailLabel }}</div>
+                <div class="usr-stat-content">
+                    <div class="usr-stat-label" title="{{ $statAvailLabel }}">{{ $statAvailLabel }}</div>
                     <div class="usr-stat-value" style="color:{{ !empty($company) ? ($statAvail > 0 ? '#16a34a' : '#dc2626') : '#dc2626' }}">{{ $statAvail }}</div>
+                </div>
             </div>
-        </div>
+        </div>{{-- /usr-stats-row --}}
 
         {{-- Table --}}
         <div class="usr-table-card">

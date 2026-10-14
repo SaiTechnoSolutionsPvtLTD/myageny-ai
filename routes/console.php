@@ -24,3 +24,6 @@ Schedule::command('recruitment:send-interview-reminders')
 
 Schedule::command('hrms:send-calendar-notifications')
     ->dailyAt('09:30');
+
+Schedule::command('expenses:generate-recurring')
+    ->dailyAt('00:05');

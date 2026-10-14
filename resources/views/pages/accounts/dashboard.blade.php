@@ -50,7 +50,11 @@
             <div class="acc-title">Accounts Dashboard</div>
             <div class="acc-sub">Manage Ad Budgets, Ad Accounts Master, and Financial Operations</div>
         </div>
-        <div style="display:flex; gap:10px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="{{ route('accounts.expenses.create') }}" class="acc-btn acc-btn-primary" style="background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 4px 14px rgba(16,185,129,.25);">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Expense
+            </a>
             <a href="{{ route('accounts.ad-budget.clients') }}" class="acc-btn acc-btn-primary">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Raise Client Ad Budget

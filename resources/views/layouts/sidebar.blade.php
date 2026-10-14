@@ -187,6 +187,35 @@
                     </div>
                 </a>
 
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('accounts.expenses.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->routeIs('accounts.expenses.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                            <path d="M7 15h0M2 9.5h20"></path>
+                        </svg>
+                        <span>Expense</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+
+                <!-- Expense Submenu -->
+                <div class="submenu {{ request()->routeIs('accounts.expenses.*') ? 'show' : '' }}">
+                    <a href="{{ route('accounts.expenses.index') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.index') ? 'active' : '' }}">
+                        Expense List
+                    </a>
+                    <a href="{{ route('accounts.expenses.create') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.create') ? 'active' : '' }}">
+                        Add Expense
+                    </a>
+                    <a href="{{ route('accounts.expenses.pivot') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.pivot') ? 'active' : '' }}">
+                        Expense Pivot
+                    </a>
+                </div>
+
                 <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*'))
                         <div class="active-indicator"></div>
