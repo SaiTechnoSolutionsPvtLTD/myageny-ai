@@ -652,32 +652,32 @@
                     </div>
                     <div class="section-body">
                         <div class="form-group">
-                            <label class="form-label">Company Name <span>*</span></label>
+                            <label class="form-label">Company Name</label>
                             <input type="text" name="company_name" class="form-input"
                                    value="{{ $data['company_name'] ?? '' }}"
-                                   placeholder="myAgenci.ai Private Limited" required>
+                                   placeholder="">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Company Address</label>
                             <textarea name="company_address" class="form-input form-textarea"
-                                      placeholder="No. 123, Main Street&#10;Chennai - 600001&#10;Tamil Nadu, India">{{ $data['company_address'] ?? '' }}</textarea>
+                                      placeholder="">{{ $data['company_address'] ?? '' }}</textarea>
                         </div>
                         <div class="grid-2">
                             <div class="form-group">
                                 <label class="form-label">Phone / WhatsApp</label>
                                 <input type="text" name="company_phone" class="form-input"
-                                       value="{{ $data['company_phone'] ?? '' }}" placeholder="+91 9999999999">
+                                       value="{{ $data['company_phone'] ?? '' }}" placeholder="">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Email</label>
                                 <input type="email" name="company_email" class="form-input"
-                                       value="{{ $data['company_email'] ?? '' }}" placeholder="hello@company.com">
+                                       value="{{ $data['company_email'] ?? '' }}" placeholder="">
                             </div>
                         </div>
                         <div class="form-group">
                             <label class="form-label">GSTIN / Tax ID</label>
                             <input type="text" name="company_gstin" class="form-input"
-                                   value="{{ $data['company_gstin'] ?? '' }}" placeholder="29ABCDE1234F1Z5" maxlength="20">
+                                   value="{{ $data['company_gstin'] ?? '' }}" placeholder="" maxlength="20">
                         </div>
                     </div>
                 </div>
@@ -810,36 +810,36 @@
                         <div class="form-group">
                             <label class="form-label">Bank Name</label>
                             <input type="text" name="bank_name" class="form-input"
-                                   value="{{ $data['bank_name'] ?? '' }}" placeholder="HDFC Bank">
+                                   value="{{ $data['bank_name'] ?? '' }}" placeholder="">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Account Name</label>
                             <input type="text" name="account_name" class="form-input"
-                                   value="{{ $data['account_name'] ?? '' }}" placeholder="Account Holder Name">
+                                   value="{{ $data['account_name'] ?? '' }}" placeholder="">
                         </div>
                         </div>
                         <div class="grid-2">
                             <div class="form-group">
                                 <label class="form-label">Account Number</label>
                                 <input type="text" name="bank_account" class="form-input"
-                                       value="{{ $data['bank_account'] ?? '' }}" placeholder="XXXXXXXXXXXX">
+                                       value="{{ $data['bank_account'] ?? '' }}" placeholder="">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">IFSC Code</label>
                                 <input type="text" name="bank_ifsc" class="form-input"
-                                       value="{{ $data['bank_ifsc'] ?? '' }}" placeholder="HDFC0001234" maxlength="15">
+                                       value="{{ $data['bank_ifsc'] ?? '' }}" placeholder="" maxlength="15">
                             </div>
                         </div>
                         <div class="grid-2">
                             <div class="form-group">
                                 <label class="form-label">Branch</label>
                                 <input type="text" name="bank_branch" class="form-input"
-                                       value="{{ $data['bank_branch'] ?? '' }}" placeholder="Chennai">
+                                       value="{{ $data['bank_branch'] ?? '' }}" placeholder="">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">UPI</label>
                                 <input type="text" name="bank_upi" class="form-input"
-                                       value="{{ $data['bank_upi'] ?? '' }}" placeholder="test@oksbi" maxlength="100">
+                                       value="{{ $data['bank_upi'] ?? '' }}" placeholder="" maxlength="100">
                             </div>
                         </div>
                     </div>
@@ -1103,14 +1103,14 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
         const logoSrc         = logoEl ? logoEl.src : '';
         const sigEl           = document.getElementById('sigImg');
         const sigSrc          = sigEl ? sigEl.src : '';
-        const company         = document.querySelector('[name="company_name"]')?.value || 'Your Company';
+        const company         = document.querySelector('[name="company_name"]')?.value || '';
         const address         = document.querySelector('[name="company_address"]')?.value || '';
 
         livePreview.innerHTML = `
         <div style="background:${color};padding:20px;border-radius:16px;margin-bottom:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div>
-                    ${logoSrc ? `<img src="${logoSrc}" style="height:48px;margin-bottom:10px;" alt="Logo">` : `<div style="font-size:20px;font-weight:800;color:${headerTextColor};">${company}</div>`}
+                    ${logoSrc ? `<img src="${logoSrc}" style="height:48px;margin-bottom:10px;" alt="Logo">` : (company ? `<div style="font-size:20px;font-weight:800;color:${headerTextColor};">${company}</div>` : '')}
                     <div style="font-size:12px;color:${headerTextColor};opacity:.9;white-space:pre-line;">${address}</div>
                 </div>
                 <div style="text-align:right;">

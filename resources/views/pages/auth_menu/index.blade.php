@@ -218,8 +218,8 @@
     </div>
 
     <div class="authdash-grid">
-        @if(auth()->user()->isSystemAdmin())
-        <a href="/companies" class="authdash-card companies">
+        @if(auth()->user()->isSystemAdmin() && strtolower(trim(auth()->user()->email ?? '')) === 'admin@myagency.com')
+        <a href="{{ route('companies.index') }}" class="authdash-card companies">
             <div class="authdash-icon companies">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path d="M3 21h18"/>
