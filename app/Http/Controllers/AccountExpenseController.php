@@ -225,7 +225,7 @@ class AccountExpenseController extends Controller
             ->when($categoryId, fn ($q) => $q->where('account_expense_category_id', $categoryId));
 
         $expenses = (clone $baseQuery)
-            ->with(['category', 'subcategory'])
+            ->with(['category', 'subcategory', 'vendor'])
             ->get();
 
         // If checking a future month (e.g. next month), include projected fixed expenses
@@ -235,7 +235,7 @@ class AccountExpenseController extends Controller
                 ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
                 ->when($categoryId, fn ($q) => $q->where('account_expense_category_id', $categoryId))
                 ->when($expenseType && $expenseType !== 'Fixed', fn ($q) => $q->whereRaw('1 = 0'))
-                ->with(['category', 'subcategory'])
+                ->with(['category', 'subcategory', 'vendor'])
                 ->get();
 
             foreach ($futureTemplates as $tpl) {
@@ -297,6 +297,7 @@ class AccountExpenseController extends Controller
                         'fixed'    => $fixed,
                         'variable' => $variable,
                         'total'    => $total,
+                        'expenses' => $items,
                     ];
                 }
                 $catFixedSum += $fixed;
@@ -320,6 +321,7 @@ class AccountExpenseController extends Controller
                     'fixed'    => $fixed,
                     'variable' => $variable,
                     'total'    => $total,
+                    'expenses' => $directItems,
                 ];
                 $catFixedSum += $fixed;
                 $catVarSum += $variable;
@@ -345,6 +347,7 @@ class AccountExpenseController extends Controller
                         'fixed'    => $fixed,
                         'variable' => $variable,
                         'total'    => $total,
+                        'expenses' => $items,
                     ];
                     $catFixedSum += $fixed;
                     $catVarSum += $variable;
@@ -362,6 +365,10 @@ class AccountExpenseController extends Controller
                     'variable'      => $catVarSum,
                     'total'         => $catTotalSum,
                     'subcategories' => $subcatRows,
+                    'expenses'      => $catExpenses->sortByDesc(function ($e) {
+                        if (!$e->expense_date) return 0;
+                        return $e->expense_date instanceof \Carbon\CarbonInterface ? $e->expense_date->timestamp : (strtotime((string) $e->expense_date) ?: 0);
+                    })->values(),
                 ];
 
                 $grandTotalFixed += $catFixedSum;
@@ -396,8 +403,13 @@ class AccountExpenseController extends Controller
                         'fixed'    => $fixed,
                         'variable' => $variable,
                         'total'    => $total,
+                        'expenses' => $unlinked,
                     ]
                 ],
+                'expenses'      => $unlinked->sortByDesc(function ($e) {
+                    if (!$e->expense_date) return 0;
+                    return $e->expense_date instanceof \Carbon\CarbonInterface ? $e->expense_date->timestamp : (strtotime((string) $e->expense_date) ?: 0);
+                })->values(),
             ];
 
             $grandTotalFixed += $fixed;
@@ -406,14 +418,23 @@ class AccountExpenseController extends Controller
             $grandTotalCount += $count;
         }
 
-        return view('pages.accounts.expenses.pivot', compact(
+        $isModal = (bool) ($request->ajax() || $request->has('modal') || $request->header('X-Modal-Request'));
+
+        $viewData = compact(
             'pivotRows',
             'allCategories',
             'grandTotalFixed',
             'grandTotalVariable',
             'grandTotalAmount',
-            'grandTotalCount'
-        ));
+            'grandTotalCount',
+            'isModal'
+        );
+
+        if ($isModal) {
+            return view('pages.accounts.expenses.pivot_content', $viewData);
+        }
+
+        return view('pages.accounts.expenses.pivot', $viewData);
     }
 
     /**

@@ -163,6 +163,18 @@
     border: 1px solid #a7f3d0;
 }
 
+.icon-teal {
+    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+    color: #0d9488;
+    border: 1px solid #99f6e4;
+}
+
+.icon-indigo {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    color: #4f46e5;
+    border: 1px solid #c7d2fe;
+}
+
 .master-card-badge {
     font-size: 11px;
     font-weight: 800;
@@ -246,11 +258,19 @@
         <div class="master-glance">
             <div class="master-glance-item">
                 <i class="bi bi-folder2-open"></i>
-                <span><strong>{{ $categoryStats['total'] }}</strong> Categories</span>
+                <span><strong>{{ $categoryStats['total'] }}</strong> Expense Categories</span>
             </div>
             <div class="master-glance-item">
                 <i class="bi bi-diagram-3"></i>
-                <span><strong>{{ $subcategoryStats['total'] }}</strong> Subcategories</span>
+                <span><strong>{{ $subcategoryStats['total'] }}</strong> Expense Subcats</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-headset" style="color:#0d9488;"></i>
+                <span><strong>{{ $supportCategoryStats['total'] }}</strong> Support Categories</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-diagram-3-fill" style="color:#4f46e5;"></i>
+                <span><strong>{{ $supportSubcategoryStats['total'] }}</strong> Support Subcats</span>
             </div>
             <div class="master-glance-item">
                 <i class="bi bi-wallet2" style="color:#9333ea;"></i>
@@ -262,7 +282,7 @@
             </div>
             <div class="master-glance-item">
                 <i class="bi bi-check-circle-fill" style="color:#16a34a;"></i>
-                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] }}</strong> Active Entries</span>
+                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $supportCategoryStats['active'] + $supportSubcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] }}</strong> Active Entries</span>
             </div>
         </div>
     </div>
@@ -331,7 +351,61 @@
             </div>
         </a>
 
-        {{-- Card 3: Ad Account Master --}}
+        {{-- Card 3: Support Category Master --}}
+        <a href="{{ route('accounts.master.support-categories.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-teal">
+                        <i class="bi bi-headset"></i>
+                    </div>
+                    <span class="master-card-badge">Support Master</span>
+                </div>
+                <div class="master-card-title">Support Category</div>
+                <div class="master-card-desc">
+                    Define high-level support classifications, ticket groups, and service request categories with active/inactive availability.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $supportCategoryStats['total'] }}</strong> Categories
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $supportCategoryStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage Categories <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 4: Support Subcategory Master --}}
+        <a href="{{ route('accounts.master.support-subcategories.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-indigo">
+                        <i class="bi bi-diagram-3-fill"></i>
+                    </div>
+                    <span class="master-card-badge">Hierarchy Master</span>
+                </div>
+                <div class="master-card-title">Support Subcategory</div>
+                <div class="master-card-desc">
+                    Configure granular support subcategories with multi-tier, user-wise hierarchy escalation chains and approval levels.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $supportSubcategoryStats['total'] }}</strong> Subcategories
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $supportSubcategoryStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage Subcategories <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 5: Ad Account Master --}}
         <a href="{{ route('accounts.ad-accounts-master.index') }}" class="master-card">
             <div>
                 <div class="master-card-top">

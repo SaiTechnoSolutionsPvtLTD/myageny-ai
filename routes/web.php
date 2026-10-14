@@ -331,6 +331,21 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
             Route::get('/expense-categories/{category}/subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'getSubcategoriesByCategory'])->name('expense-categories.subcategories');
 
+            // Support Categories CRUD
+            Route::get('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'categories'])->name('support-categories.index');
+            Route::post('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeCategory'])->name('support-categories.store');
+            Route::put('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateCategory'])->name('support-categories.update');
+            Route::patch('/support-categories/{category}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleCategoryStatus'])->name('support-categories.toggle-status');
+            Route::delete('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroyCategory'])->name('support-categories.destroy');
+
+            // Support Subcategories CRUD (with User-wise Multiple Hierarchy)
+            Route::get('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'subcategories'])->name('support-subcategories.index');
+            Route::post('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeSubcategory'])->name('support-subcategories.store');
+            Route::put('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateSubcategory'])->name('support-subcategories.update');
+            Route::patch('/support-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleSubcategoryStatus'])->name('support-subcategories.toggle-status');
+            Route::delete('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroySubcategory'])->name('support-subcategories.destroy');
+            Route::get('/support-categories/{category}/subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'getSubcategoriesByCategory'])->name('support-categories.subcategories');
+
             // Ad Accounts Master alias
             Route::get('/ad-accounts', fn () => redirect()->route('accounts.ad-accounts-master.index'))->name('ad-accounts.index');
 

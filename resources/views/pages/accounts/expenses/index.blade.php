@@ -50,7 +50,7 @@
 .attachment-chip:hover { background:#dbeafe; color:#1d4ed8; }
 
 /* Modal Styling */
-.modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center; }
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(4px); z-index:100005; align-items:center; justify-content:center; }
 .modal-overlay.active { display:flex; }
 .modal-box { background:#fff; border-radius:18px; width:94%; max-width:720px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.25); animation:popIn .25s ease; }
 @keyframes popIn { from{ opacity:0; transform:scale(.95); } to{ opacity:1; transform:scale(1); } }
@@ -58,6 +58,27 @@
 .modal-title { font-size:17px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px; }
 .modal-close { background:none; border:none; font-size:22px; color:#94a3b8; cursor:pointer; line-height:1; }
 .modal-body { padding:24px; display:flex; flex-direction:column; gap:18px; }
+
+/* Full Page Pivot Modal Styling */
+.modal-pivot-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.7); backdrop-filter:blur(6px); z-index:99990; align-items:center; justify-content:center; padding:16px; box-sizing:border-box; }
+.modal-pivot-overlay.active { display:flex; }
+.modal-pivot-container { background:#f8fafc; width:100%; height:100%; max-width:1560px; max-height:96vh; border-radius:18px; border:1px solid #cbd5e1; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 70px -10px rgba(0,0,0,.45); animation:pivotModalIn .22s cubic-bezier(.16,1,.3,1); }
+@keyframes pivotModalIn { from{ opacity:0; transform:scale(.97) translateY(8px); } to{ opacity:1; transform:scale(1) translateY(0); } }
+.modal-pivot-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:#ffffff; border-bottom:1px solid #e2e8f0; flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,.02); gap:12px; }
+.modal-pivot-title-wrap { display:flex; align-items:center; gap:12px; }
+.modal-pivot-icon { width:40px; height:40px; border-radius:10px; background:#fff7ed; color:#fe5f04; display:flex; align-items:center; justify-content:center; font-size:20px; }
+.modal-pivot-title { font-size:18px; font-weight:800; color:#0f172a; line-height:1.2; }
+.modal-pivot-sub { font-size:12px; color:#64748b; margin-top:2px; }
+.modal-pivot-actions { display:flex; align-items:center; gap:10px; }
+.pivot-close-btn { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; width:36px; height:36px; font-size:22px; color:#64748b; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; line-height:1; }
+.pivot-close-btn:hover { background:#fee2e2; color:#b91c1c; border-color:#fca5a5; }
+.modal-pivot-body { flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:20px; background:#f4f5f7; }
+@media (max-width:768px) {
+    .modal-pivot-overlay { padding:0; }
+    .modal-pivot-container { max-height:100vh; height:100%; border-radius:0; border:none; }
+    .modal-pivot-header { padding:12px 16px; }
+    .modal-pivot-body { padding:14px; }
+}
 
 .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 @media (max-width: 600px) { .detail-grid { grid-template-columns:1fr; } }
@@ -91,9 +112,9 @@
                     <i class="bi bi-arrow-repeat"></i> Sync Fixed
                 </button>
             </form>
-            <a href="{{ route('accounts.expenses.pivot') }}" class="acc-btn acc-btn-outline" style="border-color:#fe5f04; color:#fe5f04; background:#fff7ed;">
+            <button type="button" class="acc-btn acc-btn-outline" onclick="openExpensePivotFromIndex()" style="border-color:#fe5f04; color:#fe5f04; background:#fff7ed;" title="Open Expense Pivot Report in Full Page Modal">
                 <i class="bi bi-table"></i> Expense Pivot
-            </a>
+            </button>
             <a href="{{ route('accounts.expenses.create') }}" class="acc-btn acc-btn-primary">
                 <i class="bi bi-plus-lg"></i> Add Expense
             </a>
@@ -589,6 +610,41 @@
     </div>
 </div>
 
+{{-- Expense Pivot Full Page Modal --}}
+<div class="modal-pivot-overlay" id="expensePivotModal" role="dialog" aria-modal="true" aria-labelledby="pivotModalTitle">
+    <div class="modal-pivot-container">
+        <div class="modal-pivot-header">
+            <div class="modal-pivot-title-wrap">
+                <div class="modal-pivot-icon">
+                    <i class="bi bi-table"></i>
+                </div>
+                <div>
+                    <div class="modal-pivot-title" id="pivotModalTitle">Expense Pivot Report</div>
+                    <div class="modal-pivot-sub">Category & Subcategory-wise aggregation with Fixed vs Variable split and full expense breakdown</div>
+                </div>
+            </div>
+            <div class="modal-pivot-actions">
+                <button type="button" class="acc-btn acc-btn-outline acc-btn-sm" onclick="reloadPivotModal()" title="Refresh Pivot Data">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+                <a href="{{ route('accounts.expenses.pivot') }}" target="_blank" class="acc-btn acc-btn-outline acc-btn-sm" title="Open Pivot Report in Separate Page">
+                    <i class="bi bi-box-arrow-up-right"></i> Open in New Tab
+                </a>
+                <button type="button" class="pivot-close-btn" onclick="closeExpensePivotModal()" title="Close (Esc)">&times;</button>
+            </div>
+        </div>
+        <div class="modal-pivot-body" id="expensePivotModalBody">
+            <div style="text-align:center; padding:60px 20px; color:#64748b;">
+                <div class="spinner-border text-primary" role="status" style="width:3rem; height:3rem; color:#fe5f04 !important;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div style="font-size:15px; font-weight:700; color:#0f172a; margin-top:14px;">Loading Expense Pivot Aggregation...</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Aggregating category and subcategory expenses</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
 <script>
 function viewExpense(id) {
@@ -726,11 +782,218 @@ function closeDeleteModal() {
     document.getElementById('deleteExpenseModal').classList.remove('active');
 }
 
-// Close modals on clicking overlay
+// Close standard modals on clicking overlay
 document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.classList.remove('active');
     });
+});
+
+// Full Page Expense Pivot Modal Management
+let isPivotLoaded = false;
+let currentPivotUrl = "{{ route('accounts.expenses.pivot') }}?modal=1";
+
+function openExpensePivotFromIndex() {
+    // Pass active filters from index page if present
+    const month = document.querySelector('input[name="month"]')?.value;
+    const dateFrom = document.querySelector('input[name="date_from"]')?.value;
+    const dateTo = document.querySelector('input[name="date_to"]')?.value;
+    const categoryId = document.querySelector('select[name="category_id"]')?.value;
+    const expenseType = document.querySelector('select[name="expense_type"]')?.value;
+
+    const params = new URLSearchParams();
+    params.set('modal', '1');
+    if (month) params.set('month', month);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (categoryId) params.set('category_id', categoryId);
+    if (expenseType) params.set('expense_type', expenseType);
+
+    const url = "{{ route('accounts.expenses.pivot') }}?" + params.toString();
+    openExpensePivotModal(url);
+}
+
+function openExpensePivotModal(url) {
+    const modal = document.getElementById('expensePivotModal');
+    const body = document.getElementById('expensePivotModalBody');
+    if (!modal) return;
+
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    const targetUrl = url || currentPivotUrl;
+    if (!isPivotLoaded || url) {
+        body.innerHTML = `
+            <div style="text-align:center; padding:60px 20px; color:#64748b;">
+                <div class="spinner-border text-primary" role="status" style="width:3rem; height:3rem; color:#fe5f04 !important;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div style="font-size:15px; font-weight:700; color:#0f172a; margin-top:14px;">Loading Expense Pivot Aggregation...</div>
+                <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Aggregating category and subcategory expenses</div>
+            </div>
+        `;
+
+        fetch(targetUrl, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-Modal-Request': '1'
+            }
+        })
+        .then(res => res.text())
+        .then(html => {
+            body.innerHTML = html;
+            isPivotLoaded = true;
+            currentPivotUrl = targetUrl;
+            initPivotModalInteractions();
+
+            // Execute script tags inside fetched HTML
+            body.querySelectorAll('script').forEach(oldScript => {
+                const newScript = document.createElement('script');
+                Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+        })
+        .catch(err => {
+            body.innerHTML = `
+                <div style="text-align:center; padding:50px 20px; color:#b91c1c;">
+                    <i class="bi bi-exclamation-triangle-fill" style="font-size:36px; display:block; margin-bottom:10px;"></i>
+                    <div style="font-size:16px; font-weight:700;">Failed to load Expense Pivot Report.</div>
+                    <div style="font-size:13px; color:#64748b; margin-top:6px;">Please try again or view in separate page.</div>
+                    <button type="button" class="acc-btn acc-btn-primary" style="margin-top:16px;" onclick="reloadPivotModal()">
+                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                    </button>
+                </div>
+            `;
+        });
+    }
+}
+
+function closeExpensePivotModal() {
+    const modal = document.getElementById('expensePivotModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function reloadPivotModal() {
+    isPivotLoaded = false;
+    openExpensePivotModal(currentPivotUrl);
+}
+
+function initPivotModalInteractions() {
+    const modalBody = document.getElementById('expensePivotModalBody');
+    if (!modalBody) return;
+
+    const form = modalBody.querySelector('#pivotFilterForm');
+    if (form) {
+        form.onsubmit = function(e) {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const params = new URLSearchParams(formData);
+            params.set('modal', '1');
+            const targetUrl = form.action + '?' + params.toString();
+            openExpensePivotModal(targetUrl);
+        };
+    }
+}
+
+// Globally defined Accordion and Pivot handlers
+window.togglePivotAccordion = function(el) {
+    const item = el.closest('.pivot-accordion-item');
+    if (!item) return;
+    const isOpen = item.classList.toggle('is-open');
+    const body = item.querySelector('.pivot-accordion-body');
+    if (body) {
+        body.style.display = isOpen ? 'flex' : 'none';
+    }
+    const hintText = item.querySelector('.pivot-hint-text');
+    if (hintText) {
+        hintText.textContent = isOpen ? 'Click to hide breakdown' : 'Click to view breakdown';
+    }
+};
+
+window.expandAllPivotAccordions = function() {
+    document.querySelectorAll('.pivot-accordion-item').forEach(item => {
+        item.classList.add('is-open');
+        const body = item.querySelector('.pivot-accordion-body');
+        if (body) body.style.display = 'flex';
+        const hintText = item.querySelector('.pivot-hint-text');
+        if (hintText) hintText.textContent = 'Click to hide breakdown';
+    });
+};
+
+window.collapseAllPivotAccordions = function() {
+    document.querySelectorAll('.pivot-accordion-item').forEach(item => {
+        item.classList.remove('is-open');
+        const body = item.querySelector('.pivot-accordion-body');
+        if (body) body.style.display = 'none';
+        const hintText = item.querySelector('.pivot-hint-text');
+        if (hintText) hintText.textContent = 'Click to view breakdown';
+    });
+};
+
+window.filterPivotAccordions = function(query) {
+    const q = (query || '').toLowerCase().trim();
+    document.querySelectorAll('.pivot-accordion-item').forEach(item => {
+        const text = (item.getAttribute('data-search') || item.innerText || '').toLowerCase();
+        if (!q || text.includes(q)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+};
+
+window.setPivotMonth = function(monthStr) {
+    const input = document.getElementById('pivotMonthInput');
+    if (input) {
+        input.value = monthStr;
+        window.submitPivotForm();
+    }
+};
+
+window.submitPivotForm = function() {
+    const form = document.getElementById('pivotFilterForm');
+    if (form) {
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            form.submit();
+        }
+    }
+};
+
+window.resetPivotFilters = function() {
+    if (typeof openExpensePivotModal === 'function' && document.getElementById('expensePivotModal')?.classList.contains('active')) {
+        openExpensePivotModal("{{ route('accounts.expenses.pivot') }}?modal=1");
+    } else {
+        window.location.href = "{{ route('accounts.expenses.pivot') }}";
+    }
+};
+
+// Close pivot modal on clicking outside container
+document.getElementById('expensePivotModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeExpensePivotModal();
+    }
+});
+
+// Global Escape Key Listener for Modals
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const viewModal = document.getElementById('viewExpenseModal');
+        const deleteModal = document.getElementById('deleteExpenseModal');
+        const pivotModal = document.getElementById('expensePivotModal');
+
+        if (viewModal && viewModal.classList.contains('active')) {
+            closeViewModal();
+        } else if (deleteModal && deleteModal.classList.contains('active')) {
+            closeDeleteModal();
+        } else if (pivotModal && pivotModal.classList.contains('active')) {
+            closeExpensePivotModal();
+        }
+    }
 });
 
 // Filter Dynamic Subcategory Loading
