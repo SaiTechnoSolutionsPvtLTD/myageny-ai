@@ -25,7 +25,7 @@ class CheckActiveUser
                     $request->session()->regenerateToken();
 
                     return redirect()->route('login')
-                        ->with('error', 'Your company subscription has expired. Please contact your administrator.');
+                        ->with('error', 'Your company subscription has expired or is inactive. Please contact your administrator.');
                 }
             }
         }
