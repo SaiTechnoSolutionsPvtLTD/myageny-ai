@@ -433,7 +433,7 @@
         {{-- Employee-wise Table Card --}}
         <div class="tlop-card">
             <div class="tlop-card-head">
-                <div class="tlop-card-title">Employee Timesheet &amp; LOP Summary</div>
+                <div class="tlop-card-title">Employee Timesheet, Day Closing &amp; LOP Summary</div>
                 <span class="tlop-badge tlop-badge-neutral">{{ $rows->count() }} Employees</span>
             </div>
             <div class="tlop-table-wrap">
@@ -443,7 +443,7 @@
                             <th>Employee</th>
                             <th>Department &amp; Designation</th>
                             <th style="text-align: center;">Present Days</th>
-                            <th style="text-align: center;">Timesheet Submitted</th>
+                            <th style="text-align: center;">Timesheet / Day Closing Submitted</th>
                             <th style="text-align: center;">Missing Days</th>
                             <th style="text-align: center;">Leave Exempted</th>
                             <th style="text-align: center;">Timesheet LOP</th>
@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const empId = this.dataset.employeeId;
             const empName = this.dataset.employeeName;
 
-            document.getElementById('modalEmployeeName').textContent = empName + ' - Timesheet & Attendance Breakdown';
+            document.getElementById('modalEmployeeName').textContent = empName + ' - Attendance & Submission Breakdown';
             document.getElementById('modalTimelineContainer').innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Loading daily records...</div>';
 
             toggleModal(true);
@@ -638,10 +638,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             } else if (rec.is_present) {
                                 if (rec.has_timesheet) {
                                     itemClass = 'submitted';
-                                    badgeHtml = '<span class="tlop-badge tlop-badge-success">Timesheet Submitted</span>';
+                                    badgeHtml = `<span class="tlop-badge tlop-badge-success">${rec.status_label || 'Submitted'}</span>`;
                                 } else {
                                     itemClass = 'missing';
-                                    badgeHtml = '<span class="tlop-badge tlop-badge-danger">Missing Timesheet (LOP candidate)</span>';
+                                    badgeHtml = `<span class="tlop-badge tlop-badge-danger">${rec.status_label || 'Missing Submission'} (LOP candidate)</span>`;
                                 }
                             } else {
                                 badgeHtml = `<span class="tlop-badge tlop-badge-${rec.badge_class}">${rec.status_label}</span>`;
@@ -649,9 +649,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
                             let timesheetDetailsHtml = '';
                             if (rec.timesheet_entries && rec.timesheet_entries.length > 0) {
-                                timesheetDetailsHtml = '<div style="font-size:11px; color:#059669; margin-top:4px;">';
+                                timesheetDetailsHtml = '<div style="font-size:11px; color:#059669; margin-top:4px; display:flex; flex-direction:column; gap:2px;">';
                                 rec.timesheet_entries.forEach(ts => {
-                                    timesheetDetailsHtml += `<div>✓ ${ts.project_name} (${ts.status})</div>`;
+                                    timesheetDetailsHtml += `<div><strong>✓ ${ts.project_name}</strong>: ${ts.status}`;
+                                    if (ts.day_closing_update && ts.day_closing_update !== '—') {
+                                        timesheetDetailsHtml += ` <span style="color:#64748b;">(${ts.day_closing_update})</span>`;
+                                    }
+                                    timesheetDetailsHtml += `</div>`;
                                 });
                                 timesheetDetailsHtml += '</div>';
                             }

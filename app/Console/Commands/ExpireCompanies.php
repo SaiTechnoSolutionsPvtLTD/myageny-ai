@@ -18,17 +18,14 @@ class ExpireCompanies extends Command
 
         Company::query()
             ->withCount('users')
-            ->where('company_status', 'active')
             ->whereNotNull('expiry_date')
             ->get()
             ->each(function (Company $company) use (&$expiredCount, &$userCount) {
-                if (! $company->isExpired()) {
-                    return;
-                }
-
-                if ($company->syncExpiryState()) {
-                    $expiredCount++;
-                    $userCount += (int) $company->users_count;
+                if ($company->isExpired() || $company->company_status === 'inactive') {
+                    if ($company->syncExpiryState()) {
+                        $expiredCount++;
+                        $userCount += (int) $company->users_count;
+                    }
                 }
             });
 

@@ -235,16 +235,27 @@
             <form method="GET" action="{{ route('cst-allocation.index') }}" style="display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; width:100%;">
                 <input type="hidden" name="tab" id="active_tab_field" value="{{ request('tab', 'pending') }}">
 
-                <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:200px;">
+                <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:220px;">
                     <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">Lead Account</label>
                     <select name="lead_id" id="filter_lead_id" class="select2" style="width:100%;">
                         <option value="">All Lead Accounts</option>
                         @foreach($leadAccounts as $acc)
+                            @php
+                                $accLabel = $acc->company_name ?: ($acc->contact_name ?: 'Lead #'.$acc->id);
+                                if (!empty($acc->mobile_number)) {
+                                    $accLabel .= ' (' . $acc->mobile_number . ')';
+                                }
+                            @endphp
                             <option value="{{ $acc->id }}" {{ request('lead_id') == $acc->id ? 'selected' : '' }}>
-                                {{ $acc->company_name ?: ($acc->contact_name ?: 'Lead #'.$acc->id) }}
+                                {{ $accLabel }}
                             </option>
                         @endforeach
                     </select>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:160px;">
+                    <label style="font-size:10px; font-weight:800; color:var(--cst-muted); text-transform:uppercase; letter-spacing:.5px;">Mobile Number</label>
+                    <input type="text" name="mobile_number" value="{{ request('mobile_number', request('mobile')) }}" placeholder="Search mobile..." style="padding:9px 12px; border:1px solid var(--cst-border); border-radius:10px; font-size:13px; background:#fafafa;">
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:180px;">
@@ -315,6 +326,14 @@
                                 <tr>
                                     <td>
                                         <strong><a href="/leads/{{ $lead->id }}" style="color:var(--cst-orange);text-decoration:none;">{{ $lead->company_name ?: ($lead->contact_name ?: 'N/A') }}</a></strong>
+                                        @if($lead->company_name && $lead->contact_name)
+                                            <div style="font-size:12px; color:var(--cst-text); margin-top:2px;">{{ $lead->contact_name }}</div>
+                                        @endif
+                                        @if($lead->mobile_number)
+                                            <div style="font-size:11px; color:var(--cst-muted); margin-top:2px; display:flex; align-items:center; gap:4px;">
+                                                <span>📞</span> {{ $lead->mobile_number }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>{{ $lead->assignedTo?->name ?: 'Unassigned' }}</td>
                                     <td>
@@ -395,6 +414,14 @@
                                 <tr>
                                     <td>
                                         <strong><a href="/leads/{{ $lead->id }}" style="color:var(--cst-purple);text-decoration:none;">{{ $lead->company_name ?: ($lead->contact_name ?: 'N/A') }}</a></strong>
+                                        @if($lead->company_name && $lead->contact_name)
+                                            <div style="font-size:12px; color:var(--cst-text); margin-top:2px;">{{ $lead->contact_name }}</div>
+                                        @endif
+                                        @if($lead->mobile_number)
+                                            <div style="font-size:11px; color:var(--cst-muted); margin-top:2px; display:flex; align-items:center; gap:4px;">
+                                                <span>📞</span> {{ $lead->mobile_number }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>{{ $lead->assignedTo?->name ?: 'Unassigned' }}</td>
                                     <td>
@@ -553,7 +580,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Select2 on Lead Account dropdown
     if (window.jQuery && window.jQuery.fn.select2) {
         window.jQuery('#filter_lead_id').select2({
-            placeholder: 'Search Lead Account...',
+            placeholder: 'Search Lead Account or Mobile...',
             allowClear: true,
             width: '100%'
         });

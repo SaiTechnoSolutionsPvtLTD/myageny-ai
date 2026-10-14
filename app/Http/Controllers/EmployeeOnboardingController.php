@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreEmployeeOnboardingRequest;
 use App\Http\Requests\UpdateEmployeeOnboardingRequest;
 use App\Models\Branch;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
 use App\Models\Role;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Models\UserMapping;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -429,7 +431,17 @@ class EmployeeOnboardingController extends Controller
         }
 
         if (! $user) {
-            $attributes['company_id'] = auth()->user()?->company_id;
+            $companyId = auth()->user()?->company_id;
+            if ($companyId) {
+                $company = Company::find($companyId);
+                if ($company && $company->hasReachedUserLimit()) {
+                    throw ValidationException::withMessages([
+                        'portal_email' => ["Account limit reached for this company ({$company->activeUsers()->count()} of {$company->user_limit} accounts used, including Company Admin). Cannot create additional portal account."],
+                    ]);
+                }
+            }
+
+            $attributes['company_id'] = $companyId;
             $attributes['is_active'] = array_key_exists('status', $validated)
                 ? ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE)
                 : true;

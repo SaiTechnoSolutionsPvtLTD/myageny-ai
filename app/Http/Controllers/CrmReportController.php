@@ -479,11 +479,13 @@ class CrmReportController extends Controller
             })
             ->values();
         $salesExecutives = $this->paymentCollectionSalesExecutives();
+        $cstExecutives = $this->paymentCollectionCstExecutives();
 
         $filterPanelOpen =
             $request->filled('customer_id')
             || $request->filled('company_name')
             || $request->filled('sales_executive_id')
+            || $request->filled('cst_executive_id')
             || $request->filled('user_id')
             || $request->filled('payment_mode')
             || $request->filled('branch_id')
@@ -501,6 +503,7 @@ class CrmReportController extends Controller
             'branches',
             'companyOptions',
             'salesExecutives',
+            'cstExecutives',
             'filterPanelOpen',
             'defaultFromDate',
             'defaultToDate'
@@ -907,6 +910,15 @@ class CrmReportController extends Controller
             $query->where('leads.assigned_to', $salesExecId);
         }
 
+        if ($request->filled('cst_executive_id')) {
+            $cstExecId = (int) $request->input('cst_executive_id');
+            $query->where(function ($q) use ($cstExecId) {
+                $q->where('leads.customer_support_executive_id', $cstExecId)
+                  ->orWhere('leads.customer_support_tl_id', $cstExecId)
+                  ->orWhere('lead_product_payments.recorded_by', $cstExecId);
+            });
+        }
+
         if ($request->filled('payment_mode')) {
             $query->where('lead_product_payments.payment_mode', $request->payment_mode);
         }
@@ -1183,12 +1195,6 @@ class CrmReportController extends Controller
                         'business development',
                         'marketing',
                         'telecalling',
-                        'customer support',
-                        'customer support team',
-                        'customer success',
-                        'customer success team',
-                        'cst',
-                        'support',
                     ])
                     ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
                         'sales',
@@ -1196,12 +1202,6 @@ class CrmReportController extends Controller
                         'business_development',
                         'marketing',
                         'telecalling',
-                        'customer_support',
-                        'customer_support_team',
-                        'customer_success',
-                        'customer_success_team',
-                        'cst',
-                        'support',
                     ]);
                 })
                 ->orWhereHas('roles', function ($rq) {
@@ -1213,12 +1213,6 @@ class CrmReportController extends Controller
                         'bde',
                         'business_development_executive',
                         'telecaller',
-                        'customer_support_team_tl',
-                        'customer_support_team_executive',
-                        'senior_customer_success_team_executive',
-                        'customer_success_executive',
-                        'cst_executive',
-                        'cst_tl',
                     ])
                     ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
                         'sales_manager',
@@ -1228,9 +1222,79 @@ class CrmReportController extends Controller
                         'bde',
                         'business_development_executive',
                         'telecaller',
+                    ]);
+                });
+            })
+            ->whereDoesntHave('roles.department', function ($q) {
+                $q->where('name', 'like', '%customer support%')
+                  ->orWhere('name', 'like', '%customer success%')
+                  ->orWhere('name', 'like', '%cst%');
+            });
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($visibleUserIds !== null) {
+            $query->whereIn('id', $visibleUserIds);
+        }
+
+        return $query->orderBy('name')->get(['id', 'name']);
+    }
+
+    private function paymentCollectionCstExecutives()
+    {
+        $companyId = $this->visibility->companyIdFor();
+        $visibleUserIds = $this->visibility->visibleUserIds();
+
+        $query = User::query()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereHas('roles.department', function ($dq) {
+                    $dq->whereIn(DB::raw('LOWER(name)'), [
+                        'customer support',
+                        'customer support team',
+                        'customer success',
+                        'customer success team',
+                        'cst',
+                        'support',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'customer_support',
+                        'customer_support_team',
+                        'customer_success',
+                        'customer_success_team',
+                        'cst',
+                        'support',
+                    ])
+                    ->orWhere('id', 5);
+                })
+                ->orWhereHas('employeeOnboarding', function ($q) {
+                    $q->where('department_id', 5);
+                })
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereIn(DB::raw('LOWER(name)'), [
                         'customer_support_team_tl',
                         'customer_support_team_executive',
                         'senior_customer_success_team_executive',
+                        'senior_customer_success_executive',
+                        'senior_success_executive',
+                        'senior_customer_support_executive',
+                        'senior_support_executive',
+                        'senior_cst_executive',
+                        'customer_success_executive',
+                        'cst_executive',
+                        'cst_tl',
+                    ])
+                    ->orWhereIn(DB::raw('LOWER(REPLACE(name, " ", "_"))'), [
+                        'customer_support_team_tl',
+                        'customer_support_team_executive',
+                        'senior_customer_success_team_executive',
+                        'senior_customer_success_executive',
+                        'senior_success_executive',
+                        'senior_customer_support_executive',
+                        'senior_support_executive',
+                        'senior_cst_executive',
                         'customer_success_executive',
                         'cst_executive',
                         'cst_tl',

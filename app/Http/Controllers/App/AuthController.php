@@ -170,22 +170,24 @@ class AuthController extends Controller
 
         RateLimiter::clear($this->throttleKey($request));
 
+        if ($user->company_id && $user->company) {
+            $user->company->syncExpiryState();
+            $user->company->refresh();
+            $user->refresh();
+
+            if ($user->company->company_status !== 'active') {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Your company subscription has expired or is inactive. Please contact the administrator.',
+                ], 403);
+            }
+        }
+
         if (! $user->is_active) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Your account has been deactivated. Please contact your administrator.',
             ], 403);
-        }
-
-        if ($user->company_id && $user->company) {
-            $user->company->syncExpiryState();
-            $user->company->refresh();
-            if ($user->company->company_status !== 'active') {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Your company account is inactive. Please contact the main administrator.',
-                ], 403);
-            }
         }
 
         $user->update([

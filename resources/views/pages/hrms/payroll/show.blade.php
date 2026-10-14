@@ -133,6 +133,9 @@
                                 <td><span style="font-weight:700;color:#0f172a;">{{ number_format((float) $item->days_attended, 1) }}</span> <span style="font-size:11px;color:#94a3b8;">/ {{ (int)$item->working_days }}</span></td>
                                 <td>
                                     <span style="color:#166534;font-weight:700;">{{ number_format((float) $item->leave_days, 1) }}</span> Leave / 
+                                    @if((float) ($item->timesheet_lop_days ?? 0) > 0)
+                                        <span style="color:#ea580c;font-weight:700;" title="Timesheet LOP">{{ number_format((float) $item->timesheet_lop_days, 1) }} TS / </span>
+                                    @endif
                                     <span style="color:#b91c1c;font-weight:700;">{{ number_format((float) $item->lop_days, 1) }}</span> LOP
                                 </td>
                                 <td><span style="font-weight:800;color:#0284c7;">{{ number_format((float) $item->payable_days, 1) }}</span> Days</td>

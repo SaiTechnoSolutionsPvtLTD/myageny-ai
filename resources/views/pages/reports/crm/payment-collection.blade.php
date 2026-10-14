@@ -483,6 +483,7 @@
         request()->filled('customer_id')
         || request()->filled('company_name')
         || request()->filled('sales_executive_id')
+        || request()->filled('cst_executive_id')
         || request()->filled('payment_mode')
         || request()->filled('branch_id')
         || request()->filled('collection_type')
@@ -757,6 +758,16 @@
                             <option value="">All Sales Executives</option>
                             @foreach($salesExecutives as $exec)
                                 <option value="{{ $exec->id }}" @selected((string) request('sales_executive_id', request('user_id')) === (string) $exec->id)>{{ $exec->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="crm-pay-field">
+                        <label class="crm-pay-label" for="cst_executive_id">CST Executive</label>
+                        <select id="cst_executive_id" name="cst_executive_id" class="crm-pay-select select2">
+                            <option value="">All CST Executives</option>
+                            @foreach($cstExecutives as $cstExec)
+                                <option value="{{ $cstExec->id }}" @selected((string) request('cst_executive_id') === (string) $cstExec->id)>{{ $cstExec->name }}</option>
                             @endforeach
                         </select>
                     </div>

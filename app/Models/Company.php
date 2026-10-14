@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
+use App\Models\EmployeeOnboarding;
 
 class Company extends Model
 {
@@ -85,6 +86,16 @@ class Company extends Model
         return (int) $this->number_of_accounts;
     }
 
+    public function hasReachedUserLimit(): bool
+    {
+        return $this->user_limit > 0 && $this->activeUsers()->count() >= $this->user_limit;
+    }
+
+    public function remainingUserSlots(): int
+    {
+        return max(0, $this->user_limit - $this->activeUsers()->count());
+    }
+
     public function getExpiryStatusAttribute(): string
     {
         if (! $this->expiry_date) {
@@ -94,34 +105,103 @@ class Company extends Model
         return $this->isExpired() ? 'Expired' : 'Active';
     }
 
-    public function syncExpiryState(bool $force = false): bool
+    public function isExpired(): bool
     {
-        if (! $this->expiry_date) {
-            return false;
-        }
+        return $this->expiry_date ? $this->expiry_date->endOfDay()->isPast() : false;
+    }
 
-        if (! $force && ! $this->expiry_date->endOfDay()->isPast()) {
-            return false;
-        }
-
+    /**
+     * Activate the company, all its users, branches, and employees.
+     */
+    public function activateCompanyAndUsers(): void
+    {
         DB::transaction(function () {
-            $this->forceFill(['company_status' => 'inactive'])->saveQuietly();
-
             $now = now();
 
-            $this->users()
+            if ($this->company_status !== 'active') {
+                $this->forceFill(['company_status' => 'active'])->saveQuietly();
+            }
+
+            $this->users()->update([
+                'is_active' => true,
+                'user_status' => 'active',
+                'updated_at' => $now,
+            ]);
+
+            $this->branches()->update([
+                'is_active' => true,
+                'updated_at' => $now,
+            ]);
+
+            EmployeeOnboarding::where('company_id', $this->id)
+                ->where('status', '!=', EmployeeOnboarding::STATUS_RESIGNED)
                 ->update([
-                    'is_active' => false,
-                    'user_status' => 'inactive',
+                    'status' => EmployeeOnboarding::STATUS_ACTIVE,
                     'updated_at' => $now,
                 ]);
         });
-
-        return true;
     }
 
-    public function isExpired(): bool
+    /**
+     * Deactivate the company, all its users, branches, and employees.
+     */
+    public function deactivateCompanyAndUsers(): void
     {
-        return $this->expiry_date?->endOfDay()->isPast() ?? false;
+        DB::transaction(function () {
+            $now = now();
+
+            if ($this->company_status !== 'inactive') {
+                $this->forceFill(['company_status' => 'inactive'])->saveQuietly();
+            }
+
+            $this->users()->update([
+                'is_active' => false,
+                'user_status' => 'inactive',
+                'updated_at' => $now,
+            ]);
+
+            $this->branches()->update([
+                'is_active' => false,
+                'updated_at' => $now,
+            ]);
+
+            EmployeeOnboarding::where('company_id', $this->id)
+                ->where('status', '!=', EmployeeOnboarding::STATUS_RESIGNED)
+                ->update([
+                    'status' => EmployeeOnboarding::STATUS_INACTIVE,
+                    'updated_at' => $now,
+                ]);
+        });
+    }
+
+    /**
+     * Synchronize company and user status based on expiry date and company status.
+     */
+    public function syncExpiryState(bool $force = false): bool
+    {
+        $isExpired = $this->isExpired();
+        $isInactive = $this->company_status === 'inactive';
+
+        // If company is expired or inactive, deactivate all users
+        if ($isExpired || $isInactive) {
+            $hasActiveUsers = $this->users()->where(function ($q) {
+                $q->where('is_active', true)->orWhere('user_status', 'active');
+            })->exists();
+
+            if ($hasActiveUsers || ($isExpired && $this->company_status !== 'inactive') || $force) {
+                $this->deactivateCompanyAndUsers();
+                return true;
+            }
+
+            return false;
+        }
+
+        // If company is active and not expired, but force is requested (e.g. extension)
+        if (! $isExpired && $this->company_status === 'active' && $force) {
+            $this->activateCompanyAndUsers();
+            return true;
+        }
+
+        return false;
     }
 }

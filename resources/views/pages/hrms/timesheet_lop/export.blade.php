@@ -33,8 +33,8 @@
 <body>
     <table>
         <tr>
-            <th colspan="7" class="header-title">
-                Timesheet LOP Report ({{ $selectedFromDate->format('d M Y') }} to {{ $selectedToDate->format('d M Y') }})
+            <th colspan="8" class="header-title">
+                Timesheet &amp; Day Closing LOP Report ({{ $selectedFromDate->format('d M Y') }} to {{ $selectedToDate->format('d M Y') }})
             </th>
         </tr>
         <tr>
@@ -43,8 +43,8 @@
             <th>Department</th>
             <th>Designation</th>
             <th class="text-center">Present Days</th>
-            <th class="text-center">Timesheet Submitted Days</th>
-            <th class="text-center">Missing Timesheet Days</th>
+            <th class="text-center">Timesheet / Day Closing Submitted</th>
+            <th class="text-center">Missing Days</th>
             <th class="text-center">Timesheet LOP Days</th>
         </tr>
         @foreach($rows as $row)

@@ -79,6 +79,21 @@ class OvpModuleController extends Controller
         if ($request->filled('company_id')) {
             $query->where('company_id', $request->company_id);
         }
+        if ($request->filled('lead_id')) {
+            $query->where('lead_id', $request->lead_id);
+        }
+        if ($request->filled('customer')) {
+            $cust = $request->customer;
+            $query->where(function($q) use ($cust) {
+                $q->where('company_name', 'like', "%{$cust}%")
+                  ->orWhere('client_name', 'like', "%{$cust}%")
+                  ->orWhereHas('lead', function($lq) use ($cust) {
+                      $lq->where('company_name', 'like', "%{$cust}%")
+                        ->orWhere('contact_name', 'like', "%{$cust}%")
+                        ->orWhere('mobile_number', 'like', "%{$cust}%");
+                  });
+            });
+        }
         if ($request->filled('department_id')) {
             $query->where('department_id', $request->department_id);
         }
@@ -162,8 +177,51 @@ class OvpModuleController extends Controller
 
         $products = \App\Models\Product::orderBy('product_name')->get(['id', 'product_name']);
         $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
-        $users = \App\Models\User::where('user_status', 'active')->orderBy('name')->get(['id', 'name']);
         $companies = \App\Models\Company::orderBy('company_name')->get(['id', 'company_name']);
+
+        // Customers list for customer filter (leads with production initiations or converted products)
+        $customersQuery = \App\Models\Lead::query();
+        if (!$user->hasAdminLikeRole() && $user->company_id) {
+            $customersQuery->where('company_id', $user->company_id);
+        }
+        $customers = $customersQuery
+            ->where(function ($q) {
+                $q->whereIn('id', function ($sub) {
+                    $sub->select('lead_id')->from('production_initiations')->whereNotNull('lead_id');
+                })->orWhereHas('products', function ($pq) {
+                    $pq->where('product_status', 'converted');
+                });
+            })
+            ->select('id', 'company_name', 'contact_name', 'mobile_number')
+            ->orderBy('company_name')
+            ->orderBy('contact_name')
+            ->get();
+
+        // CST Executives & allocated users for Executive filter dropdown
+        $allocatedUserIds = ProductionInitiation::whereNotNull('ovp_allocated_to')->distinct()->pluck('ovp_allocated_to');
+        $cstUsersQuery = User::where('user_status', 'active')
+            ->where(function($query) use ($allocatedUserIds) {
+                $query->whereIn('id', $allocatedUserIds)
+                      ->orWhereHas('roles.department', function($q) {
+                          $q->where('name', 'like', '%customer support%')
+                            ->orWhere('name', 'like', '%customer success%')
+                            ->orWhere('id', 5);
+                      })
+                      ->orWhereHas('employeeOnboarding', function($q) {
+                          $q->where('department_id', 5);
+                      })
+                      ->orWhereHas('roles', function($q) {
+                          $q->where('name', 'like', '%support%')
+                            ->orWhere('name', 'like', '%cst%')
+                            ->orWhere('name', 'like', '%success%');
+                      });
+            });
+
+        if (!$user->hasAdminLikeRole() && $user->company_id) {
+            $cstUsersQuery->where('company_id', $user->company_id);
+        }
+
+        $users = $cstUsersQuery->orderBy('name')->get(['id', 'name']);
 
         return view('pages.ovp_module.index', [
             'cards' => $buckets,
@@ -175,6 +233,7 @@ class OvpModuleController extends Controller
             'products' => $products,
             'departments' => $departments,
             'users' => $users,
+            'customers' => $customers,
             'companies' => $companies,
         ]);
     }
@@ -252,10 +311,47 @@ class OvpModuleController extends Controller
 
         if ($validated['decision'] === 'approval') {
             try {
-                $recipientEmail = 'tamilarasan@saitechnosolutions.net';
-                // $recipientEmail = 'kesavaraj@saitechnosolutions.net';
-                $productionInitiation->loadMissing(['lead.branch', 'leadProduct', 'department']);
+                $productionInitiation->loadMissing(['lead.branch', 'lead.customerSupportTl', 'leadProduct', 'department', 'ovpAllocatedTo']);
                 $reviewedBy = auth()->user();
+
+                $cstExecutive = $productionInitiation->ovpAllocatedTo
+                    ?: ($productionInitiation->lead?->customerSupportExecutive ?: $reviewedBy);
+
+                $recipientEmails = [];
+                $seniorNames = [];
+                if ($cstExecutive) {
+                    // 1. Mapped managers (seniors) from user_mappings
+                    $mappedManagers = $cstExecutive->mappedManagers()->where('is_active', true)->get();
+                    foreach ($mappedManagers as $manager) {
+                        if (!empty($manager->email) && filter_var($manager->email, FILTER_VALIDATE_EMAIL)) {
+                            $recipientEmails[] = $manager->email;
+                            $seniorNames[] = $manager->name;
+                        }
+                    }
+
+                    // 2. Lead Customer Support TL
+                    if ($productionInitiation->lead?->customerSupportTl?->email) {
+                        $tlEmail = $productionInitiation->lead->customerSupportTl->email;
+                        if (filter_var($tlEmail, FILTER_VALIDATE_EMAIL)) {
+                            $recipientEmails[] = $tlEmail;
+                            $seniorNames[] = $productionInitiation->lead->customerSupportTl->name;
+                        }
+                    }
+                }
+
+                $recipientEmails = array_values(array_unique($recipientEmails));
+                $seniorPersonName = !empty($seniorNames) ? implode(' / ', array_unique($seniorNames)) : null;
+
+                if (empty($recipientEmails)) {
+                    $primaryEmail = 'tamilarasan@saitechnosolutions.net';
+                    $ccEmails = [];
+                } else {
+                    $primaryEmail = array_shift($recipientEmails);
+                    $ccEmails = $recipientEmails;
+                    if ($primaryEmail !== 'tamilarasan@saitechnosolutions.net' && !in_array('tamilarasan@saitechnosolutions.net', $ccEmails, true)) {
+                        $ccEmails[] = 'tamilarasan@saitechnosolutions.net';
+                    }
+                }
 
                 Mail::send('emails.ovp_approved', [
                     'initiation' => $productionInitiation,
@@ -263,9 +359,13 @@ class OvpModuleController extends Controller
                     'leadProduct' => $productionInitiation->leadProduct,
                     'departmentName' => $productionInitiation->department?->name ?? 'Production',
                     'reviewedBy' => $reviewedBy,
-                ], function ($message) use ($recipientEmail, $productionInitiation) {
-                    $message->to($recipientEmail, 'Tamilarasan')
+                    'seniorPersonName' => $seniorPersonName,
+                ], function ($message) use ($primaryEmail, $ccEmails, $productionInitiation) {
+                    $message->to($primaryEmail)
                         ->subject('OVP Approved - Lead #' . $productionInitiation->lead_id . ' (' . ($productionInitiation->product_name ?: 'Product') . ')');
+                    if (!empty($ccEmails)) {
+                        $message->cc($ccEmails);
+                    }
                 });
             } catch (\Throwable $exception) {
                 \Illuminate\Support\Facades\Log::error('Failed to send OVP approval email.', [
@@ -363,9 +463,22 @@ class OvpModuleController extends Controller
 
     private function isTlScopedUser(?User $user): bool
     {
-        return $user
-            && ! $user->hasAdminLikeRole()
-            && ($this->hasAnyRoleKey($user, self::OVP_TL_ROLE_KEYS) || $user->hasTlLikeRole());
+        if (! $user || $user->hasAdminLikeRole()) {
+            return false;
+        }
+
+        if ($this->hasAnyRoleKey($user, self::OVP_TL_ROLE_KEYS) || $user->hasTlLikeRole()) {
+            return true;
+        }
+
+        if ($user->managedUsers()->exists()) {
+            return true;
+        }
+
+        return collect($user->roleKeys()->all())->contains(function ($k) {
+            return (str_contains($k, 'senior') || str_contains($k, 'tl') || str_contains($k, 'lead') || str_contains($k, 'manager'))
+                && (str_contains($k, 'support') || str_contains($k, 'success') || str_contains($k, 'cst'));
+        });
     }
 
     private function isExecutiveScopedUser(?User $user): bool

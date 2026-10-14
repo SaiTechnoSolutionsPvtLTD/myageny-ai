@@ -84,6 +84,41 @@ class CstDailyClosingController extends Controller
     }
 
     /**
+     * Get team user IDs for a Senior CST Executive or CST TL.
+     * Includes descendants from UserMapping, leads allocated under TL, and the user themselves.
+     */
+    private function getCstTeamUserIds(User $user): array
+    {
+        $subordinateIds = $this->visibility->customerSupportUserIds($user);
+        $leadExecIds = Lead::where('customer_support_tl_id', $user->id)
+            ->orWhereIn('customer_support_tl_id', $subordinateIds)
+            ->whereNotNull('customer_support_executive_id')
+            ->pluck('customer_support_executive_id')
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+        $managedIds = \App\Models\UserMapping::where('manager_id', $user->id)
+            ->pluck('user_id')
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+        return array_values(array_unique(array_filter(array_merge($subordinateIds, $leadExecIds, $managedIds, [$user->id]))));
+    }
+
+    /**
+     * Determine if the user is a Senior CST Executive / TL or has users mapped under them.
+     */
+    private function isSeniorOrTl(User $user, array $teamUserIds): bool
+    {
+        if (count($teamUserIds) > 1) {
+            return true;
+        }
+
+        return $user->hasTlLikeRole() || collect($user->roleKeys()->all())->contains(function ($k) {
+            return str_contains($k, 'senior') || str_contains($k, 'tl') || str_contains($k, 'lead') || str_contains($k, 'manager');
+        });
+    }
+
+    /**
      * Display the CST Department Daily Closing list and KPIs.
      */
     public function index(Request $request): View
@@ -96,20 +131,27 @@ class CstDailyClosingController extends Controller
         $selectedDate = $toDate ?: ($fromDate ?: ($request->input('date') ?: $today));
 
         $canViewAll = $this->canViewAllCst($user);
-        $isAdminLike = $canViewAll;
-        $isTlLike = false;
-
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+        $isAdminLike = $canViewAll;
 
         if ($canViewAll) {
-            $assignableUsers = User::whereIn('id', $supportUserIds)->orderBy('name')->get(['id', 'name']);
+            $visibleUserIds = null;
+            $assignableUsers = User::whereIn('id', $supportUserIds)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
             if ($assignableUsers->isEmpty()) {
                 $assignableUsers = collect([$user]);
             }
             $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         } else {
-            $assignableUsers = $this->visibility->visibleAssignableUsers($user);
+            if ($isTlLike && count($cstTeamUserIds) > 1) {
+                $visibleUserIds = $cstTeamUserIds;
+                $assignableUsers = User::whereIn('id', $cstTeamUserIds)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
+            } else {
+                $visibleUserIds = [$user->id];
+                $assignableUsers = collect([$user]);
+            }
+
             if ($assignableUsers->isEmpty()) {
                 $assignableUsers = collect([$user]);
             }
@@ -211,7 +253,10 @@ class CstDailyClosingController extends Controller
     {
         $user = auth()->user();
         $canViewAll = $this->canViewAllCst($user);
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+
+        $visibleUserIds = $canViewAll ? null : (($isTlLike && count($cstTeamUserIds) > 1) ? $cstTeamUserIds : [$user->id]);
 
         $fromDate = $request->input('from_date') ?: $request->input('date_from');
         $toDate = $request->input('to_date') ?: $request->input('date_to');
@@ -609,139 +654,38 @@ class CstDailyClosingController extends Controller
         $weekEnd    = (clone $parsedDate)->endOfWeek();
 
         // ---------------------------------------------------------------------------------
-        // 1. Monthly Target :
-        // a) CST Allocated Leads Current Month Prospect Value (hot status)
-        // b) Renewal Product Yes & Current Month Renewal Value
-        // c) Development Received Payment >= 60% of Total Payment -> Remaining Value/Target
+        // 1. Monthly Prospect (from Dashboard CST Prospects - Renewals & Development):
         // ---------------------------------------------------------------------------------
-        $prospectQuery = LeadProduct::query()
-            ->whereRaw('LOWER(product_status) = ?', ['hot'])
-            ->whereMonth('closure_date', $monthStart->month)
-            ->whereYear('closure_date', $monthStart->year);
+        $targetMonthStr = $monthStart->format('Y-m');
+        $dashRequest = new Request(['month' => $targetMonthStr]);
+        $cstProspectItems = app(\App\Http\Controllers\SuperAdminDashboardController::class)->getCstProspectItems($dashRequest);
+
+        $canViewAll = $currentUser ? $this->canViewAllCst($currentUser) : true;
+
+        if ($branchId) {
+            $cstProspectItems = $cstProspectItems->filter(fn($it) => ($it['branch_id'] ?? null) == $branchId);
+        }
 
         if ($userId) {
-            $prospectQuery->whereHas('lead', function($lq) use ($userId) {
-                $lq->where('customer_support_executive_id', $userId)
-                   ->orWhere('customer_support_tl_id', $userId);
-            });
-        } elseif (!empty($supportUserIds)) {
-            $prospectQuery->whereHas('lead', function($lq) use ($supportUserIds) {
-                $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                   ->orWhereIn('customer_support_tl_id', $supportUserIds);
-            });
-        }
-        $prospectVal = (float) $prospectQuery->sum('total_price');
-
-        // Renewal Product Yes & Current month renewal
-        $renewalQuery = ProductionInitiation::query()
-            ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
-            ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
-            ->join('products', 'products.id', '=', 'production_initiations.product_id')
-            ->where(function($q) {
-                $q->where('products.is_this_renewal_product', true)
-                  ->orWhere('products.count_wise_report', true);
-            });
-
-        if ($userId) {
-            $renewalQuery->where(function($q) use ($userId) {
-                $q->where('leads.customer_support_executive_id', $userId)
-                  ->orWhere('leads.customer_support_tl_id', $userId);
-            });
-        } elseif (!empty($supportUserIds)) {
-            $renewalQuery->where(function($q) use ($supportUserIds) {
-                $q->whereIn('leads.customer_support_executive_id', $supportUserIds)
-                  ->orWhereIn('leads.customer_support_tl_id', $supportUserIds);
-            });
+            $cstProspectItems = $cstProspectItems->filter(fn($it) => ($it['cst_executive_id'] ?? null) == $userId || ($it['cst_tl_id'] ?? null) == $userId);
+        } elseif (!$canViewAll && !empty($supportUserIds)) {
+            $cstProspectItems = $cstProspectItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $supportUserIds) || in_array($it['cst_tl_id'] ?? null, $supportUserIds));
         }
 
-        $renewalInitiations = $renewalQuery->select([
-            'production_initiations.id',
-            'production_initiations.project_delivery_date',
-            'production_initiations.custom_form_data',
-            'lead_products.total_price',
-            'lead_products.closure_date',
-        ])->get();
+        $computedMonthlyProspect = (float) $cstProspectItems->sum('deal_value');
 
-        $renewalVal = 0.0;
-        foreach ($renewalInitiations as $ri) {
-            $rDateStr = $this->extractRenewalDate($ri);
-            if ($rDateStr) {
-                $rDate = Carbon::parse($rDateStr);
-                if ($rDate->month === $monthStart->month && $rDate->year === $monthStart->year) {
-                    $renewalVal += (float) $ri->total_price;
-                }
-            } elseif ($ri->closure_date) {
-                $cDate = Carbon::parse($ri->closure_date);
-                if ($cDate->month === $monthStart->month && $cDate->year === $monthStart->year) {
-                    $renewalVal += (float) $ri->total_price;
-                }
-            }
-        }
-
-        // Direct renewal lead products (not through production_initiations)
-        $directRenewalQuery = LeadProduct::query()
-            ->whereMonth('closure_date', $monthStart->month)
-            ->whereYear('closure_date', $monthStart->year)
-            ->whereHas('product', fn($q) => $q->where('is_this_renewal_product', true))
-            ->whereDoesntHave('productionInitiations');
-
-        if ($userId) {
-            $directRenewalQuery->whereHas('lead', function($lq) use ($userId) {
-                $lq->where('customer_support_executive_id', $userId)
-                   ->orWhere('customer_support_tl_id', $userId);
-            });
-        } elseif (!empty($supportUserIds)) {
-            $directRenewalQuery->whereHas('lead', function($lq) use ($supportUserIds) {
-                $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                   ->orWhereIn('customer_support_tl_id', $supportUserIds);
-            });
-        }
-        $renewalVal += (float) $directRenewalQuery->sum('total_price');
-
-        // Development received payment >= 60% of total payment -> map that value
-        $devQuery = ProductionInitiation::query()
-            ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
-            ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
-            ->where('production_initiations.department_id', 1); // 1 = Development
-
-        if ($userId) {
-            $devQuery->where(function($q) use ($userId) {
-                $q->where('leads.customer_support_executive_id', $userId)
-                  ->orWhere('leads.customer_support_tl_id', $userId);
-            });
-        } elseif (!empty($supportUserIds)) {
-            $devQuery->where(function($q) use ($supportUserIds) {
-                $q->whereIn('leads.customer_support_executive_id', $supportUserIds)
-                  ->orWhereIn('leads.customer_support_tl_id', $supportUserIds);
-            });
-        }
-
-        $devInitiations = $devQuery->select([
-            'lead_products.total_price',
-            'lead_products.amount_paid',
-        ])->get();
-
-        $devVal = 0.0;
-        foreach ($devInitiations as $di) {
-            $tPrice = (float) $di->total_price;
-            $aPaid = (float) $di->amount_paid;
-            if ($tPrice > 0 && ($aPaid / $tPrice) >= 0.60) {
-                $pending = max(0, $tPrice - $aPaid);
-                $devVal += ($pending > 0 ? $pending : $tPrice);
-            }
-        }
-
-        $computedMonthlyTarget = $prospectVal + $renewalVal + $devVal;
-
-        if ($computedMonthlyTarget <= 0 && $userId) {
-            $targetMonthStr = $monthStart->format('Y-m');
+        if ($computedMonthlyProspect <= 0 && $userId) {
             $explicitTarget = (float) (SalesTarget::where('user_id', $userId)->where('target_month', $targetMonthStr)->value('target_amount')
                 ?? SalesTarget::where('user_id', $userId)->value('target_amount')
                 ?? 0);
             $monthlyTarget = $explicitTarget;
         } else {
-            $monthlyTarget = $computedMonthlyTarget;
+            $monthlyTarget = $computedMonthlyProspect;
         }
+
+        $renewalVal = (float) $cstProspectItems->where('source_type', 'renewal')->sum('deal_value');
+        $devVal     = (float) $cstProspectItems->where('source_type', 'development')->sum('deal_value');
+        $prospectVal = $monthlyTarget;
 
         // 2. Today's Revenue : Today Received Value
         $todayPaymentQuery = LeadProductPayment::query();
@@ -778,15 +722,9 @@ class CstDailyClosingController extends Controller
         }
 
         if ($userId) {
-            $achievedPaymentQuery->where(function($q) use ($userId) {
-                $q->where('recorded_by', $userId)
-                  ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $userId)->orWhere('customer_support_tl_id', $userId));
-            });
+            $achievedPaymentQuery->where('recorded_by', $userId);
         } elseif (!empty($supportUserIds)) {
-            $achievedPaymentQuery->where(function($q) use ($supportUserIds) {
-                $q->whereIn('recorded_by', $supportUserIds)
-                  ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-            });
+            $achievedPaymentQuery->whereIn('recorded_by', $supportUserIds);
         }
         $tillNowAchieved = (float) $achievedPaymentQuery->sum('amount');
 
@@ -1027,8 +965,11 @@ class CstDailyClosingController extends Controller
     {
         $user = auth()->user();
         $canViewAll = $this->canViewAllCst($user);
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+
+        $visibleUserIds = $canViewAll ? null : (($isTlLike && count($cstTeamUserIds) > 1) ? $cstTeamUserIds : [$user->id]);
 
         $metric = trim((string) $request->input('metric', ''));
         $fromDate = $request->input('from_date') ?: $request->input('date_from');
@@ -1089,7 +1030,7 @@ class CstDailyClosingController extends Controller
                 break;
 
             case 'till_now_achieved':
-                $title = "Month-to-Date Achieved Revenue Collection";
+                $title = "Month-to-Date Collections (CST Team Collected)";
                 $q = LeadProductPayment::with(['lead.branch', 'leadProduct.product', 'recordedBy'])
                     ->whereDate('payment_date', '>=', $monthStart->toDateString())
                     ->whereDate('payment_date', '<=', $parsedDate->toDateString());
@@ -1097,15 +1038,9 @@ class CstDailyClosingController extends Controller
                     $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
                 }
                 if ($targetUserId) {
-                    $q->where(function($sub) use ($targetUserId) {
-                        $sub->where('recorded_by', $targetUserId)
-                            ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                    });
+                    $q->where('recorded_by', $targetUserId);
                 } elseif (!empty($supportUserIds)) {
-                    $q->where(function($sub) use ($supportUserIds) {
-                        $sub->whereIn('recorded_by', $supportUserIds)
-                            ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-                    });
+                    $q->whereIn('recorded_by', $supportUserIds);
                 }
                 $items = $q->latest('payment_date')->latest('id')->get();
                 foreach ($items as $p) {
@@ -1122,78 +1057,31 @@ class CstDailyClosingController extends Controller
                 break;
 
             case 'monthly_target':
-                $title = "Monthly Target Breakdown";
-                // 1. Hot prospect lead products
-                $hotProds = LeadProduct::with(['lead.branch', 'product'])
-                    ->whereRaw('LOWER(product_status) = ?', ['hot'])
-                    ->whereMonth('closure_date', $monthStart->month)
-                    ->whereYear('closure_date', $monthStart->year);
-                if ($targetUserId) {
-                    $hotProds->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                } elseif (!empty($supportUserIds)) {
-                    $hotProds->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                $title = "Monthly Prospect Breakdown";
+                $targetMonthStr = $monthStart->format('Y-m');
+                $dashRequest = new Request(['month' => $targetMonthStr]);
+                $cstItems = app(\App\Http\Controllers\SuperAdminDashboardController::class)->getCstProspectItems($dashRequest);
+
+                if ($branchId) {
+                    $cstItems = $cstItems->filter(fn($it) => ($it['branch_id'] ?? null) == $branchId);
                 }
-                foreach ($hotProds->get() as $hp) {
+
+                if ($targetUserId) {
+                    $cstItems = $cstItems->filter(fn($it) => ($it['cst_executive_id'] ?? null) == $targetUserId || ($it['cst_tl_id'] ?? null) == $targetUserId);
+                } elseif (!$canViewAll && !empty($supportUserIds)) {
+                    $cstItems = $cstItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $supportUserIds) || in_array($it['cst_tl_id'] ?? null, $supportUserIds));
+                }
+
+                foreach ($cstItems as $item) {
                     $records[] = [
-                        'account_name' => $hp->lead?->company_name ?: ($hp->lead?->name ?: 'Lead #' . $hp->lead_id),
-                        'branch_name'  => $hp->lead?->branch?->name ?: '—',
-                        'product_name' => $hp->product?->name ?: 'Prospect Deal',
-                        'amount'       => (float) $hp->total_price,
-                        'date'         => $hp->closure_date ? Carbon::parse($hp->closure_date)->format('d M Y') : '—',
-                        'mode'         => 'Hot Prospect',
-                        'recorded_by'  => 'CST Target',
+                        'account_name' => $item['company_name'] ?: ($item['customer_name'] ?: 'Lead #' . ($item['lead_id'] ?? '')),
+                        'branch_name'  => $item['branch_name'] ?: '—',
+                        'product_name' => $item['product_name'] ?: 'CST Prospect',
+                        'amount'       => (float) $item['deal_value'],
+                        'date'         => $item['closure_date'] ?: '—',
+                        'mode'         => $item['status'] ?? ($item['source_type'] === 'renewal' ? 'Renewal' : 'Development'),
+                        'recorded_by'  => $item['cst_person_name'] !== '-' ? $item['cst_person_name'] : ($item['sales_person_name'] ?? 'CST Team'),
                     ];
-                }
-
-                // 2. Renewal Products
-                $renewalQuery = ProductionInitiation::with(['lead.branch', 'product', 'leadProduct'])
-                    ->whereHas('product', fn($q) => $q->where('is_this_renewal_product', true)->orWhere('count_wise_report', true));
-                if ($targetUserId) {
-                    $renewalQuery->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                } elseif (!empty($supportUserIds)) {
-                    $renewalQuery->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-                }
-                foreach ($renewalQuery->get() as $ri) {
-                    $rDateStr = $this->extractRenewalDate($ri) ?: ($ri->leadProduct?->closure_date ? Carbon::parse($ri->leadProduct->closure_date)->toDateString() : null);
-                    if ($rDateStr) {
-                        $rDate = Carbon::parse($rDateStr);
-                        if ($rDate->month === $monthStart->month && $rDate->year === $monthStart->year) {
-                            $records[] = [
-                                'account_name' => $ri->lead?->company_name ?: ($ri->lead?->name ?: 'Lead #' . $ri->lead_id),
-                                'branch_name'  => $ri->lead?->branch?->name ?: '—',
-                                'product_name' => $ri->product?->name ?: 'Renewal Product',
-                                'amount'       => (float) ($ri->leadProduct?->total_price ?? 0),
-                                'date'         => $rDate->format('d M Y'),
-                                'mode'         => 'Renewal Target',
-                                'recorded_by'  => 'Renewal',
-                            ];
-                        }
-                    }
-                }
-
-                // 3. Dev > 60%
-                $devQuery = ProductionInitiation::with(['lead.branch', 'leadProduct'])
-                    ->where('department_id', 1);
-                if ($targetUserId) {
-                    $devQuery->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                } elseif (!empty($supportUserIds)) {
-                    $devQuery->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-                }
-                foreach ($devQuery->get() as $di) {
-                    $tPrice = (float) ($di->leadProduct?->total_price ?? 0);
-                    $aPaid = (float) ($di->leadProduct?->amount_paid ?? 0);
-                    if ($tPrice > 0 && ($aPaid / $tPrice) >= 0.60) {
-                        $pending = max(0, $tPrice - $aPaid);
-                        $records[] = [
-                            'account_name' => $di->lead?->company_name ?: ($di->lead?->name ?: 'Lead #' . $di->lead_id),
-                            'branch_name'  => $di->lead?->branch?->name ?: '—',
-                            'product_name' => $di->product_name ?: 'Development Product',
-                            'amount'       => ($pending > 0 ? $pending : $tPrice),
-                            'date'         => $monthStart->format('M Y'),
-                            'mode'         => 'Dev Target (>60% Paid)',
-                            'recorded_by'  => 'Development',
-                        ];
-                    }
                 }
                 break;
 
@@ -1201,12 +1089,12 @@ class CstDailyClosingController extends Controller
                 $title = "Target vs Achieved Overview";
                 $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchId);
                 $records[] = [
-                    'account_name' => 'Monthly Target',
+                    'account_name' => 'Monthly Prospect',
                     'branch_name'  => '—',
-                    'product_name' => 'Committed Target',
+                    'product_name' => 'Hot Prospects + Renewals + Dev Target',
                     'amount'       => (float) $stats['monthly_target'],
                     'date'         => $parsedDate->format('M Y'),
-                    'mode'         => 'Monthly Target',
+                    'mode'         => 'Monthly Prospect',
                     'recorded_by'  => 'CST Target',
                 ];
                 $records[] = [

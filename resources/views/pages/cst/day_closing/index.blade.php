@@ -164,22 +164,28 @@
                             Viewing Company-wide CST Team Metrics (All Executives)
                         @endif
                     @else
-                        Viewing Your Allocated Accounts &amp; Metrics (<strong style="color:#0f172a;">{{ auth()->user()->name }}</strong>)
+                        @if($targetUser && $targetUser->id !== auth()->id())
+                            Viewing Team Executive: <strong style="color:#0f172a;">{{ $targetUser->name }}</strong>
+                        @elseif($isTlLike && count($assignableUsers) > 1)
+                            Viewing Your Team Metrics ({{ count($assignableUsers) }} Members)
+                        @else
+                            Viewing Your Allocated Accounts &amp; Metrics (<strong style="color:#0f172a;">{{ auth()->user()->name }}</strong>)
+                        @endif
                     @endif
                 </div>
             </div>
 
             <div class="sdc-kpi-grid">
-                <!-- 1. Monthly Target (Current Month Prospect Value default) -->
-                <div class="sdc-kpi-card highlight sdc-kpi-clickable" data-open-kpi-details data-metric="monthly_target" title="Click to view Monthly Target details">
+                <!-- 1. Monthly Prospect (Current Month Prospect Value default) -->
+                <div class="sdc-kpi-card highlight sdc-kpi-clickable" data-open-kpi-details data-metric="monthly_target" title="Click to view Monthly Prospect details">
                     <div class="sdc-kpi-top">
-                        <span class="sdc-kpi-label">Monthly Target</span>
+                        <span class="sdc-kpi-label">Monthly Prospect</span>
                         <div class="sdc-kpi-icon" style="background:#fff7ed; color:#fe5f04;">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#fe5f04;">₹{{ number_format($kpiStats['monthly_target']) }}</div>
-                    <div class="sdc-kpi-sub">Prospect + Renewals + Dev &gt;60%</div>
+                    <div class="sdc-kpi-sub">Renewals &amp; Development Prospects</div>
                     <div style="font-size:10px; color:#fe5f04; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
                         <span>Click to view details</span>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -211,7 +217,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#2563eb;">₹{{ number_format($kpiStats['till_now_achieved']) }}</div>
-                    <div class="sdc-kpi-sub">Month start to selected date</div>
+                    <div class="sdc-kpi-sub">CST team collected (month start to date)</div>
                     <div style="font-size:10px; color:#2563eb; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
                         <span>Click to view details</span>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -428,8 +434,8 @@
                                 </td>
                                 <td>
                                     <div style="display:flex; flex-wrap:wrap; gap:5px; max-width:320px;">
-                                        <span class="sdc-badge metric" title="Monthly Target" style="background:#fff7ed; color:#c2410c; border-color:#fed7aa;">
-                                            🎯 Target: ₹{{ number_format($closing->monthly_target) }}
+                                        <span class="sdc-badge metric" title="Monthly Prospect" style="background:#fff7ed; color:#c2410c; border-color:#fed7aa;">
+                                            🎯 Prospect: ₹{{ number_format($closing->monthly_target) }}
                                         </span>
                                         <span class="sdc-badge metric" title="Today's Revenue" style="background:#f0fdf4; color:#15803d; border-color:#bbf7d0;">
                                             💰 Today: ₹{{ number_format($closing->today_revenue) }}
@@ -582,7 +588,7 @@
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
                     <div style="background:#fff; border:1px solid #ffedd5; padding:8px 10px; border-radius:8px;">
-                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">Monthly Target</div>
+                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase;">Monthly Prospect</div>
                         <div id="statMonthlyTarget" style="font-size:16px; font-weight:900; color:#fe5f04;">₹0</div>
                     </div>
                     <div style="background:#fff; border:1px solid #ffedd5; padding:8px 10px; border-radius:8px;">
@@ -713,7 +719,7 @@
         <!-- 8 Metric chips -->
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid #e2e8f0;">
             <span class="sdc-badge metric" style="background:#fff7ed; border-color:#fed7aa; color:#c2410c; padding:6px 12px; font-size:12px;">
-                🎯 Target: <strong id="viewMonthlyTarget" style="font-size:13px; margin-left:3px;">₹0</strong>
+                🎯 Prospect: <strong id="viewMonthlyTarget" style="font-size:13px; margin-left:3px;">₹0</strong>
             </span>
             <span class="sdc-badge metric" style="background:#f0fdf4; border-color:#bbf7d0; color:#15803d; padding:6px 12px; font-size:12px;">
                 💰 Today: <strong id="viewTodayRevenue" style="font-size:13px; margin-left:3px;">₹0</strong>

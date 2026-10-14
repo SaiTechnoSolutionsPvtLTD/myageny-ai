@@ -10,6 +10,7 @@ use App\Models\Permission;
 use App\Models\RoleHierarchyMapping;
 use App\Models\Role;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -58,6 +59,10 @@ class CompanyController extends Controller
         $company = DB::transaction(function () use ($request) {
             $data = $request->validated();
 
+            $isExpired = ! empty($data['expiry_date']) && Carbon::parse($data['expiry_date'])->endOfDay()->isPast();
+            $status = ($isExpired || ($data['company_status'] ?? '') === 'inactive') ? 'inactive' : 'active';
+            $isActive = $status === 'active';
+
             $company = Company::create([
                 'company_name' => $data['company_name'],
                 'email' => $data['email'],
@@ -65,7 +70,7 @@ class CompanyController extends Controller
                 'address' => $data['address'],
                 'number_of_accounts' => $data['number_of_accounts'],
                 'expiry_date' => $data['expiry_date'],
-                'company_status' => $data['company_status'],
+                'company_status' => $status,
                 'facebook_client_id' => $data['facebook_client_id'],
                 'facebook_client_secret' => $data['facebook_client_secret'],
                 'show_price_request' => $data['show_price_request'] ?? true,
@@ -82,7 +87,8 @@ class CompanyController extends Controller
                 'email' => $data['super_admin_email'],
                 'password' => Hash::make($data['super_admin_password']),
                 'company_id' => $company->id,
-                'is_active' => true,
+                'is_active' => $isActive,
+                'user_status' => $isActive ? 'active' : 'inactive',
             ]);
 
             $superAdmin->assignRole($companyAdminRole);
@@ -96,14 +102,18 @@ class CompanyController extends Controller
                 'address' => $company->address,
                 'email' => $company->email,
                 'phone' => $company->mobile_number,
-                'is_active' => true,
+                'is_active' => $isActive,
                 'is_default' => true,
             ]);
 
             return $company;
         });
 
-        $company->syncExpiryState();
+        if ($company->isExpired() || $company->company_status === 'inactive') {
+            $company->deactivateCompanyAndUsers();
+        } else {
+            $company->activateCompanyAndUsers();
+        }
 
         return redirect()
             ->route('companies.index')
@@ -128,8 +138,29 @@ class CompanyController extends Controller
     {
         $this->ensureMainSuperAdmin();
 
-        $company->update($request->validated());
-        $company->syncExpiryState();
+        $data = $request->validated();
+
+        $wasExpired = $company->isExpired();
+        $newExpiryDate = ! empty($data['expiry_date']) ? Carbon::parse($data['expiry_date']) : null;
+        $isNowExpired = $newExpiryDate ? $newExpiryDate->endOfDay()->isPast() : false;
+
+        // If the new expiry date has passed, force company_status to inactive
+        if ($isNowExpired) {
+            $data['company_status'] = 'inactive';
+        } elseif ($wasExpired && ! $isNowExpired && $request->input('company_status') !== 'inactive') {
+            // Expiry date extended to a future date from an expired company:
+            // Auto-activate the company
+            $data['company_status'] = 'active';
+        }
+
+        $company->update($data);
+
+        // Sync all users, branches, and employees
+        if ($company->isExpired() || $company->company_status === 'inactive') {
+            $company->deactivateCompanyAndUsers();
+        } else {
+            $company->activateCompanyAndUsers();
+        }
 
         return redirect()
             ->route('companies.show', $company)
