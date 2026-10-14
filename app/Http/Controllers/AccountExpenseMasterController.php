@@ -7,6 +7,7 @@ use App\Models\AccountExpenseSubcategory;
 use App\Models\AccountSupportCategory;
 use App\Models\AccountSupportSubcategory;
 use App\Models\AdAccountMaster;
+use App\Models\ItemMaster;
 use App\Models\VendorMaster;
 use Illuminate\Http\Request;
 
@@ -26,6 +27,7 @@ class AccountExpenseMasterController extends Controller
         $allVendors = VendorMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allSupportCategories = AccountSupportCategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allSupportSubcategories = AccountSupportSubcategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allItems = ItemMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
 
         $categoryStats = [
             'total'    => $allCategories->count(),
@@ -63,13 +65,20 @@ class AccountExpenseMasterController extends Controller
             'inactive' => $allVendors->where('status', 'inactive')->count(),
         ];
 
+        $itemStats = [
+            'total'    => $allItems->count(),
+            'active'   => $allItems->where('status', 'active')->count(),
+            'inactive' => $allItems->where('status', 'inactive')->count(),
+        ];
+
         return view('pages.accounts.master.index', compact(
             'categoryStats',
             'subcategoryStats',
             'supportCategoryStats',
             'supportSubcategoryStats',
             'adAccountStats',
-            'vendorStats'
+            'vendorStats',
+            'itemStats'
         ));
     }
 

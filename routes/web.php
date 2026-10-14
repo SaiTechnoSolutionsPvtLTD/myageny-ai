@@ -357,6 +357,15 @@ Route::middleware(['auth'])->group(function () {
                 Route::patch('/{vendor}/toggle-status', [App\Http\Controllers\VendorMasterController::class, 'toggleStatus'])->name('toggle-status');
                 Route::delete('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'destroy'])->name('destroy');
             });
+
+            // Items Master CRUD
+            Route::prefix('items')->name('items.')->group(function () {
+                Route::get('/', [App\Http\Controllers\ItemMasterController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\ItemMasterController::class, 'store'])->name('store');
+                Route::put('/{item}', [App\Http\Controllers\ItemMasterController::class, 'update'])->name('update');
+                Route::patch('/{item}/toggle-status', [App\Http\Controllers\ItemMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{item}', [App\Http\Controllers\ItemMasterController::class, 'destroy'])->name('destroy');
+            });
         });
 
         // Accounts Expenses CRUD
