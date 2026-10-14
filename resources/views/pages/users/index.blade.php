@@ -53,12 +53,12 @@
 @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
 /* ── Stats Row ── */
-.usr-stats-row { 
-    display: grid; 
-    grid-template-columns: repeat(4, 1fr); 
-    gap: 16px; 
+.usr-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
     margin-bottom: 4px;
-    animation: fadeUp .35s ease both; 
+    animation: fadeUp .35s ease both;
 }
 @media (max-width: 1200px) {
     .usr-stats-row { grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -66,32 +66,32 @@
 @media (max-width: 640px) {
     .usr-stats-row { grid-template-columns: 1fr; gap: 10px; }
 }
-.usr-stat { 
-    background: #fff; 
-    border: 1px solid #e1dee3; 
-    border-radius: 14px; 
-    padding: 16px 18px; 
-    display: flex; 
-    align-items: center; 
-    gap: 14px; 
+.usr-stat {
+    background: #fff;
+    border: 1px solid #e1dee3;
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
     transition: all .2s cubic-bezier(.4, 0, .2, 1);
     min-height: 82px;
     box-shadow: 0 1px 3px rgba(0,0,0,.02);
     box-sizing: border-box;
 }
-.usr-stat:hover { 
-    box-shadow: 0 6px 20px rgba(0,0,0,.06); 
+.usr-stat:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.06);
     border-color: #cbd5e1;
     transform: translateY(-2px);
 }
-.usr-stat-icon { 
-    width: 44px; 
-    height: 44px; 
-    border-radius: 12px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    flex-shrink: 0; 
+.usr-stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 .usr-stat-content {
     display: flex;
@@ -100,23 +100,23 @@
     min-width: 0;
     flex: 1;
 }
-.usr-stat-label { 
-    font-size: 11px; 
-    font-weight: 700; 
-    color: #64748b; 
-    text-transform: uppercase; 
-    letter-spacing: .5px; 
+.usr-stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
     line-height: 1.3;
     margin-bottom: 3px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.usr-stat-value { 
-    font-size: 24px; 
-    font-weight: 800; 
-    color: #0f172a; 
-    line-height: 1.1; 
+.usr-stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
     display: flex;
     align-items: baseline;
     gap: 6px;
@@ -418,6 +418,7 @@
             <div class="usr-stat">
                 <div class="usr-stat-icon" style="background:#f0fdf4">
                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
                 <div class="usr-stat-content">
                     <div class="usr-stat-label" title="{{ $statActiveLabel }}{{ !empty($statActiveSub) ? ' (' . $statActiveSub . ')' : '' }}">
@@ -431,6 +432,7 @@
             </div>
             <div class="usr-stat" style="cursor:pointer;" onclick="location.href='{{ route('users.index', ['activity' => 'recent_login']) }}'" title="Filter users with recent logins in the last 24 hours">
                 <div class="usr-stat-icon" style="background:#eff6ff">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#2563eb" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
                 <div class="usr-stat-content">
