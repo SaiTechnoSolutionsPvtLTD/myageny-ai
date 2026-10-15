@@ -665,7 +665,6 @@ class PermissionRequestApiController extends Controller
             ->where(
                 fn ($q) => $q
                     ->where('portal_user_id', $user->id)
-                    ->orWhere('email', $user->email)
             )
             ->latest()
             ->first();

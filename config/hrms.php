@@ -24,4 +24,17 @@ return [
     |
     */
     'attendance_gps_tolerance_meters' => (float) env('HRMS_ATTENDANCE_GPS_TOLERANCE_METERS', 15.0),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HRMS Checkout Activity Restriction Enabled
+    |--------------------------------------------------------------------------
+    |
+    | When enabled (true), non-exempt employees must submit their required daily
+    | activity (Sales Day Closing, CST Day Closing, or Timesheet) before they
+    | can check out. When disabled (false), all employees can check out without
+    | activity submission restrictions. Exempt roles can check out unconditionally.
+    |
+    */
+    'checkout_activity_restriction_enabled' => (bool) env('HRMS_CHECKOUT_ACTIVITY_RESTRICTION_ENABLED', true),
 ];

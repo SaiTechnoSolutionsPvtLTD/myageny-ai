@@ -428,6 +428,7 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
     Route::prefix('attendance')->name('attendance.')->group(function () {
         Route::post('check-in', [MobileDailyAttendanceController::class, 'attendanceCheckIn'])->name('check-in');
         Route::post('check-out', [MobileDailyAttendanceController::class, 'attendanceCheckOut'])->name('check-out');
+        Route::get('checkout-eligibility', [MobileDailyAttendanceController::class, 'checkoutEligibility'])->name('checkout-eligibility');
         Route::get('daily-list', [MobileDailyAttendanceController::class, 'dailyAttendanceList'])->name('daily-list');
         Route::get('/branch-location', [AttendanceLocationApiController::class, 'myBranch']);
         // Self-service poll: "do I have an outside-office request pending/

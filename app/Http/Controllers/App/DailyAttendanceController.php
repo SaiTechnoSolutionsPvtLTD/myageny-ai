@@ -4,8 +4,13 @@ namespace App\Http\Controllers\App;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\CstDailyClosing;
 use App\Models\DailyAttendance;
+use App\Models\EmployeeOnboarding;
+use App\Models\InternJoiningForm;
 use App\Models\OutsideOfficeAttendanceRequest;
+use App\Models\ProjectTimesheet;
+use App\Models\SalesDailyClosing;
 use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\Carbon;
@@ -13,11 +18,291 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class DailyAttendanceController extends Controller
 {
+    public const CHECKOUT_ACTIVITY_RESTRICTION_ENABLED = true;
+
     public function __construct(private readonly NotificationService $notifications)
     {
+    }
+
+    /**
+     * Check if an employee or user is eligible to check out based on role exemptions
+     * and daily activity submission (Sales Day Closing, CST Day Closing, or Timesheet).
+     */
+    public static function checkUserCheckoutEligibility(
+        ?User $user,
+        ?int $employeeId = null,
+        ?int $internId = null,
+        ?string $today = null
+    ): array {
+        $today = $today ?: Carbon::today()->toDateString();
+        $restrictionEnabled = (bool) config('hrms.checkout_activity_restriction_enabled', self::CHECKOUT_ACTIVITY_RESTRICTION_ENABLED);
+
+        // Code-level toggle: If restriction is disabled, all employees can checkout
+        if (! $restrictionEnabled) {
+            return [
+                'status'              => true,
+                'can_checkout'        => true,
+                'is_exempt'           => false,
+                'restriction_enabled' => false,
+                'activity_type'       => 'none',
+                'activity_name'       => '',
+                'has_submitted'       => true,
+                'message'             => null,
+            ];
+        }
+
+        $employee = null;
+        if ($employeeId) {
+            $employee = EmployeeOnboarding::query()->with(['role', 'department'])->find($employeeId);
+            if (! $user && $employee?->portalUser) {
+                $user = $employee->portalUser;
+            }
+        }
+
+        $intern = null;
+        if ($internId) {
+            $intern = InternJoiningForm::query()->find($internId);
+            if (! $user && $intern?->portalUser) {
+                $user = $intern->portalUser;
+            }
+        }
+
+        // If no user context can be resolved, fail safe (allow if no user, but app is auth-based)
+        if (! $user) {
+            return [
+                'status'              => true,
+                'can_checkout'        => true,
+                'is_exempt'           => true,
+                'restriction_enabled' => true,
+                'activity_type'       => 'none',
+                'activity_name'       => '',
+                'has_submitted'       => true,
+                'message'             => null,
+            ];
+        }
+
+        // ── 1. Check Exempt Roles ──────────────────────────────────────────────
+        // The following 8 roles are unconditionally exempt from checkout activity restrictions:
+        // 1. CBO
+        // 2. HR
+        // 3. Project manager
+        // 4. development_project_coordinator
+        // 5. branch admin
+        // 6. admin
+        // 7. company admin
+        // 8. cheif_operating_officer
+        if (self::isUserExemptFromCheckout($user, $employee)) {
+            return [
+                'status'              => true,
+                'can_checkout'        => true,
+                'is_exempt'           => true,
+                'restriction_enabled' => true,
+                'activity_type'       => 'exempt',
+                'activity_name'       => 'Exempt Role',
+                'has_submitted'       => true,
+                'message'             => null,
+            ];
+        }
+
+        // ── 2. Determine Required Daily Activity for Non-Exempt Employees ──────
+        // Determine whether employee belongs to Sales, CST, or Other (Development, Design, Testing, etc.)
+        $isSales = $user->hasSalesLikeRole() || $user->belongsToSalesDepartment();
+        if (! $isSales && $employee) {
+            $deptName = strtolower((string) ($employee->department?->name ?? ''));
+            $isSales = str_contains($deptName, 'sales');
+        }
+
+        $isCst = $user->hasCustomerSupportLikeRole() || $user->belongsToCustomerSupportDepartment();
+        if (! $isCst && $employee) {
+            $deptName = strtolower((string) ($employee->department?->name ?? ''));
+            $isCst = str_contains($deptName, 'customer') || str_contains($deptName, 'support') || str_contains($deptName, 'success') || str_contains($deptName, 'cst');
+        }
+
+        if ($isSales) {
+            $activityType = 'sales_closing';
+            $activityName = 'Sales Day Closing';
+            $requiredMessage = 'Submit your Sales Day Closing to enable checkout.';
+
+            // Check if Sales closing is submitted for today (or timesheet as valid fallback)
+            $hasSubmitted = SalesDailyClosing::query()
+                ->where('user_id', $user->id)
+                ->whereDate('closing_date', $today)
+                ->exists()
+                || ProjectTimesheet::query()
+                    ->where('user_id', $user->id)
+                    ->whereDate('timesheet_date', $today)
+                    ->exists();
+        } elseif ($isCst) {
+            $activityType = 'cst_closing';
+            $activityName = 'CST Day Closing';
+            $requiredMessage = 'Submit your CST Day Closing to enable checkout.';
+
+            // Check if CST closing is submitted for today (or timesheet as valid fallback)
+            $hasSubmitted = CstDailyClosing::query()
+                ->where('user_id', $user->id)
+                ->whereDate('closing_date', $today)
+                ->exists()
+                || ProjectTimesheet::query()
+                    ->where('user_id', $user->id)
+                    ->whereDate('timesheet_date', $today)
+                    ->exists();
+        } else {
+            // Development, Designing, Digital Marketing, Testing, and all other non-exempt roles
+            $activityType = 'timesheet';
+            $activityName = 'Timesheet';
+            $requiredMessage = 'Submit your timesheet for today to enable checkout.';
+
+            // Check if Timesheet is submitted for today
+            $hasSubmitted = ProjectTimesheet::query()
+                ->where('user_id', $user->id)
+                ->whereDate('timesheet_date', $today)
+                ->exists();
+        }
+
+        return [
+            'status'              => true,
+            'can_checkout'        => (bool) $hasSubmitted,
+            'is_exempt'           => false,
+            'restriction_enabled' => true,
+            'activity_type'       => $activityType,
+            'activity_name'       => $activityName,
+            'has_submitted'       => (bool) $hasSubmitted,
+            'message'             => $hasSubmitted ? null : $requiredMessage,
+        ];
+    }
+
+    /**
+     * Checks if a user belongs to one of the 8 exempt roles:
+     * 1. CBO
+     * 2. HR
+     * 3. Project manager
+     * 4. development_project_coordinator
+     * 5. branch admin
+     * 6. admin
+     * 7. company admin
+     * 8. cheif_operating_officer
+     */
+    public static function isUserExemptFromCheckout(User $user, ?EmployeeOnboarding $employee = null): bool
+    {
+        // 1. CBO
+        if (method_exists($user, 'isCbo') && $user->isCbo()) {
+            return true;
+        }
+
+        // 2. HR
+        if ($user->belongsToHrDepartment() || $user->hasHrLikeRole()) {
+            return true;
+        }
+
+        // 6. Admin & 7. Company Admin
+        if ($user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCompanyAdmin() || $user->hasAdminLikeRole()) {
+            return true;
+        }
+
+        // 5. Branch Admin
+        if ($user->isBranchAdmin()) {
+            return true;
+        }
+
+        // 4. development_project_coordinator / project_coordinator
+        if ($user->isDevelopmentProjectCoordinator() || $user->isProjectCoordinator()) {
+            return true;
+        }
+
+        // Check user role keys
+        $roleKeys = collect($user->roleKeys()->all());
+
+        $exemptExactKeys = [
+            // CBO
+            'cbo',
+            'chief_business_officer',
+            'cheif_business_officer',
+            // HR
+            'hr',
+            'human_resources',
+            'human_resource',
+            'hr_manager',
+            'hr_executive',
+            'hr_admin',
+            // Project manager
+            'project_manager',
+            'pm',
+            // development_project_coordinator
+            'development_project_coordinator',
+            'project_coordinator',
+            'project_coordination',
+            'pc',
+            // branch admin
+            'branch_admin',
+            'branch_manager',
+            // admin
+            'admin',
+            'system_admin',
+            'super_admin',
+            // company admin
+            'company_admin',
+            // cheif_operating_officer
+            'cheif_operating_officer',
+            'chief_operating_officer',
+            'coo',
+        ];
+
+        if ($roleKeys->intersect($exemptExactKeys)->isNotEmpty()) {
+            return true;
+        }
+
+        // Partial key check for any variant of the 8 exempt roles
+        $hasExemptKey = $roleKeys->contains(function ($k) {
+            return str_contains($k, 'cbo')
+                || str_contains($k, 'project_manager')
+                || str_contains($k, 'development_project_coordinator')
+                || str_contains($k, 'branch_admin')
+                || str_contains($k, 'company_admin')
+                || str_contains($k, 'cheif_operating_officer')
+                || str_contains($k, 'chief_operating_officer');
+        });
+
+        if ($hasExemptKey) {
+            return true;
+        }
+
+        // If employee model is present, check employee role name/key
+        if ($employee && $employee->role) {
+            $empRoleKey = Str::of($employee->role->name)->lower()->replace(['-', ' '], '_')->value();
+            if (in_array($empRoleKey, $exemptExactKeys, true)) {
+                return true;
+            }
+            if (str_contains($empRoleKey, 'cbo')
+                || str_contains($empRoleKey, 'project_manager')
+                || str_contains($empRoleKey, 'development_project_coordinator')
+                || str_contains($empRoleKey, 'branch_admin')
+                || str_contains($empRoleKey, 'company_admin')
+                || str_contains($empRoleKey, 'cheif_operating_officer')
+                || str_contains($empRoleKey, 'chief_operating_officer')
+                || str_contains($empRoleKey, 'hr')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Endpoint for mobile app to query checkout eligibility for the current user/employee.
+     */
+    public function checkoutEligibility(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $employeeId = $request->filled('employee_id') ? (int) $request->employee_id : null;
+        $internId = $request->filled('intern_id') ? (int) $request->intern_id : null;
+
+        $eligibility = self::checkUserCheckoutEligibility($user, $employeeId, $internId);
+
+        return response()->json($eligibility);
     }
 
     public function attendanceCheckIn(Request $request): JsonResponse
@@ -326,6 +611,22 @@ class DailyAttendanceController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Employee has already checked out for today.',
+            ], 422);
+        }
+
+        // ── Role-based checkout activity restriction ─────────────────────
+        $eligibility = self::checkUserCheckoutEligibility(
+            $request->user(),
+            $request->filled('employee_id') ? (int) $request->employee_id : null,
+            $request->filled('intern_id') ? (int) $request->intern_id : null,
+            $today
+        );
+
+        if (! ($eligibility['can_checkout'] ?? true)) {
+            return response()->json([
+                'status'      => false,
+                'message'     => $eligibility['message'] ?? 'Please submit your required daily activity before checking out.',
+                'eligibility' => $eligibility,
             ], 422);
         }
 

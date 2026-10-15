@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\App\HRMS;
 
+use App\Http\Controllers\App\DailyAttendanceController;
 use App\Http\Controllers\Controller;
 use App\Models\DailyAttendance;
 use App\Models\EmployeeFaceProfile;
@@ -305,6 +306,22 @@ class FaceAttendanceApiController extends Controller
 
         // Case B: Already checked in, but not checked out -> Check-Out
         if (empty($attendance->logout_time)) {
+            $user = $request->user() ?: $employee->portalUser;
+            $eligibility = DailyAttendanceController::checkUserCheckoutEligibility(
+                $user,
+                $employee->id,
+                null,
+                $today
+            );
+
+            if (! ($eligibility['can_checkout'] ?? true)) {
+                return response()->json([
+                    'status'      => false,
+                    'message'     => $eligibility['message'] ?? 'Please submit your required daily activity before checking out.',
+                    'eligibility' => $eligibility,
+                ], 422);
+            }
+
             $loginAt        = Carbon::parse($attendance->attendance_date->format('Y-m-d') . ' ' . $attendance->login_time);
             $workingSeconds = max($loginAt->diffInSeconds($now, false), 0);
 
@@ -492,6 +509,22 @@ class FaceAttendanceApiController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'You must check in before checking out.',
+            ], 422);
+        }
+
+        $user = $request->user() ?: $employee->portalUser;
+        $eligibility = DailyAttendanceController::checkUserCheckoutEligibility(
+            $user,
+            $employee->id,
+            null,
+            $today
+        );
+
+        if (! ($eligibility['can_checkout'] ?? true)) {
+            return response()->json([
+                'status'      => false,
+                'message'     => $eligibility['message'] ?? 'Please submit your required daily activity before checking out.',
+                'eligibility' => $eligibility,
             ], 422);
         }
 

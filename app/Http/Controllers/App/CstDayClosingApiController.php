@@ -81,6 +81,41 @@ class CstDayClosingApiController extends Controller
     }
 
     /**
+     * Get team user IDs for a Senior CST Executive or CST TL.
+     * Includes descendants from UserMapping, leads allocated under TL, and the user themselves.
+     */
+    private function getCstTeamUserIds(User $user): array
+    {
+        $subordinateIds = $this->visibility->customerSupportUserIds($user);
+        $leadExecIds = Lead::where('customer_support_tl_id', $user->id)
+            ->orWhereIn('customer_support_tl_id', $subordinateIds)
+            ->whereNotNull('customer_support_executive_id')
+            ->pluck('customer_support_executive_id')
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+        $managedIds = \App\Models\UserMapping::where('manager_id', $user->id)
+            ->pluck('user_id')
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+        return array_values(array_unique(array_filter(array_merge($subordinateIds, $leadExecIds, $managedIds, [$user->id]))));
+    }
+
+    /**
+     * Determine if the user is a Senior CST Executive / TL or has users mapped under them.
+     */
+    private function isSeniorOrTl(User $user, array $teamUserIds): bool
+    {
+        if (count($teamUserIds) > 1) {
+            return true;
+        }
+
+        return $user->hasTlLikeRole() || collect($user->roleKeys()->all())->contains(function ($k) {
+            return str_contains($k, 'senior') || str_contains($k, 'tl') || str_contains($k, 'lead') || str_contains($k, 'manager');
+        });
+    }
+
+    /**
      * Extract renewal date string from ProductionInitiation custom_form_data or project_delivery_date.
      */
     private function extractRenewalDate($pi): ?string
@@ -141,7 +176,7 @@ class CstDayClosingApiController extends Controller
             $cstProspectItems = $cstProspectItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $supportUserIds) || in_array($it['cst_tl_id'] ?? null, $supportUserIds));
         }
 
-        $computedMonthlyProspect = (float) $cstProspectItems->sum('deal_value');
+        $computedMonthlyProspect = (float) $cstProspectItems->sum('expected_value');
 
         if ($computedMonthlyProspect <= 0 && $userId) {
             $explicitTarget = (float) (SalesTarget::where('user_id', $userId)->where('target_month', $targetMonthStr)->value('target_amount')
@@ -152,11 +187,12 @@ class CstDayClosingApiController extends Controller
             $monthlyTarget = $computedMonthlyProspect;
         }
 
-        $renewalVal = (float) $cstProspectItems->where('source_type', 'renewal')->sum('deal_value');
-        $devVal     = (float) $cstProspectItems->where('source_type', 'development')->sum('deal_value');
+        $renewalVal  = (float) $cstProspectItems->where('source_type', 'renewal')->sum('expected_value');
+        $devVal      = (float) $cstProspectItems->where('source_type', 'development')->sum('expected_value');
+        $dealVal     = (float) $cstProspectItems->sum('deal_value');
         $prospectVal = $monthlyTarget;
 
-        // 2. Today's Revenue
+        // 2. Today's Revenue : Today Received Value (Only CST Department users, matching Till Now Achieved)
         $todayPaymentQuery = LeadProductPayment::query();
         if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
             $todayPaymentQuery->whereBetween('payment_date', [$dateRange[0], $dateRange[1]]);
@@ -169,15 +205,9 @@ class CstDayClosingApiController extends Controller
         }
 
         if ($userId) {
-            $todayPaymentQuery->where(function($q) use ($userId) {
-                $q->where('recorded_by', $userId)
-                  ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $userId)->orWhere('customer_support_tl_id', $userId));
-            });
+            $todayPaymentQuery->where('recorded_by', $userId);
         } elseif (!empty($supportUserIds)) {
-            $todayPaymentQuery->where(function($q) use ($supportUserIds) {
-                $q->whereIn('recorded_by', $supportUserIds)
-                  ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-            });
+            $todayPaymentQuery->whereIn('recorded_by', $supportUserIds);
         }
         $todayRevenue = (float) $todayPaymentQuery->sum('amount');
 
@@ -384,6 +414,7 @@ class CstDayClosingApiController extends Controller
             'welcome_call_new_count'            => $ovpNewCount,
             'welcome_call_overdue_count'        => $ovpOverdueCount,
             'prospect_val'                      => $prospectVal,
+            'deal_val'                          => $dealVal,
             'renewal_val'                       => $renewalVal,
             'dev_val'                           => $devVal,
             'weekly_updates_count'              => $weeklyUpdatesCount,
@@ -406,17 +437,27 @@ class CstDayClosingApiController extends Controller
         $selectedDate = $toDate ?: ($fromDate ?: ($request->input('date') ?: $today));
 
         $canViewAll = $this->canViewAllCst($user);
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+        $isAdminLike = $canViewAll;
 
         if ($canViewAll) {
-            $assignableUsers = User::whereIn('id', $supportUserIds)->orderBy('name')->get(['id', 'name']);
+            $visibleUserIds = null;
+            $assignableUsers = User::whereIn('id', $supportUserIds)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
             if ($assignableUsers->isEmpty()) {
                 $assignableUsers = collect([$user]);
             }
             $branches = Branch::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         } else {
-            $assignableUsers = $this->visibility->visibleAssignableUsers($user);
+            if ($isTlLike && count($cstTeamUserIds) > 1) {
+                $visibleUserIds = $cstTeamUserIds;
+                $assignableUsers = User::whereIn('id', $cstTeamUserIds)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
+            } else {
+                $visibleUserIds = [$user->id];
+                $assignableUsers = collect([$user]);
+            }
+
             if ($assignableUsers->isEmpty()) {
                 $assignableUsers = collect([$user]);
             }
@@ -488,7 +529,7 @@ class CstDayClosingApiController extends Controller
         $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
         $dateRangeFilter = ($fromDate && $toDate) ? [$fromDate, $toDate] : ($fromDate ?: ($toDate ?: $selectedDate));
 
-        $kpiStats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $supportUserIds, $branchIdFilter);
+        $kpiStats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
 
         $myTodayClosing = CstDailyClosing::where('user_id', $user->id)
             ->whereDate('closing_date', $today)
@@ -561,8 +602,10 @@ class CstDayClosingApiController extends Controller
     {
         $user = auth()->user();
         $canViewAll = $this->canViewAllCst($user);
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+        $visibleUserIds = $canViewAll ? null : (($isTlLike && count($cstTeamUserIds) > 1) ? $cstTeamUserIds : [$user->id]);
 
         $fromDate = $request->input('from_date') ?: $request->input('date_from');
         $toDate = $request->input('to_date') ?: $request->input('date_to');
@@ -575,7 +618,7 @@ class CstDayClosingApiController extends Controller
 
         $branchIdFilter = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
 
-        $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $supportUserIds, $branchIdFilter);
+        $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchIdFilter);
 
         $lookupUserId = $targetUserId ?? $user->id;
         $lookupDate = is_array($dateRangeFilter) ? $dateRangeFilter[1] : $dateRangeFilter;
@@ -616,8 +659,12 @@ class CstDayClosingApiController extends Controller
     {
         $user = auth()->user();
         $canViewAll = $this->canViewAllCst($user);
-        $visibleUserIds = $canViewAll ? null : $this->visibility->visibleUserIds();
         $supportUserIds = $this->getSupportUserIds($user);
+        $cstTeamUserIds = $this->getCstTeamUserIds($user);
+        $isTlLike = $this->isSeniorOrTl($user, $cstTeamUserIds);
+
+        $visibleUserIds = $canViewAll ? null : (($isTlLike && count($cstTeamUserIds) > 1) ? $cstTeamUserIds : [$user->id]);
+        $effectiveSupportIds = $visibleUserIds !== null ? $visibleUserIds : $supportUserIds;
 
         $metric = trim((string) $request->input('metric', ''));
         $fromDate = $request->input('from_date') ?: $request->input('date_from');
@@ -652,15 +699,9 @@ class CstDayClosingApiController extends Controller
                     $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
                 }
                 if ($targetUserId) {
-                    $q->where(function($sub) use ($targetUserId) {
-                        $sub->where('recorded_by', $targetUserId)
-                            ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                    });
-                } elseif (!empty($supportUserIds)) {
-                    $q->where(function($sub) use ($supportUserIds) {
-                        $sub->whereIn('recorded_by', $supportUserIds)
-                            ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-                    });
+                    $q->where('recorded_by', $targetUserId);
+                } elseif (!empty($effectiveSupportIds)) {
+                    $q->whereIn('recorded_by', $effectiveSupportIds);
                 }
                 $items = $q->latest('payment_date')->latest('id')->get();
                 foreach ($items as $p) {
@@ -677,7 +718,7 @@ class CstDayClosingApiController extends Controller
                 break;
 
             case 'till_now_achieved':
-                $title = "Month-to-Date Achieved Revenue Collection";
+                $title = "Month-to-Date Collections (CST Team Collected)";
                 $q = LeadProductPayment::with(['lead.branch', 'leadProduct.product', 'recordedBy'])
                     ->whereDate('payment_date', '>=', $monthStart->toDateString())
                     ->whereDate('payment_date', '<=', $parsedDate->toDateString());
@@ -686,8 +727,8 @@ class CstDayClosingApiController extends Controller
                 }
                 if ($targetUserId) {
                     $q->where('recorded_by', $targetUserId);
-                } elseif (!empty($supportUserIds)) {
-                    $q->whereIn('recorded_by', $supportUserIds);
+                } elseif (!empty($effectiveSupportIds)) {
+                    $q->whereIn('recorded_by', $effectiveSupportIds);
                 }
                 $items = $q->latest('payment_date')->latest('id')->get();
                 foreach ($items as $p) {
@@ -715,8 +756,8 @@ class CstDayClosingApiController extends Controller
 
                 if ($targetUserId) {
                     $cstItems = $cstItems->filter(fn($it) => ($it['cst_executive_id'] ?? null) == $targetUserId || ($it['cst_tl_id'] ?? null) == $targetUserId);
-                } elseif (!$canViewAll && !empty($supportUserIds)) {
-                    $cstItems = $cstItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $supportUserIds) || in_array($it['cst_tl_id'] ?? null, $supportUserIds));
+                } elseif (!$canViewAll && !empty($effectiveSupportIds)) {
+                    $cstItems = $cstItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $effectiveSupportIds) || in_array($it['cst_tl_id'] ?? null, $effectiveSupportIds));
                 }
 
                 $totalMatching = count($cstItems);
@@ -745,7 +786,8 @@ class CstDayClosingApiController extends Controller
                         'account_name' => $item['company_name'] ?: ($item['customer_name'] ?: 'Lead #' . ($item['lead_id'] ?? '')),
                         'branch_name'  => $item['branch_name'] ?: '—',
                         'product_name' => $item['product_name'] ?: 'CST Prospect',
-                        'amount'       => (float) $item['deal_value'],
+                        'amount'       => (float) ($item['expected_value'] ?? $item['deal_value']),
+                        'deal_value'   => (float) ($item['deal_value'] ?? 0),
                         'date'         => $item['closure_date'] ?: '—',
                         'mode'         => $item['status'] ?? ($item['source_type'] === 'renewal' ? 'Renewal' : 'Development'),
                         'recorded_by'  => $item['cst_person_name'] !== '-' ? $item['cst_person_name'] : ($item['sales_person_name'] ?? 'CST Team'),
@@ -758,12 +800,12 @@ class CstDayClosingApiController extends Controller
                 $title = "Target vs Achieved Overview";
                 $stats = $this->calculateCstStats($targetUserId, $dateRangeFilter, $visibleUserIds, $branchId);
                 $records[] = [
-                    'account_name' => 'Monthly Target',
+                    'account_name' => 'Monthly Prospect',
                     'branch_name'  => '—',
-                    'product_name' => 'Committed Target',
+                    'product_name' => 'Hot Prospects + Renewals + Dev Target',
                     'amount'       => (float) $stats['monthly_target'],
                     'date'         => $parsedDate->format('M Y'),
-                    'mode'         => 'Monthly Target',
+                    'mode'         => 'Monthly Prospect',
                     'recorded_by'  => 'CST Target',
                 ];
                 $records[] = [
@@ -802,11 +844,11 @@ class CstDayClosingApiController extends Controller
                         $q->where('user_id', $targetUserId)
                           ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
                     });
-                } elseif (!empty($supportUserIds)) {
-                    $meetingsQ->where(function($q) use ($supportUserIds) {
-                        $q->whereIn('user_id', $supportUserIds)
-                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                                                             ->orWhereIn('customer_support_tl_id', $supportUserIds)
+                } elseif (!empty($effectiveSupportIds)) {
+                    $meetingsQ->where(function($q) use ($effectiveSupportIds) {
+                        $q->whereIn('user_id', $effectiveSupportIds)
+                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $effectiveSupportIds)
+                                                             ->orWhereIn('customer_support_tl_id', $effectiveSupportIds)
                                                              ->orWhereNotNull('customer_support_executive_id'));
                     });
                 } else {
@@ -837,11 +879,11 @@ class CstDayClosingApiController extends Controller
                         $q->where('user_id', $targetUserId)
                           ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
                     });
-                } elseif (!empty($supportUserIds)) {
-                    $updatesQ->where(function($q) use ($supportUserIds) {
-                        $q->whereIn('user_id', $supportUserIds)
-                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)
-                                                             ->orWhereIn('customer_support_tl_id', $supportUserIds)
+                } elseif (!empty($effectiveSupportIds)) {
+                    $updatesQ->where(function($q) use ($effectiveSupportIds) {
+                        $q->whereIn('user_id', $effectiveSupportIds)
+                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $effectiveSupportIds)
+                                                             ->orWhereIn('customer_support_tl_id', $effectiveSupportIds)
                                                              ->orWhereNotNull('customer_support_executive_id'));
                     });
                 } else {
@@ -896,9 +938,9 @@ class CstDayClosingApiController extends Controller
 
                 if ($targetUserId) {
                     $allocQ->where('customer_support_executive_id', $targetUserId);
-                } elseif (!empty($supportUserIds)) {
-                    $allocQ->where(function($q) use ($supportUserIds) {
-                        $q->whereIn('customer_support_executive_id', $supportUserIds)
+                } elseif (!empty($effectiveSupportIds)) {
+                    $allocQ->where(function($q) use ($effectiveSupportIds) {
+                        $q->whereIn('customer_support_executive_id', $effectiveSupportIds)
                           ->orWhereNotNull('customer_support_executive_id');
                     });
                 } else {
@@ -970,9 +1012,9 @@ class CstDayClosingApiController extends Controller
 
                 if ($targetUserId) {
                     $addedQ->where('customer_support_executive_id', $targetUserId);
-                } elseif (!empty($supportUserIds)) {
-                    $addedQ->where(function($q) use ($supportUserIds) {
-                        $q->whereIn('customer_support_executive_id', $supportUserIds)
+                } elseif (!empty($effectiveSupportIds)) {
+                    $addedQ->where(function($q) use ($effectiveSupportIds) {
+                        $q->whereIn('customer_support_executive_id', $effectiveSupportIds)
                           ->orWhereNotNull('customer_support_executive_id');
                     });
                 } else {
@@ -1031,10 +1073,10 @@ class CstDayClosingApiController extends Controller
                         $q->where('ovp_allocated_to', $targetUserId)
                           ->orWhere(fn($sub) => $sub->whereNull('ovp_allocated_to')->whereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId)));
                     });
-                } elseif (!empty($supportUserIds)) {
-                    $ovpQ->where(function($q) use ($supportUserIds) {
-                        $q->whereIn('ovp_allocated_to', $supportUserIds)
-                          ->orWhere(fn($sub) => $sub->whereNull('ovp_allocated_to')->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds)->orWhereNotNull('customer_support_executive_id')));
+                } elseif (!empty($effectiveSupportIds)) {
+                    $ovpQ->where(function($q) use ($effectiveSupportIds) {
+                        $q->whereIn('ovp_allocated_to', $effectiveSupportIds)
+                          ->orWhere(fn($sub) => $sub->whereNull('ovp_allocated_to')->whereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $effectiveSupportIds)->orWhereIn('customer_support_tl_id', $effectiveSupportIds)->orWhereNotNull('customer_support_executive_id')));
                     });
                 }
 
