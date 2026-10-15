@@ -185,7 +185,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#fe5f04;">₹{{ number_format($kpiStats['monthly_target']) }}</div>
-                    <div class="sdc-kpi-sub">Renewals &amp; Development Prospects</div>
+                    <div class="sdc-kpi-sub">Renewals &amp; Development Expected Amount</div>
                     <div style="font-size:10px; color:#fe5f04; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
                         <span>Click to view details</span>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -201,7 +201,7 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#16a34a;">₹{{ number_format($kpiStats['today_revenue']) }}</div>
-                    <div class="sdc-kpi-sub">Today received value</div>
+                    <div class="sdc-kpi-sub">Today received value (CST Team)</div>
                     <div style="font-size:10px; color:#16a34a; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
                         <span>Click to view details</span>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -1171,12 +1171,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     res.records.forEach((rec, idx) => {
                         const tr = document.createElement('tr');
                         const amtStr = rec.amount > 0 ? '₹' + Math.round(rec.amount).toLocaleString('en-IN') : '—';
+                        const dealStr = (rec.deal_value && Math.round(rec.deal_value) !== Math.round(rec.amount))
+                            ? `<div style="font-size:10.5px; font-weight:600; color:#94a3b8; margin-top:2px;">Deal: ₹${Math.round(rec.deal_value).toLocaleString('en-IN')}</div>`
+                            : '';
                         tr.innerHTML = `
                             <td style="text-align:center; font-weight:700; color:#64748b;">${idx + 1}</td>
                             <td style="font-weight:800; color:#0f172a;">${escapeHtml(rec.account_name)}</td>
                             <td>${escapeHtml(rec.branch_name)}</td>
                             <td>${escapeHtml(rec.product_name)}</td>
-                            <td style="text-align:right; font-weight:800; color:#16a34a;">${amtStr}</td>
+                            <td style="text-align:right; font-weight:800; color:#16a34a;">
+                                <div>${amtStr}</div>
+                                ${dealStr}
+                            </td>
                             <td style="text-align:center; font-size:12px; color:#475569;">${escapeHtml(rec.date)}</td>
                             <td><span class="sdc-badge metric" style="font-size:11px;">${escapeHtml(rec.mode)}</span></td>
                             <td style="font-weight:700; color:#475569;">${escapeHtml(rec.recorded_by)}</td>

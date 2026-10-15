@@ -83,12 +83,24 @@
     color: #fe5f04;
 }
 
-/* Master Cards Grid */
+/* Master Cards Grid - 4 Cards Per Row */
 .master-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 24px;
-    max-width: 1280px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    width: 100%;
+}
+
+@media (max-width: 1400px) {
+    .master-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 1024px) {
+    .master-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+    .master-grid { grid-template-columns: 1fr; }
 }
 
 .master-card {
@@ -97,9 +109,9 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 250px;
-    padding: 28px;
-    border-radius: 20px;
+    min-height: 240px;
+    padding: 22px;
+    border-radius: 18px;
     border: 1px solid #e2e8f0;
     background: #ffffff;
     box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
@@ -173,6 +185,24 @@
     background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
     color: #4f46e5;
     border: 1px solid #c7d2fe;
+}
+
+.icon-sky {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    color: #0284c7;
+    border: 1px solid #bae6fd;
+}
+
+.icon-amber {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    color: #d97706;
+    border: 1px solid #fde68a;
+}
+
+.icon-rose {
+    background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+    color: #e11d48;
+    border: 1px solid #fecdd3;
 }
 
 .master-card-badge {
@@ -281,15 +311,27 @@
                 <span><strong>{{ $vendorStats['total'] }}</strong> Vendors</span>
             </div>
             <div class="master-glance-item">
+                <i class="bi bi-box-seam" style="color:#0284c7;"></i>
+                <span><strong>{{ $itemStats['total'] }}</strong> Items</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-people" style="color:#d97706;"></i>
+                <span><strong>{{ $customerStats['total'] }}</strong> Customers</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-receipt-cutoff" style="color:#e11d48;"></i>
+                <span>Invoice: <strong>{{ $invoiceSetting ? ($invoiceSetting->invoice_prefix ?: 'INV-') : 'Setup' }}</strong></span>
+            </div>
+            <div class="master-glance-item">
                 <i class="bi bi-check-circle-fill" style="color:#16a34a;"></i>
-                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $supportCategoryStats['active'] + $supportSubcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] }}</strong> Active Entries</span>
+                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $supportCategoryStats['active'] + $supportSubcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] + $itemStats['active'] + $customerStats['active'] }}</strong> Active Entries</span>
             </div>
         </div>
     </div>
 
     {{-- Alert Messages --}}
     @if(session('success'))
-        <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:14px 20px; border-radius:12px; font-size:13px; font-weight:600; margin-bottom:24px; max-width:1280px;">
+        <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:14px 20px; border-radius:12px; font-size:13px; font-weight:600; margin-bottom:24px;">
             ✓ {{ session('success') }}
         </div>
     @endif
@@ -314,12 +356,12 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $categoryStats['total'] }}</strong> Categories
+                    <strong>{{ $categoryStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $categoryStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Categories <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
@@ -341,12 +383,12 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $subcategoryStats['total'] }}</strong> Subcategories
+                    <strong>{{ $subcategoryStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $subcategoryStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Subcategories <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
@@ -368,12 +410,12 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $supportCategoryStats['total'] }}</strong> Categories
+                    <strong>{{ $supportCategoryStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $supportCategoryStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Categories <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
@@ -395,12 +437,12 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $supportSubcategoryStats['total'] }}</strong> Subcategories
+                    <strong>{{ $supportSubcategoryStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $supportSubcategoryStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Subcategories <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
@@ -422,17 +464,17 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $adAccountStats['total'] }}</strong> Accounts
+                    <strong>{{ $adAccountStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $adAccountStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Ad Accounts <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>
 
-        {{-- Card 4: Vendor Master --}}
+        {{-- Card 6: Vendor Master --}}
         <a href="{{ route('accounts.master.vendors.index') }}" class="master-card">
             <div>
                 <div class="master-card-top">
@@ -449,12 +491,95 @@
 
             <div class="master-card-footer">
                 <div class="master-card-stats">
-                    <strong>{{ $vendorStats['total'] }}</strong> Vendors
+                    <strong>{{ $vendorStats['total'] }}</strong>
                     <span style="color:#94a3b8;">•</span>
                     <span style="color:#16a34a; font-weight:700;">{{ $vendorStats['active'] }} Active</span>
                 </div>
                 <div class="master-card-action">
-                    Manage Vendors <i class="bi bi-arrow-right"></i>
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 7: Items Master --}}
+        <a href="{{ route('accounts.master.items.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-sky">
+                        <i class="bi bi-box-seam"></i>
+                    </div>
+                    <span class="master-card-badge">Catalog Master</span>
+                </div>
+                <div class="master-card-title">Items Master</div>
+                <div class="master-card-desc">
+                    Define and manage goods & services catalog items, HSN/SAC codes, standard rates, GST slabs, and remarks.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $itemStats['total'] }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $itemStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 8: Customer Master --}}
+        <a href="{{ route('accounts.master.customers.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-amber">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <span class="master-card-badge">Client Master</span>
+                </div>
+                <div class="master-card-title">Customer Master</div>
+                <div class="master-card-desc">
+                    Manage client profiles, converted leads integration, billing & shipping addresses, GST/PAN numbers, and payment terms.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $customerStats['total'] }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $customerStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 9: Invoice Settings --}}
+        <a href="{{ route('accounts.master.invoice-settings.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-rose">
+                        <i class="bi bi-receipt-cutoff"></i>
+                    </div>
+                    <span class="master-card-badge">Billing Setup</span>
+                </div>
+                <div class="master-card-title">Invoice Settings</div>
+                <div class="master-card-desc">
+                    Configure invoice number format, upload company logo & signature, enter company address, banking details & UPI, and set terms & conditions.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $invoiceSetting ? 'Configured' : 'Setup' }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:{{ $invoiceSetting ? '#16a34a' : '#ea580c' }}; font-weight:700;">
+                        {{ $invoiceSetting ? $invoiceSetting->formatInvoiceNumber() : 'INV-0001' }}
+                    </span>
+                </div>
+                <div class="master-card-action">
+                    Configure <i class="bi bi-arrow-right"></i>
                 </div>
             </div>
         </a>

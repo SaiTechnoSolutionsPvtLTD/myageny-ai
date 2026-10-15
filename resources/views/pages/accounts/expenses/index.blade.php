@@ -27,6 +27,29 @@
 
 .acc-card { background:#fff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.02); }
 
+/* Filter Accordion */
+.acc-filter-accordion { background:#fff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.02); transition:box-shadow .2s; }
+.acc-filter-accordion:hover { box-shadow:0 4px 12px rgba(0,0,0,.04); }
+.acc-filter-toggle { list-style:none; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; cursor:pointer; user-select:none; background:#fff; transition:background .15s ease; }
+.acc-filter-toggle::-webkit-details-marker, .acc-filter-toggle::marker { display:none; content:""; }
+.acc-filter-toggle:hover { background:#f8fafc; }
+.acc-filter-accordion[open] .acc-filter-toggle { border-bottom:1px solid #e2e8f0; background:#fafbfc; }
+.acc-filter-toggle-left { display:flex; align-items:center; gap:12px; min-width:0; }
+.acc-filter-icon { width:36px; height:36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; background:#fff7ed; color:#fe5f04; font-size:15px; flex-shrink:0; border:1px solid #ffedd5; }
+.acc-filter-title { font-size:14px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.acc-filter-sub { font-size:12px; color:#64748b; margin-top:2px; }
+.acc-filter-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; background:#fe5f04; color:#fff; font-size:11px; font-weight:800; letter-spacing:0.02em; }
+.acc-filter-toggle-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.acc-filter-toggle-hint { font-size:12px; font-weight:700; color:#64748b; }
+.acc-filter-toggle-hint::after { content:"Show Filters"; }
+.acc-filter-accordion[open] .acc-filter-toggle-hint::after { content:"Hide Filters"; }
+.acc-filter-chevron { width:32px; height:32px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #e2e8f0; color:#64748b; background:#fff; transition:all .2s ease; font-size:13px; }
+.acc-filter-accordion[open] .acc-filter-chevron { transform:rotate(180deg); color:#fe5f04; border-color:#fed7aa; background:#fff7ed; }
+.acc-filter-accordion .acc-filter-grid { border-bottom:none; }
+@media (max-width: 600px) {
+    .acc-filter-toggle-hint, .acc-filter-sub { display:none; }
+}
+
 /* 5 Column Filter Grid */
 .acc-filter-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; padding:16px 20px; border-bottom:1px solid #e2e8f0; background:#fff; align-items:end; }
 @media (max-width: 1200px) { .acc-filter-grid { grid-template-columns:repeat(3, 1fr); } }
@@ -175,24 +198,6 @@
             </div>
         </div>
 
-        {{-- Next Month Fixed Expense Forecast KPI Card --}}
-        <div class="acc-stat-card" style="border-left: 4px solid #8b5cf6;">
-            <div class="acc-stat-icon" style="background:#f5f3ff; color:#7c3aed;">
-                <i class="bi bi-magic"></i>
-            </div>
-            <div style="flex:1;">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-                    <span class="acc-stat-label">Next Month (Fixed)</span>
-                    <span style="font-size:10px; font-weight:800; background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px;">{{ $nextMonthCarbon->format('M Y') }}</span>
-                </div>
-                <div class="acc-stat-val" style="color:#6d28d9;">₹{{ number_format($nextMonthProjectedAmount, 2) }}</div>
-                <div style="font-size:11px; color:#7c3aed; margin-top:3px; display:flex; align-items:center; justify-content:space-between;">
-                    <span>{{ $nextMonthFixedCount }} recurring items</span>
-                    <a href="{{ route('accounts.expenses.index', ['month' => $nextMonthCarbon->format('Y-m')]) }}" style="color:#6d28d9; font-weight:700; text-decoration:none;">View &rarr;</a>
-                </div>
-            </div>
-        </div>
-
         <div class="acc-stat-card">
             <div class="acc-stat-icon" style="background:#f1f5f9; color:#475569;">
                 <i class="bi bi-collection"></i>
@@ -204,113 +209,143 @@
         </div>
     </div>
 
-    {{-- Filters & Table Card --}}
-    <div class="acc-card">
-        <form method="GET" action="{{ route('accounts.expenses.index') }}" class="acc-filter-grid">
-            {{-- ROW 1 (5 Columns) --}}
-            {{-- Col 1: Search --}}
-            <div class="filter-col">
-                <label class="filter-label">Search</label>
-                <div style="position:relative;">
-                    <i class="bi bi-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:12px;"></i>
-                    <input type="text"
-                           name="search"
-                           value="{{ request('search') }}"
-                           placeholder="Invoice #, remarks, vendor..."
-                           class="filter-control"
-                           style="padding-left:30px;">
+    @php
+        $filterKeys = ['search', 'category_id', 'subcategory_id', 'vendor_id', 'expense_type', 'date_from', 'date_to', 'month'];
+        $activeFilterCount = collect($filterKeys)->filter(fn($k) => request()->filled($k))->count();
+        $hasActiveFilters = $activeFilterCount > 0;
+    @endphp
+
+    {{-- Filter Accordion --}}
+    <details class="acc-filter-accordion" id="expenseFiltersAccordion" {{ $hasActiveFilters ? 'open' : '' }}>
+        <summary class="acc-filter-toggle">
+            <div class="acc-filter-toggle-left">
+                <span class="acc-filter-icon"><i class="bi bi-funnel-fill"></i></span>
+                <div>
+                    <div class="acc-filter-title">
+                        <span>Filter Expenses</span>
+                        @if($hasActiveFilters)
+                            <span class="acc-filter-badge">{{ $activeFilterCount }} Active</span>
+                        @endif
+                    </div>
+                    <div class="acc-filter-sub">Filter by search keyword, category, subcategory, vendor, expense type or date range</div>
                 </div>
             </div>
-
-            {{-- Col 2: Category --}}
-            <div class="filter-col">
-                <label class="filter-label">Category</label>
-                <select name="category_id" id="filterCategory" class="filter-control" onchange="filterCategoryChanged(this.value)">
-                    <option value="">All Categories</option>
-                    @foreach($categories as $cat)
-                        <option value="{{ $cat->id }}" {{ request('category_id') == $cat->id ? 'selected' : '' }}>
-                            {{ $cat->name }}
-                        </option>
-                    @endforeach
-                </select>
+            <div class="acc-filter-toggle-right">
+                <span class="acc-filter-toggle-hint"></span>
+                <span class="acc-filter-chevron"><i class="bi bi-chevron-down"></i></span>
             </div>
+        </summary>
+        <div class="acc-filter-body">
+            <form method="GET" action="{{ route('accounts.expenses.index') }}" class="acc-filter-grid">
+                {{-- ROW 1 (5 Columns) --}}
+                {{-- Col 1: Search --}}
+                <div class="filter-col">
+                    <label class="filter-label">Search</label>
+                    <div style="position:relative;">
+                        <i class="bi bi-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:12px;"></i>
+                        <input type="text"
+                               name="search"
+                               value="{{ request('search') }}"
+                               placeholder="Invoice #, remarks, vendor..."
+                               class="filter-control"
+                               style="padding-left:30px;">
+                    </div>
+                </div>
 
-            {{-- Col 3: Subcategory (Master) --}}
-            <div class="filter-col">
-                <label class="filter-label">Subcategory</label>
-                <select name="subcategory_id" id="filterSubcategory" class="filter-control">
-                    <option value="">All Subcategories</option>
-                    @foreach($subcategories as $sub)
-                        <option value="{{ $sub->id }}" data-category-id="{{ $sub->account_expense_category_id }}" {{ request('subcategory_id') == $sub->id ? 'selected' : '' }}>
-                            {{ $sub->name }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+                {{-- Col 2: Category --}}
+                <div class="filter-col">
+                    <label class="filter-label">Category</label>
+                    <select name="category_id" id="filterCategory" class="filter-control" onchange="filterCategoryChanged(this.value)">
+                        <option value="">All Categories</option>
+                        @foreach($categories as $cat)
+                            <option value="{{ $cat->id }}" {{ request('category_id') == $cat->id ? 'selected' : '' }}>
+                                {{ $cat->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-            {{-- Col 4: Vendor --}}
-            <div class="filter-col">
-                <label class="filter-label">Vendor</label>
-                <select name="vendor_id" class="filter-control">
-                    <option value="">All Vendors</option>
-                    @foreach($vendors as $ven)
-                        <option value="{{ $ven->id }}" {{ request('vendor_id') == $ven->id ? 'selected' : '' }}>
-                            {{ $ven->vendor_name }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+                {{-- Col 3: Subcategory (Master) --}}
+                <div class="filter-col">
+                    <label class="filter-label">Subcategory</label>
+                    <select name="subcategory_id" id="filterSubcategory" class="filter-control">
+                        <option value="">All Subcategories</option>
+                        @foreach($subcategories as $sub)
+                            <option value="{{ $sub->id }}" data-category-id="{{ $sub->account_expense_category_id }}" {{ request('subcategory_id') == $sub->id ? 'selected' : '' }}>
+                                {{ $sub->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-            {{-- Col 5: Expense Type --}}
-            <div class="filter-col">
-                <label class="filter-label">Expense Type</label>
-                <select name="expense_type" class="filter-control">
-                    <option value="">All Types</option>
-                    <option value="Fixed" {{ request('expense_type') === 'Fixed' ? 'selected' : '' }}>Fixed</option>
-                    <option value="Variable" {{ request('expense_type') === 'Variable' ? 'selected' : '' }}>Variable</option>
-                </select>
-            </div>
+                {{-- Col 4: Vendor --}}
+                <div class="filter-col">
+                    <label class="filter-label">Vendor</label>
+                    <select name="vendor_id" class="filter-control">
+                        <option value="">All Vendors</option>
+                        @foreach($vendors as $ven)
+                            <option value="{{ $ven->id }}" {{ request('vendor_id') == $ven->id ? 'selected' : '' }}>
+                                {{ $ven->vendor_name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-            {{-- ROW 2 (5 Columns) --}}
-            {{-- Col 1: Date From --}}
-            <div class="filter-col">
-                <label class="filter-label">Date From</label>
-                <input type="date" name="date_from" value="{{ request('date_from') }}" class="filter-control">
-            </div>
+                {{-- Col 5: Expense Type --}}
+                <div class="filter-col">
+                    <label class="filter-label">Expense Type</label>
+                    <select name="expense_type" class="filter-control">
+                        <option value="">All Types</option>
+                        <option value="Fixed" {{ request('expense_type') === 'Fixed' ? 'selected' : '' }}>Fixed</option>
+                        <option value="Variable" {{ request('expense_type') === 'Variable' ? 'selected' : '' }}>Variable</option>
+                    </select>
+                </div>
 
-            {{-- Col 2: Date To --}}
-            <div class="filter-col">
-                <label class="filter-label">Date To</label>
-                <input type="date" name="date_to" value="{{ request('date_to') }}" class="filter-control">
-            </div>
+                {{-- ROW 2 (5 Columns) --}}
+                {{-- Col 1: Date From --}}
+                <div class="filter-col">
+                    <label class="filter-label">Date From</label>
+                    <input type="date" name="date_from" value="{{ request('date_from') }}" class="filter-control">
+                </div>
 
-            {{-- Col 3: Month Preset --}}
-            <div class="filter-col">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <label class="filter-label" style="margin-bottom:0;">Month</label>
-                    <a href="{{ route('accounts.expenses.index', ['month' => $nextMonthCarbon->format('Y-m')]) }}" style="font-size:10px; color:#7c3aed; font-weight:800; text-decoration:none;" title="Quick Forecast for {{ $nextMonthCarbon->format('M Y') }}">
-                        Next: {{ $nextMonthCarbon->format('M Y') }} &rarr;
+                {{-- Col 2: Date To --}}
+                <div class="filter-col">
+                    <label class="filter-label">Date To</label>
+                    <input type="date" name="date_to" value="{{ request('date_to') }}" class="filter-control">
+                </div>
+
+                {{-- Col 3: Month Preset --}}
+                <div class="filter-col">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label class="filter-label" style="margin-bottom:0;">Month</label>
+                        <a href="{{ route('accounts.expenses.index', ['month' => $nextMonthCarbon->format('Y-m')]) }}" style="font-size:10px; color:#7c3aed; font-weight:800; text-decoration:none;" title="Quick Forecast for {{ $nextMonthCarbon->format('M Y') }}">
+                            Next: {{ $nextMonthCarbon->format('M Y') }} &rarr;
+                        </a>
+                    </div>
+                    <input type="month" name="month" value="{{ request('month') }}" class="filter-control">
+                </div>
+
+                {{-- Col 4: Apply Filter Button --}}
+                <div class="filter-col">
+                    <label class="filter-label">&nbsp;</label>
+                    <button type="submit" class="acc-btn acc-btn-primary" style="width:100%; justify-content:center; height:38px;">
+                        <i class="bi bi-funnel-fill"></i> Filter
+                    </button>
+                </div>
+
+                {{-- Col 5: Reset Button --}}
+                <div class="filter-col">
+                    <label class="filter-label">&nbsp;</label>
+                    <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary" style="width:100%; justify-content:center; height:38px; text-decoration:none;">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset
                     </a>
                 </div>
-                <input type="month" name="month" value="{{ request('month') }}" class="filter-control">
-            </div>
+            </form>
+        </div>
+    </details>
 
-            {{-- Col 4: Apply Filter Button --}}
-            <div class="filter-col">
-                <label class="filter-label">&nbsp;</label>
-                <button type="submit" class="acc-btn acc-btn-primary" style="width:100%; justify-content:center; height:38px;">
-                    <i class="bi bi-funnel-fill"></i> Filter
-                </button>
-            </div>
-
-            {{-- Col 5: Reset Button --}}
-            <div class="filter-col">
-                <label class="filter-label">&nbsp;</label>
-                <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary" style="width:100%; justify-content:center; height:38px; text-decoration:none;">
-                    <i class="bi bi-arrow-counterclockwise"></i> Reset
-                </a>
-            </div>
-        </form>
+    {{-- Table Card --}}
+    <div class="acc-card">
 
         {{-- Future Month Forecast Banner --}}
         @if($isFutureMonthFilter)

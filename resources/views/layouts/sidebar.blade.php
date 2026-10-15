@@ -187,6 +187,36 @@
                     </div>
                 </a>
 
+                <!-- Sales Dropdown -->
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('accounts.sales.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->routeIs('accounts.sales.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        <span>Sales</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+
+                <!-- Sales Submenu -->
+                <div class="submenu {{ request()->routeIs('accounts.sales.*') ? 'show' : '' }}">
+                    <a href="{{ route('accounts.sales.invoices.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.index') ? 'active' : '' }}">
+                        Invoices
+                    </a>
+                    <a href="{{ route('accounts.sales.invoices.create') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
+                        New Invoice
+                    </a>
+                </div>
+
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.expenses.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">
